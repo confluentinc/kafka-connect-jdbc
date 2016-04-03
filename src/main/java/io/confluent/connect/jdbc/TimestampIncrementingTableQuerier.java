@@ -62,10 +62,10 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   private Long incrementingOffset = null;
   private long timestampDelay;
 
-  public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
+  public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix, String keyColumnName,
                                            String timestampColumn, Long timestampOffset,
                                            String incrementingColumn, Long incrementingOffset, Long timestampDelay) {
-    super(mode, name, topicPrefix);
+    super(mode, name, topicPrefix, keyColumnName);
     this.timestampColumn = timestampColumn;
     this.timestampOffset = timestampOffset;
     this.incrementingColumn = incrementingColumn;
@@ -176,11 +176,11 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
 
   @Override
   public SourceRecord extractRecord() throws SQLException {
-    Struct record = DataConverter.convertRecord(schema, resultSet);
+    Struct record = DataConverter.convertRecord(valueSchema, resultSet);
     Map<String, Long> offset = new HashMap<>();
     if (incrementingColumn != null) {
       Long id;
-      switch (schema.field(incrementingColumn).schema().type()) {
+      switch (valueSchema.field(incrementingColumn).schema().type()) {
         case INT32:
           id = (long) (Integer) record.get(incrementingColumn);
           break;
@@ -189,7 +189,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
           break;
         default:
           throw new ConnectException("Invalid type for incrementing column: "
-                                            + schema.field(incrementingColumn).schema().type());
+                                            + valueSchema.field(incrementingColumn).schema().type());
       }
 
       // If we are only using an incrementing column, then this must be incrementing. If we are also
@@ -224,6 +224,15 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       default:
         throw new ConnectException("Unexpected query mode: " + mode);
     }
+
+    if (keyColumn != null && keySchema != null) {
+      Object key = record.get(keyColumn);
+
+      if (key != null) {
+        return new SourceRecord(partition, offset, topic, keySchema, key, record.schema(), record);
+      }
+    }
+
     return new SourceRecord(partition, offset, topic, record.schema(), record);
   }
 

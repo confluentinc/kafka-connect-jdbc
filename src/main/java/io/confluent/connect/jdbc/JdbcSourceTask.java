@@ -27,6 +27,7 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -137,6 +138,7 @@ public class JdbcSourceTask extends SourceTask {
           }
           partition = Collections.singletonMap(
               JdbcSourceConnectorConstants.TABLE_NAME_KEY, tableOrQuery);
+
           break;
         case QUERY:
           partition = Collections.singletonMap(JdbcSourceConnectorConstants.QUERY_NAME_KEY,
@@ -145,6 +147,35 @@ public class JdbcSourceTask extends SourceTask {
         default:
           throw new ConnectException("Unexpected query mode: " + queryMode);
       }
+
+      String keyColumn = null;
+      ResultSet primaryKeys = null;
+
+      try {
+        primaryKeys = db.getMetaData().getPrimaryKeys(null, null, tableOrQuery);
+
+        if (primaryKeys.next()) {
+          String candidateKeyColumn = primaryKeys.getString(4);
+
+          if (!primaryKeys.next()) {
+            keyColumn = candidateKeyColumn;
+          } else {
+            log.warn("Composite primary key found in table {}, not supported", tableOrQuery);
+          }
+        }
+      } catch (SQLException e) {
+        log.error("Couldn't query primary keys {}", e);
+        throw new ConnectException(e);
+      } finally {
+        if (primaryKeys != null) {
+          try {
+            primaryKeys.close();
+          } catch (SQLException e) {
+            log.error("Error closing primary key query {}", e);
+          }
+        }
+      }
+
       Map<String, Object> offset = offsets == null ? null : offsets.get(partition);
       Long incrementingOffset = offset == null ? null :
                               (Long) offset.get(INCREMENTING_FIELD);
@@ -154,16 +185,16 @@ public class JdbcSourceTask extends SourceTask {
       String topicPrefix = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
 
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
-        tableQueue.add(new BulkTableQuerier(queryMode, tableOrQuery, topicPrefix));
+        tableQueue.add(new BulkTableQuerier(queryMode, tableOrQuery, topicPrefix, keyColumn));
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)) {
         tableQueue.add(new TimestampIncrementingTableQuerier(
-            queryMode, tableOrQuery, topicPrefix, null, null, incrementingColumn, incrementingOffset, timestampDelayInterval));
+            queryMode, tableOrQuery, topicPrefix, keyColumn, null, null, incrementingColumn, incrementingOffset, timestampDelayInterval));
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
         tableQueue.add(new TimestampIncrementingTableQuerier(
-            queryMode, tableOrQuery, topicPrefix, timestampColumn, timestampOffset, null, null, timestampDelayInterval));
+            queryMode, tableOrQuery, topicPrefix, keyColumn, timestampColumn, timestampOffset, null, null, timestampDelayInterval));
       } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
         tableQueue.add(new TimestampIncrementingTableQuerier(
-            queryMode, tableOrQuery, topicPrefix, timestampColumn, timestampOffset,
+            queryMode, tableOrQuery, topicPrefix, keyColumn, timestampColumn, timestampOffset,
             incrementingColumn, incrementingOffset, timestampDelayInterval));
       }
     }

@@ -39,16 +39,19 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected final String name;
   protected final String query;
   protected final String topicPrefix;
+  protected final String keyColumn;
   protected long lastUpdate;
   protected PreparedStatement stmt;
   protected ResultSet resultSet;
-  protected Schema schema;
+  protected Schema keySchema;
+  protected Schema valueSchema;
 
-  public TableQuerier(QueryMode mode, String nameOrQuery, String topicPrefix) {
+  public TableQuerier(QueryMode mode, String nameOrQuery, String topicPrefix, String keyColumn) {
     this.mode = mode;
     this.name = mode.equals(QueryMode.TABLE) ? nameOrQuery : null;
     this.query = mode.equals(QueryMode.QUERY) ? nameOrQuery : null;
     this.topicPrefix = topicPrefix;
+    this.keyColumn = keyColumn;
     this.lastUpdate = 0;
   }
 
@@ -74,7 +77,11 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     if (resultSet == null) {
       stmt = getOrCreatePreparedStatement(db);
       resultSet = executeQuery();
-      schema = DataConverter.convertSchema(name, resultSet.getMetaData());
+      valueSchema = DataConverter.convertSchema(name, resultSet.getMetaData());
+
+      if (keyColumn != null) {
+        keySchema = DataConverter.convertSchema(name, keyColumn, resultSet.getMetaData());
+      }
     }
   }
 
@@ -92,7 +99,8 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     resultSet = null;
     // TODO: Can we cache this and quickly check that it's identical for the next query
     // instead of constructing from scratch since it's almost always the same
-    schema = null;
+    keySchema = null;
+    valueSchema = null;
 
     lastUpdate = now;
   }

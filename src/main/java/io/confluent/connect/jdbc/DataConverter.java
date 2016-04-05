@@ -65,8 +65,7 @@ public class DataConverter {
     Struct struct = new Struct(schema);
     for (int col = 1; col <= metadata.getColumnCount(); col++) {
       try {
-        convertFieldValue(resultSet, col, metadata.getColumnType(col), struct,
-                          metadata.getColumnLabel(col));
+        convertFieldValue(resultSet, col, struct, metadata);
       } catch (IOException e) {
         log.warn("Ignoring record because processing failed:", e);
       } catch (SQLException e) {
@@ -171,11 +170,21 @@ public class DataConverter {
 
       case Types.NUMERIC:
       case Types.DECIMAL: {
-        SchemaBuilder fieldBuilder = Decimal.builder(metadata.getScale(col));
-        if (optional) {
-          fieldBuilder.optional();
+        final int scale = metadata.getScale(col);
+        if (scale == 0) {
+          if (optional) {
+            builder.field(fieldName, Schema.OPTIONAL_INT64_SCHEMA);
+          } else {
+            builder.field(fieldName, Schema.INT64_SCHEMA);
+          }
+        } else {
+          SchemaBuilder fieldBuilder = Decimal.builder(scale);
+          if (optional)
+          {
+            fieldBuilder.optional();
+          }
+          builder.field(fieldName, fieldBuilder.build());
         }
-        builder.field(fieldName, fieldBuilder.build());
         break;
       }
 
@@ -257,9 +266,10 @@ public class DataConverter {
     }
   }
 
-  private static void convertFieldValue(ResultSet resultSet, int col, int colType,
-                                        Struct struct, String fieldName)
+  private static void convertFieldValue(ResultSet resultSet, int col,
+                                        Struct struct, ResultSetMetaData metaData)
       throws SQLException, IOException {
+    final int colType = metaData.getColumnType(col);
     final Object colValue;
     switch (colType) {
       case Types.NULL: {
@@ -322,7 +332,13 @@ public class DataConverter {
 
       case Types.NUMERIC:
       case Types.DECIMAL: {
-        colValue = resultSet.getBigDecimal(col);
+        int scale = metaData.getScale(col);
+        if (scale == 0) {
+          colValue = resultSet.getLong(col);
+        }
+        else {
+          colValue = resultSet.getBigDecimal(col);
+        }
         break;
       }
 
@@ -425,6 +441,7 @@ public class DataConverter {
 
     // FIXME: Would passing in some extra info about the schema so we can get the Field by index
     // be faster than setting this by name?
+    String fieldName = metaData.getColumnLabel(col);
     struct.put(fieldName, resultSet.wasNull() ? null : colValue);
   }
 

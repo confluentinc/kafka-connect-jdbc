@@ -24,7 +24,7 @@ import java.io.IOException;
 import java.sql.*;
 
 /**
- * Embedded HSqlDb server useful for testing against a real JDBC database.
+ * Embedded HSQLDB server useful for testing against a real JDBC database.
  */
 public class EmbeddedHSQLDB
 {
@@ -55,7 +55,18 @@ public class EmbeddedHSQLDB
     try {
       conn = DriverManager.getConnection(getUrl());
     } catch (SQLException e) {
-      throw new RuntimeException("Couldn't get HSqlDb database connection in Oracle compatibility mode.", e);
+      throw new RuntimeException("Couldn't get HSQLDB database connection in Oracle compatibility mode.", e);
+    }
+  }
+
+  /**
+   * Forces the registration of the JDBC driver into {@link DriverManager}.
+   */
+  public static void loadDriver() {
+    try {
+      Class.forName("org.hsqldb.jdbc.JDBCDriver");
+    } catch (ClassNotFoundException e) {
+      throw new RuntimeException("Unable to load the HSQLDB JDBC driver.");
     }
   }
 
@@ -71,7 +82,7 @@ public class EmbeddedHSQLDB
   private String getShutdownUrl() {
     return PROTOCOL + getRawName() + ";shutdown=true";
   }
-  
+
   /**
    * Shorthand for creating a table
    * @param name name of the table

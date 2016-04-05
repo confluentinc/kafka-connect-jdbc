@@ -21,6 +21,7 @@ import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import javax.sql.rowset.serial.SerialBlob;
@@ -37,6 +38,16 @@ import static org.junit.Assert.assertTrue;
 
 // Tests conversion of Oracle specific data types, namely {@code NUMBER}.
 public class JdbcSourceTaskConversionOracleTest extends JdbcSourceTaskTestOracleBase {
+
+  //forces the registration of the HSQLDB into java.sql.DriverManager
+  //when running these tests as part of the whole test suite, the first time
+  //DriverManager.getConnection("jdbc:hsqldb:mem") is called it complains with
+  //"No suitable driver found for jdbc:hsqldb:mem"
+  @BeforeClass
+  public static void loadDriver()
+  {
+    EmbeddedHSQLDB.loadDriver();
+  }
 
   @Before
   public void setup() throws Exception {

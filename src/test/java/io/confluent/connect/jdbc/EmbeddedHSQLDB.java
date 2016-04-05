@@ -55,7 +55,7 @@ public class EmbeddedHSQLDB
     try {
       conn = DriverManager.getConnection(getUrl());
     } catch (SQLException e) {
-      throw new RuntimeException("Couldn't get Oracle database connection", e);
+      throw new RuntimeException("Couldn't get HSqlDb database connection in Oracle compatibility mode.", e);
     }
   }
 

@@ -59,6 +59,7 @@
         <commons-io.version>2.4</commons-io.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
+        <hsqldb.version>2.3.3</hsqldb.version>
     </properties>
 
     <repositories>
@@ -131,6 +132,13 @@
             <version>${commons-io.version}</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.hsqldb</groupId>
+            <artifactId>hsqldb</artifactId>
+            <version>${hsqldb.version}</version>
+            <scope>test</scope>
+        </dependency>
+
     </dependencies>
 
     <build>

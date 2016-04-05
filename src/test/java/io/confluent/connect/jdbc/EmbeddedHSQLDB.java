@@ -59,10 +59,6 @@ public class EmbeddedHSQLDB
     }
   }
 
-  public String getName() {
-    return name;
-  }
-
   private String getRawName() {
     return NAME_PREFIX + name;
   }
@@ -75,11 +71,7 @@ public class EmbeddedHSQLDB
   private String getShutdownUrl() {
     return PROTOCOL + getRawName() + ";shutdown=true";
   }
-
-  public Connection getConnection() {
-    return conn;
-  }
-
+  
   /**
    * Shorthand for creating a table
    * @param name name of the table

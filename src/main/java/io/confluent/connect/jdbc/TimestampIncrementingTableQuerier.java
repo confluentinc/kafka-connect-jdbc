@@ -57,14 +57,14 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   private static final Calendar UTC_CALENDAR = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
 
   private String timestampColumn;
-  private Timestamp timestampOffset;
+  private Long timestampOffset;
   private String incrementingColumn;
   private boolean incrementingColumnUsePrimaryKey;
   private Long incrementingOffset = null;
   private long timestampDelay;
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix, String keyColumnName,
-                                           String timestampColumn, Timestamp timestampOffset,
+                                           String timestampColumn, Long timestampOffset,
                                            String incrementingColumn, boolean incrementingColumnUsePrimaryKey, Long incrementingOffset, Long timestampDelay) {
     super(mode, name, topicPrefix, keyColumnName);
     this.timestampColumn = timestampColumn;

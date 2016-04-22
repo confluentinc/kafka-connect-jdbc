@@ -27,7 +27,9 @@ import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.util.List;
 import java.util.Map;
 
@@ -57,12 +59,25 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
     // Minimal start/stop functionality
     PowerMock.mockStatic(DriverManager.class);
 
+    ResultSet pkResultSet = PowerMock.createMock(ResultSet.class);
+    pkResultSet.next();
+    PowerMock.expectLastCall().andReturn(false);
+    pkResultSet.close();
+    PowerMock.expectLastCall();
+
+    DatabaseMetaData dbMetadata = PowerMock.createMock(DatabaseMetaData.class);
+    dbMetadata.getPrimaryKeys(null, null, "test");
+    PowerMock.expectLastCall().andReturn(pkResultSet);
+
     // Should request a connection, then should close it on stop()
     Connection conn = PowerMock.createMock(Connection.class);
     EasyMock.expect(DriverManager.getConnection(db.getUrl()))
         .andReturn(conn);
     conn.close();
     PowerMock.expectLastCall();
+
+    conn.getMetaData();
+    PowerMock.expectLastCall().andReturn(dbMetadata);
 
     PowerMock.replayAll();
 

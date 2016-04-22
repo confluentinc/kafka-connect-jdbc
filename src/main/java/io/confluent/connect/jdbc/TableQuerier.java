@@ -18,6 +18,8 @@ package io.confluent.connect.jdbc;
 
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.source.SourceRecord;
+import org.slf4j.LoggerFactory;
+import org.slf4j.Logger;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -30,6 +32,8 @@ import java.sql.SQLException;
  * loads using timestamps, etc.
  */
 abstract class TableQuerier implements Comparable<TableQuerier> {
+  private static final Logger log = LoggerFactory.getLogger(TableQuerier.class);
+
   public enum QueryMode {
     TABLE, // Copying whole tables, with queries constructed automatically
     QUERY // User-specified query
@@ -73,7 +77,17 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   public void maybeStartQuery(Connection db) throws SQLException {
     if (resultSet == null) {
       stmt = getOrCreatePreparedStatement(db);
-      resultSet = executeQuery();
+
+      try {
+        resultSet = executeQuery();
+      } catch (SQLException e) {
+        if (exceptionIndicatesStalePreparedStatement(db, e)) {
+          log.info("Stale prepared statement, re-creating.");
+          createPreparedStatement(db);
+          resultSet = executeQuery();
+        }
+      }
+
       schema = DataConverter.convertSchema(name, resultSet.getMetaData());
     }
   }
@@ -106,5 +120,12 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     } else {
       return this.name.compareTo(other.name);
     }
+  }
+
+  private boolean exceptionIndicatesStalePreparedStatement(Connection db, SQLException e) throws SQLException {
+    // On PostgreSQL, queries with wildcards will be invalidated on schema changes
+    // and throw this error message.
+    return e.getMessage().contains("cached plan must not change result type") &&
+            db.getMetaData().getDatabaseProductName().equals("PostgreSQL");
   }
 }

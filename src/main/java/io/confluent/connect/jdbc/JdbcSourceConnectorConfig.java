@@ -107,6 +107,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String TABLE_BLACKLIST_DEFAULT = "";
   private static final String TABLE_BLACKLIST_DISPLAY = "";
 
+  public static final String INCREMENTING_COLUMN_USE_PRIMARY_KEY_CONFIG = "incrementing.column.use_primary_key";
+  private static final String INCREMENTING_COLUMN_USE_PRIMARY_KEY_DOC =
+          "If true, assume the primary key column for each table is auto incrementing.";
+  public static final boolean INCREMENTING_COLUMN_USE_PRIMARY_KEY_DEFAULT = false;
+  private static final String INCREMENTING_COLUMN_USE_PRIMARY_KEY_DISPLAY = "Is Primary Key Auto-incrementing";
+
   public static final String QUERY_CONFIG = "query";
   private static final String QUERY_DOC =
       "If specified, the query to perform to select new or updated rows. Use this setting if you "
@@ -160,6 +166,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         .define(MODE_CONFIG, Type.STRING, MODE_UNSPECIFIED, ConfigDef.ValidString.in(MODE_UNSPECIFIED, MODE_BULK, MODE_TIMESTAMP, MODE_INCREMENTING, MODE_TIMESTAMP_INCREMENTING),
                 Importance.HIGH, MODE_DOC, MODE_GROUP, 1, Width.MEDIUM, MODE_DISPLAY, Arrays.asList(INCREMENTING_COLUMN_NAME_CONFIG, TIMESTAMP_COLUMN_NAME_CONFIG, VALIDATE_NON_NULL_CONFIG))
         .define(INCREMENTING_COLUMN_NAME_CONFIG, Type.STRING, INCREMENTING_COLUMN_NAME_DEFAULT, Importance.MEDIUM, INCREMENTING_COLUMN_NAME_DOC, MODE_GROUP, 2, Width.MEDIUM, INCREMENTING_COLUMN_NAME_DISPLAY,
+                MODE_DEPENDENTS_RECOMMENDER)
+        .define(INCREMENTING_COLUMN_USE_PRIMARY_KEY_CONFIG, Type.BOOLEAN, INCREMENTING_COLUMN_USE_PRIMARY_KEY_DEFAULT, Importance.MEDIUM, INCREMENTING_COLUMN_USE_PRIMARY_KEY_DOC, MODE_GROUP, 2, Width.MEDIUM, INCREMENTING_COLUMN_USE_PRIMARY_KEY_DISPLAY,
                 MODE_DEPENDENTS_RECOMMENDER)
         .define(TIMESTAMP_COLUMN_NAME_CONFIG, Type.STRING, TIMESTAMP_COLUMN_NAME_DEFAULT, Importance.MEDIUM, TIMESTAMP_COLUMN_NAME_DOC, MODE_GROUP, 3, Width.MEDIUM, TIMESTAMP_COLUMN_NAME_DISPLAY,
                 MODE_DEPENDENTS_RECOMMENDER)

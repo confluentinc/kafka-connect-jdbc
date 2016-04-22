@@ -122,6 +122,8 @@ public class JdbcSourceTask extends SourceTask {
 
     String incrementingColumn
         = config.getString(JdbcSourceTaskConfig.INCREMENTING_COLUMN_NAME_CONFIG);
+    boolean incrementingColumnUsePrimaryKey
+        = config.getBoolean(JdbcSourceTaskConfig.INCREMENTING_COLUMN_USE_PRIMARY_KEY_CONFIG);
     String timestampColumn
         = config.getString(JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
     Long timestampDelayInterval
@@ -188,14 +190,14 @@ public class JdbcSourceTask extends SourceTask {
         tableQueue.add(new BulkTableQuerier(queryMode, tableOrQuery, topicPrefix, keyColumn));
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)) {
         tableQueue.add(new TimestampIncrementingTableQuerier(
-            queryMode, tableOrQuery, topicPrefix, keyColumn, null, null, incrementingColumn, incrementingOffset, timestampDelayInterval));
+            queryMode, tableOrQuery, topicPrefix, keyColumn, null, null, incrementingColumn, incrementingColumnUsePrimaryKey, incrementingOffset, timestampDelayInterval));
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
         tableQueue.add(new TimestampIncrementingTableQuerier(
-            queryMode, tableOrQuery, topicPrefix, keyColumn, timestampColumn, timestampOffset, null, null, timestampDelayInterval));
+            queryMode, tableOrQuery, topicPrefix, keyColumn, timestampColumn, timestampOffset, null, false, null, timestampDelayInterval));
       } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
         tableQueue.add(new TimestampIncrementingTableQuerier(
             queryMode, tableOrQuery, topicPrefix, keyColumn, timestampColumn, timestampOffset,
-            incrementingColumn, incrementingOffset, timestampDelayInterval));
+            incrementingColumn, incrementingColumnUsePrimaryKey, incrementingOffset, timestampDelayInterval));
       }
     }
 

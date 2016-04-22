@@ -57,27 +57,33 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   private static final Calendar UTC_CALENDAR = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
 
   private String timestampColumn;
-  private Long timestampOffset;
+  private Timestamp timestampOffset;
   private String incrementingColumn;
+  private boolean incrementingColumnUsePrimaryKey;
   private Long incrementingOffset = null;
   private long timestampDelay;
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix, String keyColumnName,
-                                           String timestampColumn, Long timestampOffset,
-                                           String incrementingColumn, Long incrementingOffset, Long timestampDelay) {
+                                           String timestampColumn, Timestamp timestampOffset,
+                                           String incrementingColumn, boolean incrementingColumnUsePrimaryKey, Long incrementingOffset, Long timestampDelay) {
     super(mode, name, topicPrefix, keyColumnName);
     this.timestampColumn = timestampColumn;
     this.timestampOffset = timestampOffset;
-    this.incrementingColumn = incrementingColumn;
     this.incrementingOffset = incrementingOffset;
     this.timestampDelay = timestampDelay;
+    this.incrementingColumn = incrementingColumn;
+    this.incrementingColumnUsePrimaryKey = incrementingColumnUsePrimaryKey;
   }
 
   @Override
   protected void createPreparedStatement(Connection db) throws SQLException {
-    // Default when unspecified uses an autoincrementing column
+    // Default when unspecified uses an autoincrementing column or primary key if primary key assumed to autoincrement.
     if (incrementingColumn != null && incrementingColumn.isEmpty()) {
-      incrementingColumn = JdbcUtils.getAutoincrementColumn(db, name);
+      if (incrementingColumn.isEmpty() && incrementingColumnUsePrimaryKey && keyColumn != null) {
+        incrementingColumn = keyColumn;
+      } else {
+        incrementingColumn = JdbcUtils.getAutoincrementColumn(db, name);
+      }
     }
 
     String quoteString = JdbcUtils.getIdentifierQuoteString(db);

@@ -1,4 +1,4 @@
-.. Kafka Connect JDBC documentation master file
+.. _connect_jdbc: Kafka Connect JDBC documentation master file
 
 JDBC Connector
 ==============
@@ -155,9 +155,9 @@ Note that all incremental query modes that use certain columns to detect changes
 indexes on those columns to efficiently perform the queries.
 
 For incremental query modes that use timestamps, the JDBC connector uses a configuration
-``timestamp.delay.interval.ms`` to control the wait after a row with certain timestamp appears
-before we include it in the result. The additional wait allows transactions with earlier timestamps
-to complete and the related changes to be included in the result.
+``timestamp.delay.interval.ms`` to control the waiting period after a row with certain timestamp
+appears before we include it in the result. The additional wait allows transactions with earlier
+timestamps to complete and the related changes to be included in the result.
 
 Configuration
 -------------

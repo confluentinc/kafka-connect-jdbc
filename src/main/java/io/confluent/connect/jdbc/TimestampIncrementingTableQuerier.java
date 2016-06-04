@@ -16,6 +16,7 @@
 
 package io.confluent.connect.jdbc;
 
+import io.confluent.connect.jdbc.querybuilder.GenericQueryBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -51,7 +52,7 @@ import java.util.TimeZone;
  *   so failures may cause duplicates or losses.
  * </p>
  */
-public class TimestampIncrementingTableQuerier extends TableQuerier {
+public class TimestampIncrementingTableQuerier extends TableQuerier implements GenericQueryBuilder {
   private static final Logger log = LoggerFactory.getLogger(TimestampIncrementingTableQuerier.class);
 
   private static final Calendar UTC_CALENDAR = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
@@ -80,66 +81,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
 
     String quoteString = JdbcUtils.getIdentifierQuoteString(db);
 
-    StringBuilder builder = new StringBuilder();
-
-    switch (mode) {
-      case TABLE:
-        builder.append("SELECT * FROM ");
-        builder.append(JdbcUtils.quoteString(name, quoteString));
-        break;
-      case QUERY:
-        builder.append(query);
-        break;
-      default:
-        throw new ConnectException("Unknown mode encountered when preparing query: " + mode.toString());
-    }
-
-    if (incrementingColumn != null && timestampColumn != null) {
-      // This version combines two possible conditions. The first checks timestamp == last
-      // timestamp and incrementing > last incrementing. The timestamp alone would include
-      // duplicates, but adding the incrementing condition ensures no duplicates, e.g. you would
-      // get only the row with id = 23:
-      //  timestamp 1234, id 22 <- last
-      //  timestamp 1234, id 23
-      // The second check only uses the timestamp >= last timestamp. This covers everything new,
-      // even if it is an update of the existing row. If we previously had:
-      //  timestamp 1234, id 22 <- last
-      // and then these rows were written:
-      //  timestamp 1235, id 22
-      //  timestamp 1236, id 23
-      // We should capture both id = 22 (an update) and id = 23 (a new row)
-      builder.append(" WHERE ");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-      builder.append(" < CURRENT_TIMESTAMP AND ((");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-      builder.append(" = ? AND ");
-      builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
-      builder.append(" > ?");
-      builder.append(") OR ");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-      builder.append(" > ?)");
-      builder.append(" ORDER BY ");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-      builder.append(",");
-      builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
-      builder.append(" ASC");
-    } else if (incrementingColumn != null) {
-      builder.append(" WHERE ");
-      builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
-      builder.append(" > ?");
-      builder.append(" ORDER BY ");
-      builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
-      builder.append(" ASC");
-    } else if (timestampColumn != null) {
-      builder.append(" WHERE ");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-      builder.append(" > ? AND ");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-      builder.append(" < CURRENT_TIMESTAMP ORDER BY ");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-      builder.append(" ASC");
-    }
-    String queryString = builder.toString();
+    String queryString = buildQueryString(quoteString, mode, name, query, incrementingColumn, timestampColumn);
     log.debug("{} prepared SQL query: {}", this, queryString);
     stmt = db.prepareStatement(queryString);
   }

@@ -5,12 +5,12 @@ package io.confluent.connect.jdbc.querybuilder;
  */
 public class QueryBuilderFactory {
 
-    public static QueryBuilder QueryBuilderFactory(QueryBuilder.DBType dbType) {
+    public static QueryBuilder getQueryBuilder(QueryBuilder.DBType dbType) {
         switch (dbType) {
             case POSTGRES:
                 return new PostgresQueryBuilder();
             case MS_SQL:
-                return new PostgresQueryBuilder();
+                return new MSSqlQueryBuilder();
             default:
                 return new GenericQueryBuilder();
         }

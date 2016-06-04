@@ -16,7 +16,8 @@
 
 package io.confluent.connect.jdbc;
 
-import io.confluent.connect.jdbc.querybuilder.GenericQueryBuilder;
+import io.confluent.connect.jdbc.querybuilder.QueryBuilder;
+import io.confluent.connect.jdbc.querybuilder.QueryBuilderFactory;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -27,13 +28,10 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
-import java.util.Calendar;
-import java.util.Collections;
-import java.util.Date;
-import java.util.GregorianCalendar;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.TimeZone;
+import java.util.*;
+
+import static io.confluent.connect.jdbc.querybuilder.QueryBuilder.QueryParameter;
+import static io.confluent.connect.jdbc.querybuilder.QueryBuilder.QueryParameter.*;
 
 /**
  * <p>
@@ -52,7 +50,7 @@ import java.util.TimeZone;
  *   so failures may cause duplicates or losses.
  * </p>
  */
-public class TimestampIncrementingTableQuerier extends TableQuerier implements GenericQueryBuilder {
+public class TimestampIncrementingTableQuerier extends TableQuerier {
   private static final Logger log = LoggerFactory.getLogger(TimestampIncrementingTableQuerier.class);
 
   private static final Calendar UTC_CALENDAR = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
@@ -61,6 +59,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements G
   private Long timestampOffset;
   private String incrementingColumn;
   private Long incrementingOffset = null;
+  private QueryBuilder queryBuilder = null;
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
                                            String timestampColumn, Long timestampOffset,
@@ -75,30 +74,43 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements G
   @Override
   protected void createPreparedStatement(Connection db) throws SQLException {
     // Default when unspecified uses an autoincrementing column
-    if (incrementingColumn != null && incrementingColumn.isEmpty()) {
+    if (incrementingColumn != null && incrementingColumn.isEmpty()) {  // This is really BAD Don't change the bean here
       incrementingColumn = JdbcUtils.getAutoincrementColumn(db, name);
     }
 
-    String quoteString = JdbcUtils.getIdentifierQuoteString(db);
+    queryBuilder = QueryBuilderFactory.getQueryBuilder(QueryBuilder.DBType.POSTGRES)
+            .withLimit(2000)  // TODO STEVE - make a parameter
+            .withIncrementingColumn(incrementingColumn)
+            .withTimestampColumn(timestampColumn)
+            .withQuoteString(JdbcUtils.getIdentifierQuoteString(db))
+            .withTableName(name);
 
-    String queryString = buildQueryString(quoteString, mode, name, query, incrementingColumn, timestampColumn);
+         if (mode == QueryMode.QUERY)
+            queryBuilder.withUserQuery(query);
+
+    queryBuilder.buildQuery();
+
+    String queryString = queryBuilder.toString();
     log.debug("{} prepared SQL query: {}", this, queryString);
     stmt = db.prepareStatement(queryString);
   }
 
   @Override
   protected ResultSet executeQuery() throws SQLException {
-    if (incrementingColumn != null && timestampColumn != null) {
-      Timestamp ts = new Timestamp(timestampOffset == null ? 0 : timestampOffset);
-      stmt.setTimestamp(1, ts, UTC_CALENDAR);
-      stmt.setLong(2, (incrementingOffset == null ? -1 : incrementingOffset));
-      stmt.setTimestamp(3, ts, UTC_CALENDAR);
-    } else if (incrementingColumn != null) {
-      stmt.setLong(1, (incrementingOffset == null ? -1 : incrementingOffset));
-    } else if (timestampColumn != null) {
-      Timestamp ts = new Timestamp(timestampOffset == null ? 0 : timestampOffset);
-      stmt.setTimestamp(1, ts, UTC_CALENDAR);
+
+    List<QueryParameter> queryParameters = queryBuilder.getQueryParameters();
+    for (int i = 0; i < queryParameters.size(); i ++) {
+      switch (queryParameters.get(i)) {
+        case INCREMENTING_COLUMN:
+          stmt.setLong(i + 1, (incrementingOffset == null ? -1 : incrementingOffset));
+          break;
+        case TIMESTAMP_COLUMN:
+          Timestamp ts = new Timestamp(timestampOffset == null ? 0 : timestampOffset);
+          stmt.setTimestamp(i + 1, ts, UTC_CALENDAR);
+          break;
+      }
     }
+
     return stmt.executeQuery();
   }
 

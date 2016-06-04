@@ -10,12 +10,7 @@ import static io.confluent.connect.jdbc.querybuilder.QueryBuilder.QueryParameter
 /**
  * Created by stlowenthal on 6/3/16.
  */
-public class GenericQueryBuilderTest {
-
-    protected static final String TABLE_NAME = "table1";
-    protected static final String QUOTE = "\"";
-    protected static final String INCREMENTING_COLUMN = "seq1";
-    protected static final String TIMESTAMP_COLUMN = "ts1";
+public class GenericQueryBuilderTest implements QueryBuilderTest {
 
     @Test
     public void genericTimestampQuery() {

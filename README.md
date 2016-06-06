@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/slowenthal/kafka-connect-jdbc.svg?branch=new_queries)](https://travis-ci.org/slowenthal/kafka-connect-jdbc)
+
 # Kafka Connect JDBC Connector
 
 kafka-connect-jdbc is a [Kafka Connector](http://kafka.apache.org/090/documentation.html#connect)

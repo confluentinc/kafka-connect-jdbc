@@ -4,7 +4,6 @@ import org.junit.Test;
 
 import static io.confluent.connect.jdbc.querybuilder.QueryBuilder.DBType.POSTGRES;
 import static junit.framework.TestCase.assertEquals;
-import static org.junit.Assert.*;
 
 /**
  * Created by stlowenthal on 6/3/16.
@@ -20,7 +19,7 @@ public class PostgresQueryBuilderTest implements QueryBuilderTest {
 
         qb.buildQuery();
 
-        assertEquals("SELECT * FROM \"table1\"  WHERE \"ts1\" > ? AND \"ts1\" < CURRENT_TIMESTAMP ORDER BY \"ts1\" ASC", qb.getQuery());
+        assertEquals("SELECT * FROM \"table1\"  WHERE \"ts1\" > ? AND \"ts1\" < CURRENT_TIMESTAMP ORDER BY \"ts1\" ASC", qb.getQueryString());
         assertEquals(1, qb.getQueryParameters().size());
         assertEquals(QueryBuilder.QueryParameter.TIMESTAMP_COLUMN,qb.getQueryParameters().get(0));
 
@@ -36,7 +35,7 @@ public class PostgresQueryBuilderTest implements QueryBuilderTest {
 
         qb.buildQuery();
 
-        assertEquals("SELECT * FROM \"table1\"  WHERE \"seq1\" > ? ORDER BY \"seq1\" ASC", qb.getQuery());
+        assertEquals("SELECT * FROM \"table1\"  WHERE \"seq1\" > ? ORDER BY \"seq1\" ASC", qb.getQueryString());
         assertEquals(1, qb.getQueryParameters().size());
         assertEquals(QueryBuilder.QueryParameter.INCREMENTING_COLUMN,qb.getQueryParameters().get(0));
     }
@@ -51,7 +50,7 @@ public class PostgresQueryBuilderTest implements QueryBuilderTest {
 
         qb.buildQuery();
 
-        assertEquals("SELECT * FROM \"table1\"  WHERE \"ts1\" < CURRENT_TIMESTAMP AND (\"ts1\", \"seq1\") > (?, ?) ORDER BY \"ts1\",\"seq1\" ASC", qb.getQuery());
+        assertEquals("SELECT * FROM \"table1\"  WHERE \"ts1\" < CURRENT_TIMESTAMP AND (\"ts1\", \"seq1\") > (?, ?) ORDER BY \"ts1\",\"seq1\" ASC", qb.getQueryString());
         assertEquals(2, qb.getQueryParameters().size());
         assertEquals(QueryBuilder.QueryParameter.TIMESTAMP_COLUMN,qb.getQueryParameters().get(0));
         assertEquals(QueryBuilder.QueryParameter.INCREMENTING_COLUMN,qb.getQueryParameters().get(1));
@@ -68,7 +67,7 @@ public class PostgresQueryBuilderTest implements QueryBuilderTest {
 
         qb.buildQuery();
 
-        assertEquals("SELECT * FROM \"table1\"  WHERE \"ts1\" > ? AND \"ts1\" < CURRENT_TIMESTAMP ORDER BY \"ts1\" ASC LIMIT 1000", qb.getQuery());
+        assertEquals("SELECT * FROM \"table1\"  WHERE \"ts1\" > ? AND \"ts1\" < CURRENT_TIMESTAMP ORDER BY \"ts1\" ASC LIMIT 1000", qb.getQueryString());
         assertEquals(1, qb.getQueryParameters().size());
         assertEquals(QueryBuilder.QueryParameter.TIMESTAMP_COLUMN,qb.getQueryParameters().get(0));
 
@@ -85,7 +84,7 @@ public class PostgresQueryBuilderTest implements QueryBuilderTest {
 
         qb.buildQuery();
 
-        assertEquals("SELECT * FROM \"table1\"  WHERE \"seq1\" > ? ORDER BY \"seq1\" ASC LIMIT 1000" , qb.getQuery());
+        assertEquals("SELECT * FROM \"table1\"  WHERE \"seq1\" > ? ORDER BY \"seq1\" ASC LIMIT 1000" , qb.getQueryString());
         assertEquals(1, qb.getQueryParameters().size());
         assertEquals(QueryBuilder.QueryParameter.INCREMENTING_COLUMN,qb.getQueryParameters().get(0));
     }
@@ -101,7 +100,7 @@ public class PostgresQueryBuilderTest implements QueryBuilderTest {
 
         qb.buildQuery();
 
-        assertEquals("SELECT * FROM \"table1\"  WHERE \"ts1\" < CURRENT_TIMESTAMP AND (\"ts1\", \"seq1\") > (?, ?) ORDER BY \"ts1\",\"seq1\" ASC LIMIT 1000", qb.getQuery());
+        assertEquals("SELECT * FROM \"table1\"  WHERE \"ts1\" < CURRENT_TIMESTAMP AND (\"ts1\", \"seq1\") > (?, ?) ORDER BY \"ts1\",\"seq1\" ASC LIMIT 1000", qb.getQueryString());
         assertEquals(2, qb.getQueryParameters().size());
         assertEquals(QueryBuilder.QueryParameter.TIMESTAMP_COLUMN,qb.getQueryParameters().get(0));
         assertEquals(QueryBuilder.QueryParameter.INCREMENTING_COLUMN,qb.getQueryParameters().get(1));

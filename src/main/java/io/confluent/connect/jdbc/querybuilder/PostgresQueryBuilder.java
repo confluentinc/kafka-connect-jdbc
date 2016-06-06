@@ -55,7 +55,9 @@ public class PostgresQueryBuilder extends GenericQueryBuilder {
     }
 
     private StringBuilder maybeAddLimit(StringBuilder builder) {
-        if (limit != null) {
+
+        // A value of 0 means NO LIMIT
+        if (limit > 0) {
             builder.append(" LIMIT ")
                     .append(limit);
         }

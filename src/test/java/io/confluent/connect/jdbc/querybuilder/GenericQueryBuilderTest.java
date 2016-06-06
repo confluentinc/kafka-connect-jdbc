@@ -22,7 +22,7 @@ public class GenericQueryBuilderTest implements QueryBuilderTest {
 
         qb.buildQuery();
 
-        assertEquals("SELECT * FROM \"table1\"  WHERE \"ts1\" > ? AND \"ts1\" < CURRENT_TIMESTAMP ORDER BY \"ts1\" ASC", qb.getQuery());
+        assertEquals("SELECT * FROM \"table1\"  WHERE \"ts1\" > ? AND \"ts1\" < CURRENT_TIMESTAMP ORDER BY \"ts1\" ASC", qb.getQueryString());
         assertEquals(1, qb.getQueryParameters().size());
         assertEquals(QueryParameter.TIMESTAMP_COLUMN,qb.getQueryParameters().get(0));
 
@@ -38,7 +38,7 @@ public class GenericQueryBuilderTest implements QueryBuilderTest {
 
         qb.buildQuery();
 
-        assertEquals("SELECT * FROM \"table1\"  WHERE \"seq1\" > ? ORDER BY \"seq1\" ASC", qb.getQuery());
+        assertEquals("SELECT * FROM \"table1\"  WHERE \"seq1\" > ? ORDER BY \"seq1\" ASC", qb.getQueryString());
         assertEquals(1, qb.getQueryParameters().size());
         assertEquals(QueryParameter.INCREMENTING_COLUMN,qb.getQueryParameters().get(0));
     }
@@ -53,7 +53,7 @@ public class GenericQueryBuilderTest implements QueryBuilderTest {
 
         qb.buildQuery();
 
-        assertEquals("SELECT * FROM \"table1\"  WHERE \"ts1\" < CURRENT_TIMESTAMP AND ((\"ts1\" = ? AND \"seq1\" > ?) OR \"ts1\" > ?) ORDER BY \"ts1\",\"seq1\" ASC", qb.getQuery());
+        assertEquals("SELECT * FROM \"table1\"  WHERE \"ts1\" < CURRENT_TIMESTAMP AND ((\"ts1\" = ? AND \"seq1\" > ?) OR \"ts1\" > ?) ORDER BY \"ts1\",\"seq1\" ASC", qb.getQueryString());
         assertEquals(3, qb.getQueryParameters().size());
         assertEquals(QueryParameter.TIMESTAMP_COLUMN,qb.getQueryParameters().get(0));
         assertEquals(QueryParameter.INCREMENTING_COLUMN,qb.getQueryParameters().get(1));

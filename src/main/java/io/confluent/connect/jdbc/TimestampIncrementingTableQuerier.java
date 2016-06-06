@@ -31,7 +31,7 @@ import java.sql.Timestamp;
 import java.util.*;
 
 import static io.confluent.connect.jdbc.querybuilder.QueryBuilder.QueryParameter;
-import static io.confluent.connect.jdbc.querybuilder.QueryBuilder.QueryParameter.*;
+import static io.confluent.connect.jdbc.querybuilder.QueryBuilder.DBType;
 
 /**
  * <p>
@@ -60,37 +60,49 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   private String incrementingColumn;
   private Long incrementingOffset = null;
   private QueryBuilder queryBuilder = null;
+  private Integer queryLimit = null;
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
                                            String timestampColumn, Long timestampOffset,
-                                           String incrementingColumn, Long incrementingOffset) {
+                                           String incrementingColumn, Long incrementingOffset, Integer queryLimit) {
     super(mode, name, topicPrefix);
     this.timestampColumn = timestampColumn;
     this.timestampOffset = timestampOffset;
     this.incrementingColumn = incrementingColumn;
     this.incrementingOffset = incrementingOffset;
+    this.queryLimit = queryLimit;
   }
 
   @Override
   protected void createPreparedStatement(Connection db) throws SQLException {
+
+    // Get the DB type
+    String databaseProductName = db.getMetaData().getDatabaseProductName();
+    DBType dbType = QueryBuilderFactory.dbProductNameToDBType(databaseProductName);
+
+    log.debug("Using Database product \"" + databaseProductName + "\" with database SQL generator \"" + dbType.name() + "\".");
+
     // Default when unspecified uses an autoincrementing column
     if (incrementingColumn != null && incrementingColumn.isEmpty()) {  // This is really BAD Don't change the bean here
       incrementingColumn = JdbcUtils.getAutoincrementColumn(db, name);
     }
 
-    queryBuilder = QueryBuilderFactory.getQueryBuilder(QueryBuilder.DBType.POSTGRES)
-            .withLimit(2000)  // TODO STEVE - make a parameter
-            .withIncrementingColumn(incrementingColumn)
-            .withTimestampColumn(timestampColumn)
-            .withQuoteString(JdbcUtils.getIdentifierQuoteString(db))
-            .withTableName(name);
+    if (mode == QueryMode.QUERY) {
+      queryBuilder = QueryBuilderFactory.getQueryBuilder(DBType.CUSTOM_QUERY)
+              .withUserQuery(query);
+    } else {
+      queryBuilder = QueryBuilderFactory.getQueryBuilder(dbType)
+              .withQuoteString(JdbcUtils.getIdentifierQuoteString(db))
+              .withLimit(queryLimit)
+              .withIncrementingColumn(incrementingColumn)
+              .withTimestampColumn(timestampColumn)
+              .withTableName(name);
+    }
 
-         if (mode == QueryMode.QUERY)
-            queryBuilder.withUserQuery(query);
 
     queryBuilder.buildQuery();
 
-    String queryString = queryBuilder.toString();
+    String queryString = queryBuilder.getQueryString();
     log.debug("{} prepared SQL query: {}", this, queryString);
     stmt = db.prepareStatement(queryString);
   }
@@ -175,6 +187,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
            ", topicPrefix='" + topicPrefix + '\'' +
            ", timestampColumn='" + timestampColumn + '\'' +
            ", incrementingColumn='" + incrementingColumn + '\'' +
+           ", queryLimit='" + queryLimit + '\'' +
            '}';
   }
 }

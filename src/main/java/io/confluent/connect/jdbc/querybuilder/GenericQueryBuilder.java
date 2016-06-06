@@ -3,6 +3,7 @@ package io.confluent.connect.jdbc.querybuilder;
 import io.confluent.connect.jdbc.JdbcUtils;
 import io.confluent.connect.jdbc.querybuilder.QueryBuilder;
 
+import javax.naming.OperationNotSupportedException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -17,7 +18,7 @@ public class GenericQueryBuilder implements QueryBuilder {
     protected String quoteString;
     protected String tableName = null;
     protected String userQuery = null;
-    protected Integer limit = null;
+    protected int limit = 0;
     protected String incrementingColumn = null;
     protected String timestampColumn = null;
 
@@ -39,8 +40,7 @@ public class GenericQueryBuilder implements QueryBuilder {
 
     @Override
     public QueryBuilder withUserQuery(String userQuery) {
-        this.userQuery = userQuery;
-        return this;
+        throw new IllegalStateException("This Builder does not support Custom Queries");
     }
 
     @Override
@@ -65,11 +65,7 @@ public class GenericQueryBuilder implements QueryBuilder {
     public void buildQuery() {
         StringBuilder builder = new StringBuilder();
 
-        if (userQuery != null) {
-            builder.append(userQuery);
-        } else {
-            builder.append(buildSelectList());
-        }
+        builder.append(buildSelectList());
 
         builder.append(' ');
 
@@ -173,7 +169,7 @@ public class GenericQueryBuilder implements QueryBuilder {
     }
 
     @Override
-    public String getQuery() {
+    public String getQueryString() {
         return query;
     }
 

@@ -21,7 +21,7 @@ public interface QueryBuilder {
 
     void buildQuery();
 
-    String getQuery();
+    String getQueryString();
 
     List<QueryParameter> getQueryParameters();
 
@@ -32,6 +32,7 @@ public interface QueryBuilder {
 
     enum DBType {
         GENERIC,
+        CUSTOM_QUERY,
         POSTGRES,
         MS_SQL
     }

@@ -77,13 +77,13 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
 
   @Override
   protected void createPreparedStatement(Connection db) throws SQLException {
-    // Default when unspecified uses an autoincrementing column or primary key if primary key assumed to autoincrement.
-    if (incrementingColumn != null && incrementingColumn.isEmpty()) {
-      if (incrementingColumn.isEmpty() && incrementingColumnUsePrimaryKey && keyColumn != null) {
-        incrementingColumn = keyColumn;
-      } else {
-        incrementingColumn = JdbcUtils.getAutoincrementColumn(db, name);
-      }
+    // Use primary key if one exists and use.primary.key is set to true.
+    // Default when unspecified uses an autoincrementing column.
+    if (incrementingColumnUsePrimaryKey && keyColumn != null) {
+      incrementingColumn = keyColumn;
+      // TODO verify type of key column to be possible to be autoincrementing?
+    } else if (incrementingColumn == null || incrementingColumn.isEmpty()) {
+      incrementingColumn = JdbcUtils.getAutoincrementColumn(db, name);
     }
 
     String quoteString = JdbcUtils.getIdentifierQuoteString(db);

@@ -59,7 +59,6 @@
         <commons-io.version>2.4</commons-io.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
-        <apache-staging.maven.repo>http://repository.apache.org/content/groups/staging/</apache-staging.maven.repo>
     </properties>
 
     <repositories>
@@ -67,11 +66,6 @@
             <id>confluent</id>
             <name>Confluent</name>
             <url>${confluent.maven.repo}</url>
-        </repository>
-        <repository>
-            <id>apache</id>
-            <name>Apache Staging</name>
-            <url>${apache-staging.maven.repo}</url>
         </repository>
     </repositories>
 

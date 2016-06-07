@@ -125,6 +125,20 @@ public class JdbcSourceConnectorTest {
   }
 
   @Test
+  public void testPartitioningTableAndViewView() throws Exception {
+    // Tests case where we have a table and a view of that table.
+    db.createTableAndView("test_table", "test_view", "id", "INT NOT NULL");
+    connector.start(connProps);
+    List<Map<String, String>> configs = connector.taskConfigs(10);
+    assertEquals(2, configs.size());
+    assertTaskConfigsHaveParentConfigs(configs);
+    assertEquals("test_table", configs.get(0).get(JdbcSourceTaskConfig.TABLES_CONFIG));
+    assertEquals("test_view", configs.get(1).get(JdbcSourceTaskConfig.TABLES_CONFIG));
+    assertNull(configs.get(0).get(JdbcSourceTaskConfig.QUERY_CONFIG));
+    connector.stop();
+  }
+
+  @Test
   public void testPartitioningManyTables() throws Exception {
     // Tests distributing tables across multiple tasks, in this case unevenly
     db.createTable("test1", "id", "INT NOT NULL");

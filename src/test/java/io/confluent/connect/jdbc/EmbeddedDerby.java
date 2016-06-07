@@ -136,6 +136,36 @@ public class EmbeddedDerby {
   }
 
   /**
+   * Shorthand for creating a table and a view that selects from the table.
+   * @param tableName name of the table
+   * @param viewName name of the view
+   * @param fields list of field names followed by specs specifications, e.g. "user-id",
+   *               "INT NOT NULL", "username", "VARCHAR(20)". May include other settings like
+   *               "PRIMARY KEY user_id"
+   */
+  public void createTableAndView(String tableName, String viewName, String... fields) throws SQLException {
+    createTable(tableName, fields);
+
+    StringBuilder statement = new StringBuilder();
+    statement.append("CREATE VIEW ");
+    statement.append(quoteCaseSensitive(viewName));
+    statement.append(" AS SELECT ");
+    for (int i = 0; i < fields.length; i += 2) {
+      if (i > 0) {
+        statement.append(", ");
+      }
+      statement.append(quoteCaseSensitive(fields[i]));
+    }
+    statement.append(" FROM ");
+    statement.append(quoteCaseSensitive(tableName));
+
+    Statement stmt = conn.createStatement();
+    String statementStr = statement.toString();
+    log.debug("Creating view {} in {} with statement {}", name, this.name, statementStr);
+    stmt.execute(statementStr);
+  }
+
+  /**
    * Drop a table.
    * @param name
    */

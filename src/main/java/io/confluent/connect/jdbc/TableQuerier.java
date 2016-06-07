@@ -85,6 +85,8 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
           log.info("Stale prepared statement, re-creating.");
           createPreparedStatement(db);
           resultSet = executeQuery();
+        } else {
+          throw e;
         }
       }
 

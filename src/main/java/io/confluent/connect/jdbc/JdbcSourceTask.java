@@ -257,6 +257,10 @@ public class JdbcSourceTask extends SourceTask {
   private void validateNonNullable(String incrementalMode, String table, String incrementingColumn,
                                    String timestampColumn) {
     try {
+      // Views typically will not expose NOT NULL constraints on their columns, so don't
+      // check for nullability.
+      if (JdbcUtils.isView(db, table)) return;
+
       // Validate that requested columns for offsets are NOT NULL. Currently this is only performed
       // for table-based copying because custom query mode doesn't allow this to be looked up
       // without a query or parsing the query since we don't have a table name.

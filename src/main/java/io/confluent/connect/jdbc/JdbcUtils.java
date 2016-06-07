@@ -166,6 +166,15 @@ public class JdbcUtils {
     return false;
   }
 
+  public static boolean isView(Connection conn, String name)
+          throws SQLException {
+    ResultSet rs = conn.getMetaData().getTables(null, null, name, null);
+    while (rs.next()) {
+      if (rs.getString(GET_TABLES_TYPE_COLUMN).equals("VIEW")) return true;
+    }
+    return false;
+  }
+
   /**
    * Format the given Date assuming UTC timezone in a format supported by SQL.
    * @param date the date to convert to a String

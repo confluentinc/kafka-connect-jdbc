@@ -5,5 +5,5 @@ deploy:
     secure: Ohm8SvY/5f00PC1JpJAiQ9l3oVx7T/lEjgkhYsLj0pbBTlIsPWXcFYIvqPjgrp+fPblOOem3oVJHXzO5YPb/Z2CZYnMTe0v7N+75ssytCgXomTZ6Qy1zP80qcPJrxwf0/TD17yuTAilcqIgKSf+8LiedU/O/SdRbNPzYBmqmuCjBWyDfqTcLbYaF2mgKEd3hIIUzf5ugu2DbS64OsT23JaxlyK/lQ2cLKwxjw3nv+jsbQ2FvisGA3+5cjlI4KUfvCazWOsTF8WBT8nKSwQqXHOu/xq3M62TnGYF9FelpnJqe8aZgO1glFQAriVVz/4C7sJwg37Z28AEEWJIo0ShUsM8Vvtl656wHhNVqiV/dw5/RBWAl+FqOEfpeuxk35ruSx/Z5qoTXDGjeqe9iQWQPDBfacdZdfA/SeAVWJLJBOAhCMLuvRniBgDskmBcBKEubMLM6RsERkgGQZts7DmpOc8w9cLdp9z0B03qkmklMW/cJuVUNe4LKHQ4SQMgof6tBRuQgXyYRiE6PmdSP4BbVmfehHTHIpTRPFwn9MTY1S4lmmAU/Hw0TMRuOEnGasds+ZiyRCPDnR40Vve9oIPQrtxm1YSC7NtMw9vxMXODsBYqqWG6PCMD/wvQNHLcgtz5PRwbhRp/N1PIUEK1BEwZv792ugulWp+lLD1ZuN2MOwIg=
   file: kafka-connect-jdbc-*.jar
   on:
-    repo: slowenthal/kafka-connect-jdbc
-    branch: new_queries
+    tags: true
+

@@ -15,7 +15,7 @@ public class QueryBuilderFactory {
             case POSTGRES:
                 return new PostgresQueryBuilder();
             case MS_SQL:
-                return new PostgresQueryBuilder();
+                return new MSSqlQueryBuilder();
             default:
                 return new GenericQueryBuilder();
         }

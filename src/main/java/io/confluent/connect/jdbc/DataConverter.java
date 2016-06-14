@@ -328,7 +328,7 @@ public class DataConverter {
         if (bigDecimalValue == null)
           colValue = null;
         else
-          colValue = resultSet.getBigDecimal(col).setScale(scale);;
+          colValue = resultSet.getBigDecimal(col).setScale(scale);
         break;
       }
 

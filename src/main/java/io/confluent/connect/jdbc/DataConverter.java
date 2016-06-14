@@ -27,6 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.net.URL;
 import java.sql.Blob;
 import java.sql.Clob;
@@ -322,7 +323,12 @@ public class DataConverter {
 
       case Types.NUMERIC:
       case Types.DECIMAL: {
-        colValue = resultSet.getBigDecimal(col);
+        int scale = resultSet.getMetaData().getScale(col);
+        BigDecimal bigDecimalValue = resultSet.getBigDecimal(col);
+        if (bigDecimalValue == null)
+          colValue = null;
+        else
+          colValue = resultSet.getBigDecimal(col).setScale(scale);;
         break;
       }
 

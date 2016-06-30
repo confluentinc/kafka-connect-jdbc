@@ -51,7 +51,7 @@ public class JdbcUtils {
    * The default only includes standard, user-defined tables.
    */
   public static final Set<String> DEFAULT_TABLE_TYPES = Collections.unmodifiableSet(
-      new HashSet<>(Arrays.asList("TABLE"))
+      new HashSet<>(Arrays.asList("TABLE", "VIEW"))
   );
 
   private static final int GET_TABLES_TYPE_COLUMN = 4;
@@ -161,6 +161,15 @@ public class JdbcUtils {
       }
     }
 
+    return false;
+  }
+
+  public static boolean isView(Connection conn, String name)
+          throws SQLException {
+    ResultSet rs = conn.getMetaData().getTables(null, null, name, null);
+    while (rs.next()) {
+      if (rs.getString(GET_TABLES_TYPE_COLUMN).equals("VIEW")) return true;
+    }
     return false;
   }
 

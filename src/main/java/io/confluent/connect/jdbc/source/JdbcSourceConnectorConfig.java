@@ -53,6 +53,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final int BATCH_MAX_ROWS_DEFAULT = 100;
   private static final String BATCH_MAX_ROWS_DISPLAY = "Max Rows Per Batch";
 
+  public static final String NUMERIC_PRECISION_MAPPING_CONFIG = "numeric.precision.mapping";
+  private static final String NUMERIC_PRECISION_MAPPING_DOC =
+      "Whether or not to map NUMERIC values by precision";
+  public static final boolean NUMERIC_PRECISION_MAPPING_DEFAULT = false;
+  private static final String NUMERIC_PRECISION_MAPPING_DISPLAY = "Map Numeric Values By Precision";
+
   public static final String MODE_CONFIG = "mode";
   private static final String MODE_DOC =
       "The mode for updating a table each time it is polled. Options include:\n"
@@ -175,6 +181,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
                 TABLE_RECOMMENDER)
         .define(TABLE_BLACKLIST_CONFIG, Type.LIST, TABLE_BLACKLIST_DEFAULT, Importance.MEDIUM, TABLE_BLACKLIST_DOC, DATABASE_GROUP, 3, Width.LONG, TABLE_BLACKLIST_DISPLAY,
                 TABLE_RECOMMENDER)
+        .define(NUMERIC_PRECISION_MAPPING_CONFIG, Type.BOOLEAN, NUMERIC_PRECISION_MAPPING_DEFAULT, Importance.LOW, NUMERIC_PRECISION_MAPPING_DOC, DATABASE_GROUP, 4, Width.SHORT, NUMERIC_PRECISION_MAPPING_DISPLAY)
         .define(TABLE_TYPE_CONFIG, Type.LIST, TABLE_TYPE_DEFAULT, Importance.LOW,
                 TABLE_TYPE_DOC, CONNECTOR_GROUP, 4, Width.MEDIUM, TABLE_TYPE_DISPLAY)
         .define(MODE_CONFIG, Type.STRING, MODE_UNSPECIFIED, ConfigDef.ValidString.in(MODE_UNSPECIFIED, MODE_BULK, MODE_TIMESTAMP, MODE_INCREMENTING, MODE_TIMESTAMP_INCREMENTING),

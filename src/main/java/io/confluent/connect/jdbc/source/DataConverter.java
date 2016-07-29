@@ -45,7 +45,7 @@ import java.util.TimeZone;
  * Connect records.
  */
 public class DataConverter {
-  private static final Logger log = LoggerFactory.getLogger(JdbcSourceTask.class);
+  private static final Logger log = LoggerFactory.getLogger(DataConverter.class);
 
   private static final ThreadLocal<Calendar> UTC_CALENDAR = new ThreadLocal<Calendar>() {
     @Override
@@ -54,7 +54,13 @@ public class DataConverter {
     }
   };
 
-  public static Schema convertSchema(String tableName, ResultSetMetaData metadata)
+  private final boolean numericPrecisionMapping;
+
+  DataConverter(JdbcSourceTaskConfig config) {
+    this.numericPrecisionMapping = config.getBoolean(JdbcSourceConnectorConfig.NUMERIC_PRECISION_MAPPING_CONFIG);
+  }
+
+  public Schema convertSchema(String tableName, ResultSetMetaData metadata)
       throws SQLException {
     // TODO: Detect changes to metadata, which will require schema updates
     SchemaBuilder builder = SchemaBuilder.struct().name(tableName);
@@ -64,7 +70,7 @@ public class DataConverter {
     return builder.build();
   }
 
-  public static Struct convertRecord(Schema schema, ResultSet resultSet)
+  public Struct convertRecord(Schema schema, ResultSet resultSet)
       throws SQLException {
     ResultSetMetaData metadata = resultSet.getMetaData();
     Struct struct = new Struct(schema);
@@ -82,7 +88,7 @@ public class DataConverter {
   }
 
 
-  private static void addFieldSchema(ResultSetMetaData metadata, int col,
+  private void addFieldSchema(ResultSetMetaData metadata, int col,
                                      SchemaBuilder builder)
       throws SQLException {
     // Label is what the query requested the column name be using an "AS" clause, name is the
@@ -175,6 +181,23 @@ public class DataConverter {
       }
 
       case Types.NUMERIC:
+        if (numericPrecisionMapping) {
+          int precision = metadata.getPrecision(col);
+          if (metadata.getScale(col) == 0 && precision < 20) { // integer
+            Schema schema;
+            if (precision > 10) {
+              schema = (optional) ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA;
+            } else if (precision > 5) {
+              schema = (optional) ? Schema.OPTIONAL_INT32_SCHEMA : Schema.INT32_SCHEMA;
+            } else if (precision > 3) {
+              schema = (optional) ? Schema.OPTIONAL_INT16_SCHEMA : Schema.INT16_SCHEMA;
+            } else {
+              schema = (optional) ? Schema.OPTIONAL_INT8_SCHEMA : Schema.INT8_SCHEMA;
+            }
+            builder.field(fieldName, schema);
+            break;
+          }
+        }
       case Types.DECIMAL: {
         SchemaBuilder fieldBuilder = Decimal.builder(metadata.getScale(col));
         if (optional) {
@@ -262,7 +285,7 @@ public class DataConverter {
     }
   }
 
-  private static void convertFieldValue(ResultSet resultSet, int col, int colType,
+  private void convertFieldValue(ResultSet resultSet, int col, int colType,
                                         Struct struct, String fieldName)
       throws SQLException, IOException {
     final Object colValue;
@@ -326,6 +349,22 @@ public class DataConverter {
       }
 
       case Types.NUMERIC:
+        if (numericPrecisionMapping) {
+          ResultSetMetaData metadata = resultSet.getMetaData();
+          int precision = metadata.getPrecision(col);
+          if (metadata.getScale(col) == 0 && precision < 20) { // integer
+            if (precision > 10) {
+              colValue = resultSet.getLong(col);
+            } else if (precision > 5) {
+              colValue = resultSet.getInt(col);
+            } else if (precision > 3) {
+              colValue = resultSet.getShort(col);
+            } else {
+              colValue = resultSet.getByte(col);
+            }
+            break;
+          }
+        }
       case Types.DECIMAL: {
         colValue = resultSet.getBigDecimal(col);
         break;
@@ -432,5 +471,4 @@ public class DataConverter {
     // be faster than setting this by name?
     struct.put(fieldName, resultSet.wasNull() ? null : colValue);
   }
-
 }

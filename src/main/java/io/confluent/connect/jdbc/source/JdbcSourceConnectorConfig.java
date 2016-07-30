@@ -55,7 +55,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public static final String NUMERIC_PRECISION_MAPPING_CONFIG = "numeric.precision.mapping";
   private static final String NUMERIC_PRECISION_MAPPING_DOC =
-      "Whether or not to map NUMERIC values by precision";
+      "Whether or not to attempt mapping NUMERIC values by precision to integral types";
   public static final boolean NUMERIC_PRECISION_MAPPING_DEFAULT = false;
   private static final String NUMERIC_PRECISION_MAPPING_DISPLAY = "Map Numeric Values By Precision";
 

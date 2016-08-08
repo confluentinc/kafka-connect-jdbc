@@ -55,18 +55,11 @@ public class DataConverter {
   };
 
   public static Schema convertSchema(String tableName, ResultSetMetaData metadata)
-      throws SQLException {
-    return convertSchema(tableName, null, metadata);
-  }
-
-  public static Schema convertSchema(String tableName, String columnName, ResultSetMetaData metadata)
           throws SQLException {
     // TODO: Detect changes to metadata, which will require schema updates
     SchemaBuilder builder = SchemaBuilder.struct().name(tableName);
     for (int col = 1; col <= metadata.getColumnCount(); col++) {
-      if (columnName == null || metadata.getColumnName(col).equals(columnName)) {
-        addFieldSchema(metadata, col, builder);
-      }
+	  addFieldSchema(metadata, col, builder);
     }
     return builder.build();
   }

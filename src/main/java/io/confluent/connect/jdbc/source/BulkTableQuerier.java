@@ -81,7 +81,7 @@ public class BulkTableQuerier extends TableQuerier {
         throw new ConnectException("Unexpected query mode: " + mode);
     }
 
-    if (keyColumn != null && keySchema != null) {
+    if (keyColumn != null) {
       Object key = record.get(keyColumn);
 
       if (key != null) {

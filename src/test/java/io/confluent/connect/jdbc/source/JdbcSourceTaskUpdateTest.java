@@ -139,7 +139,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
             "id", "INT NOT NULL PRIMARY KEY");
     db.insert(SINGLE_TABLE_NAME, "id", 1);
 
-    startTask(null, null, "true", null, 0L);
+    startTask(null, null, true, null, 0L);
 
     verifyIncrementingKeyFirstPoll(TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
@@ -216,7 +216,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
 
     db.insert(SINGLE_TABLE_NAME, "modified", JdbcUtils.formatUTC(new Timestamp(10L)), "id", 1);
 
-    startTask("modified", null, null, null, 4l);
+    startTask("modified", null, null, null, 4L);
     verifyTimestampFirstPoll(TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     Long currentTime = new Date().getTime();
@@ -440,10 +440,9 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     startTask(timestampColumn, incrementingColumn, null, query, 0L);
   }
 
-  private void startTask(String timestampColumn, String incrementingColumn, String usePrimaryKeyAsIncrementingColumn, String query, Long delay) {
+  private void startTask(String timestampColumn, String incrementingColumn, Boolean usePrimaryKeyAsIncrementingColumn, String query, Long delay) {
     String mode = null;
-    boolean hasIncrementingColumn = incrementingColumn != null ||
-            (usePrimaryKeyAsIncrementingColumn != null && usePrimaryKeyAsIncrementingColumn.equals("true"));
+    boolean hasIncrementingColumn = incrementingColumn != null || usePrimaryKeyAsIncrementingColumn;
 
     if (timestampColumn != null && hasIncrementingColumn) {
       mode = JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING;
@@ -468,7 +467,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
       taskConfig.put(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG, incrementingColumn);
     }
     if (usePrimaryKeyAsIncrementingColumn != null) {
-      taskConfig.put(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_USE_PRIMARY_KEY_CONFIG, usePrimaryKeyAsIncrementingColumn);
+      taskConfig.put(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_USE_PRIMARY_KEY_CONFIG, usePrimaryKeyAsIncrementingColumn.toString());
     }
     taskConfig.put(JdbcSourceConnectorConfig.TIMESTAMP_DELAY_INTERVAL_MS_CONFIG, delay == null ? "0" : delay.toString());
     task.start(taskConfig);

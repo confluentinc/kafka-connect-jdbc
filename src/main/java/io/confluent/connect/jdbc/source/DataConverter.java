@@ -59,7 +59,7 @@ public class DataConverter {
     // TODO: Detect changes to metadata, which will require schema updates
     SchemaBuilder builder = SchemaBuilder.struct().name(tableName);
     for (int col = 1; col <= metadata.getColumnCount(); col++) {
-	  addFieldSchema(metadata, col, builder);
+      addFieldSchema(metadata, col, builder);
     }
     return builder.build();
   }

@@ -442,7 +442,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
 
   private void startTask(String timestampColumn, String incrementingColumn, Boolean usePrimaryKeyAsIncrementingColumn, String query, Long delay) {
     String mode = null;
-    boolean hasIncrementingColumn = incrementingColumn != null || usePrimaryKeyAsIncrementingColumn;
+    boolean hasIncrementingColumn = incrementingColumn != null || (usePrimaryKeyAsIncrementingColumn != null && usePrimaryKeyAsIncrementingColumn);
 
     if (timestampColumn != null && hasIncrementingColumn) {
       mode = JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING;

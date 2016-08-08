@@ -36,6 +36,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
+import io.confluent.connect.jdbc.source.JdbcSourceTask;
+import io.confluent.connect.jdbc.source.JdbcSourceTaskConfig;
+import io.confluent.connect.jdbc.source.TableMonitorThread;
 import io.confluent.connect.jdbc.util.StringUtils;
 import io.confluent.connect.jdbc.util.Version;
 
@@ -83,6 +87,10 @@ public class JdbcSourceConnector extends SourceConnector {
     Set<String> whitelistSet = whitelist.isEmpty() ? null : new HashSet<>(whitelist);
     List<String> blacklist = config.getList(JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG);
     Set<String> blacklistSet = blacklist.isEmpty() ? null : new HashSet<>(blacklist);
+    List<String> tableTypes =  config.getList(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG);
+    Set<String> tableTypesSet =  new HashSet<>(tableTypes);
+
+
     if (whitelistSet != null && blacklistSet != null)
       throw new ConnectException(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + " and "
                                  + JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG + " are "
@@ -97,7 +105,7 @@ public class JdbcSourceConnector extends SourceConnector {
       whitelistSet = Collections.emptySet();
     }
     tableMonitorThread = new TableMonitorThread(db, context, tablePollMs, whitelistSet,
-                                                blacklistSet);
+                                                blacklistSet, tableTypesSet);
     tableMonitorThread.start();
   }
 
@@ -150,6 +158,6 @@ public class JdbcSourceConnector extends SourceConnector {
 
   @Override
   public ConfigDef config() {
-    return JdbcSourceConnectorConfig.config;
+    return JdbcSourceConnectorConfig.CONFIG_DEF;
   }
 }

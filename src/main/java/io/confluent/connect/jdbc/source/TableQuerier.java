@@ -43,13 +43,15 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected PreparedStatement stmt;
   protected ResultSet resultSet;
   protected Schema schema;
+  protected final DataConverter converter;
 
-  public TableQuerier(QueryMode mode, String nameOrQuery, String topicPrefix) {
+  public TableQuerier(QueryMode mode, String nameOrQuery, JdbcSourceTaskConfig config) {
     this.mode = mode;
     this.name = mode.equals(QueryMode.TABLE) ? nameOrQuery : null;
     this.query = mode.equals(QueryMode.QUERY) ? nameOrQuery : null;
-    this.topicPrefix = topicPrefix;
+    this.topicPrefix = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
     this.lastUpdate = 0;
+    this.converter = new DataConverter(config);
   }
 
   public long getLastUpdate() {
@@ -74,7 +76,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     if (resultSet == null) {
       stmt = getOrCreatePreparedStatement(db);
       resultSet = executeQuery();
-      schema = DataConverter.convertSchema(name, resultSet.getMetaData());
+      schema = converter.convertSchema(name, resultSet.getMetaData());
     }
   }
 

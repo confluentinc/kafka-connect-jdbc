@@ -16,6 +16,7 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.util.JdbcUtils;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -26,13 +27,7 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
-import java.util.Calendar;
-import java.util.Collections;
-import java.util.GregorianCalendar;
-import java.util.Map;
-import java.util.TimeZone;
-
-import io.confluent.connect.jdbc.util.JdbcUtils;
+import java.util.*;
 
 /**
  * <p>
@@ -183,6 +178,9 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     Timestamp latest = null;
     if (incrementingColumn != null) {
       switch (schema.field(incrementingColumn).schema().type()) {
+        case INT8:
+          id = (long) (Byte) record.get(incrementingColumn);
+          break;
         case INT32:
           id = (long) (Integer) record.get(incrementingColumn);
           break;

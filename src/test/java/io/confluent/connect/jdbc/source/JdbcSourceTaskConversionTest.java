@@ -35,11 +35,13 @@ import java.nio.ByteBuffer;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
 import java.util.List;
+import java.util.Map;
 import java.util.TimeZone;
 
 import javax.sql.rowset.serial.SerialBlob;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 // Tests conversion of data types and schemas. These use the types supported by Derby, which
@@ -272,18 +274,50 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
                    null);
   }
 
-  // Derby has an XML type, but the JDBC driver doesn't implement any of the type bindings,
-  // returning strings instead, so the XML type is not tested here
+  @Test
+  public void testSchemaPrefix() throws Exception {
+    tearDown();
+    super.setup();
 
-  private void typeConversion(String sqlType, boolean nullable,
-                              Object sqlValue, Schema convertedSchema,
-                              Object convertedValue) throws Exception {
+    Map<String, String> config = singleTableConfig();
+
+    final String expectedSchemaName = String.format(
+        "%s.%s",
+        JdbcSourceTaskConversionTest.class.getPackage().getName(),
+        SINGLE_TABLE_NAME
+    );
+
+    config.put(
+        JdbcSourceConnectorConfig.SCHEMA_NAME_PREFIX_CONFIG,
+        JdbcSourceTaskConversionTest.class.getPackage().getName() + "."
+    );
+    task = new JdbcSourceTask(time);
+    task.start(config);
+    createAndInsert("VARCHAR(5)", true, "A");
+    List<SourceRecord> records = task.poll();
+    assertFalse(records.isEmpty());
+    SourceRecord record = records.get(0);
+    assertEquals(Type.STRUCT, record.valueSchema().type());
+    assertEquals(expectedSchemaName, record.valueSchema().name());
+    db.dropTable(SINGLE_TABLE_NAME);
+  }
+
+  private void createAndInsert(String sqlType, boolean nullable, Object sqlValue) throws Exception {
     String sqlColumnSpec = sqlType;
     if (!nullable) {
       sqlColumnSpec += " NOT NULL";
     }
     db.createTable(SINGLE_TABLE_NAME, "id", sqlColumnSpec);
     db.insert(SINGLE_TABLE_NAME, "id", sqlValue);
+  }
+
+  // Derby has an XML type, but the JDBC driver doesn't implement any of the type bindings,
+  // returning strings instead, so the XML type is not tested here
+
+  private void typeConversion(String sqlType, boolean nullable,
+                              Object sqlValue, Schema convertedSchema,
+                              Object convertedValue) throws Exception {
+    createAndInsert(sqlType, nullable, sqlValue);
     List<SourceRecord> records = task.poll();
     validateRecords(records, convertedSchema, convertedValue);
     db.dropTable(SINGLE_TABLE_NAME);

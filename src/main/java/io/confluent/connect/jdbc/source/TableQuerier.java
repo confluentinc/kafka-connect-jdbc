@@ -39,16 +39,20 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected final String name;
   protected final String query;
   protected final String topicPrefix;
+  protected final String schemaNamePrefix;
+  protected final JdbcSourceTaskConfig jdbcSourceTaskConfig;
   protected long lastUpdate;
   protected PreparedStatement stmt;
   protected ResultSet resultSet;
   protected Schema schema;
 
-  public TableQuerier(QueryMode mode, String nameOrQuery, String topicPrefix) {
+  public TableQuerier(QueryMode mode, String nameOrQuery, JdbcSourceTaskConfig jdbcSourceTaskConfig) {
     this.mode = mode;
     this.name = mode.equals(QueryMode.TABLE) ? nameOrQuery : null;
     this.query = mode.equals(QueryMode.QUERY) ? nameOrQuery : null;
-    this.topicPrefix = topicPrefix;
+    this.jdbcSourceTaskConfig = jdbcSourceTaskConfig;
+    this.topicPrefix = this.jdbcSourceTaskConfig.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
+    this.schemaNamePrefix = this.jdbcSourceTaskConfig.getString(JdbcSourceTaskConfig.SCHEMA_NAME_PREFIX_CONFIG);
     this.lastUpdate = 0;
   }
 
@@ -74,7 +78,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     if (resultSet == null) {
       stmt = getOrCreatePreparedStatement(db);
       resultSet = executeQuery();
-      schema = DataConverter.convertSchema(name, resultSet.getMetaData());
+      schema = DataConverter.convertSchema(this.schemaNamePrefix, name, resultSet.getMetaData());
     }
   }
 

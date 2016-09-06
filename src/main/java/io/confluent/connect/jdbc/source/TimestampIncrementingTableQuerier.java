@@ -61,10 +61,10 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   private long timestampDelay;
   private TimestampIncrementingOffset offset;
 
-  public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
+  public TimestampIncrementingTableQuerier(QueryMode mode, String name, JdbcSourceTaskConfig jdbcSourceTaskConfig,
                                            String timestampColumn, String incrementingColumn,
                                            Map<String, Object> offsetMap, Long timestampDelay) {
-    super(mode, name, topicPrefix);
+    super(mode, name, jdbcSourceTaskConfig);
     this.timestampColumn = timestampColumn;
     this.incrementingColumn = incrementingColumn;
     this.timestampDelay = timestampDelay;

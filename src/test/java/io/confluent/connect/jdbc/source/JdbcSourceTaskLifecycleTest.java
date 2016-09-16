@@ -125,7 +125,7 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
     task.poll();
     assertEquals(startTime + JdbcSourceConnectorConfig.POLL_INTERVAL_MS_DEFAULT,
                  time.milliseconds());
-
+    task.stop();
   }
 
   @Test
@@ -204,6 +204,7 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
                    time.milliseconds());
       validatePollResultTable(records, 1, SECOND_TABLE_NAME);
     }
+    task.stop();
   }
 
   private static void validatePollResultTable(List<SourceRecord> records,

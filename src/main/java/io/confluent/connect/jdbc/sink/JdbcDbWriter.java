@@ -30,7 +30,7 @@ import java.util.Map;
 
 import io.confluent.connect.jdbc.sink.dialect.DbDialect;
 
-public class JdbcDbWriter {
+public class JdbcDbWriter implements AutoCloseable{
   private static final Logger log = LoggerFactory.getLogger(JdbcDbWriter.class);
 
   private final JdbcSinkConfig config;
@@ -88,6 +88,11 @@ public class JdbcDbWriter {
         log.warn("Ignoring error closing connection", sqle);
       }
     }
+  }
+
+  @Override
+  public void close() throws Exception {
+    closeQuietly();
   }
 
   String destinationTable(String topic) {

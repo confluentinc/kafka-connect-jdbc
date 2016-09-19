@@ -114,6 +114,7 @@ public class SinkTaskTest {
             }
         )
     );
+    task.stop();
   }
 
   @Test
@@ -176,6 +177,7 @@ public class SinkTaskTest {
             }
         )
     );
+    task.stop();
   }
 
 }

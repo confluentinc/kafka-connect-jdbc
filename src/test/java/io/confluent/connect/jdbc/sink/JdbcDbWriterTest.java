@@ -16,6 +16,7 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import org.junit.Assert;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -112,6 +113,7 @@ public class JdbcDbWriterTest {
     for (Field field : valueSchema2.fields()) {
       assertTrue(refreshedMetadata.columns.containsKey(field.name()));
     }
+    writer.closeQuietly();
   }
 
   @Test(expected = SQLException.class)
@@ -160,7 +162,7 @@ public class JdbcDbWriterTest {
     props.put("pk.fields", pkFields);
     props.put("insert.mode", insertMode.toString());
 
-    JdbcDbWriter writer = newWriter(props);
+    //JdbcDbWriter writer = newWriter(props);
 
     Schema keySchema = SchemaBuilder.struct()
         .field("id", SchemaBuilder.INT64_SCHEMA);
@@ -178,17 +180,36 @@ public class JdbcDbWriterTest {
 
     SinkRecord record = new SinkRecord(topic, partition, keySchema, keyStruct, valueSchema, valueStruct, offset);
 
-    writer.write(Collections.nCopies(2, record));
+    // This writer gets special treatment because it is sometimes expected to throw an
+    // exception but always needs to be closed. We want it closed so we can release writer
+    // locked files and clean up after the test.
+    try(JdbcDbWriter writer = newWriter(props)){
 
+      writer.write(Collections.nCopies(2, record));
+      writer.closeQuietly();
+
+    }catch(Exception e){
+
+      // if true -> some tests are asserting this exception so rethrow.
+      // if false -> no tests are asserting this exception and we want to close the writer.
+
+      if(e.getClass().getName().equals("java.sql.SQLException")){
+        throw new SQLException(e);
+      }else{
+        e.printStackTrace();
+        Assert.fail("An exception was not expected but was thrown: " + e.toString());
+      }
+    }
     assertEquals(
-        1,
-        sqliteHelper.select("select count(*) from books", new SqliteHelper.ResultSetReadCallback() {
-          @Override
-          public void read(ResultSet rs) throws SQLException {
-            assertEquals(1, rs.getInt(1));
-          }
-        })
+            1,
+            sqliteHelper.select("select count(*) from books", new SqliteHelper.ResultSetReadCallback() {
+              @Override
+              public void read(ResultSet rs) throws SQLException {
+                assertEquals(1, rs.getInt(1));
+              }
+            })
     );
+
   }
 
   @Test
@@ -269,6 +290,6 @@ public class JdbcDbWriterTest {
             }
         )
     );
+    writer.closeQuietly();
   }
-
 }

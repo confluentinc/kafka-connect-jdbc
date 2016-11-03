@@ -21,10 +21,10 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>io.confluent</groupId>
-    <artifactId>kafka-connect-jdbc</artifactId>
+    <artifactId>kafka-connect-jdbc-onespot</artifactId>
     <packaging>jar</packaging>
     <version>3.0.1</version>
-    <name>kafka-connect-jdbc</name>
+    <name>kafka-connect-jdbc-onespot</name>
     <organization>
         <name>Confluent, Inc.</name>
         <url>http://confluent.io</url>

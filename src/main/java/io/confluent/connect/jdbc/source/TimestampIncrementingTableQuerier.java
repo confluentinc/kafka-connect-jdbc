@@ -16,11 +16,11 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.util.JdbcUtils;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
-import org.apache.kafka.connect.source.SourceRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,12 +30,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Calendar;
-import java.util.Collections;
 import java.util.GregorianCalendar;
 import java.util.Map;
 import java.util.TimeZone;
-
-import io.confluent.connect.jdbc.util.JdbcUtils;
 
 /**
  * <p>
@@ -68,8 +65,9 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
                                            String timestampColumn, String incrementingColumn,
                                            Map<String, Object> offsetMap, Long timestampDelay,
-                                           String schemaPattern) {
-    super(mode, name, topicPrefix, schemaPattern);
+                                           String schemaPattern,
+                                           Integer partition) {
+    super(mode, name, topicPrefix, schemaPattern, partition);
     this.timestampColumn = timestampColumn;
     this.incrementingColumn = incrementingColumn;
     this.timestampDelay = timestampDelay;
@@ -180,26 +178,9 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   }
 
   @Override
-  public SourceRecord extractRecord() throws SQLException {
-    final Struct record = DataConverter.convertRecord(schema, resultSet);
+  public Map<String, ?> getSourceOffset(Schema schema, Struct record) {
     offset = extractOffset(schema, record);
-    // TODO: Key?
-    final String topic;
-    final Map<String, String> partition;
-    switch (mode) {
-      case TABLE:
-        partition = Collections.singletonMap(JdbcSourceConnectorConstants.TABLE_NAME_KEY, name);
-        topic = topicPrefix + name;
-        break;
-      case QUERY:
-        partition = Collections.singletonMap(JdbcSourceConnectorConstants.QUERY_NAME_KEY,
-                                             JdbcSourceConnectorConstants.QUERY_NAME_VALUE);
-        topic = topicPrefix;
-        break;
-      default:
-        throw new ConnectException("Unexpected query mode: " + mode);
-    }
-    return new SourceRecord(partition, offset.toMap(), topic, record.schema(), record);
+    return (offset != null) ? offset.toMap() : null;
   }
 
   // Visible for testing
@@ -214,7 +195,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     }
 
     final Long extractedId;
-    if (incrementingColumn != null) {
+    if (incrementingColumn != null && schema != null && schema.field(incrementingColumn) != null) {
       final Schema incrementingColumnSchema = schema.field(incrementingColumn).schema();
       final Object incrementingColumnValue = record.get(incrementingColumn);
       if (incrementingColumnValue == null) {

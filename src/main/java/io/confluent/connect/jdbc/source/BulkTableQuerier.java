@@ -36,8 +36,8 @@ import io.confluent.connect.jdbc.util.JdbcUtils;
 public class BulkTableQuerier extends TableQuerier {
   private static final Logger log = LoggerFactory.getLogger(BulkTableQuerier.class);
 
-  public BulkTableQuerier(QueryMode mode, String name, String schemaPattern, String topicPrefix) {
-    super(mode, name, topicPrefix, schemaPattern);
+  public BulkTableQuerier(QueryMode mode, String name, String key, String schemaPattern, String topicPrefix) {
+    super(mode, name, key, topicPrefix, schemaPattern);
   }
 
   @Override
@@ -80,7 +80,12 @@ public class BulkTableQuerier extends TableQuerier {
       default:
         throw new ConnectException("Unexpected query mode: " + mode);
     }
-    return new SourceRecord(partition, null, topic, record.schema(), record);
+
+    if (key == null) {
+      return new SourceRecord(partition, null, topic, record.schema(), record);
+    } else {
+      return new SourceRecord(partition, null, topic, record.schema(), record.get(key), record.schema(), record);
+    }
   }
 
   @Override

@@ -280,7 +280,10 @@ public class DataConverter {
 
       // 8 bits int
       case Types.TINYINT: {
-        colValue = resultSet.getByte(col);
+        if (resultSet.getShort(col) > Byte.MAX_VALUE)
+          colValue = resultSet.getShort(col);
+        else
+          colValue = resultSet.getByte(col);
         break;
       }
 

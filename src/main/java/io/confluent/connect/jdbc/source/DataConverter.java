@@ -385,7 +385,7 @@ public class DataConverter {
       case Types.NUMERIC: {
         ResultSetMetaData metadata = resultSet.getMetaData();
         int precision = metadata.getPrecision(col);
-        if (metadata.getScale(col) == 0 && precision < 20) { // integer
+        if (metadata.getScale(col) == 0 && precision < 19) { // integer
           if (precision > 9) {
             colValue = resultSet.getLong(col);
           } else if (precision > 4) {

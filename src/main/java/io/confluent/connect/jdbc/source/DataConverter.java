@@ -220,8 +220,12 @@ public class DataConverter {
           break;
         }
       }
+
       case Types.DECIMAL: {
-        SchemaBuilder fieldBuilder = Decimal.builder(metadata.getScale(col));
+        int scale = metadata.getScale(col);
+        if (scale == -127) //NUMBER without precision defined for OracleDB
+          scale = 127;
+        SchemaBuilder fieldBuilder = Decimal.builder(scale);
         if (optional) {
           fieldBuilder.optional();
         }
@@ -399,7 +403,11 @@ public class DataConverter {
         }
       }
       case Types.DECIMAL: {
-        colValue = resultSet.getBigDecimal(col);
+        ResultSetMetaData metadata = resultSet.getMetaData();
+        int scale = metadata.getScale(col);
+        if (scale == -127)
+          scale = 127;
+        colValue = resultSet.getBigDecimal(col, scale);
         break;
       }
 

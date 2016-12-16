@@ -35,10 +35,8 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.SQLXML;
 import java.sql.Types;
-import java.util.Calendar;
-import java.util.GregorianCalendar;
-import java.util.TimeZone;
 
+import io.confluent.connect.jdbc.util.DateTimeUtils;
 
 /**
  * DataConverter handles translating table schemas to Kafka Connect schemas and row data to Kafka
@@ -46,13 +44,6 @@ import java.util.TimeZone;
  */
 public class DataConverter {
   private static final Logger log = LoggerFactory.getLogger(JdbcSourceTask.class);
-
-  private static final ThreadLocal<Calendar> UTC_CALENDAR = new ThreadLocal<Calendar>() {
-    @Override
-    protected Calendar initialValue() {
-      return new GregorianCalendar(TimeZone.getTimeZone("UTC"));
-    }
-  };
 
   public static Schema convertSchema(String tableName, ResultSetMetaData metadata)
       throws SQLException {
@@ -97,6 +88,7 @@ public class DataConverter {
         metadata.isNullable(col) == ResultSetMetaData.columnNullableUnknown) {
       optional = true;
     }
+
     switch (sqlType) {
       case Types.NULL: {
         log.warn("JDBC type {} not currently supported", sqlType);
@@ -113,8 +105,7 @@ public class DataConverter {
       }
 
       // ints <= 8 bits
-      case Types.BIT:
-      case Types.TINYINT: {
+      case Types.BIT: {
         if (optional) {
           builder.field(fieldName, Schema.OPTIONAL_INT8_SCHEMA);
         } else {
@@ -122,12 +113,38 @@ public class DataConverter {
         }
         break;
       }
+
+      case Types.TINYINT: {
+        if (optional) {
+          if (metadata.isSigned(col)) {
+            builder.field(fieldName, Schema.OPTIONAL_INT8_SCHEMA);
+          } else {
+            builder.field(fieldName, Schema.OPTIONAL_INT16_SCHEMA);
+          }
+        } else {
+          if (metadata.isSigned(col)) {
+            builder.field(fieldName, Schema.INT8_SCHEMA);
+          } else {
+            builder.field(fieldName, Schema.INT16_SCHEMA);
+          }
+        }
+        break;
+      }
+
       // 16 bit ints
       case Types.SMALLINT: {
         if (optional) {
-          builder.field(fieldName, Schema.OPTIONAL_INT16_SCHEMA);
+          if (metadata.isSigned(col)) {
+            builder.field(fieldName, Schema.OPTIONAL_INT16_SCHEMA);
+          } else {
+            builder.field(fieldName, Schema.OPTIONAL_INT32_SCHEMA);
+          }
         } else {
-          builder.field(fieldName, Schema.INT16_SCHEMA);
+          if (metadata.isSigned(col)) {
+            builder.field(fieldName, Schema.INT16_SCHEMA);
+          } else {
+            builder.field(fieldName, Schema.INT32_SCHEMA);
+          }
         }
         break;
       }
@@ -135,9 +152,17 @@ public class DataConverter {
       // 32 bit ints
       case Types.INTEGER: {
         if (optional) {
-          builder.field(fieldName, Schema.OPTIONAL_INT32_SCHEMA);
+          if (metadata.isSigned(col)) {
+            builder.field(fieldName, Schema.OPTIONAL_INT32_SCHEMA);
+          } else {
+            builder.field(fieldName, Schema.OPTIONAL_INT64_SCHEMA);
+          }
         } else {
-          builder.field(fieldName, Schema.INT32_SCHEMA);
+          if (metadata.isSigned(col)) {
+            builder.field(fieldName, Schema.INT32_SCHEMA);
+          } else {
+            builder.field(fieldName, Schema.INT64_SCHEMA);
+          }
         }
         break;
       }
@@ -289,19 +314,31 @@ public class DataConverter {
 
       // 8 bits int
       case Types.TINYINT: {
-        colValue = resultSet.getByte(col);
+        if (resultSet.getMetaData().isSigned(col)) {
+          colValue = resultSet.getByte(col);
+        } else {
+          colValue = resultSet.getShort(col);
+        }
         break;
       }
 
       // 16 bits int
       case Types.SMALLINT: {
-        colValue = resultSet.getShort(col);
+        if (resultSet.getMetaData().isSigned(col)) {
+          colValue = resultSet.getShort(col);
+        } else {
+          colValue = resultSet.getInt(col);
+        }
         break;
       }
 
       // 32 bits int
       case Types.INTEGER: {
-        colValue = resultSet.getInt(col);
+        if (resultSet.getMetaData().isSigned(col)) {
+          colValue = resultSet.getInt(col);
+        } else {
+          colValue = resultSet.getLong(col);
+        }
         break;
       }
 
@@ -355,19 +392,19 @@ public class DataConverter {
 
       // Date is day + moth + year
       case Types.DATE: {
-        colValue = resultSet.getDate(col, UTC_CALENDAR.get());
+        colValue = resultSet.getDate(col, DateTimeUtils.UTC_CALENDAR.get());
         break;
       }
 
       // Time is a time of day -- hour, minute, seconds, nanoseconds
       case Types.TIME: {
-        colValue = resultSet.getTime(col, UTC_CALENDAR.get());
+        colValue = resultSet.getTime(col, DateTimeUtils.UTC_CALENDAR.get());
         break;
       }
 
       // Timestamp is a date + time
       case Types.TIMESTAMP: {
-        colValue = resultSet.getTimestamp(col, UTC_CALENDAR.get());
+        colValue = resultSet.getTimestamp(col, DateTimeUtils.UTC_CALENDAR.get());
         break;
       }
 

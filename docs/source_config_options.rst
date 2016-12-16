@@ -108,6 +108,13 @@ Connector
   * Default: 0
   * Importance: high
 
+``partition``
+  Partition used to put messages in topics. This parameter is used to assign globally a partition number across all topics used.
+
+  * Type: int
+  * Default: null
+  * Importance: low
+
 Mode
 ^^^^
 

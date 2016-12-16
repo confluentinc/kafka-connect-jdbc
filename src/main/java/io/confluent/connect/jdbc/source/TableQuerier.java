@@ -17,12 +17,16 @@
 package io.confluent.connect.jdbc.source;
 
 import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Collections;
+import java.util.Map;
 
 /**
  * TableQuerier executes queries against a specific table. Implementations handle different types
@@ -40,6 +44,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected final String name;
   protected final String query;
   protected final String topicPrefix;
+  protected final Integer partition;
 
   // Mutable state
   protected long lastUpdate;
@@ -47,13 +52,15 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected ResultSet resultSet;
   protected Schema schema;
 
-  public TableQuerier(QueryMode mode, String nameOrQuery, String topicPrefix, String schemaPattern) {
+  public TableQuerier(QueryMode mode, String nameOrQuery, String topicPrefix, String schemaPattern, Integer partition) {
     this.mode = mode;
     this.schemaPattern = schemaPattern;
     this.name = mode.equals(QueryMode.TABLE) ? nameOrQuery : null;
     this.query = mode.equals(QueryMode.QUERY) ? nameOrQuery : null;
     this.topicPrefix = topicPrefix;
     this.lastUpdate = 0;
+    this.partition = partition;
+
   }
 
   public long getLastUpdate() {
@@ -88,7 +95,37 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     return resultSet.next();
   }
 
-  public abstract SourceRecord extractRecord() throws SQLException;
+  public SourceRecord extractRecord() throws SQLException {
+    final Struct record = DataConverter.convertRecord(schema, resultSet);
+
+    final String topic;
+    final Map<String, String> sourcePartition;
+    switch (mode) {
+      case TABLE:
+        sourcePartition = Collections.singletonMap(JdbcSourceConnectorConstants.TABLE_NAME_KEY, name);
+        topic = topicPrefix + name;
+        break;
+      case QUERY:
+        sourcePartition = Collections.singletonMap(JdbcSourceConnectorConstants.QUERY_NAME_KEY,
+                JdbcSourceConnectorConstants.QUERY_NAME_VALUE);
+        topic = topicPrefix;
+        break;
+      default:
+        throw new ConnectException("Unexpected query mode: " + mode);
+    }
+
+    if (partition != null && partition < 0) {
+      throw new ConnectException("partition ='" + partition + "' must not be negative");
+    }
+    return new SourceRecord(sourcePartition, getSourceOffset(schema, record), topic, partition, record.schema(), record);
+
+
+  }
+
+  public Map<String, ?> getSourceOffset(Schema schema, Struct record) {
+    return null;
+  }
+
 
   public void reset(long now) {
     closeResultSetQuietly();

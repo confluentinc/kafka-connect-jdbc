@@ -21,15 +21,32 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.source.SourceRecord;
+import org.junit.Rule;
 import org.junit.Test;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
+import javax.sql.rowset.RowSetMetaDataImpl;
 import java.math.BigDecimal;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collections;
+import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.when;
 
 public class TimestampIncrementingTableQuerierTest {
+  public static final String TABLE_NAME = "myname";
+  public static final String TOPIC_PREFIX = "topic-prefix-";
+  public static final String PARTITION_NAME = "partition";
+  public static final int PARTITION_NUMBER_VALUE = 12;
+  @Rule
+  public MockitoRule rule = MockitoJUnit.rule();
+  @Mock
+  private ResultSet resultSet;
 
   @Test
   public void extractIntOffset() throws SQLException {
@@ -69,8 +86,55 @@ public class TimestampIncrementingTableQuerierTest {
     newQuerier().extractOffset(schema, record).getIncrementingOffset();
   }
 
+  @Test
+  public void getSourceOffsetNominalCase() {
+    final Schema decimalSchema = Decimal.schema(0);
+    final Schema schema = SchemaBuilder.struct().field("id", decimalSchema).build();
+    final Struct record = new Struct(schema).put("id", new BigDecimal(42));
+    Map<String, ?> sourceOffset = newQuerier().getSourceOffset(schema, record);
+    TimestampIncrementingOffset expected = new TimestampIncrementingOffset(null, 42L);
+    assertEquals(expected.toMap(), sourceOffset);
+  }
+
+  @Test
+  public void getSourceOffsetNullValues() {
+    Map<String, ?> sourceOffset = newQuerier().getSourceOffset(null, null);
+    TimestampIncrementingOffset offset = new TimestampIncrementingOffset(null, null);
+    assertEquals(offset.toMap(), sourceOffset);
+  }
+
+  @Test
+  public void extractRecordsNominalCase() throws SQLException {
+    TableQuerier querier = newQuerierWithPartitionValue(PARTITION_NUMBER_VALUE);
+
+    SourceRecord sourceRecord = querier.extractRecord();
+    Schema schema = SchemaBuilder.struct().build();
+    Struct struct = new Struct(schema);
+    SourceRecord expected = new SourceRecord(Collections.singletonMap(JdbcSourceConnectorConstants.TABLE_NAME_KEY, TABLE_NAME), Collections.EMPTY_MAP, TOPIC_PREFIX + TABLE_NAME, PARTITION_NUMBER_VALUE, schema, struct);
+
+    assertEquals(expected, sourceRecord);
+
+  }
+
+  @Test(expected = ConnectException.class)
+  public void extractRecordsWithNegativeValue() throws SQLException {
+    TableQuerier querier = newQuerierWithPartitionValue(-1);
+    querier.extractRecord();
+
+  }
+
+  private TableQuerier newQuerierWithPartitionValue(int partitionNumberValue) throws SQLException {
+    TableQuerier querier = new TimestampIncrementingTableQuerier(TableQuerier.QueryMode.TABLE, TABLE_NAME, TOPIC_PREFIX, null, "id", Collections.<String, Object>emptyMap(), 0L, null, partitionNumberValue);
+    querier.resultSet = this.resultSet;
+    querier.schema =  SchemaBuilder.struct().build();
+    RowSetMetaDataImpl resultSetMetaData = new RowSetMetaDataImpl();
+    when(resultSet.getMetaData()).thenReturn(resultSetMetaData);
+    return querier;
+  }
+
+
   private TimestampIncrementingTableQuerier newQuerier() {
-    return new TimestampIncrementingTableQuerier(TableQuerier.QueryMode.TABLE, null, "", null, "id", Collections.<String, Object>emptyMap(), 0L, null);
+    return new TimestampIncrementingTableQuerier(TableQuerier.QueryMode.TABLE, null, "", null, "id", Collections.<String, Object>emptyMap(), 0L, null, null);
   }
 
 }

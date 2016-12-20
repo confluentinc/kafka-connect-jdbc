@@ -42,6 +42,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected final String topicPrefix;
 
   // Mutable state
+
   protected final boolean mapNumerics;
   protected long lastUpdate;
   protected PreparedStatement stmt;

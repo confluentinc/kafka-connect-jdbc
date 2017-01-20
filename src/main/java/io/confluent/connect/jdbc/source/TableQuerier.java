@@ -17,12 +17,13 @@
 package io.confluent.connect.jdbc.source;
 
 import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
+import java.util.Collections;
+import java.util.Map;
 
 /**
  * TableQuerier executes queries against a specific table. Implementations handle different types
@@ -37,6 +38,8 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
 
   protected final QueryMode mode;
   protected final String schemaPattern;
+  private String kafkaKeyColumn;
+  private String kafkaTimestampColumn;
   protected final String name;
   protected final String query;
   protected final String topicPrefix;
@@ -47,12 +50,16 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected long lastUpdate;
   protected PreparedStatement stmt;
   protected ResultSet resultSet;
-  protected Schema schema;
+  protected Schema valueSchema;
+  protected Schema keySchema;
 
   public TableQuerier(QueryMode mode, String nameOrQuery, String topicPrefix,
-                      String schemaPattern, boolean mapNumerics) {
+                      String schemaPattern, boolean mapNumerics,
+                      String kafkaKeyColumn, String kafkaTimestampColumn) {
     this.mode = mode;
     this.schemaPattern = schemaPattern;
+    this.kafkaKeyColumn = kafkaKeyColumn;
+    this.kafkaTimestampColumn = kafkaTimestampColumn;
     this.name = mode.equals(QueryMode.TABLE) ? nameOrQuery : null;
     this.query = mode.equals(QueryMode.QUERY) ? nameOrQuery : null;
     this.topicPrefix = topicPrefix;
@@ -82,7 +89,11 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     if (resultSet == null) {
       stmt = getOrCreatePreparedStatement(db);
       resultSet = executeQuery();
-      schema = DataConverter.convertSchema(name, resultSet.getMetaData(), mapNumerics);
+      ResultSetMetaData metadata = resultSet.getMetaData();
+      valueSchema = DataConverter.convertSchema(name, metadata, mapNumerics);
+      if(kafkaKeyColumn != null && !kafkaKeyColumn.isEmpty()) {
+        keySchema = DataConverter.convertSchema(kafkaKeyColumn, metadata, mapNumerics);
+      }
     }
   }
 
@@ -94,12 +105,41 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
 
   public abstract SourceRecord extractRecord() throws SQLException;
 
+  protected SourceRecord extractRecordCore(Struct record, Map<String, ?> sourceOffset) throws SQLException {
+    final String topic;
+    final Map<String, String> partition;
+    switch (mode) {
+      case TABLE:
+        partition = Collections.singletonMap(JdbcSourceConnectorConstants.TABLE_NAME_KEY, name);
+        topic = topicPrefix + name;
+        break;
+      case QUERY:
+        partition = Collections.singletonMap(JdbcSourceConnectorConstants.QUERY_NAME_KEY,
+                JdbcSourceConnectorConstants.QUERY_NAME_VALUE);
+        topic = topicPrefix;
+        break;
+      default:
+        throw new ConnectException("Unexpected query mode: " + mode);
+    }
+    Long kafkaKey = null;
+    if (kafkaKeyColumn != null && !kafkaKeyColumn.isEmpty()) {
+      kafkaKey = record.getInt64(kafkaKeyColumn);
+    }
+
+    Long kafkaTimestamp = null;
+    if (kafkaTimestampColumn != null && !kafkaTimestampColumn.isEmpty()) {
+      kafkaTimestamp = record.getInt64(kafkaTimestampColumn);
+    }
+    return new SourceRecord(partition, sourceOffset, topic, null, keySchema, kafkaKey, record.schema(), record, kafkaTimestamp);
+  }
+
   public void reset(long now) {
     closeResultSetQuietly();
     closeStatementQuietly();
     // TODO: Can we cache this and quickly check that it's identical for the next query
     // instead of constructing from scratch since it's almost always the same
-    schema = null;
+    valueSchema = null;
+    keySchema = null;
     lastUpdate = now;
   }
 

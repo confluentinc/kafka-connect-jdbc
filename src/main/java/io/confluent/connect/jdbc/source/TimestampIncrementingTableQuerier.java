@@ -61,16 +61,19 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   private String incrementingColumn;
   private long timestampDelay;
   private TimestampIncrementingOffset offset;
+  private String kafkaTimestampColumn;
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
                                            String timestampColumn, String incrementingColumn,
                                            Map<String, Object> offsetMap, Long timestampDelay,
-                                           String schemaPattern, boolean mapNumerics) {
-    super(mode, name, topicPrefix, schemaPattern, mapNumerics);
+                                           String schemaPattern, boolean mapNumerics,
+                                           String kafkaKeyColumn, String kafkaTimestampColumn) {
+    super(mode, name, topicPrefix, schemaPattern, mapNumerics, kafkaKeyColumn, kafkaTimestampColumn);
     this.timestampColumn = timestampColumn;
     this.incrementingColumn = incrementingColumn;
     this.timestampDelay = timestampDelay;
     this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
+    this.kafkaTimestampColumn = kafkaTimestampColumn;
   }
 
   @Override
@@ -178,25 +181,9 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
 
   @Override
   public SourceRecord extractRecord() throws SQLException {
-    final Struct record = DataConverter.convertRecord(schema, resultSet, mapNumerics);
-    offset = extractOffset(schema, record);
-    // TODO: Key?
-    final String topic;
-    final Map<String, String> partition;
-    switch (mode) {
-      case TABLE:
-        partition = Collections.singletonMap(JdbcSourceConnectorConstants.TABLE_NAME_KEY, name);
-        topic = topicPrefix + name;
-        break;
-      case QUERY:
-        partition = Collections.singletonMap(JdbcSourceConnectorConstants.QUERY_NAME_KEY,
-                                             JdbcSourceConnectorConstants.QUERY_NAME_VALUE);
-        topic = topicPrefix;
-        break;
-      default:
-        throw new ConnectException("Unexpected query mode: " + mode);
-    }
-    return new SourceRecord(partition, offset.toMap(), topic, record.schema(), record);
+    final Struct record = DataConverter.convertRecord(valueSchema, resultSet, mapNumerics);
+    offset = extractOffset(valueSchema, record);
+    return extractRecordCore(record, offset.toMap());
   }
 
   // Visible for testing

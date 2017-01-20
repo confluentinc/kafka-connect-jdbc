@@ -31,7 +31,7 @@ public class JdbcSourceTaskConfig extends JdbcSourceConnectorConfig {
   public static final String TABLES_CONFIG = "tables";
   private static final String TABLES_DOC = "List of tables for this task to watch for changes.";
 
-  static ConfigDef config = baseConfigDef()
+    static ConfigDef config = baseConfigDef()
       .define(TABLES_CONFIG, Type.LIST, Importance.HIGH, TABLES_DOC);
 
   public JdbcSourceTaskConfig(Map<String, String> props) {

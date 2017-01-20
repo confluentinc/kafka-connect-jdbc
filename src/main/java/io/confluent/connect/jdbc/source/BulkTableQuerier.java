@@ -35,10 +35,13 @@ import io.confluent.connect.jdbc.util.JdbcUtils;
  */
 public class BulkTableQuerier extends TableQuerier {
   private static final Logger log = LoggerFactory.getLogger(BulkTableQuerier.class);
+  private String kafkaTimestampColumn;
 
   public BulkTableQuerier(QueryMode mode, String name, String schemaPattern,
-                          String topicPrefix, boolean mapNumerics) {
-    super(mode, name, topicPrefix, schemaPattern, mapNumerics);
+                          String topicPrefix, boolean mapNumerics,
+                          String kafkaKeyColumn, String kafkaTimestampColumn) {
+    super(mode, name, topicPrefix, schemaPattern, mapNumerics, kafkaKeyColumn, kafkaTimestampColumn);
+    this.kafkaTimestampColumn = kafkaTimestampColumn;
   }
 
   @Override
@@ -64,33 +67,16 @@ public class BulkTableQuerier extends TableQuerier {
 
   @Override
   public SourceRecord extractRecord() throws SQLException {
-    Struct record = DataConverter.convertRecord(schema, resultSet, mapNumerics);
-    // TODO: key from primary key? partition?
-    final String topic;
-    final Map<String, String> partition;
-    switch (mode) {
-      case TABLE:
-        partition = Collections.singletonMap(JdbcSourceConnectorConstants.TABLE_NAME_KEY, name);
-        topic = topicPrefix + name;
-        break;
-      case QUERY:
-        partition = Collections.singletonMap(JdbcSourceConnectorConstants.QUERY_NAME_KEY,
-                                             JdbcSourceConnectorConstants.QUERY_NAME_VALUE);
-        topic = topicPrefix;
-        break;
-      default:
-        throw new ConnectException("Unexpected query mode: " + mode);
-    }
-    return new SourceRecord(partition, null, topic, record.schema(), record);
+    Struct record = DataConverter.convertRecord(valueSchema, resultSet, mapNumerics);
+    return extractRecordCore(record, null);
   }
 
   @Override
   public String toString() {
     return "BulkTableQuerier{" +
-           "name='" + name + '\'' +
-           ", query='" + query + '\'' +
-           ", topicPrefix='" + topicPrefix + '\'' +
-           '}';
+            "name='" + name + '\'' +
+            ", query='" + query + '\'' +
+            ", topicPrefix='" + topicPrefix + '\'' +
+            '}';
   }
-
 }

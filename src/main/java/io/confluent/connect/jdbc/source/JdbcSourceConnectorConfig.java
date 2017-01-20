@@ -103,6 +103,18 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String TIMESTAMP_COLUMN_NAME_DEFAULT = "";
   private static final String TIMESTAMP_COLUMN_NAME_DISPLAY = "Timestamp Column Name";
 
+  public static final String KAFKA_KEY_COLUMN_CONFIG = "kafka.key.column";
+  private static final String KAFKA_KEY_COLUMN_DOC =
+          "The name of the column to use to populate the SourceRecord key value";
+  public static final String KAFKA_KEY_COLUMN_DEFAULT = "";
+  private static final String KAFKA_KEY_COLUMN_DISPLAY = "Kafka key Column Name";
+
+  public static final String KAFKA_TIMESTAMP_COLUMN_CONFIG = "kafka.timestamp.column";
+  private static final String KAFKA_TIMESTAMP_COLUMN_DOC =
+          "The name of the column to use to populate the SourceRecord Timestamp value";
+  public static final String KAFKA_TIMESTAMP_COLUMN_DEFAULT = "";
+  private static final String KAFKA_TIMESTAMP_COLUMN_DISPLAY = "Kafka Timestamp Column Name";
+
   public static final String TABLE_POLL_INTERVAL_MS_CONFIG = "table.poll.interval.ms";
   private static final String TABLE_POLL_INTERVAL_MS_DOC =
       "Frequency in ms to poll for new or removed tables, which may result in updated task "
@@ -216,7 +228,9 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         .define(BATCH_MAX_ROWS_CONFIG, Type.INT, BATCH_MAX_ROWS_DEFAULT, Importance.LOW, BATCH_MAX_ROWS_DOC, CONNECTOR_GROUP, 2, Width.SHORT, BATCH_MAX_ROWS_DISPLAY)
         .define(TABLE_POLL_INTERVAL_MS_CONFIG, Type.LONG, TABLE_POLL_INTERVAL_MS_DEFAULT, Importance.LOW, TABLE_POLL_INTERVAL_MS_DOC, CONNECTOR_GROUP, 3, Width.SHORT, TABLE_POLL_INTERVAL_MS_DISPLAY)
         .define(TOPIC_PREFIX_CONFIG, Type.STRING, Importance.HIGH, TOPIC_PREFIX_DOC, CONNECTOR_GROUP, 4, Width.MEDIUM, TOPIC_PREFIX_DISPLAY)
-        .define(TIMESTAMP_DELAY_INTERVAL_MS_CONFIG, Type.LONG, TIMESTAMP_DELAY_INTERVAL_MS_DEFAULT, Importance.HIGH, TIMESTAMP_DELAY_INTERVAL_MS_DOC, CONNECTOR_GROUP, 5, Width.MEDIUM, TIMESTAMP_DELAY_INTERVAL_MS_DISPLAY);
+        .define(TIMESTAMP_DELAY_INTERVAL_MS_CONFIG, Type.LONG, TIMESTAMP_DELAY_INTERVAL_MS_DEFAULT, Importance.HIGH, TIMESTAMP_DELAY_INTERVAL_MS_DOC, CONNECTOR_GROUP, 5, Width.MEDIUM, TIMESTAMP_DELAY_INTERVAL_MS_DISPLAY)
+        .define(KAFKA_KEY_COLUMN_CONFIG, Type.STRING, KAFKA_KEY_COLUMN_DEFAULT, Importance.MEDIUM, KAFKA_KEY_COLUMN_DOC, CONNECTOR_GROUP, 6, Width.MEDIUM, KAFKA_KEY_COLUMN_DISPLAY)
+        .define(KAFKA_TIMESTAMP_COLUMN_CONFIG, Type.STRING, KAFKA_TIMESTAMP_COLUMN_DEFAULT, Importance.MEDIUM, KAFKA_TIMESTAMP_COLUMN_DOC, CONNECTOR_GROUP, 7, Width.MEDIUM, KAFKA_TIMESTAMP_COLUMN_DISPLAY);
   }
 
   public static final ConfigDef CONFIG_DEF = baseConfigDef();

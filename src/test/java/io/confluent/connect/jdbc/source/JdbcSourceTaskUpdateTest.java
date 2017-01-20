@@ -24,12 +24,7 @@ import org.junit.Test;
 import org.powermock.api.easymock.PowerMock;
 
 import java.sql.Timestamp;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 
@@ -193,7 +188,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
 
     db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatUtcTimestamp(new Timestamp(10L)), "id", 1);
 
-    startTask("modified", null, null, 4L);
+    startTask("modified", null, null, 4L, null, null);
     verifyTimestampFirstPoll(TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     Long currentTime = new Date().getTime();
@@ -413,11 +408,103 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     PowerMock.verifyAll();
   }
 
-  private void startTask(String timestampColumn, String incrementingColumn, String query) {
-    startTask(timestampColumn, incrementingColumn, query, 0L);
+  @Test
+  public void testKafkaKeyAddedToSourceRecord() throws Exception {
+    expectInitializeNoOffsets(Arrays.asList(SINGLE_TABLE_PARTITION));
+
+    PowerMock.replayAll();
+
+    db.createTable(SINGLE_TABLE_NAME,
+            "id", "INT NOT NULL");
+    db.insert(SINGLE_TABLE_NAME, "id", 1);
+
+    startTask(null, "id", null, 0L,"id", null);
+    List<SourceRecord> records = task.poll();
+    assertEquals(Collections.singletonMap(1, 1), countIntValues(records, "id"));
+    assertEquals(Collections.singletonMap(1L, 1), countIntIncrementingOffsets(records, "id"));
+    assertIncrementingOffsets(records);
+    assertRecordsTopic(records, TOPIC_PREFIX + SINGLE_TABLE_NAME);
+    SourceRecord record = records.get(0);
+    assertEquals(1, record.key());
+
+    PowerMock.verifyAll();
   }
 
-  private void startTask(String timestampColumn, String incrementingColumn, String query, Long delay) {
+  @Test
+  public void testKafkaTimestampAddedToSourceRecordViaTimestamp() throws Exception {
+    expectInitializeNoOffsets(Arrays.asList(SINGLE_TABLE_PARTITION));
+
+    PowerMock.replayAll();
+
+    db.createTable(SINGLE_TABLE_NAME,
+            "id", "INT NOT NULL", "createddate", "TIMESTAMP NOT NULL");
+    db.insert(SINGLE_TABLE_NAME, "id", 1, "createddate", DateTimeUtils.formatUtcTimestamp(new Timestamp(10L)));
+
+    startTask(null, "id", null, 0L, null, "createddate");
+    List<SourceRecord> records = task.poll();
+    assertEquals(Collections.singletonMap(1, 1), countIntValues(records, "id"));
+    assertEquals(Collections.singletonMap(1L, 1), countIntIncrementingOffsets(records, "id"));
+    assertIncrementingOffsets(records);
+    assertRecordsTopic(records, TOPIC_PREFIX + SINGLE_TABLE_NAME);
+    SourceRecord record = records.get(0);
+    assertEquals((Long)10L, record.timestamp());
+
+    PowerMock.verifyAll();
+  }
+
+  @Test
+  public void testKafkaTimestampAddedToSourceRecordViaDate() throws Exception {
+    expectInitializeNoOffsets(Arrays.asList(SINGLE_TABLE_PARTITION));
+
+    PowerMock.replayAll();
+
+    db.createTable(SINGLE_TABLE_NAME,
+            "id", "INT NOT NULL", "createddate", "TIMESTAMP NOT NULL");
+
+    Date date = new Date();
+    db.insert(SINGLE_TABLE_NAME, "id", 1, "createddate", DateTimeUtils.formatUtcTimestamp(date));
+
+    startTask(null, "id", null, 0L, null, "createddate");
+    List<SourceRecord> records = task.poll();
+    assertEquals(Collections.singletonMap(1, 1), countIntValues(records, "id"));
+    assertEquals(Collections.singletonMap(1L, 1), countIntIncrementingOffsets(records, "id"));
+    assertIncrementingOffsets(records);
+    assertRecordsTopic(records, TOPIC_PREFIX + SINGLE_TABLE_NAME);
+    SourceRecord record = records.get(0);
+    assertEquals((Long)date.getTime(), record.timestamp());
+
+    PowerMock.verifyAll();
+  }
+
+  @Test
+  public void testKafkaTimestampAddedToSourceRecordViaLong() throws Exception {
+    expectInitializeNoOffsets(Arrays.asList(SINGLE_TABLE_PARTITION));
+
+    PowerMock.replayAll();
+
+    db.createTable(SINGLE_TABLE_NAME,
+            "id", "INT NOT NULL", "createddate", "BIGINT NOT NULL");
+
+    Long dateTime = 10L;
+    db.insert(SINGLE_TABLE_NAME, "id", 1, "createddate", dateTime);
+
+    startTask(null, "id", null, 0L, null, "createddate");
+    List<SourceRecord> records = task.poll();
+    assertEquals(Collections.singletonMap(1, 1), countIntValues(records, "id"));
+    assertEquals(Collections.singletonMap(1L, 1), countIntIncrementingOffsets(records, "id"));
+    assertIncrementingOffsets(records);
+    assertRecordsTopic(records, TOPIC_PREFIX + SINGLE_TABLE_NAME);
+    SourceRecord record = records.get(0);
+    assertEquals(dateTime, record.timestamp());
+
+    PowerMock.verifyAll();
+  }
+
+  private void startTask(String timestampColumn, String incrementingColumn, String query) {
+    startTask(timestampColumn, incrementingColumn, query, 0L, null, null);
+  }
+
+  private void startTask(String timestampColumn, String incrementingColumn, String query, Long delay, String kafkaKey, String kafkaTimestamp) {
     String mode = null;
     if (timestampColumn != null && incrementingColumn != null) {
       mode = JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING;
@@ -440,6 +527,12 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     }
     if (incrementingColumn != null) {
       taskConfig.put(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG, incrementingColumn);
+    }
+    if(kafkaKey != null){
+      taskConfig.put(JdbcSourceConnectorConfig.KAFKA_KEY_COLUMN_CONFIG, kafkaKey);
+    }
+    if(kafkaTimestamp != null){
+      taskConfig.put(JdbcSourceConnectorConfig.KAFKA_TIMESTAMP_COLUMN_CONFIG, kafkaTimestamp);
     }
     taskConfig.put(JdbcSourceConnectorConfig.TIMESTAMP_DELAY_INTERVAL_MS_CONFIG, delay == null ? "0" : delay.toString());
     task.start(taskConfig);

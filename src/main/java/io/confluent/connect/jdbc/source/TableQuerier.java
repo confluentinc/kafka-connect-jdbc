@@ -16,6 +16,7 @@
 
 package io.confluent.connect.jdbc.source;
 
+import org.apache.kafka.common.errors.InvalidTimestampException;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -121,14 +122,27 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
       default:
         throw new ConnectException("Unexpected query mode: " + mode);
     }
-    Long kafkaKey = null;
+    Object kafkaKey = null;
     if (kafkaKeyColumn != null && !kafkaKeyColumn.isEmpty()) {
-      kafkaKey = record.getInt64(kafkaKeyColumn);
+      kafkaKey = record.get(kafkaKeyColumn);
     }
 
     Long kafkaTimestamp = null;
     if (kafkaTimestampColumn != null && !kafkaTimestampColumn.isEmpty()) {
-      kafkaTimestamp = record.getInt64(kafkaTimestampColumn);
+      Object timestamp = record.get(kafkaTimestampColumn);
+      if(timestamp instanceof Date){
+        kafkaTimestamp = ((Date)timestamp).getTime();
+      }
+      else if(timestamp instanceof Timestamp) {
+        kafkaTimestamp = ((Timestamp)timestamp).getTime();
+      }
+      else if(timestamp instanceof Long){
+        kafkaTimestamp = (Long)timestamp;
+      }
+      else {
+        throw new InvalidTimestampException(String.format("Type %s cannot be used as a Kafka Timestamp. " +
+                "Valid types are Date, Timestamp and Long", timestamp.getClass().getName()));
+      }
     }
     return new SourceRecord(partition, sourceOffset, topic, null, keySchema, kafkaKey, record.schema(), record, kafkaTimestamp);
   }

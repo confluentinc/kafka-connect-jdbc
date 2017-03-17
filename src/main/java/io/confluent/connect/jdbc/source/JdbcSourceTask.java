@@ -183,6 +183,11 @@ public class JdbcSourceTask extends SourceTask {
     while (!stop.get()) {
       final TableQuerier querier = tableQueue.peek();
 
+      if(querier == null) {
+        stop();
+        return null;
+      }
+
       if (!querier.querying()) {
         // If not in the middle of an update, wait for next update time
         final long nextUpdate = querier.getLastUpdate() + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
@@ -233,7 +238,9 @@ public class JdbcSourceTask extends SourceTask {
     TableQuerier removedQuerier = tableQueue.poll();
     assert removedQuerier == expectedHead;
     expectedHead.reset(time.milliseconds());
-    tableQueue.add(expectedHead);
+    String mode = config.getString(JdbcSourceTaskConfig.MODE_CONFIG);
+    if(!mode.equals(JdbcSourceTaskConfig.MODE_LOAD_ONCE))
+      tableQueue.add(expectedHead);
   }
 
   private void validateNonNullable(String incrementalMode, String schemaPattern, String table, String incrementingColumn, String timestampColumn) {

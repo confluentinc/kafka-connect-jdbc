@@ -74,13 +74,15 @@ public class MySqlDialectTest extends BaseDialectTest {
         "`pk1` INT NOT NULL," + System.lineSeparator() +
         "`pk2` INT NOT NULL," + System.lineSeparator() +
         "`col1` INT NOT NULL," + System.lineSeparator() +
-        "PRIMARY KEY(`pk1`,`pk2`))");
+        "PRIMARY KEY(`pk1`,`pk2`))"
+    );
   }
 
   @Test
   public void alterAddOneCol() {
     verifyAlterAddOneCol(
-        "ALTER TABLE `test` ADD `newcol1` INT NULL");
+        "ALTER TABLE `test` ADD `newcol1` INT NULL"
+    );
   }
 
   @Test
@@ -97,7 +99,8 @@ public class MySqlDialectTest extends BaseDialectTest {
     assertEquals(
         "insert into `actor`(`actor_id`,`first_name`,`last_name`,`score`) " +
         "values(?,?,?,?) on duplicate key update `first_name`=values(`first_name`),`last_name`=values(`last_name`),`score`=values(`score`)",
-        dialect.getUpsertQuery("actor", Arrays.asList("actor_id"), Arrays.asList("first_name", "last_name", "score")));
+        dialect.getUpsertQuery("actor", Arrays.asList("actor_id"), Arrays.asList("first_name", "last_name", "score"))
+    );
   }
 
   @Test

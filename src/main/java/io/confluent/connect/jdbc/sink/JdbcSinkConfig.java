@@ -34,7 +34,9 @@ public class JdbcSinkConfig extends AbstractConfig {
 
   public enum InsertMode {
     INSERT,
-    UPSERT;
+    UPSERT,
+    UPDATE;
+
   }
 
   public enum PrimaryKeyMode {
@@ -106,7 +108,9 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "``insert``\n"
       + "    Use standard SQL ``INSERT`` statements.\n"
       + "``upsert``\n"
-      + "    Use the appropriate upsert semantics for the target database if it is supported by the connector, e.g. ``INSERT OR IGNORE``.";
+      + "    Use the appropriate upsert semantics for the target database if it is supported by the connector, e.g. ``INSERT OR IGNORE``."
+      + "``update``\n"
+      + "    Use the appropriate update semantics for the target database if it is supported by the connector, e.g. ``UPDATE``.";
   private static final String INSERT_MODE_DISPLAY = "Insert Mode";
 
   public static final String PK_FIELDS = "pk.fields";
@@ -158,23 +162,20 @@ public class JdbcSinkConfig extends AbstractConfig {
       .define(CONNECTION_URL, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE,
               ConfigDef.Importance.HIGH, CONNECTION_URL_DOC,
               CONNECTION_GROUP, 1, ConfigDef.Width.LONG, CONNECTION_URL_DISPLAY)
-      .define(CONNECTION_USER, ConfigDef.Type.STRING, null,
-              ConfigDef.Importance.HIGH, CONNECTION_USER_DOC,
+      .define(CONNECTION_USER, ConfigDef.Type.STRING, null, ConfigDef.Importance.HIGH, CONNECTION_USER_DOC,
               CONNECTION_GROUP, 2, ConfigDef.Width.MEDIUM, CONNECTION_USER_DISPLAY)
       .define(CONNECTION_PASSWORD, ConfigDef.Type.PASSWORD, null,
               ConfigDef.Importance.HIGH, CONNECTION_PASSWORD_DOC,
               CONNECTION_GROUP, 3, ConfigDef.Width.MEDIUM, CONNECTION_PASSWORD_DISPLAY)
       // Writes
       .define(INSERT_MODE, ConfigDef.Type.STRING, INSERT_MODE_DEFAULT, EnumValidator.in(InsertMode.values()),
-              ConfigDef.Importance.HIGH, INSERT_MODE_DOC,
-              WRITES_GROUP, 1, ConfigDef.Width.MEDIUM, INSERT_MODE_DISPLAY)
+              ConfigDef.Importance.HIGH, INSERT_MODE_DOC, WRITES_GROUP, 1, ConfigDef.Width.MEDIUM, INSERT_MODE_DISPLAY)
       .define(BATCH_SIZE, ConfigDef.Type.INT, BATCH_SIZE_DEFAULT, NON_NEGATIVE_INT_VALIDATOR,
-              ConfigDef.Importance.MEDIUM, BATCH_SIZE_DOC,
-              WRITES_GROUP, 2, ConfigDef.Width.SHORT, BATCH_SIZE_DISPLAY)
+              ConfigDef.Importance.MEDIUM, BATCH_SIZE_DOC, WRITES_GROUP, 2, ConfigDef.Width.SHORT,
+              BATCH_SIZE_DISPLAY)
       // Data Mapping
-      .define(TABLE_NAME_FORMAT, ConfigDef.Type.STRING, TABLE_NAME_FORMAT_DEFAULT,
-              ConfigDef.Importance.MEDIUM, TABLE_NAME_FORMAT_DOC,
-              DATAMAPPING_GROUP, 1, ConfigDef.Width.LONG, TABLE_NAME_FORMAT_DISPLAY)
+      .define(TABLE_NAME_FORMAT, ConfigDef.Type.STRING, TABLE_NAME_FORMAT_DEFAULT, ConfigDef.Importance.MEDIUM,
+              TABLE_NAME_FORMAT_DOC, DATAMAPPING_GROUP, 1, ConfigDef.Width.LONG, TABLE_NAME_FORMAT_DISPLAY)
       .define(PK_MODE, ConfigDef.Type.STRING, PK_MODE_DEFAULT, EnumValidator.in(PrimaryKeyMode.values()),
               ConfigDef.Importance.HIGH, PK_MODE_DOC,
               DATAMAPPING_GROUP, 2, ConfigDef.Width.MEDIUM, PK_MODE_DISPLAY)

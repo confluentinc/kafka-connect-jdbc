@@ -70,25 +70,25 @@ public class MySqlDialectTest extends BaseDialectTest {
   @Test
   public void createThreeColTwoPk() {
     verifyCreateThreeColTwoPk(
-         "CREATE TABLE `test` (" + System.lineSeparator() +
-         "`pk1` INT NOT NULL," + System.lineSeparator() +
-         "`pk2` INT NOT NULL," + System.lineSeparator() +
-         "`col1` INT NOT NULL," + System.lineSeparator() +
-         "PRIMARY KEY(`pk1`,`pk2`))");
+        "CREATE TABLE `test` (" + System.lineSeparator() +
+        "`pk1` INT NOT NULL," + System.lineSeparator() +
+        "`pk2` INT NOT NULL," + System.lineSeparator() +
+        "`col1` INT NOT NULL," + System.lineSeparator() +
+        "PRIMARY KEY(`pk1`,`pk2`))");
   }
 
   @Test
   public void alterAddOneCol() {
-     verifyAlterAddOneCol(
-         "ALTER TABLE `test` ADD `newcol1` INT NULL");
+    verifyAlterAddOneCol(
+        "ALTER TABLE `test` ADD `newcol1` INT NULL");
   }
 
   @Test
   public void alterAddTwoCol() {
     verifyAlterAddTwoCols(
-         "ALTER TABLE `test` " + System.lineSeparator()
-         + "ADD `newcol1` INT NULL," + System.lineSeparator()
-         + "ADD `newcol2` INT DEFAULT 42"
+        "ALTER TABLE `test` " + System.lineSeparator()
+        + "ADD `newcol1` INT NULL," + System.lineSeparator()
+        + "ADD `newcol2` INT DEFAULT 42"
     );
   }
 

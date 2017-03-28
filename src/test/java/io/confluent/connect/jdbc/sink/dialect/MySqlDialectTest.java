@@ -62,42 +62,42 @@ public class MySqlDialectTest extends BaseDialectTest {
   @Test
   public void createOneColOnePk() {
     verifyCreateOneColOnePk(
-            "CREATE TABLE `test` (" + System.lineSeparator() +
-            "`pk1` INT NOT NULL," + System.lineSeparator() +
-            "PRIMARY KEY(`pk1`))");
+        "CREATE TABLE `test` (" + System.lineSeparator() +
+        "`pk1` INT NOT NULL," + System.lineSeparator() +
+        "PRIMARY KEY(`pk1`))");
   }
 
   @Test
   public void createThreeColTwoPk() {
     verifyCreateThreeColTwoPk(
-            "CREATE TABLE `test` (" + System.lineSeparator() +
-            "`pk1` INT NOT NULL," + System.lineSeparator() +
-            "`pk2` INT NOT NULL," + System.lineSeparator() +
-            "`col1` INT NOT NULL," + System.lineSeparator() +
-            "PRIMARY KEY(`pk1`,`pk2`))");
+         "CREATE TABLE `test` (" + System.lineSeparator() +
+         "`pk1` INT NOT NULL," + System.lineSeparator() +
+         "`pk2` INT NOT NULL," + System.lineSeparator() +
+         "`col1` INT NOT NULL," + System.lineSeparator() +
+         "PRIMARY KEY(`pk1`,`pk2`))");
   }
 
   @Test
   public void alterAddOneCol() {
      verifyAlterAddOneCol(
-             "ALTER TABLE `test` ADD `newcol1` INT NULL");
+         "ALTER TABLE `test` ADD `newcol1` INT NULL");
   }
 
   @Test
   public void alterAddTwoCol() {
     verifyAlterAddTwoCols(
-            "ALTER TABLE `test` " + System.lineSeparator()
-            + "ADD `newcol1` INT NULL," + System.lineSeparator()
-            + "ADD `newcol2` INT DEFAULT 42"
+         "ALTER TABLE `test` " + System.lineSeparator()
+         + "ADD `newcol1` INT NULL," + System.lineSeparator()
+         + "ADD `newcol2` INT DEFAULT 42"
     );
   }
 
   @Test
   public void upsert() {
     assertEquals(
-            "insert into `actor`(`actor_id`,`first_name`,`last_name`,`score`) " +
-            "values(?,?,?,?) on duplicate key update `first_name`=values(`first_name`),`last_name`=values(`last_name`),`score`=values(`score`)",
-            dialect.getUpsertQuery("actor", Arrays.asList("actor_id"), Arrays.asList("first_name", "last_name", "score")));
+        "insert into `actor`(`actor_id`,`first_name`,`last_name`,`score`) " +
+        "values(?,?,?,?) on duplicate key update `first_name`=values(`first_name`),`last_name`=values(`last_name`),`score`=values(`score`)",
+        dialect.getUpsertQuery("actor", Arrays.asList("actor_id"), Arrays.asList("first_name", "last_name", "score")));
   }
 
   @Test

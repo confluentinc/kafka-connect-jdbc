@@ -98,7 +98,8 @@ public class PreparedStatementBinderTest {
         statement,
         pkMode,
         schemaPair,
-        fieldsMetadata, JdbcSinkConfig.InsertMode.INSERT
+        fieldsMetadata,
+        JdbcSinkConfig.InsertMode.INSERT
     );
 
     binder.bindRecord(new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));

@@ -210,7 +210,7 @@ public class JdbcSourceTask extends SourceTask {
         // Continue until all the data in the partition which parted by latest timestamp in current batch is read
         while (hadNext = querier.next()) {
           SourceRecord record = querier.extractRecord();
-          if(latestOffset == null || !latestOffset.equals(TimestampIncrementingOffset.fromMap(record.sourceOffset()))) {
+          if (latestOffset == null || !latestOffset.equals(TimestampIncrementingOffset.fromMap(record.sourceOffset()))) {
             break;
           }
           results.add(record);

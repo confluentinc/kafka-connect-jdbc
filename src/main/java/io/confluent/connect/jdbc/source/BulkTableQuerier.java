@@ -54,6 +54,8 @@ public class BulkTableQuerier extends TableQuerier {
         log.debug("{} prepared SQL query: {}", this, query);
         stmt = db.prepareStatement(query);
         break;
+      default:
+        log.warn("unhandled mode={}", mode);
     }
   }
 
@@ -74,8 +76,10 @@ public class BulkTableQuerier extends TableQuerier {
         topic = topicPrefix + name;
         break;
       case QUERY:
-        partition = Collections.singletonMap(JdbcSourceConnectorConstants.QUERY_NAME_KEY,
-                                             JdbcSourceConnectorConstants.QUERY_NAME_VALUE);
+        partition = Collections.singletonMap(
+            JdbcSourceConnectorConstants.QUERY_NAME_KEY,
+            JdbcSourceConnectorConstants.QUERY_NAME_VALUE
+        );
         topic = topicPrefix;
         break;
       default:
@@ -86,11 +90,10 @@ public class BulkTableQuerier extends TableQuerier {
 
   @Override
   public String toString() {
-    return "BulkTableQuerier{" +
-           "name='" + name + '\'' +
-           ", query='" + query + '\'' +
-           ", topicPrefix='" + topicPrefix + '\'' +
-           '}';
+    return "BulkTableQuerier{"
+           + "name='" + name + '\''
+           + ", query='" + query + '\''
+           + ", topicPrefix='" + topicPrefix + '\''
+           + '}';
   }
-
 }

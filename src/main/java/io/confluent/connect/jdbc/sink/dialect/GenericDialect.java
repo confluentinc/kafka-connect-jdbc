@@ -22,11 +22,13 @@ import java.util.List;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 
 public class GenericDialect extends DbDialect {
+
   public GenericDialect() {
     super("\"", "\"");
   }
 
-  // Only INSERT supported for now. CREATE and ALTER may be possible if we can figure out a reasonable type map.
+  // Only INSERT supported for now. CREATE and ALTER may be possible if we can figure out a
+  // reasonable type map.
 
   @Override
   public String getCreateQuery(String tableName, Collection<SinkRecordField> fields) {
@@ -39,7 +41,11 @@ public class GenericDialect extends DbDialect {
   }
 
   @Override
-  public String getUpsertQuery(String table, Collection<String> keyColumns, Collection<String> columns) {
+  public String getUpsertQuery(
+      String table,
+      Collection<String> keyColumns,
+      Collection<String> columns
+  ) {
     throw new UnsupportedOperationException();
   }
 }

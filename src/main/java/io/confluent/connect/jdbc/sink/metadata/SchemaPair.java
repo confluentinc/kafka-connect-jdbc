@@ -21,6 +21,7 @@ import org.apache.kafka.connect.data.Schema;
 import java.util.Objects;
 
 public class SchemaPair {
+
   public final Schema keySchema;
   public final Schema valueSchema;
 
@@ -38,8 +39,8 @@ public class SchemaPair {
       return false;
     }
     SchemaPair that = (SchemaPair) o;
-    return Objects.equals(keySchema, that.keySchema) &&
-           Objects.equals(valueSchema, that.valueSchema);
+    return Objects.equals(keySchema, that.keySchema)
+           && Objects.equals(valueSchema, that.valueSchema);
   }
 
   @Override

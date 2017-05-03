@@ -32,6 +32,7 @@ import java.util.Map;
 import io.confluent.connect.jdbc.sink.dialect.DbDialect;
 
 public class JdbcSinkTask extends SinkTask {
+
   private static final Logger log = LoggerFactory.getLogger(JdbcSinkTask.class);
 
   JdbcSinkConfig config;
@@ -60,12 +61,23 @@ public class JdbcSinkTask extends SinkTask {
     }
     final SinkRecord first = records.iterator().next();
     final int recordsCount = records.size();
-    log.trace("Received {} records. First record kafka coordinates:({}-{}-{}). Writing them to the database...",
-              recordsCount, first.topic(), first.kafkaPartition(), first.kafkaOffset());
+    log.trace(
+        "Received {} records. First record kafka coordinates:({}-{}-{}). Writing them to the "
+        + "database...",
+        recordsCount,
+        first.topic(),
+        first.kafkaPartition(),
+        first.kafkaOffset()
+    );
     try {
       writer.write(records);
     } catch (SQLException sqle) {
-      log.warn("Write of {} records failed, remainingRetries={}", records.size(), remainingRetries, sqle);
+      log.warn(
+          "Write of {} records failed, remainingRetries={}",
+          records.size(),
+          remainingRetries,
+          sqle
+      );
       if (remainingRetries == 0) {
         throw new ConnectException(sqle);
       } else {

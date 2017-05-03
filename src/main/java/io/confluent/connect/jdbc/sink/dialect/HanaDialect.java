@@ -21,6 +21,8 @@ import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -30,9 +32,11 @@ import java.util.Map;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 
 import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.joinToBuilder;
-import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.nCopiesToBuilder;
+import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.appendNCopiesToBuilder;
 
 public class HanaDialect extends DbDialect {
+
+  private static final Logger log = LoggerFactory.getLogger(HanaDialect.class);
 
   public HanaDialect() {
     super("\"", "\"");
@@ -50,6 +54,8 @@ public class HanaDialect extends DbDialect {
           return "DATE";
         case Timestamp.LOGICAL_NAME:
           return "TIMESTAMP";
+        default:
+          log.debug("unhandled schemaName={}", schemaName);
       }
     }
     switch (type) {
@@ -71,6 +77,8 @@ public class HanaDialect extends DbDialect {
         return "VARCHAR(1000)";
       case BYTES:
         return "BLOB";
+      default:
+        log.debug("unhandled type={}", type);
     }
     return super.getSqlType(schemaName, parameters, type);
   }
@@ -92,14 +100,18 @@ public class HanaDialect extends DbDialect {
   }
 
   @Override
-  public String getUpsertQuery(final String table, Collection<String> keyCols, Collection<String> cols) {
+  public String getUpsertQuery(
+      final String table,
+      Collection<String> keyCols,
+      Collection<String> cols
+  ) {
     // https://help.sap.com/hana_one/html/sql_replace_upsert.html
     StringBuilder builder = new StringBuilder("UPSERT ");
     builder.append(escaped(table));
     builder.append("(");
     joinToBuilder(builder, ",", keyCols, cols, escaper());
     builder.append(") VALUES(");
-    nCopiesToBuilder(builder, ",", "?", keyCols.size() + cols.size());
+    appendNCopiesToBuilder(builder, ",", "?", keyCols.size() + cols.size());
     builder.append(")");
     builder.append(" WITH PRIMARY KEY");
     return builder.toString();

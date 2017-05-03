@@ -13,9 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  **/
+
 package io.confluent.connect.jdbc.source;
 
 public class JdbcSourceConnectorConstants {
+
   public static final String TABLE_NAME_KEY = "table";
   public static final String QUERY_NAME_KEY = "query";
   public static final String QUERY_NAME_VALUE = "query";

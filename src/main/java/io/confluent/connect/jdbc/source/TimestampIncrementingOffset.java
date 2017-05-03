@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class TimestampIncrementingOffset {
+
   private static final String INCREMENTING_FIELD = "incrementing";
   private static final String TIMESTAMP_FIELD = "timestamp";
   private static final String TIMESTAMP_NANOS_FIELD = "timestamp_nanos";
@@ -30,9 +31,9 @@ public class TimestampIncrementingOffset {
 
   /**
    * @param timestampOffset the timestamp offset.
-   *                        If null, {@link #getTimestampOffset()} will return {@code new Timestamp(0)}.
+   *     If null, {@link #getTimestampOffset()} will return {@code new Timestamp(0)}.
    * @param incrementingOffset the incrementing offset.
-   *                           If null, {@link #getIncrementingOffset()} will return -1.
+   *     If null, {@link #getIncrementingOffset()} will return -1.
    */
   public TimestampIncrementingOffset(Timestamp timestampOffset, Long incrementingOffset) {
     this.timestampOffset = timestampOffset;
@@ -88,10 +89,14 @@ public class TimestampIncrementingOffset {
 
     TimestampIncrementingOffset that = (TimestampIncrementingOffset) o;
 
-    if (incrementingOffset != null ? !incrementingOffset.equals(that.incrementingOffset) : that.incrementingOffset != null) {
+    if (incrementingOffset != null
+        ? !incrementingOffset.equals(that.incrementingOffset)
+        : that.incrementingOffset != null) {
       return false;
     }
-    return timestampOffset != null ? timestampOffset.equals(that.timestampOffset) : that.timestampOffset == null;
+    return timestampOffset != null
+           ? timestampOffset.equals(that.timestampOffset)
+           : that.timestampOffset == null;
 
   }
 

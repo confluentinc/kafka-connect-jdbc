@@ -21,6 +21,8 @@ import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -31,15 +33,24 @@ import java.util.Map;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 
 import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.joinToBuilder;
-import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.nCopiesToBuilder;
+import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.appendNCopiesToBuilder;
 
 public class SqliteDialect extends DbDialect {
+
+  private static final Logger log = LoggerFactory.getLogger(OracleDialect.class);
+
   public SqliteDialect() {
     super("`", "`");
   }
 
   @Override
-  protected void formatColumnValue(StringBuilder builder, String schemaName, Map<String, String> schemaParameters, Schema.Type type, Object value) {
+  protected void formatColumnValue(
+      StringBuilder builder,
+      String schemaName,
+      Map<String, String> schemaParameters,
+      Schema.Type type,
+      Object value
+  ) {
     if (schemaName != null) {
       switch (schemaName) {
         case Date.LOGICAL_NAME:
@@ -47,6 +58,8 @@ public class SqliteDialect extends DbDialect {
         case Timestamp.LOGICAL_NAME:
           builder.append(((java.util.Date) value).getTime());
           return;
+        default:
+          log.debug("unhandled schemaName={}", schemaName);
       }
     }
     super.formatColumnValue(builder, schemaName, schemaParameters, type, value);
@@ -61,6 +74,8 @@ public class SqliteDialect extends DbDialect {
         case Time.LOGICAL_NAME:
         case Timestamp.LOGICAL_NAME:
           return "NUMERIC";
+        default:
+          log.debug("unhandled schemaName={}", schemaName);
       }
     }
     switch (type) {
@@ -77,6 +92,8 @@ public class SqliteDialect extends DbDialect {
         return "TEXT";
       case BYTES:
         return "BLOB";
+      default:
+        log.debug("unhandled type={}", type);
     }
     return super.getSqlType(schemaName, parameters, type);
   }
@@ -97,7 +114,7 @@ public class SqliteDialect extends DbDialect {
     builder.append(escaped(table)).append("(");
     joinToBuilder(builder, ",", keyCols, cols, escaper());
     builder.append(") VALUES(");
-    nCopiesToBuilder(builder, ",", "?", cols.size() + keyCols.size());
+    appendNCopiesToBuilder(builder, ",", "?", cols.size() + keyCols.size());
     builder.append(")");
     return builder.toString();
   }

@@ -37,23 +37,25 @@ import io.confluent.connect.jdbc.util.JdbcUtils;
 
 /**
  * <p>
- *   TimestampIncrementingTableQuerier performs incremental loading of data using two mechanisms: a
- *   timestamp column provides monotonically incrementing values that can be used to detect new or
- *   modified rows and a strictly incrementing (e.g. auto increment) column allows detecting new rows
- *   or combined with the timestamp provide a unique identifier for each update to the row.
+ * TimestampIncrementingTableQuerier performs incremental loading of data using two mechanisms: a
+ * timestamp column provides monotonically incrementing values that can be used to detect new or
+ * modified rows and a strictly incrementing (e.g. auto increment) column allows detecting new rows
+ * or combined with the timestamp provide a unique identifier for each update to the row.
  * </p>
  * <p>
- *   At least one of the two columns must be specified (or left as "" for the incrementing column
- *   to indicate use of an auto-increment column). If both columns are provided, they are both
- *   used to ensure only new or updated rows are reported and to totally order updates so
- *   recovery can occur no matter when offsets were committed. If only the incrementing fields is
- *   provided, new rows will be detected but not updates. If only the timestamp field is
- *   provided, both new and updated rows will be detected, but stream offsets will not be unique
- *   so failures may cause duplicates or losses.
+ * At least one of the two columns must be specified (or left as "" for the incrementing column
+ * to indicate use of an auto-increment column). If both columns are provided, they are both
+ * used to ensure only new or updated rows are reported and to totally order updates so
+ * recovery can occur no matter when offsets were committed. If only the incrementing fields is
+ * provided, new rows will be detected but not updates. If only the timestamp field is
+ * provided, both new and updated rows will be detected, but stream offsets will not be unique
+ * so failures may cause duplicates or losses.
  * </p>
  */
 public class TimestampIncrementingTableQuerier extends TableQuerier {
-  private static final Logger log = LoggerFactory.getLogger(TimestampIncrementingTableQuerier.class);
+
+  private static final Logger log =
+      LoggerFactory.getLogger(TimestampIncrementingTableQuerier.class);
 
   private static final BigDecimal LONG_MAX_VALUE_AS_BIGDEC = new BigDecimal(Long.MAX_VALUE);
 
@@ -62,10 +64,12 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   private long timestampDelay;
   private TimestampIncrementingOffset offset;
 
-  public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
-                                           String timestampColumn, String incrementingColumn,
-                                           Map<String, Object> offsetMap, Long timestampDelay,
-                                           String schemaPattern, boolean mapNumerics) {
+  public TimestampIncrementingTableQuerier(
+      QueryMode mode, String name, String topicPrefix,
+      String timestampColumn, String incrementingColumn,
+      Map<String, Object> offsetMap, Long timestampDelay,
+      String schemaPattern, boolean mapNumerics
+  ) {
     super(mode, name, topicPrefix, schemaPattern, mapNumerics);
     this.timestampColumn = timestampColumn;
     this.incrementingColumn = incrementingColumn;
@@ -93,7 +97,9 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
         builder.append(query);
         break;
       default:
-        throw new ConnectException("Unknown mode encountered when preparing query: " + mode.toString());
+        throw new ConnectException(
+            "Unknown mode encountered when preparing query: " + mode.toString()
+        );
     }
 
     if (incrementingColumn != null && timestampColumn != null) {
@@ -151,27 +157,44 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     if (incrementingColumn != null && timestampColumn != null) {
       Timestamp tsOffset = offset.getTimestampOffset();
       Long incOffset = offset.getIncrementingOffset();
-      Timestamp endTime = new Timestamp(JdbcUtils.getCurrentTimeOnDB(stmt.getConnection(), DateTimeUtils.UTC_CALENDAR.get()).getTime() - timestampDelay);
+      Timestamp endTime =
+          new Timestamp(
+              JdbcUtils.getCurrentTimeOnDb(
+                  stmt.getConnection(),
+                  DateTimeUtils.UTC_CALENDAR.get()
+              ).getTime() - timestampDelay
+          );
       stmt.setTimestamp(1, endTime, DateTimeUtils.UTC_CALENDAR.get());
       stmt.setTimestamp(2, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
       stmt.setLong(3, incOffset);
       stmt.setTimestamp(4, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
-      log.debug("Executing prepared statement with start time value = {} end time = {} and incrementing value = {}",
-                DateTimeUtils.formatUtcTimestamp(tsOffset),
-                DateTimeUtils.formatUtcTimestamp(endTime),
-                incOffset);
+      log.debug(
+          "Executing prepared statement with start time value = {} end time = {} and incrementing"
+          + " value = {}",
+          DateTimeUtils.formatUtcTimestamp(tsOffset),
+          DateTimeUtils.formatUtcTimestamp(endTime),
+          incOffset
+      );
     } else if (incrementingColumn != null) {
       Long incOffset = offset.getIncrementingOffset();
       stmt.setLong(1, incOffset);
       log.debug("Executing prepared statement with incrementing value = {}", incOffset);
     } else if (timestampColumn != null) {
       Timestamp tsOffset = offset.getTimestampOffset();
-      Timestamp endTime = new Timestamp(JdbcUtils.getCurrentTimeOnDB(stmt.getConnection(), DateTimeUtils.UTC_CALENDAR.get()).getTime() - timestampDelay);
+      Timestamp endTime =
+          new Timestamp(
+              JdbcUtils.getCurrentTimeOnDb(
+                  stmt.getConnection(),
+                  DateTimeUtils.UTC_CALENDAR.get()
+              ).getTime() - timestampDelay
+          );
       stmt.setTimestamp(1, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
       stmt.setTimestamp(2, endTime, DateTimeUtils.UTC_CALENDAR.get());
-      log.debug("Executing prepared statement with timestamp value = {} end time = {}",
-                DateTimeUtils.formatUtcTimestamp(tsOffset),
-                DateTimeUtils.formatUtcTimestamp(endTime));
+      log.debug(
+          "Executing prepared statement with timestamp value = {} end time = {}",
+          DateTimeUtils.formatUtcTimestamp(tsOffset),
+          DateTimeUtils.formatUtcTimestamp(endTime)
+      );
     }
     return stmt.executeQuery();
   }
@@ -189,8 +212,10 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
         topic = topicPrefix + name;
         break;
       case QUERY:
-        partition = Collections.singletonMap(JdbcSourceConnectorConstants.QUERY_NAME_KEY,
-                                             JdbcSourceConnectorConstants.QUERY_NAME_VALUE);
+        partition = Collections.singletonMap(
+            JdbcSourceConnectorConstants.QUERY_NAME_KEY,
+            JdbcSourceConnectorConstants.QUERY_NAME_VALUE
+        );
         topic = topicPrefix;
         break;
       default:
@@ -215,26 +240,35 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       final Schema incrementingColumnSchema = schema.field(incrementingColumn).schema();
       final Object incrementingColumnValue = record.get(incrementingColumn);
       if (incrementingColumnValue == null) {
-        throw new ConnectException("Null value for incrementing column of type: " + incrementingColumnSchema.type());
+        throw new ConnectException(
+            "Null value for incrementing column of type: " + incrementingColumnSchema.type()
+        );
       } else if (isIntegralPrimitiveType(incrementingColumnValue)) {
         extractedId = ((Number) incrementingColumnValue).longValue();
-      } else if (incrementingColumnSchema.name() != null && incrementingColumnSchema.name().equals(Decimal.LOGICAL_NAME)) {
+      } else if (incrementingColumnSchema.name() != null && incrementingColumnSchema.name()
+          .equals(Decimal.LOGICAL_NAME)) {
         final BigDecimal decimal = ((BigDecimal) incrementingColumnValue);
         if (decimal.compareTo(LONG_MAX_VALUE_AS_BIGDEC) > 0) {
-          throw new ConnectException("Decimal value for incrementing column exceeded Long.MAX_VALUE");
+          throw new ConnectException(
+              "Decimal value for incrementing column exceeded Long.MAX_VALUE"
+          );
         }
         if (decimal.scale() != 0) {
           throw new ConnectException("Scale of Decimal value for incrementing column must be 0");
         }
         extractedId = decimal.longValue();
       } else {
-        throw new ConnectException("Invalid type for incrementing column: " + incrementingColumnSchema.type());
+        throw new ConnectException(
+            "Invalid type for incrementing column: " + incrementingColumnSchema.type()
+        );
       }
 
       // If we are only using an incrementing column, then this must be incrementing.
       // If we are also using a timestamp, then we may see updates to older rows.
       Long incrementingOffset = offset.getIncrementingOffset();
-      assert incrementingOffset == -1L || extractedId > incrementingOffset || timestampColumn != null;
+      assert incrementingOffset == -1L
+             || extractedId > incrementingOffset
+             || timestampColumn != null;
     } else {
       extractedId = null;
     }
@@ -251,12 +285,12 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
 
   @Override
   public String toString() {
-    return "TimestampIncrementingTableQuerier{" +
-           "name='" + name + '\'' +
-           ", query='" + query + '\'' +
-           ", topicPrefix='" + topicPrefix + '\'' +
-           ", timestampColumn='" + timestampColumn + '\'' +
-           ", incrementingColumn='" + incrementingColumn + '\'' +
-           '}';
+    return "TimestampIncrementingTableQuerier{"
+           + "name='" + name + '\''
+           + ", query='" + query + '\''
+           + ", topicPrefix='" + topicPrefix + '\''
+           + ", timestampColumn='" + timestampColumn + '\''
+           + ", incrementingColumn='" + incrementingColumn + '\''
+           + '}';
   }
 }

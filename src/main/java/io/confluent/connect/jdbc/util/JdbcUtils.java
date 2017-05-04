@@ -62,9 +62,9 @@ public class JdbcUtils {
   /**
    * Get a list of tables in the database. This uses the default filters, which only include
    * user-defined tables.
+   *
    * @param conn database connection
    * @return a list of tables
-   * @throws SQLException
    */
   public static List<String> getTables(Connection conn, String schemaPattern) throws SQLException {
     return getTables(conn, schemaPattern, DEFAULT_TABLE_TYPES);
@@ -72,11 +72,12 @@ public class JdbcUtils {
 
   /**
    * Get a list of table names in the database.
+   *
    * @param conn database connection
    * @param types a set of table types that should be included in the results
-   * @throws SQLException
    */
-  public static List<String> getTables(Connection conn, String schemaPattern, Set<String> types) throws SQLException {
+  public static List<String> getTables(Connection conn, String schemaPattern, Set<String> types)
+      throws SQLException {
     DatabaseMetaData metadata = conn.getMetaData();
     try (ResultSet rs = metadata.getTables(null, schemaPattern, "%", null)) {
       List<String> tableNames = new ArrayList<>();
@@ -97,13 +98,14 @@ public class JdbcUtils {
 
   /**
    * Look up the autoincrement column for the specified table.
+   *
    * @param conn database connection
    * @param table the table to
    * @return the name of the column that is an autoincrement column, or null if there is no
-   *         autoincrement column or more than one exists
-   * @throws SQLException
+   *     autoincrement column or more than one exists
    */
-  public static String getAutoincrementColumn(Connection conn, String schemaPattern, String table) throws SQLException {
+  public static String getAutoincrementColumn(Connection conn, String schemaPattern, String table)
+      throws SQLException {
     String result = null;
     int matches = 0;
 
@@ -125,7 +127,8 @@ public class JdbcUtils {
     log.trace("Falling back to SELECT detection of auto-increment column for {}:{}", conn, table);
     try (Statement stmt = conn.createStatement()) {
       String quoteString = getIdentifierQuoteString(conn);
-      ResultSet rs = stmt.executeQuery("SELECT * FROM " + quoteString + table + quoteString + " LIMIT 1");
+      ResultSet rs =
+          stmt.executeQuery("SELECT * FROM " + quoteString + table + quoteString + " LIMIT 1");
       ResultSetMetaData rsmd = rs.getMetaData();
       for (int i = 1; i < rsmd.getColumnCount(); i++) {
         if (rsmd.isAutoIncrement(i)) {
@@ -137,7 +140,12 @@ public class JdbcUtils {
     return (matches == 1 ? result : null);
   }
 
-  public static boolean isColumnNullable(Connection conn, String schemaPattern, String table, String column)
+  public static boolean isColumnNullable(
+      Connection conn,
+      String schemaPattern,
+      String table,
+      String column
+  )
       throws SQLException {
     try (ResultSet rs = conn.getMetaData().getColumns(null, schemaPattern, table, column)) {
       if (rs.getMetaData().getColumnCount() > GET_COLUMNS_IS_NULLABLE) {
@@ -154,9 +162,9 @@ public class JdbcUtils {
 
   /**
    * Get the string used for quoting identifiers in this database's SQL dialect.
+   *
    * @param connection the database connection
    * @return the quote string
-   * @throws SQLException
    */
   public static String getIdentifierQuoteString(Connection connection) throws SQLException {
     String quoteString = connection.getMetaData().getIdentifierQuoteString();
@@ -166,6 +174,7 @@ public class JdbcUtils {
 
   /**
    * Quote the given string.
+   *
    * @param orig the string to quote
    * @param quote the quote character
    * @return the quoted string
@@ -176,33 +185,41 @@ public class JdbcUtils {
 
   /**
    * Return current time at the database
-   * @param conn
-   * @param cal
-   * @return
    */
-  public static Timestamp getCurrentTimeOnDB(Connection conn, Calendar cal) throws SQLException, ConnectException {
+  public static Timestamp getCurrentTimeOnDb(Connection conn, Calendar cal)
+      throws SQLException, ConnectException {
     String query;
 
     // This is ugly, but to run a function, everyone does 'select function()'
     // except Oracle that does 'select function() from dual'
-    // and Derby uses either the dummy table SYSIBM.SYSDUMMY1  or values expression (I chose to use values)
+    // and Derby uses either the dummy table SYSIBM.SYSDUMMY1  or values expression (I chose to
+    // use values)
     String dbProduct = conn.getMetaData().getDatabaseProductName();
-    if ("Oracle".equals(dbProduct))
+    if ("Oracle".equals(dbProduct)) {
       query = "select CURRENT_TIMESTAMP from dual";
-    else if ("Apache Derby".equals(dbProduct))
+    } else if ("Apache Derby".equals(dbProduct)) {
       query = "values(CURRENT_TIMESTAMP)";
-    else
+    } else {
       query = "select CURRENT_TIMESTAMP;";
+    }
 
     try (Statement stmt = conn.createStatement()) {
       log.debug("executing query " + query + " to get current time from database");
       ResultSet rs = stmt.executeQuery(query);
-      if (rs.next())
+      if (rs.next()) {
         return rs.getTimestamp(1, cal);
-      else
-        throw new ConnectException("Unable to get current time from DB using query " + query + " on database " + dbProduct);
+      } else {
+        throw new ConnectException(
+            "Unable to get current time from DB using query " + query + " on database " + dbProduct
+        );
+      }
     } catch (SQLException e) {
-      log.error("Failed to get current time from DB using query " + query + " on database " + dbProduct, e);
+      log.error(
+          "Failed to get current time from DB using query {} on database {} ",
+          query,
+          dbProduct,
+          e
+      );
       throw e;
     }
   }

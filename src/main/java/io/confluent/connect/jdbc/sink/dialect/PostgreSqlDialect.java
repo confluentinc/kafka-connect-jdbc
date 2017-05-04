@@ -21,14 +21,18 @@ import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.Map;
 
 import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.joinToBuilder;
-import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.nCopiesToBuilder;
+import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.appendNCopiesToBuilder;
 
 public class PostgreSqlDialect extends DbDialect {
+
+  private static final Logger log = LoggerFactory.getLogger(PostgreSqlDialect.class);
 
   public PostgreSqlDialect() {
     super("\"", "\"");
@@ -46,6 +50,8 @@ public class PostgreSqlDialect extends DbDialect {
           return "TIME";
         case Timestamp.LOGICAL_NAME:
           return "TIMESTAMP";
+        default:
+          log.debug("unhandled schemaName={}", schemaName);
       }
     }
     switch (type) {
@@ -67,19 +73,25 @@ public class PostgreSqlDialect extends DbDialect {
         return "TEXT";
       case BYTES:
         return "BLOB";
+      default:
+        log.debug("unhandled type={}", type);
     }
     return super.getSqlType(schemaName, parameters, type);
   }
 
   @Override
-  public String getUpsertQuery(final String table, final Collection<String> keyCols, final Collection<String> cols) {
+  public String getUpsertQuery(
+      final String table,
+      final Collection<String> keyCols,
+      final Collection<String> cols
+  ) {
     final StringBuilder builder = new StringBuilder();
     builder.append("INSERT INTO ");
     builder.append(escaped(table));
     builder.append(" (");
     joinToBuilder(builder, ",", keyCols, cols, escaper());
     builder.append(") VALUES (");
-    nCopiesToBuilder(builder, ",", "?", cols.size() + keyCols.size());
+    appendNCopiesToBuilder(builder, ",", "?", cols.size() + keyCols.size());
     builder.append(") ON CONFLICT (");
     joinToBuilder(builder, ",", keyCols, escaper());
     builder.append(") DO UPDATE SET ");

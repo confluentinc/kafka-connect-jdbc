@@ -18,6 +18,8 @@ package io.confluent.connect.jdbc.source;
 
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.source.SourceRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -30,10 +32,13 @@ import java.sql.SQLException;
  * loads using timestamps, etc.
  */
 abstract class TableQuerier implements Comparable<TableQuerier> {
+
   public enum QueryMode {
     TABLE, // Copying whole tables, with queries constructed automatically
     QUERY // User-specified query
   }
+
+  private static final Logger log = LoggerFactory.getLogger(TableQuerier.class);
 
   protected final QueryMode mode;
   protected final String schemaPattern;
@@ -49,8 +54,13 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected ResultSet resultSet;
   protected Schema schema;
 
-  public TableQuerier(QueryMode mode, String nameOrQuery, String topicPrefix,
-                      String schemaPattern, boolean mapNumerics) {
+  public TableQuerier(
+      QueryMode mode,
+      String nameOrQuery,
+      String topicPrefix,
+      String schemaPattern,
+      boolean mapNumerics
+  ) {
     this.mode = mode;
     this.schemaPattern = schemaPattern;
     this.name = mode.equals(QueryMode.TABLE) ? nameOrQuery : null;
@@ -108,6 +118,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
       try {
         stmt.close();
       } catch (SQLException ignored) {
+        log.trace("ignoring", ignored);
       }
     }
     stmt = null;
@@ -118,6 +129,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
       try {
         resultSet.close();
       } catch (SQLException ignored) {
+        log.trace("ignoring", ignored);
       }
     }
     resultSet = null;

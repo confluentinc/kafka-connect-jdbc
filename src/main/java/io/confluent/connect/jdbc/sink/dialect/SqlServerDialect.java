@@ -21,6 +21,8 @@ import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -32,6 +34,8 @@ import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.joinToBuilder;
 
 public class SqlServerDialect extends DbDialect {
+
+  private static final Logger log = LoggerFactory.getLogger(SqlServerDialect.class);
 
   public SqlServerDialect() {
     super("[", "]");
@@ -49,6 +53,8 @@ public class SqlServerDialect extends DbDialect {
           return "time";
         case Timestamp.LOGICAL_NAME:
           return "datetime2";
+        default:
+          log.debug("unhandled schemaName={}", schemaName);
       }
     }
     switch (type) {
@@ -70,6 +76,8 @@ public class SqlServerDialect extends DbDialect {
         return "varchar(max)";
       case BYTES:
         return "varbinary(max)";
+      default:
+        log.debug("unhandled type={}", type);
     }
     return super.getSqlType(schemaName, parameters, type);
   }

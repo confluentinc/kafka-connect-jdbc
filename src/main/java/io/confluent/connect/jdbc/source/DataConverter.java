@@ -43,9 +43,14 @@ import io.confluent.connect.jdbc.util.DateTimeUtils;
  * Connect records.
  */
 public class DataConverter {
+
   private static final Logger log = LoggerFactory.getLogger(JdbcSourceTask.class);
 
-  public static Schema convertSchema(String tableName, ResultSetMetaData metadata, boolean mapNumerics)
+  public static Schema convertSchema(
+      String tableName,
+      ResultSetMetaData metadata,
+      boolean mapNumerics
+  )
       throws SQLException {
     // TODO: Detect changes to metadata, which will require schema updates
     SchemaBuilder builder = SchemaBuilder.struct().name(tableName);
@@ -61,8 +66,14 @@ public class DataConverter {
     Struct struct = new Struct(schema);
     for (int col = 1; col <= metadata.getColumnCount(); col++) {
       try {
-        convertFieldValue(resultSet, col, metadata.getColumnType(col), struct,
-                          metadata.getColumnLabel(col), mapNumerics);
+        convertFieldValue(
+            resultSet,
+            col,
+            metadata.getColumnType(col),
+            struct,
+            metadata.getColumnLabel(col),
+            mapNumerics
+        );
       } catch (IOException e) {
         log.warn("Ignoring record because processing failed:", e);
       } catch (SQLException e) {
@@ -73,8 +84,10 @@ public class DataConverter {
   }
 
 
-  private static void addFieldSchema(ResultSetMetaData metadata, int col,
-                                     SchemaBuilder builder, boolean mapNumerics)
+  private static void addFieldSchema(
+      ResultSetMetaData metadata, int col,
+      SchemaBuilder builder, boolean mapNumerics
+  )
       throws SQLException {
     // Label is what the query requested the column name be using an "AS" clause, name is the
     // original
@@ -84,8 +97,8 @@ public class DataConverter {
 
     int sqlType = metadata.getColumnType(col);
     boolean optional = false;
-    if (metadata.isNullable(col) == ResultSetMetaData.columnNullable ||
-        metadata.isNullable(col) == ResultSetMetaData.columnNullableUnknown) {
+    if (metadata.isNullable(col) == ResultSetMetaData.columnNullable
+        || metadata.isNullable(col) == ResultSetMetaData.columnNullableUnknown) {
       optional = true;
     }
 
@@ -206,26 +219,26 @@ public class DataConverter {
             Schema schema;
             if (precision > 9) {
               schema = (optional) ? Schema.OPTIONAL_INT64_SCHEMA :
-                      Schema.INT64_SCHEMA;
+                       Schema.INT64_SCHEMA;
             } else if (precision > 4) {
               schema = (optional) ? Schema.OPTIONAL_INT32_SCHEMA :
-                      Schema.INT32_SCHEMA;
+                       Schema.INT32_SCHEMA;
             } else if (precision > 2) {
               schema = (optional) ? Schema.OPTIONAL_INT16_SCHEMA :
-                      Schema.INT16_SCHEMA;
+                       Schema.INT16_SCHEMA;
             } else {
               schema = (optional) ? Schema.OPTIONAL_INT8_SCHEMA :
-                      Schema.INT8_SCHEMA;
+                       Schema.INT8_SCHEMA;
             }
             builder.field(fieldName, schema);
             break;
           }
         }
-
       case Types.DECIMAL: {
         int scale = metadata.getScale(col);
-        if (scale == -127) //NUMBER without precision defined for OracleDB
+        if (scale == -127) { //NUMBER without precision defined for OracleDB
           scale = 127;
+        }
         SchemaBuilder fieldBuilder = Decimal.builder(scale);
         if (optional) {
           fieldBuilder.optional();
@@ -312,8 +325,14 @@ public class DataConverter {
     }
   }
 
-  private static void convertFieldValue(ResultSet resultSet, int col, int colType,
-                                        Struct struct, String fieldName, boolean mapNumerics)
+  private static void convertFieldValue(
+      ResultSet resultSet,
+      int col,
+      int colType,
+      Struct struct,
+      String fieldName,
+      boolean mapNumerics
+  )
       throws SQLException, IOException {
     final Object colValue;
     switch (colType) {
@@ -407,8 +426,9 @@ public class DataConverter {
       case Types.DECIMAL: {
         ResultSetMetaData metadata = resultSet.getMetaData();
         int scale = metadata.getScale(col);
-        if (scale == -127)
+        if (scale == -127) {
           scale = 127;
+        }
         colValue = resultSet.getBigDecimal(col, scale);
         break;
       }

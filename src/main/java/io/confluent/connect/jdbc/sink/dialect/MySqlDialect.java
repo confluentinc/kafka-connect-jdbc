@@ -21,14 +21,18 @@ import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.Map;
 
 import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.joinToBuilder;
-import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.nCopiesToBuilder;
+import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.appendNCopiesToBuilder;
 
 public class MySqlDialect extends DbDialect {
+
+  private static final Logger log = LoggerFactory.getLogger(MySqlDialect.class);
 
   public MySqlDialect() {
     super("`", "`");
@@ -47,6 +51,8 @@ public class MySqlDialect extends DbDialect {
           return "TIME(3)";
         case Timestamp.LOGICAL_NAME:
           return "DATETIME(3)";
+        default:
+          log.debug("unhandled schemaName={}", schemaName);
       }
     }
     switch (type) {
@@ -68,12 +74,18 @@ public class MySqlDialect extends DbDialect {
         return "VARCHAR(256)";
       case BYTES:
         return "VARBINARY(1024)";
+      default:
+        log.debug("unhandled type={}", type);
     }
     return super.getSqlType(schemaName, parameters, type);
   }
 
   @Override
-  public String getUpsertQuery(final String table, final Collection<String> keyCols, final Collection<String> cols) {
+  public String getUpsertQuery(
+      final String table,
+      final Collection<String> keyCols,
+      final Collection<String> cols
+  ) {
     //MySql doesn't support SQL 2003:merge so here how the upsert is handled
 
     final StringBuilder builder = new StringBuilder();
@@ -82,7 +94,7 @@ public class MySqlDialect extends DbDialect {
     builder.append("(");
     joinToBuilder(builder, ",", keyCols, cols, escaper());
     builder.append(") values(");
-    nCopiesToBuilder(builder, ",", "?", cols.size() + keyCols.size());
+    appendNCopiesToBuilder(builder, ",", "?", cols.size() + keyCols.size());
     builder.append(") on duplicate key update ");
     joinToBuilder(
         builder,

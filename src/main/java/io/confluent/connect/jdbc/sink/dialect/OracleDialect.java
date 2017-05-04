@@ -21,6 +21,8 @@ import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -32,6 +34,9 @@ import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.joinToBuilder;
 
 public class OracleDialect extends DbDialect {
+
+  private static final Logger log = LoggerFactory.getLogger(OracleDialect.class);
+
   public OracleDialect() {
     super("\"", "\"");
   }
@@ -48,6 +53,8 @@ public class OracleDialect extends DbDialect {
           return "DATE";
         case Timestamp.LOGICAL_NAME:
           return "TIMESTAMP";
+        default:
+          log.debug("unhandled schemaName={}", schemaName);
       }
     }
     switch (type) {
@@ -69,6 +76,8 @@ public class OracleDialect extends DbDialect {
         return "CLOB";
       case BYTES:
         return "BLOB";
+      default:
+        log.debug("unhandled type={}", type);
     }
     return super.getSqlType(schemaName, parameters, type);
   }
@@ -84,7 +93,11 @@ public class OracleDialect extends DbDialect {
   }
 
   @Override
-  public String getUpsertQuery(final String table, Collection<String> keyCols, Collection<String> cols) {
+  public String getUpsertQuery(
+      final String table,
+      Collection<String> keyCols,
+      Collection<String> cols
+  ) {
     // https://blogs.oracle.com/cmar/entry/using_merge_to_do_an
 
     final StringBuilder builder = new StringBuilder();
@@ -97,7 +110,11 @@ public class OracleDialect extends DbDialect {
     joinToBuilder(builder, " and ", keyCols, new StringBuilderUtil.Transform<String>() {
       @Override
       public void apply(StringBuilder builder, String col) {
-        builder.append(tableName).append(".").append(escaped(col)).append("=incoming.").append(escaped(col));
+        builder.append(tableName)
+            .append(".")
+            .append(escaped(col))
+            .append("=incoming.")
+            .append(escaped(col));
       }
     });
     builder.append(")");
@@ -106,7 +123,11 @@ public class OracleDialect extends DbDialect {
       joinToBuilder(builder, ",", cols, new StringBuilderUtil.Transform<String>() {
         @Override
         public void apply(StringBuilder builder, String col) {
-          builder.append(tableName).append(".").append(escaped(col)).append("=incoming.").append(escaped(col));
+          builder.append(tableName)
+              .append(".")
+              .append(escaped(col))
+              .append("=incoming.")
+              .append(escaped(col));
         }
       });
     }

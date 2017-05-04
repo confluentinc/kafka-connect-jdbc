@@ -19,6 +19,8 @@ package io.confluent.connect.jdbc.sink.metadata;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -31,13 +33,20 @@ import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 
 public class FieldsMetadata {
 
+  private static final Logger log = LoggerFactory.getLogger(FieldsMetadata.class);
+
   public final Set<String> keyFieldNames;
   public final Set<String> nonKeyFieldNames;
   public final Map<String, SinkRecordField> allFields;
 
-  private FieldsMetadata(Set<String> keyFieldNames, Set<String> nonKeyFieldNames, Map<String, SinkRecordField> allFields) {
+  private FieldsMetadata(
+      Set<String> keyFieldNames,
+      Set<String> nonKeyFieldNames,
+      Map<String, SinkRecordField> allFields
+  ) {
     if ((keyFieldNames.size() + nonKeyFieldNames.size() != allFields.size())
-        || !(allFields.keySet().containsAll(keyFieldNames) && allFields.keySet().containsAll(nonKeyFieldNames))) {
+        || !(allFields.keySet().containsAll(keyFieldNames) && allFields.keySet()
+        .containsAll(nonKeyFieldNames))) {
       throw new IllegalArgumentException(String.format(
           "Validation fail -- keyFieldNames:%s nonKeyFieldNames:%s allFields:%s",
           keyFieldNames, nonKeyFieldNames, allFields
@@ -55,7 +64,14 @@ public class FieldsMetadata {
       final Set<String> fieldsWhitelist,
       final SchemaPair schemaPair
   ) {
-    return extract(tableName, pkMode, configuredPkFields, fieldsWhitelist, schemaPair.keySchema, schemaPair.valueSchema);
+    return extract(
+        tableName,
+        pkMode,
+        configuredPkFields,
+        fieldsWhitelist,
+        schemaPair.keySchema,
+        schemaPair.valueSchema
+    );
   }
 
   public static FieldsMetadata extract(
@@ -74,7 +90,6 @@ public class FieldsMetadata {
 
     final Set<String> keyFieldNames = new LinkedHashSet<>();
     switch (pkMode) {
-
       case KAFKA: {
         if (configuredPkFields.isEmpty()) {
           keyFieldNames.addAll(JdbcSinkConfig.DEFAULT_KAFKA_PK_NAMES);
@@ -82,18 +97,31 @@ public class FieldsMetadata {
           keyFieldNames.addAll(configuredPkFields);
         } else {
           throw new ConnectException(String.format(
-              "PK mode for table '%s' is %s so there should either be no field names defined for defaults %s to be applicable, "
+              "PK mode for table '%s' is %s so there should either be no field names defined for "
+              + "defaults %s to be applicable, "
               + "or exactly 3, defined fields are: %s",
-              tableName, pkMode, JdbcSinkConfig.DEFAULT_KAFKA_PK_NAMES, configuredPkFields
+              tableName,
+              pkMode,
+              JdbcSinkConfig.DEFAULT_KAFKA_PK_NAMES,
+              configuredPkFields
           ));
         }
         final Iterator<String> it = keyFieldNames.iterator();
         final String topicFieldName = it.next();
-        allFields.put(topicFieldName, new SinkRecordField(Schema.STRING_SCHEMA, topicFieldName, true));
+        allFields.put(
+            topicFieldName,
+            new SinkRecordField(Schema.STRING_SCHEMA, topicFieldName, true)
+        );
         final String partitionFieldName = it.next();
-        allFields.put(partitionFieldName, new SinkRecordField(Schema.INT32_SCHEMA, partitionFieldName, true));
+        allFields.put(
+            partitionFieldName,
+            new SinkRecordField(Schema.INT32_SCHEMA, partitionFieldName, true)
+        );
         final String offsetFieldName = it.next();
-        allFields.put(offsetFieldName, new SinkRecordField(Schema.INT64_SCHEMA, offsetFieldName, true));
+        allFields.put(
+            offsetFieldName,
+            new SinkRecordField(Schema.INT64_SCHEMA, offsetFieldName, true)
+        );
       }
       break;
 
@@ -107,7 +135,8 @@ public class FieldsMetadata {
         if (keySchemaType.isPrimitive()) {
           if (configuredPkFields.size() != 1) {
             throw new ConnectException(String.format(
-                "Need exactly one PK column defined since the key schema for records is a primitive type, defined columns are: %s",
+                "Need exactly one PK column defined since the key schema for records is a "
+                + "primitive type, defined columns are: %s",
                 configuredPkFields
             ));
           }
@@ -124,8 +153,12 @@ public class FieldsMetadata {
               final Field keyField = keySchema.field(fieldName);
               if (keyField == null) {
                 throw new ConnectException(String.format(
-                    "PK mode for table '%s' is %s with configured PK fields %s, but record key schema does not contain field: %s",
-                    tableName, pkMode, configuredPkFields, fieldName
+                    "PK mode for table '%s' is %s with configured PK fields %s, but record key "
+                    + "schema does not contain field: %s",
+                    tableName,
+                    pkMode,
+                    configuredPkFields,
+                    fieldName
                 ));
               }
             }
@@ -136,14 +169,20 @@ public class FieldsMetadata {
             allFields.put(fieldName, new SinkRecordField(fieldSchema, fieldName, true));
           }
         } else {
-          throw new ConnectException("Key schema must be primitive type or Struct, but is of type: " + keySchemaType);
+          throw new ConnectException(
+              "Key schema must be primitive type or Struct, but is of type: " + keySchemaType
+          );
         }
       }
       break;
 
       case RECORD_VALUE: {
         if (valueSchema == null) {
-          throw new ConnectException(String.format("PK mode for table '%s' is %s, but record value schema is missing", tableName, pkMode));
+          throw new ConnectException(String.format(
+              "PK mode for table '%s' is %s, but record value schema is missing",
+              tableName,
+              pkMode
+          ));
         }
         if (configuredPkFields.isEmpty()) {
           for (Field keyField : valueSchema.fields()) {
@@ -153,8 +192,12 @@ public class FieldsMetadata {
           for (String fieldName : configuredPkFields) {
             if (valueSchema.field(fieldName) == null) {
               throw new ConnectException(String.format(
-                  "PK mode for table '%s' is %s with configured PK fields %s, but record value schema does not contain field: %s",
-                  tableName, pkMode, configuredPkFields, fieldName
+                  "PK mode for table '%s' is %s with configured PK fields %s, but record value "
+                  + "schema does not contain field: %s",
+                  tableName,
+                  pkMode,
+                  configuredPkFields,
+                  fieldName
               ));
             }
           }
@@ -167,6 +210,8 @@ public class FieldsMetadata {
       }
       break;
 
+      default:
+        log.warn("unhandled pkMode={}", pkMode);
     }
 
     final Set<String> nonKeyFieldNames = new LinkedHashSet<>();
@@ -187,7 +232,9 @@ public class FieldsMetadata {
     }
 
     if (allFields.isEmpty()) {
-      throw new ConnectException("No fields found using key and value schemas for table: " + tableName);
+      throw new ConnectException(
+          "No fields found using key and value schemas for table: " + tableName
+      );
     }
 
     return new FieldsMetadata(keyFieldNames, nonKeyFieldNames, allFields);
@@ -195,10 +242,10 @@ public class FieldsMetadata {
 
   @Override
   public String toString() {
-    return "FieldsMetadata{" +
-           "keyFieldNames=" + keyFieldNames +
-           ", nonKeyFieldNames=" + nonKeyFieldNames +
-           ", allFields=" + allFields +
-           '}';
+    return "FieldsMetadata{"
+           + "keyFieldNames=" + keyFieldNames
+           + ", nonKeyFieldNames=" + nonKeyFieldNames
+           + ", allFields=" + allFields
+           + '}';
   }
 }

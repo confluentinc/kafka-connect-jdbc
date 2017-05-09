@@ -44,7 +44,7 @@ public class TimestampIncrementingOffset {
   }
 
   public Timestamp getTimestampOffset() {
-    return timestampOffset == null ? new Timestamp(0) : timestampOffset;
+    return timestampOffset;
   }
 
   public Map<String, Object> toMap() {

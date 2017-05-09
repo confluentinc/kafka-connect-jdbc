@@ -148,10 +148,14 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
 
   @Override
   protected ResultSet executeQuery() throws SQLException {
+    Timestamp currentTimeOnDb = null;
+    if (timestampColumn != null) {
+      currentTimeOnDb = JdbcUtils.getCurrentTimeOnDB(stmt.getConnection(), DateTimeUtils.UTC_CALENDAR.get());
+    }
     if (incrementingColumn != null && timestampColumn != null) {
-      Timestamp tsOffset = offset.getTimestampOffset();
+      Timestamp tsOffset = getTimestampOffset(currentTimeOnDb);
       Long incOffset = offset.getIncrementingOffset();
-      Timestamp endTime = new Timestamp(JdbcUtils.getCurrentTimeOnDB(stmt.getConnection(), DateTimeUtils.UTC_CALENDAR.get()).getTime() - timestampDelay);
+      Timestamp endTime = new Timestamp(currentTimeOnDb.getTime() - timestampDelay);
       stmt.setTimestamp(1, endTime, DateTimeUtils.UTC_CALENDAR.get());
       stmt.setTimestamp(2, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
       stmt.setLong(3, incOffset);
@@ -165,8 +169,8 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       stmt.setLong(1, incOffset);
       log.debug("Executing prepared statement with incrementing value = {}", incOffset);
     } else if (timestampColumn != null) {
-      Timestamp tsOffset = offset.getTimestampOffset();
-      Timestamp endTime = new Timestamp(JdbcUtils.getCurrentTimeOnDB(stmt.getConnection(), DateTimeUtils.UTC_CALENDAR.get()).getTime() - timestampDelay);
+      Timestamp tsOffset = getTimestampOffset(currentTimeOnDb);
+      Timestamp endTime = new Timestamp(currentTimeOnDb.getTime() - timestampDelay);
       stmt.setTimestamp(1, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
       stmt.setTimestamp(2, endTime, DateTimeUtils.UTC_CALENDAR.get());
       log.debug("Executing prepared statement with timestamp value = {} end time = {}",
@@ -197,6 +201,33 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
         throw new ConnectException("Unexpected query mode: " + mode);
     }
     return new SourceRecord(partition, offset.toMap(), topic, record.schema(), record);
+  }
+
+  Timestamp getTimestampOffset(Timestamp currentTimeOnDb) throws SQLException {
+    if (offset.getTimestampOffset() == null) {
+      Timestamp timestamp = null;
+      String defaultOffset = config.getString(JdbcSourceTaskConfig.TIMESTAMP_DEFAULT_OFFSET_CONFIG);
+      if (defaultOffset.equals(JdbcSourceTaskConfig.TIMESTAMP_DEFAULT_OFFSET_EARLIST)) {
+        timestamp = new Timestamp(0);
+      } else {
+        Long offsets;
+        if (defaultOffset.equals(JdbcSourceTaskConfig.TIMESTAMP_DEFAULT_OFFSET_LATEST)) {
+          offsets = 0L;
+        } else {
+          try {
+            offsets = Long.valueOf(defaultOffset);
+          } catch (Exception e) {
+            offsets = 0L;
+            log.error("The config {} with value {} is not valid.", 
+                JdbcSourceTaskConfig.TIMESTAMP_DEFAULT_OFFSET_CONFIG, 
+                defaultOffset);
+          }
+        }
+        timestamp = new Timestamp(currentTimeOnDb.getTime() - offsets);
+      }
+      offset = new TimestampIncrementingOffset(timestamp, offset.getIncrementingOffset());
+    }
+    return offset.getTimestampOffset();
   }
 
   // Visible for testing

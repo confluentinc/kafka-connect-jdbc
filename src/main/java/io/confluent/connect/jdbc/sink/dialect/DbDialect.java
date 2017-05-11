@@ -24,6 +24,8 @@ import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
 
 import java.nio.ByteBuffer;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -201,6 +203,14 @@ public abstract class DbDialect {
     };
   }
 
+  public void configureConnectionSpecificSettings(Connection connection) throws SQLException {
+    
+  }
+
+  public void configureTableSpecificSettings(Connection connection, String tableName) throws SQLException {
+    
+  }
+  
   static List<String> extractPrimaryKeyFieldNames(Collection<SinkRecordField> fields) {
     final List<String> pks = new ArrayList<>();
     for (SinkRecordField f : fields) {
@@ -241,6 +251,8 @@ public abstract class DbDialect {
         return new MySqlDialect();
       case "postgresql":
         return new PostgreSqlDialect();
+      case "db2":
+        return new Db2Dialect();
       default:
         return new GenericDialect();
     }

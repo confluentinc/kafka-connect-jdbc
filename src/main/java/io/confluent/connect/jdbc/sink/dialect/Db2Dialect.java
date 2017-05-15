@@ -51,8 +51,7 @@ public class Db2Dialect extends DbDialect {
           String defaultOrganizationType = rs.getString(1);
           if ("COLUMN".equals(defaultOrganizationType)) {
             tableOrg = Db2TableOrganization.COLUMN;
-          }
-          else if ("ROW".equals(defaultOrganizationType)) {
+          } else if ("ROW".equals(defaultOrganizationType)) {
             tableOrg = Db2TableOrganization.ROW;
           }
         }
@@ -77,8 +76,7 @@ public class Db2Dialect extends DbDialect {
             String tableOrganizationType = rs.getString(1);
             if ("C".equals(tableOrganizationType)) {
               tableOrg = Db2TableOrganization.COLUMN;
-            }
-            else if ("R".equals(tableOrganizationType)) {
+            } else if ("R".equals(tableOrganizationType)) {
               tableOrg = Db2TableOrganization.ROW;
             }
           }

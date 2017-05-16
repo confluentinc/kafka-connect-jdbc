@@ -84,6 +84,7 @@ public class DbStructure {
     if (!config.autoCreate) {
       throw new ConnectException(String.format("Table %s is missing and auto-creation is disabled", tableName));
     }
+    dbDialect.configureConnectionSpecificSettings(connection);
     final String sql = dbDialect.getCreateQuery(tableName, fieldsMetadata.allFields.values());
     log.info("Creating table:{} with SQL: {}", tableName, sql);
     try (Statement statement = connection.createStatement()) {
@@ -135,6 +136,7 @@ public class DbStructure {
       throw new ConnectException(String.format("Table %s is missing fields (%s) and auto-evolution is disabled", tableName, missingFields));
     }
 
+    dbDialect.configureTableSpecificSettings(connection, tableName);
     final List<String> amendTableQueries = dbDialect.getAlterTable(tableName, missingFields);
     log.info("Amending table to add missing fields:{} maxRetries:{} with SQL: {}", missingFields, maxRetries, amendTableQueries);
     try (Statement statement = connection.createStatement()) {

@@ -35,6 +35,22 @@ public class JdbcSourceTaskConfig extends JdbcSourceConnectorConfig {
       .define(TABLES_CONFIG, Type.LIST, Importance.HIGH, TABLES_DOC);
 
   public JdbcSourceTaskConfig(Map<String, String> props) {
-    super(config, props);
+    super(modifyConfig(config,props), props);
   }
+
+  private static ConfigDef modifyConfig(ConfigDef config,Map<String,String >  props){
+
+    for(String prop:props.keySet()){
+      if((prop.contains(INCREMENTING_COLUMN_NAME_CONFIG) && !prop.startsWith(INCREMENTING_COLUMN_NAME_CONFIG))){
+        config.define(prop, Type.STRING,"",Importance.MEDIUM, "Documentation",MODE_GROUP,2, ConfigDef.Width.MEDIUM,"");
+      }
+      else if((prop.contains(TIMESTAMP_COLUMN_NAME_CONFIG) && !prop.startsWith(TIMESTAMP_COLUMN_NAME_CONFIG)) ){
+        config.define(prop, Type.STRING,"",Importance.MEDIUM, "Documentation",MODE_GROUP,3, ConfigDef.Width.MEDIUM,"");
+      }
+    }
+    return config;
+  }
+
+
+
 }

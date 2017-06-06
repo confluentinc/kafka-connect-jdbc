@@ -123,6 +123,8 @@ public class JdbcSourceTask extends SourceTask {
     boolean validateNonNulls
         = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
 
+    log.info("Default Incrementing Column: "+incrementingColumn);
+    log.info("Default Timestamp Column: "+timestampColumn);
     for (String tableOrQuery : tablesOrQuery) {
       final Map<String, String> partition;
       switch (queryMode) {
@@ -149,16 +151,55 @@ public class JdbcSourceTask extends SourceTask {
         tableQueue.add(new BulkTableQuerier(queryMode, tableOrQuery, schemaPattern,
                 topicPrefix, mapNumerics));
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)) {
+        log.info("Incrementing column info: "+tableOrQuery+"."+JdbcSourceTaskConfig.INCREMENTING_COLUMN_NAME_CONFIG);
+        String tableIncrementingColumn=incrementingColumn;
+        try {
+          tableIncrementingColumn = config.getString(tableOrQuery + "." + JdbcSourceTaskConfig.INCREMENTING_COLUMN_NAME_CONFIG);
+        } catch (Exception e){
+          log.info("Table Specific Incrementing column not Defined. Reverting to default");
+        }
+        if(validateNonNulls)
+          validateNonNullable(mode, schemaPattern, tableOrQuery, tableIncrementingColumn, timestampColumn);
         tableQueue.add(new TimestampIncrementingTableQuerier(
-            queryMode, tableOrQuery, topicPrefix, null, incrementingColumn, offset,
+            queryMode, tableOrQuery, topicPrefix, null, tableIncrementingColumn, offset,
                 timestampDelayInterval, schemaPattern, mapNumerics));
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
+        log.info("Timestamp column info: "+tableOrQuery+"."+JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
+        String tableTimestampColumn = timestampColumn;
+        try {
+          tableTimestampColumn = config.getString(tableOrQuery + "." + JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
+        } catch (Exception e){
+          log.info("Table specific timestamp column not defined. Reverting to default");
+        }
+        if(validateNonNulls)
+          validateNonNullable(mode, schemaPattern, tableOrQuery, incrementingColumn,tableTimestampColumn);
         tableQueue.add(new TimestampIncrementingTableQuerier(
-            queryMode, tableOrQuery, topicPrefix, timestampColumn, null, offset,
+            queryMode, tableOrQuery, topicPrefix,tableTimestampColumn, null, offset,
                 timestampDelayInterval, schemaPattern, mapNumerics));
       } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
+
+        log.info("Entered timestamp+incrementing mode");
+        log.info("Incrementing column info: "+tableOrQuery+"."+JdbcSourceTaskConfig.INCREMENTING_COLUMN_NAME_CONFIG);
+        log.info("Timestamp column info: "+tableOrQuery+"."+JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
+
+        String tableIncrementingColumn = incrementingColumn;
+        String tableTimestampColumn = timestampColumn;
+
+        try {
+          tableIncrementingColumn = config.getString(tableOrQuery + "." + JdbcSourceTaskConfig.INCREMENTING_COLUMN_NAME_CONFIG);
+        } catch (Exception e){
+          log.info("Table specific incrementing column not defined. Reverting to default");
+        }
+
+        try {
+          tableTimestampColumn = config.getString(tableOrQuery + "." + JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
+        } catch (Exception e){
+          log.info("Table specific timestamp column not defined. Reverting to default");
+        }
+        if(validateNonNulls)
+          validateNonNullable(mode, schemaPattern, tableOrQuery, tableIncrementingColumn, tableTimestampColumn);
         tableQueue.add(new TimestampIncrementingTableQuerier(
-            queryMode, tableOrQuery, topicPrefix, timestampColumn, incrementingColumn,
+            queryMode, tableOrQuery, topicPrefix, tableTimestampColumn, tableIncrementingColumn,
                 offset, timestampDelayInterval, schemaPattern, mapNumerics));
       }
     }

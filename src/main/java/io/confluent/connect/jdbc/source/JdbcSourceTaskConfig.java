@@ -47,10 +47,10 @@ public class JdbcSourceTaskConfig extends JdbcSourceConnectorConfig {
       else if((prop.contains(TIMESTAMP_COLUMN_NAME_CONFIG) && !prop.startsWith(TIMESTAMP_COLUMN_NAME_CONFIG)) ){
         config.define(prop, Type.STRING,"",Importance.MEDIUM, "Documentation",MODE_GROUP,3, ConfigDef.Width.MEDIUM,"");
       }
+      else if ((prop.startsWith(ANONYMIZE))) {
+        config.define(prop,Type.STRING,"",Importance.MEDIUM, "Documentation",MODE_GROUP,3, ConfigDef.Width.MEDIUM,"");
+      }
     }
     return config;
   }
-
-
-
 }

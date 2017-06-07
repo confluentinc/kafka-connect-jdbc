@@ -35,6 +35,7 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.SQLXML;
 import java.sql.Types;
+import java.util.ArrayList;
 
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 
@@ -72,6 +73,30 @@ public class DataConverter {
     return struct;
   }
 
+  public static Struct convertRecord(Schema schema, ResultSet resultSet,
+                                     boolean mapNumerics, ArrayList<String> anonymizeList)
+          throws SQLException {
+
+    ResultSetMetaData metadata = resultSet.getMetaData();
+    Struct struct = new Struct(schema);
+    for (int col = 1; col <= metadata.getColumnCount(); col++) {
+      try {
+        if (anonymizeList!=null && anonymizeList.contains(metadata.getColumnLabel(col))) {
+          log.info("About to anonymize");
+          convertFieldValueAnonymize(resultSet, col, metadata.getColumnType(col), struct,
+                  metadata.getColumnLabel(col), mapNumerics);
+        }
+        else
+          convertFieldValue(resultSet, col, metadata.getColumnType(col), struct,
+                  metadata.getColumnLabel(col), mapNumerics);
+      } catch (IOException e) {
+        log.warn("Ignoring record because processing failed:", e);
+      } catch (SQLException e) {
+        log.warn("Ignoring record due to SQL error:", e);
+      }
+    }
+    return struct;
+  }
 
   private static void addFieldSchema(ResultSetMetaData metadata, int col,
                                      SchemaBuilder builder, boolean mapNumerics)
@@ -512,6 +537,43 @@ public class DataConverter {
 
     // FIXME: Would passing in some extra info about the schema so we can get the Field by index
     // be faster than setting this by name?
+    struct.put(fieldName, resultSet.wasNull() ? null : colValue);
+  }
+
+  private static void convertFieldValueAnonymize(ResultSet resultSet, int col, int colType,
+                                        Struct struct, String fieldName, boolean mapNumerics)
+          throws SQLException, IOException {
+    final Object colValue;
+    log.info("Col type is: " + colType);
+    switch (colType) {
+      case Types.NULL: {
+        colValue = null;
+        break;
+      }
+
+      case Types.CHAR:
+      case Types.VARCHAR:
+      case Types.LONGVARCHAR: {
+          DataTransform dataT = new DataTransform();
+          colValue = dataT.transformString(resultSet.getString(col));
+        break;
+      }
+
+      case Types.NCHAR:
+      case Types.NVARCHAR:
+      case Types.LONGNVARCHAR: {
+        DataTransform dataT = new DataTransform();
+        colValue = dataT.transformString(resultSet.getNString(col));
+        break;
+      }
+
+      default: {
+        // These are not currently supported, but we don't want to log something for every single
+        // record we translate. There will already be errors logged for the schema translation
+        return;
+      }
+    }
+
     struct.put(fieldName, resultSet.wasNull() ? null : colValue);
   }
 

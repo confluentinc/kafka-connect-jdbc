@@ -26,6 +26,7 @@ import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.sql.*;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Map;
 
@@ -58,6 +59,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   private String incrementingColumn;
   private long timestampDelay;
   private TimestampIncrementingOffset offset;
+  private ArrayList<String> anonymizeList;
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
                                            String timestampColumn, String incrementingColumn,
@@ -68,6 +70,19 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     this.incrementingColumn = incrementingColumn;
     this.timestampDelay = timestampDelay;
     this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
+  }
+
+  public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
+                                           String timestampColumn, String incrementingColumn,
+                                           Map<String, Object> offsetMap, Long timestampDelay,
+                                           String schemaPattern, boolean mapNumerics, ArrayList<String> anonymizeList) {
+    super(mode, name, topicPrefix, schemaPattern, mapNumerics);
+    this.timestampColumn = timestampColumn;
+    this.incrementingColumn = incrementingColumn;
+    this.timestampDelay = timestampDelay;
+    this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
+//    this.anonymizeList = new ArrayList<String>();  // Is this required?
+    this.anonymizeList = anonymizeList;
   }
 
   @Override
@@ -186,8 +201,17 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     } else if (timestampColumn != null) {
       Timestamp tsOffset = offset.getTimestampOffset();
       Timestamp endTime = new Timestamp(JdbcUtils.getCurrentTimeOnDB(stmt.getConnection(), DateTimeUtils.UTC_CALENDAR.get()).getTime() - timestampDelay);
-      stmt.setTimestamp(1, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
-      stmt.setTimestamp(2, endTime, DateTimeUtils.UTC_CALENDAR.get());
+
+      // Milliseconds since epoch are represented as int8 fields, so change arguments to get milliseconds times for endTime and tsOffset
+      if (colType.equals("int8")) {
+        stmt.setLong(1, tsOffset.getTime());
+        stmt.setLong(2, endTime.getTime());
+      }
+      else {
+        stmt.setTimestamp(1, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
+        stmt.setTimestamp(2, endTime, DateTimeUtils.UTC_CALENDAR.get());
+      }
+
       log.info("Executing prepared statement with timestamp value = {} end time = {}",
                 DateTimeUtils.formatUtcTimestamp(tsOffset),
                 DateTimeUtils.formatUtcTimestamp(endTime));
@@ -200,9 +224,10 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
 
   @Override
   public SourceRecord extractRecord() throws SQLException {
-    final Struct record = DataConverter.convertRecord(schema, resultSet, mapNumerics);
+    final Struct record = DataConverter.convertRecord(schema, resultSet, mapNumerics, anonymizeList);
     offset = extractOffset(schema, record);
     // TODO: Key?
+    log.info("Extract record called: " + record.toString());
     final String topic;
     final Map<String, String> partition;
     switch (mode) {

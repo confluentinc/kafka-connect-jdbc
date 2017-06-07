@@ -92,6 +92,10 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     return resultSet.next();
   }
 
+  public boolean previous() throws SQLException {
+    return resultSet.previous();
+  }
+
   public abstract SourceRecord extractRecord() throws SQLException;
 
   public void reset(long now) {

@@ -201,8 +201,23 @@ public class JdbcSourceTask extends SourceTask {
 
         int batchMaxRows = config.getInt(JdbcSourceTaskConfig.BATCH_MAX_ROWS_CONFIG);
         boolean hadNext = true;
+        TimestampIncrementingOffset latestOffset = null;
         while (results.size() < batchMaxRows && (hadNext = querier.next())) {
-          results.add(querier.extractRecord());
+          SourceRecord record = querier.extractRecord();
+          results.add(record);
+          latestOffset = TimestampIncrementingOffset.fromMap(record.sourceOffset());
+        }
+        // Continue until all the data in the partition which parted by latest timestamp in current batch is read
+        if (hadNext) {
+          while (hadNext = querier.next()) {
+            SourceRecord record = querier.extractRecord();
+            if (latestOffset == null || !latestOffset.equals(TimestampIncrementingOffset.fromMap(record.sourceOffset()))) {
+              // Roll back the cursor to previous record
+              querier.previous();
+              break;
+            }
+            results.add(record);
+          }
         }
 
         if (!hadNext) {

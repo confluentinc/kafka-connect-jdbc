@@ -36,6 +36,7 @@ import java.sql.SQLException;
 import java.sql.SQLXML;
 import java.sql.Types;
 import java.util.ArrayList;
+import java.util.Map;
 
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 
@@ -74,17 +75,17 @@ public class DataConverter {
   }
 
   public static Struct convertRecord(Schema schema, ResultSet resultSet,
-                                     boolean mapNumerics, ArrayList<String> anonymizeList)
+                                     boolean mapNumerics, Map<String,String> anonymizeMap)
           throws SQLException {
 
     ResultSetMetaData metadata = resultSet.getMetaData();
     Struct struct = new Struct(schema);
     for (int col = 1; col <= metadata.getColumnCount(); col++) {
       try {
-        if (anonymizeList!=null && anonymizeList.contains(metadata.getColumnLabel(col))) {
+        if (anonymizeMap!=null && anonymizeMap.keySet().contains(metadata.getColumnLabel(col))) {
           log.info("About to anonymize");
           convertFieldValueAnonymize(resultSet, col, metadata.getColumnType(col), struct,
-                  metadata.getColumnLabel(col), mapNumerics);
+                  metadata.getColumnLabel(col), mapNumerics,anonymizeMap.get(metadata.getColumnLabel(col)));
         }
         else
           convertFieldValue(resultSet, col, metadata.getColumnType(col), struct,
@@ -541,7 +542,7 @@ public class DataConverter {
   }
 
   private static void convertFieldValueAnonymize(ResultSet resultSet, int col, int colType,
-                                        Struct struct, String fieldName, boolean mapNumerics)
+                                        Struct struct, String fieldName, boolean mapNumerics,String transformer)
           throws SQLException, IOException {
     final Object colValue;
     log.info("Col type is: " + colType);
@@ -555,7 +556,7 @@ public class DataConverter {
       case Types.VARCHAR:
       case Types.LONGVARCHAR: {
           DataTransform dataT = new DataTransform();
-          colValue = dataT.transformString(resultSet.getString(col));
+          colValue = dataT.transformString(resultSet.getString(col),transformer);
         break;
       }
 
@@ -563,7 +564,7 @@ public class DataConverter {
       case Types.NVARCHAR:
       case Types.LONGNVARCHAR: {
         DataTransform dataT = new DataTransform();
-        colValue = dataT.transformString(resultSet.getNString(col));
+        colValue = dataT.transformString(resultSet.getNString(col),transformer);
         break;
       }
 

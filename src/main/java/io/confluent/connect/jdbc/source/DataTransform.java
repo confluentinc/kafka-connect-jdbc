@@ -12,10 +12,11 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 public class DataTransform {
-    private static final Logger log = LoggerFactory.getLogger(JdbcSourceTask.class);
+    private static final Logger log = LoggerFactory.getLogger(DataTransform.class);
 
-    public static String transformString(String value) {
+    public static String transformString(String value, String transformer) {
         String hashtext = null;
+        log.info("Transformation required: " + transformer);
         try {
             MessageDigest m = MessageDigest.getInstance("MD5");
 

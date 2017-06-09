@@ -133,9 +133,9 @@ public class DataConverter {
       // ints <= 8 bits
       case Types.BIT: {
         if (optional) {
-          builder.field(fieldName, Schema.OPTIONAL_INT8_SCHEMA);
+          builder.field(fieldName, Schema.OPTIONAL_BOOLEAN_SCHEMA);
         } else {
-          builder.field(fieldName, Schema.INT8_SCHEMA);
+          builder.field(fieldName, Schema.BOOLEAN_SCHEMA);
         }
         break;
       }
@@ -332,7 +332,14 @@ public class DataConverter {
       case Types.REF:
       case Types.ROWID:
       default: {
-        log.warn("JDBC type {} not currently supported", sqlType);
+        if (optional) {
+          builder.field(fieldName, Schema.OPTIONAL_STRING_SCHEMA);
+
+        } else {
+          builder.field(fieldName, Schema.STRING_SCHEMA);
+        }
+        //break;
+        //log.warn("JDBC type {} not currently supported", sqlType);
         break;
       }
     }
@@ -359,7 +366,10 @@ public class DataConverter {
          * TODO: Postgres handles this differently, returning a string "t" or "f". See the
          * elasticsearch-jdbc plugin for an example of how this is handled
          */
-        colValue = resultSet.getByte(col);
+        //colValue = resultSet.getByte(col);
+
+        colValue =  resultSet.getBoolean(col) ;
+
         break;
       }
 
@@ -532,7 +542,10 @@ public class DataConverter {
       default: {
         // These are not currently supported, but we don't want to log something for every single
         // record we translate. There will already be errors logged for the schema translation
-        return;
+        colValue = resultSet.getString(col);
+        break;
+
+        //return;
       }
     }
 

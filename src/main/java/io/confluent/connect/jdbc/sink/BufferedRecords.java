@@ -62,13 +62,28 @@ public class BufferedRecords {
     if (currentSchemaPair == null) {
       currentSchemaPair = schemaPair;
       // re-initialize everything that depends on the record schema
-      fieldsMetadata = FieldsMetadata.extract(tableName, config.pkMode, config.pkFields, config.fieldsWhitelist, currentSchemaPair);
+      //final JdbcSinkConfig.PrimaryKeyMode tablePkMode = JdbcSinkConfig.PrimaryKeyMode.valueOf(config.getString(tableName+".pk.mode").toUpperCase());
+
+      List<String> tablePkFields =  config.pkFields;
+      try {
+        tablePkFields = config.getList(tableName + ".pk.fields");
+      }catch (Exception e){
+        log.info("Table specific pk fields not defined. Reverting to default");
+      }
+
+      JdbcSinkConfig.InsertMode tableInsertMode = config.insertMode;
+      try {
+        tableInsertMode = JdbcSinkConfig.InsertMode.valueOf(config.getString(tableName + ".insert.mode").toUpperCase());
+      }catch (Exception e){
+        log.info("Table specific insert mode not defined. Reverting to default");
+      }
+      fieldsMetadata = FieldsMetadata.extract(tableName,config.pkMode, tablePkFields, config.fieldsWhitelist, currentSchemaPair);
       dbStructure.createOrAmendIfNecessary(config, connection, tableName, fieldsMetadata);
       final String insertSql = getInsertSql();
-      log.debug("{} sql: {}", config.insertMode, insertSql);
+      //log.debug("{} sql: {}", config.insertMode, insertSql);
       close();
       preparedStatement = connection.prepareStatement(insertSql);
-      preparedStatementBinder = new PreparedStatementBinder(preparedStatement, config.pkMode, schemaPair, fieldsMetadata, config.insertMode);
+      preparedStatementBinder = new PreparedStatementBinder(preparedStatement, config.pkMode, schemaPair, fieldsMetadata, tableInsertMode);
     }
 
     final List<SinkRecord> flushed;
@@ -105,8 +120,15 @@ public class BufferedRecords {
       }
       totalUpdateCount += updateCount;
     }
+
     if (totalUpdateCount != records.size() && !successNoInfo) {
-      switch (config.insertMode) {
+      JdbcSinkConfig.InsertMode tableInsertMode = config.insertMode;
+      try {
+          tableInsertMode  = JdbcSinkConfig.InsertMode.valueOf(config.getString(tableName + ".insert.mode").toUpperCase());
+      }catch (Exception e){
+        log.info("Table specific insert not defined");
+      }
+      switch (tableInsertMode) {
         case INSERT:
           throw new ConnectException(String.format("Update count (%d) did not sum up to total number of records inserted (%d)",
                                                    totalUpdateCount, records.size()));
@@ -135,7 +157,14 @@ public class BufferedRecords {
   }
 
   private String getInsertSql() {
-    switch (config.insertMode) {
+
+    JdbcSinkConfig.InsertMode tableInsertMode = config.insertMode;
+    try {
+      tableInsertMode =JdbcSinkConfig.InsertMode.valueOf(config.getString(tableName + ".insert.mode").toUpperCase());
+    }catch (Exception e){
+      log.info("Table specific insert not defined");
+    }
+    switch (tableInsertMode) {
       case INSERT:
         return dbDialect.getInsert(tableName, fieldsMetadata.keyFieldNames, fieldsMetadata.nonKeyFieldNames);
       case UPSERT:

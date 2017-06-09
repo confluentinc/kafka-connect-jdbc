@@ -25,6 +25,7 @@ import org.slf4j.LoggerFactory;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Map;
 
@@ -36,9 +37,17 @@ import io.confluent.connect.jdbc.util.JdbcUtils;
 public class BulkTableQuerier extends TableQuerier {
   private static final Logger log = LoggerFactory.getLogger(BulkTableQuerier.class);
 
+  private ArrayList<String> anonymizeList;
+
   public BulkTableQuerier(QueryMode mode, String name, String schemaPattern,
                           String topicPrefix, boolean mapNumerics) {
     super(mode, name, topicPrefix, schemaPattern, mapNumerics);
+  }
+
+  public BulkTableQuerier(QueryMode mode, String name, String schemaPattern,
+                          String topicPrefix, boolean mapNumerics, ArrayList<String> anonymizeList) {
+    super(mode, name, topicPrefix, schemaPattern, mapNumerics);
+    this.anonymizeList = anonymizeList;
   }
 
   @Override
@@ -64,7 +73,7 @@ public class BulkTableQuerier extends TableQuerier {
 
   @Override
   public SourceRecord extractRecord() throws SQLException {
-    Struct record = DataConverter.convertRecord(schema, resultSet, mapNumerics);
+    Struct record = DataConverter.convertRecord(schema, resultSet, mapNumerics,anonymizeList);
     // TODO: key from primary key? partition?
     final String topic;
     final Map<String, String> partition;

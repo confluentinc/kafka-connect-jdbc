@@ -59,7 +59,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   private String incrementingColumn;
   private long timestampDelay;
   private TimestampIncrementingOffset offset;
-  private ArrayList<String> anonymizeList;
+  private Map<String,String> anonymizeMap;
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
                                            String timestampColumn, String incrementingColumn,
@@ -75,14 +75,14 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
                                            String timestampColumn, String incrementingColumn,
                                            Map<String, Object> offsetMap, Long timestampDelay,
-                                           String schemaPattern, boolean mapNumerics, ArrayList<String> anonymizeList) {
+                                           String schemaPattern, boolean mapNumerics, Map<String,String> anonymizeMap) {
     super(mode, name, topicPrefix, schemaPattern, mapNumerics);
     this.timestampColumn = timestampColumn;
     this.incrementingColumn = incrementingColumn;
     this.timestampDelay = timestampDelay;
     this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
 //    this.anonymizeList = new ArrayList<String>();  // Is this required?
-    this.anonymizeList = anonymizeList;
+    this.anonymizeMap = anonymizeMap;
   }
 
   @Override
@@ -224,7 +224,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
 
   @Override
   public SourceRecord extractRecord() throws SQLException {
-    final Struct record = DataConverter.convertRecord(schema, resultSet, mapNumerics, anonymizeList);
+    final Struct record = DataConverter.convertRecord(schema, resultSet, mapNumerics, anonymizeMap);
     offset = extractOffset(schema, record);
     // TODO: Key?
     log.info("Extract record called: " + record.toString());

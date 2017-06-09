@@ -51,7 +51,8 @@ public class JdbcSourceTaskConfig extends JdbcSourceConnectorConfig {
       else if(prop.contains(MODE_CONFIG) && !prop.startsWith(MODE_CONFIG)){
         config.define(prop, Type.STRING, MODE_UNSPECIFIED, ConfigDef.ValidString.in(MODE_UNSPECIFIED, MODE_BULK, MODE_TIMESTAMP, MODE_INCREMENTING, MODE_TIMESTAMP_INCREMENTING),
                 Importance.HIGH, "Doc", MODE_GROUP, 1, ConfigDef.Width.MEDIUM, "", Arrays.asList(INCREMENTING_COLUMN_NAME_CONFIG, TIMESTAMP_COLUMN_NAME_CONFIG, VALIDATE_NON_NULL_CONFIG));
-      else if ((prop.startsWith(ANONYMIZE))) {
+      }
+      else if ((prop.equals(ANONYMIZE+".default")) || (prop.contains(ANONYMIZE + ".column.name"))) {
         config.define(prop,Type.STRING,"",Importance.MEDIUM, "Documentation",MODE_GROUP,3, ConfigDef.Width.MEDIUM,"");
       }
     }

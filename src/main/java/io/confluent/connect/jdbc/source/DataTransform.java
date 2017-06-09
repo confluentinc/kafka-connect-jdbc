@@ -11,10 +11,11 @@ import java.math.BigInteger;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
-public class DataTransform {
+public class DataTransform implements Transform {
+
     private static final Logger log = LoggerFactory.getLogger(DataTransform.class);
 
-    public static String transformString(String value, String transformer) {
+    public String transformString(String value, String transformer) {
         String hashtext = null;
         log.info("Transformation required: " + transformer);
         try {

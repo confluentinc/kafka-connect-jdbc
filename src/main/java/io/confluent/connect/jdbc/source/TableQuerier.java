@@ -35,6 +35,8 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     QUERY // User-specified query
   }
 
+  protected final JdbcSourceTaskConfig config;
+
   protected final QueryMode mode;
   protected final String schemaPattern;
   protected final String name;
@@ -51,6 +53,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
 
   public TableQuerier(QueryMode mode, String nameOrQuery, String topicPrefix,
                       String schemaPattern, boolean mapNumerics) {
+    this.config = JdbcSourceTaskConfig.getInstance();
     this.mode = mode;
     this.schemaPattern = schemaPattern;
     this.name = mode.equals(QueryMode.TABLE) ? nameOrQuery : null;

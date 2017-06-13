@@ -31,10 +31,27 @@ public class JdbcSourceTaskConfig extends JdbcSourceConnectorConfig {
   public static final String TABLES_CONFIG = "tables";
   private static final String TABLES_DOC = "List of tables for this task to watch for changes.";
 
+  private static JdbcSourceTaskConfig instance = null;
+
   static ConfigDef config = baseConfigDef()
       .define(TABLES_CONFIG, Type.LIST, Importance.HIGH, TABLES_DOC);
 
-  public JdbcSourceTaskConfig(Map<String, String> props) {
+  private JdbcSourceTaskConfig(Map<String, String> props) {
     super(config, props);
   }
+
+  public static void load(Map<String, String> props) {
+    if (instance == null) {
+      synchronized (instance) {
+        if (instance == null) {
+          instance = new JdbcSourceTaskConfig(props);
+        }
+      }
+    }
+  }
+
+  public static JdbcSourceTaskConfig getInstance() {
+    return instance;
+  }
+
 }

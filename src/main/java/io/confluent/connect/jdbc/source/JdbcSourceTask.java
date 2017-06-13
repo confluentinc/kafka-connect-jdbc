@@ -69,10 +69,12 @@ public class JdbcSourceTask extends SourceTask {
   @Override
   public void start(Map<String, String> properties) {
     try {
-      config = new JdbcSourceTaskConfig(properties);
+      JdbcSourceTaskConfig.load(properties);
     } catch (ConfigException e) {
       throw new ConnectException("Couldn't start JdbcSourceTask due to configuration error", e);
     }
+
+    config = JdbcSourceTaskConfig.getInstance();
 
     final String dbUrl = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
     final String dbUser = config.getString(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG);

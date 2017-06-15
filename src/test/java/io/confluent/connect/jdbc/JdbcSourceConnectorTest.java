@@ -156,6 +156,15 @@ public class JdbcSourceConnectorTest {
   }
 
   @Test
+  public void testPartitioningZeroTables() throws Exception {
+    connector.start(connProps);
+    List<Map<String, String>> configs = connector.taskConfigs(3);
+    assertEquals(0, configs.size());
+    assertTaskConfigsHaveParentConfigs(configs);
+    connector.stop();
+  }
+  
+  @Test
   public void testPartitioningQuery() throws Exception {
     // Tests "partitioning" when config specifies running a custom query
     db.createTable("test1", "id", "INT NOT NULL");

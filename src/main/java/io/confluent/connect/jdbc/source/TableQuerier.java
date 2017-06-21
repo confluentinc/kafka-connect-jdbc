@@ -39,6 +39,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected final String schemaPattern;
   protected final String name;
   protected final String query;
+  protected final String key;
   protected final String topicPrefix;
 
   // Mutable state
@@ -49,12 +50,13 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected ResultSet resultSet;
   protected Schema schema;
 
-  public TableQuerier(QueryMode mode, String nameOrQuery, String topicPrefix,
+  public TableQuerier(QueryMode mode, String nameOrQuery, String key, String topicPrefix,
                       String schemaPattern, boolean mapNumerics) {
     this.mode = mode;
     this.schemaPattern = schemaPattern;
     this.name = mode.equals(QueryMode.TABLE) ? nameOrQuery : null;
     this.query = mode.equals(QueryMode.QUERY) ? nameOrQuery : null;
+    this.key = key;
     this.topicPrefix = topicPrefix;
     this.mapNumerics = mapNumerics;
     this.lastUpdate = 0;

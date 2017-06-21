@@ -122,6 +122,8 @@ public class JdbcSourceTask extends SourceTask {
         = config.getLong(JdbcSourceTaskConfig.TIMESTAMP_DELAY_INTERVAL_MS_CONFIG);
     boolean validateNonNulls
         = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
+    String key
+        = config.getString(JdbcSourceTaskConfig.KEY_CONFIG);    
 
     for (String tableOrQuery : tablesOrQuery) {
       final Map<String, String> partition;
@@ -146,19 +148,19 @@ public class JdbcSourceTask extends SourceTask {
       boolean mapNumerics = config.getBoolean(JdbcSourceTaskConfig.NUMERIC_PRECISION_MAPPING_CONFIG);
 
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
-        tableQueue.add(new BulkTableQuerier(queryMode, tableOrQuery, schemaPattern,
+        tableQueue.add(new BulkTableQuerier(queryMode, tableOrQuery, key, schemaPattern,
                 topicPrefix, mapNumerics));
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)) {
         tableQueue.add(new TimestampIncrementingTableQuerier(
-            queryMode, tableOrQuery, topicPrefix, null, incrementingColumn, offset,
+            queryMode, tableOrQuery, topicPrefix, key, null, incrementingColumn, offset,
                 timestampDelayInterval, schemaPattern, mapNumerics));
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
         tableQueue.add(new TimestampIncrementingTableQuerier(
-            queryMode, tableOrQuery, topicPrefix, timestampColumn, null, offset,
+            queryMode, tableOrQuery, topicPrefix, key, timestampColumn, null, offset,
                 timestampDelayInterval, schemaPattern, mapNumerics));
       } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
         tableQueue.add(new TimestampIncrementingTableQuerier(
-            queryMode, tableOrQuery, topicPrefix, timestampColumn, incrementingColumn,
+            queryMode, tableOrQuery, topicPrefix, key, timestampColumn, incrementingColumn,
                 offset, timestampDelayInterval, schemaPattern, mapNumerics));
       }
     }

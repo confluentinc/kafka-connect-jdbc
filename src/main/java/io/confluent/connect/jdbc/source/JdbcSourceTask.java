@@ -27,6 +27,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -133,6 +135,26 @@ public class JdbcSourceTask extends SourceTask {
 
       log.info("Mode for table: "+tableOrQuery+" is "+tableMode);
 
+      Connection connection = cachedConnectionProvider.getValidConnection();
+
+      final Set<String> pkColumns = new HashSet<>();
+      ResultSet pkResultSet=null;
+      try {
+        //final DatabaseMetaData dbMetaData = connection.getMetaData();
+        //final String product = dbMetaData.getDatabaseProductName();
+        final String catalog = connection.getCatalog();
+        final String schema = connection.getSchema();
+        pkResultSet = connection.getMetaData().getPrimaryKeys(catalog,schema,tableOrQuery);
+
+        //stmt.close();
+        while (pkResultSet.next()) {
+          final String colName = pkResultSet.getString("COLUMN_NAME");
+          pkColumns.add(colName);
+        }
+        log.info("All Pk Info for table: "+tableOrQuery+" - "+pkColumns);
+      } catch (SQLException e) {
+        e.printStackTrace();
+      }
       // Store all column names to be anonymized in anonymizeList
       anonymizeMap = null;
       try {

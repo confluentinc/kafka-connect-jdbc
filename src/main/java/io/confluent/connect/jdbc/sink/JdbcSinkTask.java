@@ -60,12 +60,6 @@ public class JdbcSinkTask extends SinkTask {
       return;
     }
     final SinkRecord first = records.iterator().next();
-    if(first.valueSchema() !=null) {
-      log.info("RecordValueSchema: " + first.valueSchema());
-      log.info("RecordInfo: "+first.toString());
-    }
-    if(first.keySchema() !=null)
-      log.info("RecordKeySchema: "+first.keySchema().toString());
     final int recordsCount = records.size();
     log.trace("Received {} records. First record kafka coordinates:({}-{}-{}). Writing them to the database...",
               recordsCount, first.topic(), first.kafkaPartition(), first.kafkaOffset());

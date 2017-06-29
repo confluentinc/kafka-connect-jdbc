@@ -325,8 +325,30 @@ public class DataConverter {
       }
 
       case Types.ARRAY:
+        if(metadata.getColumnTypeName(col).equals("_text")) {
+          SchemaBuilder textArrayBuilder = PostgresTypes.TextArrayBuilder();
+          builder.field(fieldName, textArrayBuilder.optional().build());
+          break;
+        }
+        else if(metadata.getColumnTypeName(col).equals("_int4")){
+          SchemaBuilder intArrayBuilder = PostgresTypes.IntArrayBuilder();
+          builder.field(fieldName,intArrayBuilder.optional().build());
+          break;
+        }
+
       case Types.JAVA_OBJECT:
       case Types.OTHER:
+        if(metadata.getColumnTypeName(col).equals("jsonb")){
+
+          SchemaBuilder jsonBuilder = PostgresTypes.JsonbBuilder();
+          builder.field(fieldName,jsonBuilder.optional().build());
+          break;
+        }
+        else if(metadata.getColumnTypeName(col).equals("point")){
+          SchemaBuilder pointBuilder = PostgresTypes.PointBuilder();
+          builder.field(fieldName,pointBuilder.optional().build());
+          break;
+        }
       case Types.DISTINCT:
       case Types.STRUCT:
       case Types.REF:
@@ -533,6 +555,8 @@ public class DataConverter {
       }
 
       case Types.ARRAY:
+        colValue = resultSet.getString(col);
+        break;
       case Types.JAVA_OBJECT:
       case Types.OTHER:
       case Types.DISTINCT:

@@ -16,11 +16,17 @@
 
 package io.confluent.connect.jdbc.sink.dialect;
 
+import io.confluent.connect.jdbc.source.JdbcSourceTask;
+import io.confluent.connect.jdbc.source.PostgresTypes;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import io.confluent.connect.jdbc.source.PostgresTypes.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 
 import java.util.Collection;
 import java.util.Map;
@@ -30,7 +36,8 @@ import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.nCopiesTo
 
 public class PostgreSqlDialect extends DbDialect {
 
-  public PostgreSqlDialect() {
+  private static final Logger log = LoggerFactory.getLogger(PostgreSqlDialect.class);
+  public  PostgreSqlDialect() {
     super("\"", "\"");
   }
 
@@ -38,6 +45,14 @@ public class PostgreSqlDialect extends DbDialect {
   protected String getSqlType(String schemaName, Map<String, String> parameters, Schema.Type type) {
     if (schemaName != null) {
       switch (schemaName) {
+        case PostgresTypes.INTEGER_ARRAY_LOGICAL_NAME:
+          return "INTEGER[]";
+        case PostgresTypes.TEXT_ARRAY_LOGICAL_NAME:
+          return "TEXT[]";
+        case PostgresTypes.JSONB_LOGICAL_NAME:
+          return "JSONB";
+        case PostgresTypes.POINT_LOGICAL_NAME:
+          return "POINT";
         case Decimal.LOGICAL_NAME:
           return "DECIMAL";
         case Date.LOGICAL_NAME:
@@ -66,7 +81,7 @@ public class PostgreSqlDialect extends DbDialect {
       case STRING:
         return "TEXT";
       case BYTES:
-        return "BLOB";
+        return "BYTEA";
     }
     return super.getSqlType(schemaName, parameters, type);
   }
@@ -82,7 +97,12 @@ public class PostgreSqlDialect extends DbDialect {
     nCopiesToBuilder(builder, ",", "?", cols.size() + keyCols.size());
     builder.append(") ON CONFLICT (");
     joinToBuilder(builder, ",", keyCols, escaper());
-    builder.append(") DO UPDATE SET ");
+    if((cols.size()+keyCols.size())!=keyCols.size()) {
+      builder.append(") DO UPDATE SET ");
+    }
+    else{
+      builder.append(") DO NOTHING");
+    }
     joinToBuilder(
         builder,
         ",",

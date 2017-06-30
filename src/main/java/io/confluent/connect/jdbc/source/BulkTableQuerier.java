@@ -36,9 +36,17 @@ import io.confluent.connect.jdbc.util.JdbcUtils;
 public class BulkTableQuerier extends TableQuerier {
   private static final Logger log = LoggerFactory.getLogger(BulkTableQuerier.class);
 
+  private Map<String,String> anonymizeMap;
+
   public BulkTableQuerier(QueryMode mode, String name, String schemaPattern,
                           String topicPrefix, boolean mapNumerics) {
     super(mode, name, topicPrefix, schemaPattern, mapNumerics);
+  }
+
+  public BulkTableQuerier(QueryMode mode, String name, String schemaPattern,
+                          String topicPrefix, boolean mapNumerics, Map<String,String> anonymizeMap) {
+    super(mode, name, topicPrefix, schemaPattern, mapNumerics);
+    this.anonymizeMap = anonymizeMap;
   }
 
   @Override
@@ -64,7 +72,7 @@ public class BulkTableQuerier extends TableQuerier {
 
   @Override
   public SourceRecord extractRecord() throws SQLException {
-    Struct record = DataConverter.convertRecord(schema, resultSet, mapNumerics);
+    Struct record = DataConverter.convertRecord(schema, resultSet, mapNumerics,anonymizeMap);
     // TODO: key from primary key? partition?
     final String topic;
     final Map<String, String> partition;

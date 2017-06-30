@@ -25,8 +25,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
-import java.sql.*;
-import java.util.ArrayList;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.Collections;
 import java.util.Map;
 
@@ -59,7 +61,6 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   private String incrementingColumn;
   private long timestampDelay;
   private TimestampIncrementingOffset offset;
-  private Map<String,String> anonymizeMap;
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
                                            String timestampColumn, String incrementingColumn,
@@ -70,19 +71,6 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     this.incrementingColumn = incrementingColumn;
     this.timestampDelay = timestampDelay;
     this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
-  }
-
-  public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
-                                           String timestampColumn, String incrementingColumn,
-                                           Map<String, Object> offsetMap, Long timestampDelay,
-                                           String schemaPattern, boolean mapNumerics, Map<String,String> anonymizeMap) {
-    super(mode, name, topicPrefix, schemaPattern, mapNumerics);
-    this.timestampColumn = timestampColumn;
-    this.incrementingColumn = incrementingColumn;
-    this.timestampDelay = timestampDelay;
-    this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
-//    this.anonymizeList = new ArrayList<String>();  // Is this required?
-    this.anonymizeMap = anonymizeMap;
   }
 
   @Override
@@ -160,36 +148,14 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
 
   @Override
   protected ResultSet executeQuery() throws SQLException {
-
-    // Get column data type of timestamp column. We receive the column name of the timestamp column
-    // but need to identify the corresponding column index, as the MetaData does not have
-    // in-built mechanism to identify this
-    ResultSetMetaData columns = stmt.getMetaData();
-    String colType = null;
-    for (int i = 1;i<=columns.getColumnCount();i++)
-      if (columns.getColumnName(i).equals(timestampColumn)) {
-        colType = columns.getColumnTypeName(i);
-        break;
-      }
-
     if (incrementingColumn != null && timestampColumn != null) {
       Timestamp tsOffset = offset.getTimestampOffset();
       Long incOffset = offset.getIncrementingOffset();
       Timestamp endTime = new Timestamp(JdbcUtils.getCurrentTimeOnDB(stmt.getConnection(), DateTimeUtils.UTC_CALENDAR.get()).getTime() - timestampDelay);
-
-      // Milliseconds since epoch are represented as int8 fields, so change arguments to get milliseconds times for endTime and tsOffset
-      if (colType.equals("int8")) {
-        stmt.setLong(1, endTime.getTime());
-        stmt.setLong(2, tsOffset.getTime());
-        stmt.setLong(4, tsOffset.getTime());
-      }
-      else {
-        stmt.setTimestamp(1, endTime, DateTimeUtils.UTC_CALENDAR.get());
-        stmt.setTimestamp(2, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
-        stmt.setTimestamp(4, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
-      }
+      stmt.setTimestamp(1, endTime, DateTimeUtils.UTC_CALENDAR.get());
+      stmt.setTimestamp(2, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
       stmt.setLong(3, incOffset);
-
+      stmt.setTimestamp(4, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
       log.debug("Executing prepared statement with start time value = {} end time = {} and incrementing value = {}",
                 DateTimeUtils.formatUtcTimestamp(tsOffset),
                 DateTimeUtils.formatUtcTimestamp(endTime),
@@ -201,33 +167,20 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     } else if (timestampColumn != null) {
       Timestamp tsOffset = offset.getTimestampOffset();
       Timestamp endTime = new Timestamp(JdbcUtils.getCurrentTimeOnDB(stmt.getConnection(), DateTimeUtils.UTC_CALENDAR.get()).getTime() - timestampDelay);
-
-      // Milliseconds since epoch are represented as int8 fields, so change arguments to get milliseconds times for endTime and tsOffset
-      if (colType.equals("int8")) {
-        stmt.setLong(1, tsOffset.getTime());
-        stmt.setLong(2, endTime.getTime());
-      }
-      else {
-        stmt.setTimestamp(1, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
-        stmt.setTimestamp(2, endTime, DateTimeUtils.UTC_CALENDAR.get());
-      }
-
-      log.info("Executing prepared statement with timestamp value = {} end time = {}",
+      stmt.setTimestamp(1, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
+      stmt.setTimestamp(2, endTime, DateTimeUtils.UTC_CALENDAR.get());
+      log.debug("Executing prepared statement with timestamp value = {} end time = {}",
                 DateTimeUtils.formatUtcTimestamp(tsOffset),
                 DateTimeUtils.formatUtcTimestamp(endTime));
     }
-
-    log.info("Final query is: " + stmt.toString()+"\n\n");
-
     return stmt.executeQuery();
   }
 
   @Override
   public SourceRecord extractRecord() throws SQLException {
-    final Struct record = DataConverter.convertRecord(schema, resultSet, mapNumerics, anonymizeMap);
+    final Struct record = DataConverter.convertRecord(schema, resultSet, mapNumerics);
     offset = extractOffset(schema, record);
     // TODO: Key?
-    log.info("Extract record called: " + record.toString());
     final String topic;
     final Map<String, String> partition;
     switch (mode) {
@@ -250,14 +203,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   TimestampIncrementingOffset extractOffset(Schema schema, Struct record) {
     final Timestamp extractedTimestamp;
     if (timestampColumn != null) {
-
-      // extractedTimestamp cast as Long if timestamp column is of epoch time.
-      if (record.get(timestampColumn).getClass().getName().toString().equals("java.lang.Long")) {
-        extractedTimestamp = new Timestamp((Long) record.get(timestampColumn));
-      }
-      else {
-        extractedTimestamp = (Timestamp) record.get(timestampColumn);
-      }
+      extractedTimestamp = (Timestamp) record.get(timestampColumn);
       Timestamp timestampOffset = offset.getTimestampOffset();
       assert timestampOffset != null && timestampOffset.compareTo(extractedTimestamp) <= 0;
     } else {

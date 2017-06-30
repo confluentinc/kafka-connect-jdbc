@@ -41,7 +41,6 @@ public class JdbcSinkTask extends SinkTask {
   @Override
   public void start(final Map<String, String> props) {
     log.info("Starting task");
-    log.info("Sink Properties: "+props);
     config = new JdbcSinkConfig(props);
     initWriter();
     remainingRetries = config.maxRetries;

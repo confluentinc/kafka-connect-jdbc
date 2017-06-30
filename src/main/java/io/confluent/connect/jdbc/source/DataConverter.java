@@ -35,8 +35,6 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.SQLXML;
 import java.sql.Types;
-import java.util.ArrayList;
-import java.util.Map;
 
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 
@@ -74,30 +72,6 @@ public class DataConverter {
     return struct;
   }
 
-  public static Struct convertRecord(Schema schema, ResultSet resultSet,
-                                     boolean mapNumerics, Map<String,String> anonymizeMap)
-          throws SQLException {
-
-    ResultSetMetaData metadata = resultSet.getMetaData();
-    Struct struct = new Struct(schema);
-    for (int col = 1; col <= metadata.getColumnCount(); col++) {
-      try {
-        if (anonymizeMap!=null && anonymizeMap.keySet().contains(metadata.getColumnLabel(col))) {
-          log.info("About to anonymize");
-          convertFieldValueAnonymize(resultSet, col, metadata.getColumnType(col), struct,
-                  metadata.getColumnLabel(col), mapNumerics,anonymizeMap.get(metadata.getColumnLabel(col)));
-        }
-        else
-          convertFieldValue(resultSet, col, metadata.getColumnType(col), struct,
-                  metadata.getColumnLabel(col), mapNumerics);
-      } catch (IOException e) {
-        log.warn("Ignoring record because processing failed:", e);
-      } catch (SQLException e) {
-        log.warn("Ignoring record due to SQL error:", e);
-      }
-    }
-    return struct;
-  }
 
   private static void addFieldSchema(ResultSetMetaData metadata, int col,
                                      SchemaBuilder builder, boolean mapNumerics)
@@ -133,9 +107,9 @@ public class DataConverter {
       // ints <= 8 bits
       case Types.BIT: {
         if (optional) {
-          builder.field(fieldName, Schema.OPTIONAL_BOOLEAN_SCHEMA);
+          builder.field(fieldName, Schema.OPTIONAL_INT8_SCHEMA);
         } else {
-          builder.field(fieldName, Schema.BOOLEAN_SCHEMA);
+          builder.field(fieldName, Schema.INT8_SCHEMA);
         }
         break;
       }
@@ -325,43 +299,14 @@ public class DataConverter {
       }
 
       case Types.ARRAY:
-        if(metadata.getColumnTypeName(col).equals("_text")) {
-          SchemaBuilder textArrayBuilder = PostgresTypes.TextArrayBuilder();
-          builder.field(fieldName, textArrayBuilder.optional().build());
-          break;
-        }
-        else if(metadata.getColumnTypeName(col).equals("_int4")){
-          SchemaBuilder intArrayBuilder = PostgresTypes.IntArrayBuilder();
-          builder.field(fieldName,intArrayBuilder.optional().build());
-          break;
-        }
-
       case Types.JAVA_OBJECT:
       case Types.OTHER:
-        if(metadata.getColumnTypeName(col).equals("jsonb")){
-
-          SchemaBuilder jsonBuilder = PostgresTypes.JsonbBuilder();
-          builder.field(fieldName,jsonBuilder.optional().build());
-          break;
-        }
-        else if(metadata.getColumnTypeName(col).equals("point")){
-          SchemaBuilder pointBuilder = PostgresTypes.PointBuilder();
-          builder.field(fieldName,pointBuilder.optional().build());
-          break;
-        }
       case Types.DISTINCT:
       case Types.STRUCT:
       case Types.REF:
       case Types.ROWID:
       default: {
-        if (optional) {
-          builder.field(fieldName, Schema.OPTIONAL_STRING_SCHEMA);
-
-        } else {
-          builder.field(fieldName, Schema.STRING_SCHEMA);
-        }
-        //break;
-        //log.warn("JDBC type {} not currently supported", sqlType);
+        log.warn("JDBC type {} not currently supported", sqlType);
         break;
       }
     }
@@ -388,10 +333,7 @@ public class DataConverter {
          * TODO: Postgres handles this differently, returning a string "t" or "f". See the
          * elasticsearch-jdbc plugin for an example of how this is handled
          */
-        //colValue = resultSet.getByte(col);
-
-        colValue =  resultSet.getBoolean(col) ;
-
+        colValue = resultSet.getByte(col);
         break;
       }
 
@@ -555,8 +497,6 @@ public class DataConverter {
       }
 
       case Types.ARRAY:
-        colValue = resultSet.getString(col);
-        break;
       case Types.JAVA_OBJECT:
       case Types.OTHER:
       case Types.DISTINCT:
@@ -566,52 +506,12 @@ public class DataConverter {
       default: {
         // These are not currently supported, but we don't want to log something for every single
         // record we translate. There will already be errors logged for the schema translation
-        colValue = resultSet.getString(col);
-        break;
-
-        //return;
+        return;
       }
     }
 
     // FIXME: Would passing in some extra info about the schema so we can get the Field by index
     // be faster than setting this by name?
-    struct.put(fieldName, resultSet.wasNull() ? null : colValue);
-  }
-
-  private static void convertFieldValueAnonymize(ResultSet resultSet, int col, int colType,
-                                        Struct struct, String fieldName, boolean mapNumerics,String transformer)
-          throws SQLException, IOException {
-    final Object colValue;
-    log.info("Col type is: " + colType);
-    switch (colType) {
-      case Types.NULL: {
-        colValue = null;
-        break;
-      }
-
-      case Types.CHAR:
-      case Types.VARCHAR:
-      case Types.LONGVARCHAR: {
-          DataTransform dataT = new DataTransform();
-          colValue = dataT.transformString(resultSet.getString(col),transformer);
-        break;
-      }
-
-      case Types.NCHAR:
-      case Types.NVARCHAR:
-      case Types.LONGNVARCHAR: {
-        DataTransform dataT = new DataTransform();
-        colValue = dataT.transformString(resultSet.getNString(col),transformer);
-        break;
-      }
-
-      default: {
-        // These are not currently supported, but we don't want to log something for every single
-        // record we translate. There will already be errors logged for the schema translation
-        return;
-      }
-    }
-
     struct.put(fieldName, resultSet.wasNull() ? null : colValue);
   }
 

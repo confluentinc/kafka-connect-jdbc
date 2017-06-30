@@ -20,16 +20,17 @@ import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
 
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import io.confluent.connect.jdbc.util.StringUtils;
 import org.apache.kafka.common.config.types.Password;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class JdbcSinkConfig extends AbstractConfig {
-  private static final Logger log = LoggerFactory.getLogger(JdbcSinkConfig.class);
 
   public enum InsertMode {
     INSERT,
@@ -216,29 +217,8 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final List<String> pkFields;
   public final Set<String> fieldsWhitelist;
 
-  public static ConfigDef modifyConfig(ConfigDef config, Map<String, String> props){
-    //String topicInfo =(String) props.get("topic");
-
-    for(String prop: props.keySet()){
-      if(prop.contains("pk.fields") && !prop.startsWith("pk.fields")){
-        config.define(prop, ConfigDef.Type.LIST, ConfigDef.Importance.MEDIUM,"doc");
-
-      }
-      else if(prop.contains("pk.mode") && !prop.startsWith("pk.mode")){
-        config.define(prop, ConfigDef.Type.STRING, ConfigDef.Importance.MEDIUM,"doc");
-      }
-      else if(prop.contains("insert.mode") && !prop.startsWith("insert.mode")){
-        config.define(prop,ConfigDef.Type.STRING,ConfigDef.Importance.MEDIUM,"doc");
-      }
-    }
-
-
-    return config;
-  }
-
   public JdbcSinkConfig(Map<?, ?> props) {
-    super(modifyConfig(CONFIG_DEF,(Map<String,String>)props), props);
-
+    super(CONFIG_DEF, props);
     connectionUrl = getString(CONNECTION_URL);
     connectionUser = getString(CONNECTION_USER);
     connectionPassword = getPasswordValue(CONNECTION_PASSWORD);
@@ -253,8 +233,6 @@ public class JdbcSinkConfig extends AbstractConfig {
     pkFields = getList(PK_FIELDS);
     fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
   }
-
-
 
   private String getPasswordValue(String key) {
     Password password = getPassword(key);

@@ -110,7 +110,11 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       //  timestamp 1235, id 22
       //  timestamp 1236, id 23
       // We should capture both id = 22 (an update) and id = 23 (a new row)
-      builder.append(" WHERE ");
+      if (query.indexOf("where") != -1) {
+        builder.append(" and ");
+      } else {
+        builder.append(" WHERE ");
+      }
       builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
       builder.append(" < ? AND ((");
       builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
@@ -126,14 +130,22 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
       builder.append(" ASC");
     } else if (incrementingColumn != null) {
-      builder.append(" WHERE ");
+      if (query.indexOf("where") != -1) {
+        builder.append(" and ");
+      } else {
+        builder.append(" WHERE ");
+      }
       builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
       builder.append(" > ?");
       builder.append(" ORDER BY ");
       builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
       builder.append(" ASC");
     } else if (timestampColumn != null) {
-      builder.append(" WHERE ");
+      if (query.indexOf("where") != -1) {
+        builder.append(" and ");
+      } else {
+        builder.append(" WHERE ");
+      }
       builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
       builder.append(" > ? AND ");
       builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));

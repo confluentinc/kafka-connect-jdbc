@@ -96,12 +96,24 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String INCREMENTING_COLUMN_NAME_DEFAULT = "";
   private static final String INCREMENTING_COLUMN_NAME_DISPLAY = "Incrementing Column Name";
 
+  public static final String INCREMENTING_COLUMN_ALIAS_CONFIG = "incrementing.column.alias";
+  private static final String INCREMENTING_COLUMN_ALIAS_DOC =
+      "The alias of the strictly incrementing column to use to detect new rows.";
+  public static final String INCREMENTING_COLUMN_ALIAS_DEFAULT = "";
+  private static final String INCREMENTING_COLUMN_ALIAS_DISPLAY = "Incrementing Column Alias";
+
   public static final String TIMESTAMP_COLUMN_NAME_CONFIG = "timestamp.column.name";
   private static final String TIMESTAMP_COLUMN_NAME_DOC =
       "The name of the timestamp column to use to detect new or modified rows. This column may "
       + "not be nullable.";
   public static final String TIMESTAMP_COLUMN_NAME_DEFAULT = "";
   private static final String TIMESTAMP_COLUMN_NAME_DISPLAY = "Timestamp Column Name";
+
+  public static final String TIMESTAMP_COLUMN_ALIAS_CONFIG = "timestamp.column.alias";
+  private static final String TIMESTAMP_COLUMN_ALIAS_DOC =
+      "The alias of the timestamp column to use to detect new or modified rows.";
+  public static final String TIMESTAMP_COLUMN_ALIAS_DEFAULT = "";
+  private static final String TIMESTAMP_COLUMN_ALIAS_DISPLAY = "Timestamp Column Alias";
 
   public static final String TABLE_POLL_INTERVAL_MS_CONFIG = "table.poll.interval.ms";
   private static final String TABLE_POLL_INTERVAL_MS_DOC =
@@ -204,14 +216,19 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
                 TABLE_TYPE_DOC, CONNECTOR_GROUP, 4, Width.MEDIUM, TABLE_TYPE_DISPLAY)
         .define(NUMERIC_PRECISION_MAPPING_CONFIG, Type.BOOLEAN, NUMERIC_PRECISION_MAPPING_DEFAULT, Importance.LOW, NUMERIC_PRECISION_MAPPING_DOC, DATABASE_GROUP, 4, Width.SHORT, NUMERIC_PRECISION_MAPPING_DISPLAY)
         .define(MODE_CONFIG, Type.STRING, MODE_UNSPECIFIED, ConfigDef.ValidString.in(MODE_UNSPECIFIED, MODE_BULK, MODE_TIMESTAMP, MODE_INCREMENTING, MODE_TIMESTAMP_INCREMENTING),
-                Importance.HIGH, MODE_DOC, MODE_GROUP, 1, Width.MEDIUM, MODE_DISPLAY, Arrays.asList(INCREMENTING_COLUMN_NAME_CONFIG, TIMESTAMP_COLUMN_NAME_CONFIG, VALIDATE_NON_NULL_CONFIG))
+                Importance.HIGH, MODE_DOC, MODE_GROUP, 1, Width.MEDIUM, MODE_DISPLAY,
+                Arrays.asList(INCREMENTING_COLUMN_NAME_CONFIG, INCREMENTING_COLUMN_ALIAS_CONFIG, TIMESTAMP_COLUMN_NAME_CONFIG, TIMESTAMP_COLUMN_ALIAS_CONFIG, VALIDATE_NON_NULL_CONFIG))
         .define(INCREMENTING_COLUMN_NAME_CONFIG, Type.STRING, INCREMENTING_COLUMN_NAME_DEFAULT, Importance.MEDIUM, INCREMENTING_COLUMN_NAME_DOC, MODE_GROUP, 2, Width.MEDIUM, INCREMENTING_COLUMN_NAME_DISPLAY,
                 MODE_DEPENDENTS_RECOMMENDER)
-        .define(TIMESTAMP_COLUMN_NAME_CONFIG, Type.STRING, TIMESTAMP_COLUMN_NAME_DEFAULT, Importance.MEDIUM, TIMESTAMP_COLUMN_NAME_DOC, MODE_GROUP, 3, Width.MEDIUM, TIMESTAMP_COLUMN_NAME_DISPLAY,
+        .define(INCREMENTING_COLUMN_ALIAS_CONFIG, Type.STRING, INCREMENTING_COLUMN_ALIAS_DEFAULT, Importance.LOW, INCREMENTING_COLUMN_ALIAS_DOC, MODE_GROUP, 3, Width.SHORT, INCREMENTING_COLUMN_ALIAS_DISPLAY,
                 MODE_DEPENDENTS_RECOMMENDER)
-        .define(VALIDATE_NON_NULL_CONFIG, Type.BOOLEAN, VALIDATE_NON_NULL_DEFAULT, Importance.LOW, VALIDATE_NON_NULL_DOC, MODE_GROUP, 4, Width.SHORT, VALIDATE_NON_NULL_DISPLAY,
+        .define(TIMESTAMP_COLUMN_NAME_CONFIG, Type.STRING, TIMESTAMP_COLUMN_NAME_DEFAULT, Importance.MEDIUM, TIMESTAMP_COLUMN_NAME_DOC, MODE_GROUP, 4, Width.MEDIUM, TIMESTAMP_COLUMN_NAME_DISPLAY,
                 MODE_DEPENDENTS_RECOMMENDER)
-        .define(QUERY_CONFIG, Type.STRING, QUERY_DEFAULT, Importance.MEDIUM, QUERY_DOC, MODE_GROUP, 5, Width.SHORT, QUERY_DISPLAY)
+        .define(TIMESTAMP_COLUMN_ALIAS_CONFIG, Type.STRING, TIMESTAMP_COLUMN_ALIAS_DEFAULT, Importance.LOW, TIMESTAMP_COLUMN_ALIAS_DOC, MODE_GROUP, 5, Width.SHORT, TIMESTAMP_COLUMN_ALIAS_DISPLAY,
+                MODE_DEPENDENTS_RECOMMENDER)
+        .define(VALIDATE_NON_NULL_CONFIG, Type.BOOLEAN, VALIDATE_NON_NULL_DEFAULT, Importance.LOW, VALIDATE_NON_NULL_DOC, MODE_GROUP, 6, Width.SHORT, VALIDATE_NON_NULL_DISPLAY,
+                MODE_DEPENDENTS_RECOMMENDER)
+        .define(QUERY_CONFIG, Type.STRING, QUERY_DEFAULT, Importance.MEDIUM, QUERY_DOC, MODE_GROUP, 7, Width.SHORT, QUERY_DISPLAY)
         .define(POLL_INTERVAL_MS_CONFIG, Type.INT, POLL_INTERVAL_MS_DEFAULT, Importance.HIGH, POLL_INTERVAL_MS_DOC, CONNECTOR_GROUP, 1, Width.SHORT, POLL_INTERVAL_MS_DISPLAY)
         .define(BATCH_MAX_ROWS_CONFIG, Type.INT, BATCH_MAX_ROWS_DEFAULT, Importance.LOW, BATCH_MAX_ROWS_DOC, CONNECTOR_GROUP, 2, Width.SHORT, BATCH_MAX_ROWS_DISPLAY)
         .define(TABLE_POLL_INTERVAL_MS_CONFIG, Type.LONG, TABLE_POLL_INTERVAL_MS_DEFAULT, Importance.LOW, TABLE_POLL_INTERVAL_MS_DOC, CONNECTOR_GROUP, 3, Width.SHORT, TABLE_POLL_INTERVAL_MS_DISPLAY)
@@ -268,11 +285,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         case MODE_BULK:
           return false;
         case MODE_TIMESTAMP:
-          return name.equals(TIMESTAMP_COLUMN_NAME_CONFIG) || name.equals(VALIDATE_NON_NULL_CONFIG);
+          return name.equals(TIMESTAMP_COLUMN_NAME_CONFIG) || name.equals(TIMESTAMP_COLUMN_ALIAS_CONFIG) || name.equals(VALIDATE_NON_NULL_CONFIG);
         case MODE_INCREMENTING:
-          return name.equals(INCREMENTING_COLUMN_NAME_CONFIG) || name.equals(VALIDATE_NON_NULL_CONFIG);
+          return name.equals(INCREMENTING_COLUMN_NAME_CONFIG) || name.equals(INCREMENTING_COLUMN_ALIAS_CONFIG) || name.equals(VALIDATE_NON_NULL_CONFIG);
         case MODE_TIMESTAMP_INCREMENTING:
-          return name.equals(TIMESTAMP_COLUMN_NAME_CONFIG) || name.equals(INCREMENTING_COLUMN_NAME_CONFIG) || name.equals(VALIDATE_NON_NULL_CONFIG);
+          return name.equals(TIMESTAMP_COLUMN_NAME_CONFIG) || name.equals(TIMESTAMP_COLUMN_ALIAS_CONFIG) || name.equals(INCREMENTING_COLUMN_NAME_CONFIG) || name.equals(INCREMENTING_COLUMN_ALIAS_CONFIG) || name.equals(VALIDATE_NON_NULL_CONFIG);
         case MODE_UNSPECIFIED:
           throw new ConfigException("Query mode must be specified");
         default:

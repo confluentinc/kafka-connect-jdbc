@@ -58,17 +58,22 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   private static final BigDecimal LONG_MAX_VALUE_AS_BIGDEC = new BigDecimal(Long.MAX_VALUE);
 
   private String timestampColumn;
+  private String timestampColumnAlias;
   private String incrementingColumn;
+  private String incrementingColumnAlias;
   private long timestampDelay;
   private TimestampIncrementingOffset offset;
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
-                                           String timestampColumn, String incrementingColumn,
+                                           String timestampColumn, String timestampColumnAlias,
+                                           String incrementingColumn, String incrementingColumnAlias,
                                            Map<String, Object> offsetMap, Long timestampDelay,
                                            String schemaPattern, boolean mapNumerics) {
     super(mode, name, topicPrefix, schemaPattern, mapNumerics);
     this.timestampColumn = timestampColumn;
+    this.timestampColumnAlias = timestampColumnAlias;
     this.incrementingColumn = incrementingColumn;
+    this.incrementingColumnAlias = incrementingColumnAlias;
     this.timestampDelay = timestampDelay;
     this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
   }
@@ -110,35 +115,39 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       //  timestamp 1235, id 22
       //  timestamp 1236, id 23
       // We should capture both id = 22 (an update) and id = 23 (a new row)
+      String quotedTimestampColumn = getQuotedColumn(timestampColumn, timestampColumnAlias, quoteString);
+      String quotedIncrementingColumn = getQuotedColumn(incrementingColumn, incrementingColumnAlias, quoteString);
       builder.append(" WHERE ");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
+      builder.append(quotedTimestampColumn);
       builder.append(" < ? AND ((");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
+      builder.append(quotedTimestampColumn);
       builder.append(" = ? AND ");
-      builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
+      builder.append(quotedIncrementingColumn);
       builder.append(" > ?");
       builder.append(") OR ");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
+      builder.append(quotedTimestampColumn);
       builder.append(" > ?)");
       builder.append(" ORDER BY ");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
+      builder.append(quotedTimestampColumn);
       builder.append(",");
-      builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
+      builder.append(quotedIncrementingColumn);
       builder.append(" ASC");
     } else if (incrementingColumn != null) {
+      String quotedIncrementingColumn = getQuotedColumn(incrementingColumn, incrementingColumnAlias, quoteString);
       builder.append(" WHERE ");
-      builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
+      builder.append(quotedIncrementingColumn);
       builder.append(" > ?");
       builder.append(" ORDER BY ");
-      builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
+      builder.append(quotedIncrementingColumn);
       builder.append(" ASC");
     } else if (timestampColumn != null) {
+      String quotedTimestampColumn = getQuotedColumn(timestampColumn, timestampColumnAlias, quoteString);
       builder.append(" WHERE ");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
+      builder.append(quotedTimestampColumn);
       builder.append(" > ? AND ");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
+      builder.append(quotedTimestampColumn);
       builder.append(" < ? ORDER BY ");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
+      builder.append(quotedTimestampColumn);
       builder.append(" ASC");
     }
     String queryString = builder.toString();
@@ -247,6 +256,22 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
            || incrementingColumnValue instanceof Integer
            || incrementingColumnValue instanceof Short
            || incrementingColumnValue instanceof Byte;
+  }
+
+  /**
+   * @param columnName column name
+   * @param columnAlias optional column alias
+   * @param quoteString string used to quote SQL identifiers
+   * @return the quoted column with a prefixed alias, if applicable
+   */
+  private String getQuotedColumn(String columnName, String columnAlias, String quoteString) {
+    String result = "";
+
+    if (!columnAlias.isEmpty()) {
+      result += JdbcUtils.quoteString(timestampColumnAlias, quoteString) + ".";
+    }
+
+    return result + JdbcUtils.quoteString(columnName, quoteString);
   }
 
   @Override

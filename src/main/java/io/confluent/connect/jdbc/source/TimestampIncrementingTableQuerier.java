@@ -268,7 +268,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     String result = "";
 
     if (!columnAlias.isEmpty()) {
-      result += JdbcUtils.quoteString(timestampColumnAlias, quoteString) + ".";
+      result += JdbcUtils.quoteString(columnAlias, quoteString) + ".";
     }
 
     return result + JdbcUtils.quoteString(columnName, quoteString);

@@ -19,12 +19,15 @@ package io.confluent.connect.jdbc.sink.dialect;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
+
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 
 import static org.junit.Assert.assertEquals;
 
@@ -102,4 +105,12 @@ public class PostgreSqlDialectTest extends BaseDialectTest {
     );
   }
 
+  @Test
+  public void testCreateTableWithBooleanFieldWithDefault() {
+    Schema booleanWithDefault = SchemaBuilder.bool().defaultValue(false).build();
+    SinkRecordField field = new SinkRecordField(booleanWithDefault, "bar", false);
+    String createQuery = dialect.getCreateQuery("foo", Collections.singletonList(field));
+    assertEquals("CREATE TABLE \"foo\" (" + System.lineSeparator()
+                 + "\"bar\" BOOLEAN DEFAULT FALSE)", createQuery);
+  }
 }

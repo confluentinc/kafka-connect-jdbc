@@ -148,22 +148,40 @@ public abstract class DbDialect {
     }
   }
 
-  protected void formatColumnValue(StringBuilder builder, String schemaName, Map<String, String> schemaParameters, Schema.Type type, Object value) {
+  // Returns true if it was
+  protected boolean formatLogicalColumnValue(
+      StringBuilder builder,
+      String schemaName,
+      Object value
+  ) {
     if (schemaName != null) {
       switch (schemaName) {
         case Decimal.LOGICAL_NAME:
           builder.append(value);
-          return;
+          return true;
         case Date.LOGICAL_NAME:
           builder.append("'").append(DateTimeUtils.formatUtcDate((java.util.Date) value)).append("'");
-          return;
+          return true;
         case Time.LOGICAL_NAME:
           builder.append("'").append(DateTimeUtils.formatUtcTime((java.util.Date) value)).append("'");
-          return;
+          return true;
         case Timestamp.LOGICAL_NAME:
           builder.append("'").append(DateTimeUtils.formatUtcTimestamp((java.util.Date) value)).append("'");
-          return;
+          return true;
       }
+    }
+    return false;
+  }
+
+  protected void formatColumnValue(
+      StringBuilder builder,
+      String schemaName,
+      Map<String, String> schemaParameters,
+      Schema.Type type,
+      Object value
+  ) {
+    if (formatLogicalColumnValue(builder, schemaName, value)) {
+      return;
     }
     switch (type) {
       case INT8:

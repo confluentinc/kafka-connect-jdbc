@@ -97,4 +97,18 @@ public class PostgreSqlDialect extends DbDialect {
     return builder.toString();
   }
 
+  @Override
+  protected void formatColumnValue(StringBuilder builder, String schemaName, Map<String, String> schemaParameters, Schema.Type type, Object value) {
+    if (schemaName != null && super.formatLogicalColumnValue(builder, schemaName, value)) {
+      return;
+    }
+
+    // Postgres does not like 0/1 instead of TRUE/FALSE
+    if (Schema.Type.BOOLEAN.equals(type)) {
+      builder.append((Boolean) value ? "TRUE" : "FALSE");
+      return;
+    }
+
+    super.formatColumnValue(builder, schemaName, schemaParameters, type, value);
+  }
 }

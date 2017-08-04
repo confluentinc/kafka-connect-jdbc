@@ -76,7 +76,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   @Override
   protected void createPreparedStatement(Connection db) throws SQLException {
     // Default when unspecified uses an autoincrementing column
-    if (incrementingColumn != null && incrementingColumn.isEmpty()) {
+    if (incrementingColumn != null && incrementingColumn.trim().isEmpty()) {
       incrementingColumn = JdbcUtils.getAutoincrementColumn(db, schemaPattern, name);
     }
 
@@ -110,7 +110,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       //  timestamp 1235, id 22
       //  timestamp 1236, id 23
       // We should capture both id = 22 (an update) and id = 23 (a new row)
-      builder.append(" WHERE ");
+      appendWhereIfNotPresent(builder);
       builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
       builder.append(" < ? AND ((");
       builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
@@ -126,14 +126,14 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
       builder.append(" ASC");
     } else if (incrementingColumn != null) {
-      builder.append(" WHERE ");
+      appendWhereIfNotPresent(builder);
       builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
       builder.append(" > ?");
       builder.append(" ORDER BY ");
       builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
       builder.append(" ASC");
     } else if (timestampColumn != null) {
-      builder.append(" WHERE ");
+      appendWhereIfNotPresent(builder);
       builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
       builder.append(" > ? AND ");
       builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
@@ -146,7 +146,17 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     stmt = db.prepareStatement(queryString);
   }
 
-  @Override
+  private void appendWhereIfNotPresent(StringBuilder builder) {
+	  if(query != null && !query.trim().isEmpty()){
+		  if(query.indexOf(" where ") != -1){
+			  builder.append(" AND ");
+		  }else{
+			  builder.append(" WHERE ");
+		  }
+	  }
+  }
+
+@Override
   protected ResultSet executeQuery() throws SQLException {
     if (incrementingColumn != null && timestampColumn != null) {
       Timestamp tsOffset = offset.getTimestampOffset();

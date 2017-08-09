@@ -78,11 +78,11 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     return resultSet != null;
   }
 
-  public void maybeStartQuery(Connection db) throws SQLException {
+  public void maybeStartQuery(Connection db, boolean isPSQL) throws SQLException {
     if (resultSet == null) {
       stmt = getOrCreatePreparedStatement(db);
       resultSet = executeQuery();
-      schema = DataConverter.convertSchema(name, resultSet.getMetaData(), mapNumerics);
+      schema = DataConverter.convertSchema(name, resultSet.getMetaData(), mapNumerics, isPSQL);
     }
   }
 

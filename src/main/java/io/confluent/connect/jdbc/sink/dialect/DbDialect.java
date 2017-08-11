@@ -277,7 +277,12 @@ public abstract class DbDialect {
     if (!url.startsWith("jdbc:")) {
       throw new ConnectException(String.format("Not a valid JDBC URL: %s", url));
     }
-    final int index = url.indexOf("://", "jdbc:".length());
+    int index = 0;
+    if (url.startsWith("jdbc:exa:")) {
+      index = url.indexOf("exa:", "jdbc:".length());
+    } else {
+      index = url.indexOf("://", "jdbc:".length());
+    }
     if (index < 0) {
       throw new ConnectException(String.format("Not a valid JDBC URL: %s", url));
     }

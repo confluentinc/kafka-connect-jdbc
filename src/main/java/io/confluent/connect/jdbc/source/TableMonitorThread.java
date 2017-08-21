@@ -70,7 +70,6 @@ public class TableMonitorThread extends Thread {
           context.requestTaskReconfiguration();
         }
       } catch (Exception e) {
-        context.raiseError(e);
         throw e;
       }
 

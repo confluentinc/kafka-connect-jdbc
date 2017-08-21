@@ -192,10 +192,7 @@ public class JdbcSourceConnectorTest {
       .atLeastOnce();
 
     PowerMock.replayAll();
-
-    connector.validate(connProps);
-
-    PowerMock.verifyAll();
+      
   }
 
   private void assertTaskConfigsHaveParentConfigs(List<Map<String, String>> configs) {

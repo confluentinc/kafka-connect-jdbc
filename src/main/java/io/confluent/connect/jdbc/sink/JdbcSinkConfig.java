@@ -159,49 +159,36 @@ public class JdbcSinkConfig extends AbstractConfig {
 
   public static final ConfigDef CONFIG_DEF = new ConfigDef()
       // Connection
-      .define(CONNECTION_URL, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE,
-              ConfigDef.Importance.HIGH, CONNECTION_URL_DOC,
-              CONNECTION_GROUP, 1, ConfigDef.Width.LONG, CONNECTION_URL_DISPLAY)
+      .define(CONNECTION_URL, ConfigDef.Type.STRING, null,
+              ConfigDef.Importance.HIGH, CONNECTION_URL_DOC)
       .define(CONNECTION_USER, ConfigDef.Type.STRING, null,
-              ConfigDef.Importance.HIGH, CONNECTION_USER_DOC,
-              CONNECTION_GROUP, 2, ConfigDef.Width.MEDIUM, CONNECTION_USER_DISPLAY)
+              ConfigDef.Importance.HIGH, CONNECTION_USER_DOC)
       .define(CONNECTION_PASSWORD, ConfigDef.Type.PASSWORD, null,
-              ConfigDef.Importance.HIGH, CONNECTION_PASSWORD_DOC,
-              CONNECTION_GROUP, 3, ConfigDef.Width.MEDIUM, CONNECTION_PASSWORD_DISPLAY)
+              ConfigDef.Importance.HIGH, CONNECTION_PASSWORD_DOC)
       // Writes
       .define(INSERT_MODE, ConfigDef.Type.STRING, INSERT_MODE_DEFAULT, EnumValidator.in(InsertMode.values()),
-              ConfigDef.Importance.HIGH, INSERT_MODE_DOC,
-              WRITES_GROUP, 1, ConfigDef.Width.MEDIUM, INSERT_MODE_DISPLAY)
+              ConfigDef.Importance.HIGH, INSERT_MODE_DOC)
       .define(BATCH_SIZE, ConfigDef.Type.INT, BATCH_SIZE_DEFAULT, NON_NEGATIVE_INT_VALIDATOR,
-              ConfigDef.Importance.MEDIUM, BATCH_SIZE_DOC,
-              WRITES_GROUP, 2, ConfigDef.Width.SHORT, BATCH_SIZE_DISPLAY)
+              ConfigDef.Importance.MEDIUM, BATCH_SIZE_DOC)
       // Data Mapping
       .define(TABLE_NAME_FORMAT, ConfigDef.Type.STRING, TABLE_NAME_FORMAT_DEFAULT,
-              ConfigDef.Importance.MEDIUM, TABLE_NAME_FORMAT_DOC,
-              DATAMAPPING_GROUP, 1, ConfigDef.Width.LONG, TABLE_NAME_FORMAT_DISPLAY)
+              ConfigDef.Importance.MEDIUM, TABLE_NAME_FORMAT_DOC)
       .define(PK_MODE, ConfigDef.Type.STRING, PK_MODE_DEFAULT, EnumValidator.in(PrimaryKeyMode.values()),
-              ConfigDef.Importance.HIGH, PK_MODE_DOC,
-              DATAMAPPING_GROUP, 2, ConfigDef.Width.MEDIUM, PK_MODE_DISPLAY)
+              ConfigDef.Importance.HIGH, PK_MODE_DOC)
       .define(PK_FIELDS, ConfigDef.Type.LIST, PK_FIELDS_DEFAULT,
-              ConfigDef.Importance.MEDIUM, PK_FIELDS_DOC,
-              DATAMAPPING_GROUP, 3, ConfigDef.Width.LONG, PK_FIELDS_DISPLAY)
+              ConfigDef.Importance.MEDIUM, PK_FIELDS_DOC)
       .define(FIELDS_WHITELIST, ConfigDef.Type.LIST, FIELDS_WHITELIST_DEFAULT,
-              ConfigDef.Importance.MEDIUM, FIELDS_WHITELIST_DOC,
-              DATAMAPPING_GROUP, 4, ConfigDef.Width.LONG, FIELDS_WHITELIST_DISPLAY)
+              ConfigDef.Importance.MEDIUM, FIELDS_WHITELIST_DOC)
       // DDL
       .define(AUTO_CREATE, ConfigDef.Type.BOOLEAN, AUTO_CREATE_DEFAULT,
-              ConfigDef.Importance.MEDIUM, AUTO_CREATE_DOC,
-              DDL_GROUP, 1, ConfigDef.Width.SHORT, AUTO_CREATE_DISPLAY)
+              ConfigDef.Importance.MEDIUM, AUTO_CREATE_DOC)
       .define(AUTO_EVOLVE, ConfigDef.Type.BOOLEAN, AUTO_EVOLVE_DEFAULT,
-              ConfigDef.Importance.MEDIUM, AUTO_EVOLVE_DOC,
-              DDL_GROUP, 2, ConfigDef.Width.SHORT, AUTO_EVOLVE_DISPLAY)
+              ConfigDef.Importance.MEDIUM, AUTO_EVOLVE_DOC)
       // Retries
       .define(MAX_RETRIES, ConfigDef.Type.INT, MAX_RETRIES_DEFAULT, NON_NEGATIVE_INT_VALIDATOR,
-              ConfigDef.Importance.MEDIUM, MAX_RETRIES_DOC,
-              RETRIES_GROUP, 1, ConfigDef.Width.SHORT, MAX_RETRIES_DISPLAY)
+              ConfigDef.Importance.MEDIUM, MAX_RETRIES_DOC)
       .define(RETRY_BACKOFF_MS, ConfigDef.Type.INT, RETRY_BACKOFF_MS_DEFAULT, NON_NEGATIVE_INT_VALIDATOR,
-              ConfigDef.Importance.MEDIUM, RETRY_BACKOFF_MS_DOC,
-              RETRIES_GROUP, 2, ConfigDef.Width.SHORT, RETRY_BACKOFF_MS_DISPLAY);
+              ConfigDef.Importance.MEDIUM, RETRY_BACKOFF_MS_DOC);
 
   public final String connectionUrl;
   public final String connectionUser;
@@ -276,6 +263,5 @@ public class JdbcSinkConfig extends AbstractConfig {
   }
 
   public static void main(String... args) {
-    System.out.println(CONFIG_DEF.toEnrichedRst());
   }
 }

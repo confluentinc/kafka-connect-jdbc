@@ -44,11 +44,6 @@ public class MockTime implements Time {
     }
 
     @Override
-    public long hiResClockMs() {
-        return TimeUnit.NANOSECONDS.toMillis(nanoseconds());
-    }
-
-    @Override
     public long nanoseconds() {
         this.sleep(autoTickMs);
         return nanos;

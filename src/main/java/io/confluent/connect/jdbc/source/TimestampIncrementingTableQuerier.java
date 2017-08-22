@@ -61,16 +61,18 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   private String incrementingColumn;
   private long timestampDelay;
   private TimestampIncrementingOffset offset;
+  private boolean quoteFieldnames;
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
                                            String timestampColumn, String incrementingColumn,
                                            Map<String, Object> offsetMap, Long timestampDelay,
-                                           String schemaPattern, boolean mapNumerics) {
+                                           String schemaPattern, boolean mapNumerics, boolean quoteFieldnames) {
     super(mode, name, topicPrefix, schemaPattern, mapNumerics);
     this.timestampColumn = timestampColumn;
     this.incrementingColumn = incrementingColumn;
     this.timestampDelay = timestampDelay;
     this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
+    this.quoteFieldnames = quoteFieldnames;
   }
 
   @Override
@@ -80,7 +82,11 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       incrementingColumn = JdbcUtils.getAutoincrementColumn(db, schemaPattern, name);
     }
 
-    String quoteString = JdbcUtils.getIdentifierQuoteString(db);
+    String quoteString;
+    if (quoteFieldnames)
+      quoteString = JdbcUtils.getIdentifierQuoteString(db);
+    else
+      quoteString = "";
 
     StringBuilder builder = new StringBuilder();
 

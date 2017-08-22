@@ -71,6 +71,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final int BATCH_MAX_ROWS_DEFAULT = 100;
   private static final String BATCH_MAX_ROWS_DISPLAY = "Max Rows Per Batch";
 
+  public static final String QUERY_QUOTE_FIELDNAMES_CONFIG = "query.quote.fieldnames";
+  private static final String QUERY_QUOTE_FIELDNAMES_DOC =
+          "Specifies if the field names are quoted in QUERY mode";
+  public static final boolean QUERY_QUOTE_FIELDNAMES_DEFAULT = true;
+  private static final String QUERY_QUOTE_FIELDNAMES_DISPLAY = "Quote field names in query mode";
+
   public static final String NUMERIC_PRECISION_MAPPING_CONFIG = "numeric.precision.mapping";
   private static final String NUMERIC_PRECISION_MAPPING_DOC =
           "Whether or not to attempt mapping NUMERIC values by precision to integral types";
@@ -224,6 +230,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         .define(VALIDATE_NON_NULL_CONFIG, Type.BOOLEAN, VALIDATE_NON_NULL_DEFAULT, Importance.LOW, VALIDATE_NON_NULL_DOC, MODE_GROUP, 4, Width.SHORT, VALIDATE_NON_NULL_DISPLAY,
                 MODE_DEPENDENTS_RECOMMENDER)
         .define(QUERY_CONFIG, Type.STRING, QUERY_DEFAULT, Importance.MEDIUM, QUERY_DOC, MODE_GROUP, 5, Width.SHORT, QUERY_DISPLAY)
+        .define(QUERY_QUOTE_FIELDNAMES_CONFIG, Type.BOOLEAN, QUERY_QUOTE_FIELDNAMES_DEFAULT, Importance.LOW, QUERY_QUOTE_FIELDNAMES_DOC, CONNECTOR_GROUP, 5, Width.SHORT, QUERY_QUOTE_FIELDNAMES_DISPLAY)
         .define(POLL_INTERVAL_MS_CONFIG, Type.INT, POLL_INTERVAL_MS_DEFAULT, Importance.HIGH, POLL_INTERVAL_MS_DOC, CONNECTOR_GROUP, 1, Width.SHORT, POLL_INTERVAL_MS_DISPLAY)
         .define(BATCH_MAX_ROWS_CONFIG, Type.INT, BATCH_MAX_ROWS_DEFAULT, Importance.LOW, BATCH_MAX_ROWS_DOC, CONNECTOR_GROUP, 2, Width.SHORT, BATCH_MAX_ROWS_DISPLAY)
         .define(TABLE_POLL_INTERVAL_MS_CONFIG, Type.LONG, TABLE_POLL_INTERVAL_MS_DEFAULT, Importance.LOW, TABLE_POLL_INTERVAL_MS_DOC, CONNECTOR_GROUP, 3, Width.SHORT, TABLE_POLL_INTERVAL_MS_DISPLAY)

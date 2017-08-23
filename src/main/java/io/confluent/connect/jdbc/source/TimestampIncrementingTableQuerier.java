@@ -62,17 +62,23 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   private long timestampDelay;
   private TimestampIncrementingOffset offset;
   private boolean quoteFieldnames;
+  private boolean useMySqlLimit;
+  private int batchMaxRows;
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
                                            String timestampColumn, String incrementingColumn,
                                            Map<String, Object> offsetMap, Long timestampDelay,
-                                           String schemaPattern, boolean mapNumerics, boolean quoteFieldnames) {
+                                           String schemaPattern, boolean mapNumerics,
+                                           boolean quoteFieldnames,
+                                           boolean useMySqlLimit, int batchMaxRows) {
     super(mode, name, topicPrefix, schemaPattern, mapNumerics);
     this.timestampColumn = timestampColumn;
     this.incrementingColumn = incrementingColumn;
     this.timestampDelay = timestampDelay;
     this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
     this.quoteFieldnames = quoteFieldnames;
+    this.useMySqlLimit = useMySqlLimit;
+    this.batchMaxRows = batchMaxRows;
   }
 
   @Override
@@ -148,6 +154,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       builder.append(" ASC");
     }
     String queryString = builder.toString();
+    if (useMySqlLimit) queryString = queryString + " LIMIT " + batchMaxRows;
     log.debug("{} prepared SQL query: {}", this, queryString);
     stmt = db.prepareStatement(queryString);
   }

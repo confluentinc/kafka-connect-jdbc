@@ -77,6 +77,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final boolean QUERY_QUOTE_FIELDNAMES_DEFAULT = true;
   private static final String QUERY_QUOTE_FIELDNAMES_DISPLAY = "Quote field names in query mode";
 
+  public static final String USE_MYSQL_LIMIT_CONFIG = "mysql.use.limit";
+  private static final String USE_MYSQL_LIMIT_DOC =
+      "Use the MySQL LIMIT clause with the BATCH_MAX_ROWS value to prevent OOM Exceptions for big queries";
+  public static final boolean USE_MYSQL_LIMIT_DEFAULT = false;
+  private static final String USE_MYSQL_LIMIT_DISPLAY = "Use the MySQL LIMIT clause with BATCH_MAX_ROWS";
+
   public static final String NUMERIC_PRECISION_MAPPING_CONFIG = "numeric.precision.mapping";
   private static final String NUMERIC_PRECISION_MAPPING_DOC =
           "Whether or not to attempt mapping NUMERIC values by precision to integral types";
@@ -233,6 +239,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         .define(QUERY_QUOTE_FIELDNAMES_CONFIG, Type.BOOLEAN, QUERY_QUOTE_FIELDNAMES_DEFAULT, Importance.LOW, QUERY_QUOTE_FIELDNAMES_DOC, CONNECTOR_GROUP, 5, Width.SHORT, QUERY_QUOTE_FIELDNAMES_DISPLAY)
         .define(POLL_INTERVAL_MS_CONFIG, Type.INT, POLL_INTERVAL_MS_DEFAULT, Importance.HIGH, POLL_INTERVAL_MS_DOC, CONNECTOR_GROUP, 1, Width.SHORT, POLL_INTERVAL_MS_DISPLAY)
         .define(BATCH_MAX_ROWS_CONFIG, Type.INT, BATCH_MAX_ROWS_DEFAULT, Importance.LOW, BATCH_MAX_ROWS_DOC, CONNECTOR_GROUP, 2, Width.SHORT, BATCH_MAX_ROWS_DISPLAY)
+        .define(USE_MYSQL_LIMIT_CONFIG, Type.BOOLEAN, USE_MYSQL_LIMIT_DEFAULT, Importance.LOW, USE_MYSQL_LIMIT_DOC, CONNECTOR_GROUP, 2, Width.SHORT, USE_MYSQL_LIMIT_DISPLAY)
         .define(TABLE_POLL_INTERVAL_MS_CONFIG, Type.LONG, TABLE_POLL_INTERVAL_MS_DEFAULT, Importance.LOW, TABLE_POLL_INTERVAL_MS_DOC, CONNECTOR_GROUP, 3, Width.SHORT, TABLE_POLL_INTERVAL_MS_DISPLAY)
         .define(TOPIC_PREFIX_CONFIG, Type.STRING, Importance.HIGH, TOPIC_PREFIX_DOC, CONNECTOR_GROUP, 4, Width.MEDIUM, TOPIC_PREFIX_DISPLAY)
         .define(TIMESTAMP_DELAY_INTERVAL_MS_CONFIG, Type.LONG, TIMESTAMP_DELAY_INTERVAL_MS_DEFAULT, Importance.HIGH, TIMESTAMP_DELAY_INTERVAL_MS_DOC, CONNECTOR_GROUP, 5, Width.MEDIUM, TIMESTAMP_DELAY_INTERVAL_MS_DISPLAY);

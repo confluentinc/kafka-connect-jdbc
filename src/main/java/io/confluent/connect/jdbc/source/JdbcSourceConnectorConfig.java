@@ -118,6 +118,15 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String INCREMENTING_COLUMN_NAME_DEFAULT = "";
   private static final String INCREMENTING_COLUMN_NAME_DISPLAY = "Incrementing Column Name";
 
+  public static final String INCREMENTING_COLUMN_LABEL_CONFIG = "incrementing.column.label";
+  private static final String INCREMENTING_COLUMN_LABEL_DOC =
+      "The label ('AS column_label' in the SELECT statement) of the strictly incrementing column to use to detect new rows. Any empty value "
+      + "indicates that the value defined by INCREMENTING_COLUMN_NAME_CONFIG is used to derive the field name in the source record "
+      + "and it's schema. This config option is useful for MySQL where you cannot use column labels in where clauses but you need a unique "
+      + "label for this field in the kafka record";
+  public static final String INCREMENTING_COLUMN_LABEL_DEFAULT = "";
+  private static final String INCREMENTING_COLUMN_LABEL_DISPLAY = "Incrementing Column Label";
+
   public static final String TIMESTAMP_COLUMN_NAME_CONFIG = "timestamp.column.name";
   private static final String TIMESTAMP_COLUMN_NAME_DOC =
       "The name of the timestamp column to use to detect new or modified rows. This column may "
@@ -231,6 +240,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
                 Importance.HIGH, MODE_DOC, MODE_GROUP, 1, Width.MEDIUM, MODE_DISPLAY, Arrays.asList(INCREMENTING_COLUMN_NAME_CONFIG, TIMESTAMP_COLUMN_NAME_CONFIG, VALIDATE_NON_NULL_CONFIG))
         .define(INCREMENTING_COLUMN_NAME_CONFIG, Type.STRING, INCREMENTING_COLUMN_NAME_DEFAULT, Importance.MEDIUM, INCREMENTING_COLUMN_NAME_DOC, MODE_GROUP, 2, Width.MEDIUM, INCREMENTING_COLUMN_NAME_DISPLAY,
                 MODE_DEPENDENTS_RECOMMENDER)
+        .define(INCREMENTING_COLUMN_LABEL_CONFIG, Type.STRING, INCREMENTING_COLUMN_LABEL_DEFAULT, Importance.LOW, INCREMENTING_COLUMN_LABEL_DOC, MODE_GROUP, 2, Width.MEDIUM, INCREMENTING_COLUMN_LABEL_DISPLAY,
+                MODE_DEPENDENTS_RECOMMENDER)
         .define(TIMESTAMP_COLUMN_NAME_CONFIG, Type.STRING, TIMESTAMP_COLUMN_NAME_DEFAULT, Importance.MEDIUM, TIMESTAMP_COLUMN_NAME_DOC, MODE_GROUP, 3, Width.MEDIUM, TIMESTAMP_COLUMN_NAME_DISPLAY,
                 MODE_DEPENDENTS_RECOMMENDER)
         .define(VALIDATE_NON_NULL_CONFIG, Type.BOOLEAN, VALIDATE_NON_NULL_DEFAULT, Importance.LOW, VALIDATE_NON_NULL_DOC, MODE_GROUP, 4, Width.SHORT, VALIDATE_NON_NULL_DISPLAY,
@@ -296,9 +307,9 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         case MODE_TIMESTAMP:
           return name.equals(TIMESTAMP_COLUMN_NAME_CONFIG) || name.equals(VALIDATE_NON_NULL_CONFIG);
         case MODE_INCREMENTING:
-          return name.equals(INCREMENTING_COLUMN_NAME_CONFIG) || name.equals(VALIDATE_NON_NULL_CONFIG);
+          return name.equals(INCREMENTING_COLUMN_NAME_CONFIG) || name.equals(INCREMENTING_COLUMN_LABEL_CONFIG) || name.equals(VALIDATE_NON_NULL_CONFIG);
         case MODE_TIMESTAMP_INCREMENTING:
-          return name.equals(TIMESTAMP_COLUMN_NAME_CONFIG) || name.equals(INCREMENTING_COLUMN_NAME_CONFIG) || name.equals(VALIDATE_NON_NULL_CONFIG);
+          return name.equals(TIMESTAMP_COLUMN_NAME_CONFIG) || name.equals(INCREMENTING_COLUMN_NAME_CONFIG) || name.equals(INCREMENTING_COLUMN_LABEL_CONFIG) || name.equals(VALIDATE_NON_NULL_CONFIG);
         case MODE_UNSPECIFIED:
           throw new ConfigException("Query mode must be specified");
         default:

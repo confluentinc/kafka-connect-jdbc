@@ -72,6 +72,14 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     this.timestampDelay = timestampDelay;
     this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
   }
+  
+  private void ifWhereIncluded(StringBuilder builder, String query){
+    if (query != null && query.toLowerCase().indexOf("where") != -1) {
+      builder.append(" and ");
+    } else {
+      builder.append(" where ");
+    }
+  }
 
   @Override
   protected void createPreparedStatement(Connection db) throws SQLException {
@@ -110,7 +118,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       //  timestamp 1235, id 22
       //  timestamp 1236, id 23
       // We should capture both id = 22 (an update) and id = 23 (a new row)
-      builder.append(" WHERE ");
+      ifWhereIncluded(builder,query);
       builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
       builder.append(" < ? AND ((");
       builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
@@ -126,14 +134,14 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
       builder.append(" ASC");
     } else if (incrementingColumn != null) {
-      builder.append(" WHERE ");
+      ifWhereIncluded(builder,query);
       builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
       builder.append(" > ?");
       builder.append(" ORDER BY ");
       builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
       builder.append(" ASC");
     } else if (timestampColumn != null) {
-      builder.append(" WHERE ");
+      ifWhereIncluded(builder,query);
       builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
       builder.append(" > ? AND ");
       builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));

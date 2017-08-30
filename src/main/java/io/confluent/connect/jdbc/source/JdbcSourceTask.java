@@ -119,6 +119,8 @@ public class JdbcSourceTask extends SourceTask {
         = config.getString(JdbcSourceTaskConfig.SCHEMA_PATTERN_CONFIG);
     String incrementingColumn
         = config.getString(JdbcSourceTaskConfig.INCREMENTING_COLUMN_NAME_CONFIG);
+    String incrementingColumnLabel
+        = config.getString(JdbcSourceTaskConfig.INCREMENTING_COLUMN_LABEL_CONFIG);
     String timestampColumn
         = config.getString(JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
     Long timestampDelayInterval
@@ -147,22 +149,25 @@ public class JdbcSourceTask extends SourceTask {
 
       String topicPrefix = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
       boolean mapNumerics = config.getBoolean(JdbcSourceTaskConfig.NUMERIC_PRECISION_MAPPING_CONFIG);
+      boolean quoteFieldnames = config.getBoolean(JdbcSourceTaskConfig.QUERY_QUOTE_FIELDNAMES_CONFIG);
+      boolean useMySqlLimit = config.getBoolean(JdbcSourceTaskConfig.USE_MYSQL_LIMIT_CONFIG);
+      int batchMaxRows = config.getInt(JdbcSourceTaskConfig.BATCH_MAX_ROWS_CONFIG);
 
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(new BulkTableQuerier(queryMode, tableOrQuery, schemaPattern,
                 topicPrefix, mapNumerics));
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)) {
         tableQueue.add(new TimestampIncrementingTableQuerier(
-            queryMode, tableOrQuery, topicPrefix, null, incrementingColumn, offset,
-                timestampDelayInterval, schemaPattern, mapNumerics));
+            queryMode, tableOrQuery, topicPrefix, null, incrementingColumn, incrementingColumnLabel, offset,
+                timestampDelayInterval, schemaPattern, mapNumerics, quoteFieldnames, useMySqlLimit, batchMaxRows));
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
         tableQueue.add(new TimestampIncrementingTableQuerier(
-            queryMode, tableOrQuery, topicPrefix, timestampColumn, null, offset,
-                timestampDelayInterval, schemaPattern, mapNumerics));
+            queryMode, tableOrQuery, topicPrefix, timestampColumn, null, null, offset,
+                timestampDelayInterval, schemaPattern, mapNumerics, quoteFieldnames, useMySqlLimit, batchMaxRows));
       } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
         tableQueue.add(new TimestampIncrementingTableQuerier(
-            queryMode, tableOrQuery, topicPrefix, timestampColumn, incrementingColumn,
-                offset, timestampDelayInterval, schemaPattern, mapNumerics));
+            queryMode, tableOrQuery, topicPrefix, timestampColumn, incrementingColumn, incrementingColumnLabel,
+                offset, timestampDelayInterval, schemaPattern, mapNumerics, quoteFieldnames, useMySqlLimit, batchMaxRows));
       }
     }
 

@@ -59,18 +59,29 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
 
   private String timestampColumn;
   private String incrementingColumn;
+  private String incrementingColumnLabel;
   private long timestampDelay;
   private TimestampIncrementingOffset offset;
+  private boolean quoteFieldnames;
+  private boolean useMySqlLimit;
+  private int batchMaxRows;
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
                                            String timestampColumn, String incrementingColumn,
+                                           String incrementingColumnLabel,
                                            Map<String, Object> offsetMap, Long timestampDelay,
-                                           String schemaPattern, boolean mapNumerics) {
+                                           String schemaPattern, boolean mapNumerics,
+                                           boolean quoteFieldnames,
+                                           boolean useMySqlLimit, int batchMaxRows) {
     super(mode, name, topicPrefix, schemaPattern, mapNumerics);
     this.timestampColumn = timestampColumn;
     this.incrementingColumn = incrementingColumn;
+    this.incrementingColumnLabel = incrementingColumnLabel;
     this.timestampDelay = timestampDelay;
     this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
+    this.quoteFieldnames = quoteFieldnames;
+    this.useMySqlLimit = useMySqlLimit;
+    this.batchMaxRows = batchMaxRows;
   }
 
   @Override
@@ -80,7 +91,11 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       incrementingColumn = JdbcUtils.getAutoincrementColumn(db, schemaPattern, name);
     }
 
-    String quoteString = JdbcUtils.getIdentifierQuoteString(db);
+    String quoteString;
+    if (quoteFieldnames)
+      quoteString = JdbcUtils.getIdentifierQuoteString(db);
+    else
+      quoteString = "";
 
     StringBuilder builder = new StringBuilder();
 
@@ -142,6 +157,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       builder.append(" ASC");
     }
     String queryString = builder.toString();
+    if (useMySqlLimit) queryString = queryString + " LIMIT " + batchMaxRows;
     log.debug("{} prepared SQL query: {}", this, queryString);
     stmt = db.prepareStatement(queryString);
   }
@@ -212,8 +228,15 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
 
     final Long extractedId;
     if (incrementingColumn != null) {
-      final Schema incrementingColumnSchema = schema.field(incrementingColumn).schema();
-      final Object incrementingColumnValue = record.get(incrementingColumn);
+      final Schema incrementingColumnSchema;
+      final Object incrementingColumnValue;
+      if (incrementingColumnLabel != null && !incrementingColumnLabel.equals("")) {
+        incrementingColumnSchema = schema.field(incrementingColumnLabel).schema();
+        incrementingColumnValue = record.get(incrementingColumnLabel);
+      } else {
+        incrementingColumnSchema = schema.field(incrementingColumn).schema();
+        incrementingColumnValue = record.get(incrementingColumn);
+      }
       if (incrementingColumnValue == null) {
         throw new ConnectException("Null value for incrementing column of type: " + incrementingColumnSchema.type());
       } else if (isIntegralPrimitiveType(incrementingColumnValue)) {
@@ -257,6 +280,9 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
            ", topicPrefix='" + topicPrefix + '\'' +
            ", timestampColumn='" + timestampColumn + '\'' +
            ", incrementingColumn='" + incrementingColumn + '\'' +
+           ", incrementingColumnLabel='" + incrementingColumnLabel + '\'' +
+           ", useMySqlLimit='" + useMySqlLimit + '\'' +
+           ", batchMaxRows='" + batchMaxRows + '\'' +
            '}';
   }
 }

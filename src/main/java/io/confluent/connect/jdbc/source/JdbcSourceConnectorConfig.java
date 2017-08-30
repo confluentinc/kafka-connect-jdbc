@@ -80,6 +80,18 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final int BATCH_MAX_ROWS_DEFAULT = 100;
   private static final String BATCH_MAX_ROWS_DISPLAY = "Max Rows Per Batch";
 
+  public static final String QUERY_QUOTE_FIELDNAMES_CONFIG = "query.quote.fieldnames";
+  private static final String QUERY_QUOTE_FIELDNAMES_DOC =
+          "Specifies if the field names are quoted in QUERY mode";
+  public static final boolean QUERY_QUOTE_FIELDNAMES_DEFAULT = true;
+  private static final String QUERY_QUOTE_FIELDNAMES_DISPLAY = "Quote field names in query mode";
+
+  public static final String USE_MYSQL_LIMIT_CONFIG = "mysql.use.limit";
+  private static final String USE_MYSQL_LIMIT_DOC =
+      "Use the MySQL LIMIT clause with the BATCH_MAX_ROWS value to prevent OOM Exceptions for big queries";
+  public static final boolean USE_MYSQL_LIMIT_DEFAULT = false;
+  private static final String USE_MYSQL_LIMIT_DISPLAY = "Use the MySQL LIMIT clause with BATCH_MAX_ROWS";
+
   public static final String NUMERIC_PRECISION_MAPPING_CONFIG = "numeric.precision.mapping";
   private static final String NUMERIC_PRECISION_MAPPING_DOC =
           "Whether or not to attempt mapping NUMERIC values by precision to integral types";
@@ -114,6 +126,15 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "This column may not be nullable.";
   public static final String INCREMENTING_COLUMN_NAME_DEFAULT = "";
   private static final String INCREMENTING_COLUMN_NAME_DISPLAY = "Incrementing Column Name";
+
+  public static final String INCREMENTING_COLUMN_LABEL_CONFIG = "incrementing.column.label";
+  private static final String INCREMENTING_COLUMN_LABEL_DOC =
+      "The label ('AS column_label' in the SELECT statement) of the strictly incrementing column to use to detect new rows. Any empty value "
+      + "indicates that the value defined by INCREMENTING_COLUMN_NAME_CONFIG is used to derive the field name in the source record "
+      + "and it's schema. This config option is useful for MySQL where you cannot use column labels in where clauses but you need a unique "
+      + "label for this field in the kafka record";
+  public static final String INCREMENTING_COLUMN_LABEL_DEFAULT = "";
+  private static final String INCREMENTING_COLUMN_LABEL_DISPLAY = "Incrementing Column Label";
 
   public static final String TIMESTAMP_COLUMN_NAME_CONFIG = "timestamp.column.name";
   private static final String TIMESTAMP_COLUMN_NAME_DOC =
@@ -231,13 +252,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
                 Importance.HIGH, MODE_DOC, MODE_GROUP, 1, Width.MEDIUM, MODE_DISPLAY, Arrays.asList(INCREMENTING_COLUMN_NAME_CONFIG, TIMESTAMP_COLUMN_NAME_CONFIG, VALIDATE_NON_NULL_CONFIG))
         .define(INCREMENTING_COLUMN_NAME_CONFIG, Type.STRING, INCREMENTING_COLUMN_NAME_DEFAULT, Importance.MEDIUM, INCREMENTING_COLUMN_NAME_DOC, MODE_GROUP, 2, Width.MEDIUM, INCREMENTING_COLUMN_NAME_DISPLAY,
                 MODE_DEPENDENTS_RECOMMENDER)
+        .define(INCREMENTING_COLUMN_LABEL_CONFIG, Type.STRING, INCREMENTING_COLUMN_LABEL_DEFAULT, Importance.LOW, INCREMENTING_COLUMN_LABEL_DOC, MODE_GROUP, 2, Width.MEDIUM, INCREMENTING_COLUMN_LABEL_DISPLAY,
+                MODE_DEPENDENTS_RECOMMENDER)
         .define(TIMESTAMP_COLUMN_NAME_CONFIG, Type.STRING, TIMESTAMP_COLUMN_NAME_DEFAULT, Importance.MEDIUM, TIMESTAMP_COLUMN_NAME_DOC, MODE_GROUP, 3, Width.MEDIUM, TIMESTAMP_COLUMN_NAME_DISPLAY,
                 MODE_DEPENDENTS_RECOMMENDER)
         .define(VALIDATE_NON_NULL_CONFIG, Type.BOOLEAN, VALIDATE_NON_NULL_DEFAULT, Importance.LOW, VALIDATE_NON_NULL_DOC, MODE_GROUP, 4, Width.SHORT, VALIDATE_NON_NULL_DISPLAY,
                 MODE_DEPENDENTS_RECOMMENDER)
         .define(QUERY_CONFIG, Type.STRING, QUERY_DEFAULT, Importance.MEDIUM, QUERY_DOC, MODE_GROUP, 5, Width.SHORT, QUERY_DISPLAY)
+        .define(QUERY_QUOTE_FIELDNAMES_CONFIG, Type.BOOLEAN, QUERY_QUOTE_FIELDNAMES_DEFAULT, Importance.LOW, QUERY_QUOTE_FIELDNAMES_DOC, CONNECTOR_GROUP, 5, Width.SHORT, QUERY_QUOTE_FIELDNAMES_DISPLAY)
         .define(POLL_INTERVAL_MS_CONFIG, Type.INT, POLL_INTERVAL_MS_DEFAULT, Importance.HIGH, POLL_INTERVAL_MS_DOC, CONNECTOR_GROUP, 1, Width.SHORT, POLL_INTERVAL_MS_DISPLAY)
         .define(BATCH_MAX_ROWS_CONFIG, Type.INT, BATCH_MAX_ROWS_DEFAULT, Importance.LOW, BATCH_MAX_ROWS_DOC, CONNECTOR_GROUP, 2, Width.SHORT, BATCH_MAX_ROWS_DISPLAY)
+        .define(USE_MYSQL_LIMIT_CONFIG, Type.BOOLEAN, USE_MYSQL_LIMIT_DEFAULT, Importance.LOW, USE_MYSQL_LIMIT_DOC, CONNECTOR_GROUP, 2, Width.SHORT, USE_MYSQL_LIMIT_DISPLAY)
         .define(TABLE_POLL_INTERVAL_MS_CONFIG, Type.LONG, TABLE_POLL_INTERVAL_MS_DEFAULT, Importance.LOW, TABLE_POLL_INTERVAL_MS_DOC, CONNECTOR_GROUP, 3, Width.SHORT, TABLE_POLL_INTERVAL_MS_DISPLAY)
         .define(TOPIC_PREFIX_CONFIG, Type.STRING, Importance.HIGH, TOPIC_PREFIX_DOC, CONNECTOR_GROUP, 4, Width.MEDIUM, TOPIC_PREFIX_DISPLAY)
         .define(TIMESTAMP_DELAY_INTERVAL_MS_CONFIG, Type.LONG, TIMESTAMP_DELAY_INTERVAL_MS_DEFAULT, Importance.HIGH, TIMESTAMP_DELAY_INTERVAL_MS_DOC, CONNECTOR_GROUP, 5, Width.MEDIUM, TIMESTAMP_DELAY_INTERVAL_MS_DISPLAY);
@@ -350,9 +375,9 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         case MODE_TIMESTAMP:
           return name.equals(TIMESTAMP_COLUMN_NAME_CONFIG) || name.equals(VALIDATE_NON_NULL_CONFIG);
         case MODE_INCREMENTING:
-          return name.equals(INCREMENTING_COLUMN_NAME_CONFIG) || name.equals(VALIDATE_NON_NULL_CONFIG);
+          return name.equals(INCREMENTING_COLUMN_NAME_CONFIG) || name.equals(INCREMENTING_COLUMN_LABEL_CONFIG) || name.equals(VALIDATE_NON_NULL_CONFIG);
         case MODE_TIMESTAMP_INCREMENTING:
-          return name.equals(TIMESTAMP_COLUMN_NAME_CONFIG) || name.equals(INCREMENTING_COLUMN_NAME_CONFIG) || name.equals(VALIDATE_NON_NULL_CONFIG);
+          return name.equals(TIMESTAMP_COLUMN_NAME_CONFIG) || name.equals(INCREMENTING_COLUMN_NAME_CONFIG) || name.equals(INCREMENTING_COLUMN_LABEL_CONFIG) || name.equals(VALIDATE_NON_NULL_CONFIG);
         case MODE_UNSPECIFIED:
           throw new ConfigException("Query mode must be specified");
         default:

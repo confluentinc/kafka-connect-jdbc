@@ -242,6 +242,10 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     return new TimestampIncrementingOffset(extractedTimestamp, extractedId);
   }
 
+  public TimestampIncrementingOffset getOffset() {
+    return offset;
+  }
+
   private boolean isIntegralPrimitiveType(Object incrementingColumnValue) {
     return incrementingColumnValue instanceof Long
            || incrementingColumnValue instanceof Integer

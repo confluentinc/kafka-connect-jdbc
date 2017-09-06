@@ -156,6 +156,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final boolean VALIDATE_NON_NULL_DEFAULT = true;
   private static final String VALIDATE_NON_NULL_DISPLAY = "Validate Non Null";
 
+  public static final String KEY_COLUMN_CONFIG = "key.column.name";
+  private static final String KEY_COLUMN_CONFIG_DOC =
+      "Column in query results that defines record key";
+  private static final String KEY_COLUMN_CONFIG_DISPLAY = "Key Column";
+
+
   public static final String TIMESTAMP_DELAY_INTERVAL_MS_CONFIG = "timestamp.delay.interval.ms";
   private static final String TIMESTAMP_DELAY_INTERVAL_MS_DOC =
       "How long to wait after a row with certain timestamp appears before we include it in the result. "
@@ -207,7 +213,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         .define(BATCH_MAX_ROWS_CONFIG, Type.INT, BATCH_MAX_ROWS_DEFAULT, Importance.LOW, BATCH_MAX_ROWS_DOC)
         .define(TABLE_POLL_INTERVAL_MS_CONFIG, Type.LONG, TABLE_POLL_INTERVAL_MS_DEFAULT, Importance.LOW, TABLE_POLL_INTERVAL_MS_DOC)
         .define(TOPIC_PREFIX_CONFIG, Type.STRING, Importance.HIGH, TOPIC_PREFIX_DOC)
-        .define(TIMESTAMP_DELAY_INTERVAL_MS_CONFIG, Type.LONG, TIMESTAMP_DELAY_INTERVAL_MS_DEFAULT, Importance.HIGH, TIMESTAMP_DELAY_INTERVAL_MS_DOC);
+        .define(TIMESTAMP_DELAY_INTERVAL_MS_CONFIG, Type.LONG, TIMESTAMP_DELAY_INTERVAL_MS_DEFAULT, Importance.HIGH, TIMESTAMP_DELAY_INTERVAL_MS_DOC)
+        .define(KEY_COLUMN_CONFIG, Type.STRING, null, Importance.MEDIUM, KEY_COLUMN_CONFIG_DOC);
   }
 
   public static final ConfigDef CONFIG_DEF = baseConfigDef();

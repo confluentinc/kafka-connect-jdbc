@@ -37,7 +37,7 @@ public class LoggingTableQuerier extends TableQuerier {
   private Logger infoLogger = LoggerFactory.getLogger(LoggingTableQuerier.class);
 
   public LoggingTableQuerier(TableQuerier delegate, String name) {
-    super(QueryMode.QUERY, null, null, null, false);
+    super(QueryMode.QUERY, null, null, null, false, null);
     this.delegate = delegate;
     this.name = name;
   }

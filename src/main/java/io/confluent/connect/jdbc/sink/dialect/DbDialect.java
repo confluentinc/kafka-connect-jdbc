@@ -82,6 +82,23 @@ public abstract class DbDialect {
     return builder.toString();
   }
 
+  public final String getDelete(final String tableName, final Collection<String> keyColumns) {
+    StringBuilder builder = new StringBuilder("DELETE FROM ");
+    builder.append(escaped(tableName));
+
+    Transform<String> updateTransformer = new Transform<String>() {
+      @Override public void apply(StringBuilder builder, String input) {
+        builder.append(escaped(input));
+        builder.append(" = ?");
+      }
+    };
+
+    if (!keyColumns.isEmpty()) {
+      builder.append(" WHERE ");
+    }
+    joinToBuilder(builder, ", ", keyColumns, updateTransformer);
+    return builder.toString();
+  }
 
   public String getUpsertQuery(final String table, final Collection<String> keyColumns, final Collection<String> columns) {
     throw new UnsupportedOperationException();

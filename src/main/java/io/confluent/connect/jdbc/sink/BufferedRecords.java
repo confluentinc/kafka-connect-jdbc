@@ -46,7 +46,8 @@ public class BufferedRecords {
   private SchemaPair currentSchemaPair;
   private FieldsMetadata fieldsMetadata;
   private PreparedStatement preparedStatement;
-  private PreparedStatementBinder preparedStatementBinder;
+  private PreparedStatement deletePreparedStatement;
+  private PreparedStatementsBinder preparedStatementsBinder;
 
   public BufferedRecords(JdbcSinkConfig config, String tableName, DbDialect dbDialect, DbStructure dbStructure, Connection connection) {
     this.tableName = tableName;
@@ -65,10 +66,14 @@ public class BufferedRecords {
       fieldsMetadata = FieldsMetadata.extract(tableName, config.pkMode, config.pkFields, config.fieldsWhitelist, currentSchemaPair);
       dbStructure.createOrAmendIfNecessary(config, connection, tableName, fieldsMetadata);
       final String insertSql = getInsertSql();
-      log.debug("{} sql: {}", config.insertMode, insertSql);
+      final String deleteSql = getDeleteSql();
+      log.debug("{} sql: {} deleteSql: {}", config.insertMode, insertSql, deleteSql);
       close();
       preparedStatement = connection.prepareStatement(insertSql);
-      preparedStatementBinder = new PreparedStatementBinder(preparedStatement, config.pkMode, schemaPair, fieldsMetadata, config.insertMode);
+      if (deleteSql != null) {
+        deletePreparedStatement = connection.prepareStatement(deleteSql);
+      }
+      preparedStatementsBinder = new PreparedStatementsBinder(preparedStatement, deletePreparedStatement, config.pkMode, schemaPair, fieldsMetadata, config.insertMode);
     }
 
     final List<SinkRecord> flushed;
@@ -94,7 +99,7 @@ public class BufferedRecords {
       return new ArrayList<>();
     }
     for (SinkRecord record : records) {
-      preparedStatementBinder.bindRecord(record);
+      preparedStatementsBinder.bindRecord(record);
     }
     int totalUpdateCount = 0;
     boolean successNoInfo = false;
@@ -104,6 +109,15 @@ public class BufferedRecords {
         continue;
       }
       totalUpdateCount += updateCount;
+    }
+    if (deletePreparedStatement != null) {
+      for (int updateCount : deletePreparedStatement.executeBatch()) {
+        if (updateCount == Statement.SUCCESS_NO_INFO) {
+          successNoInfo = true;
+          continue;
+        }
+        totalUpdateCount += updateCount;
+      }
     }
     if (totalUpdateCount != records.size() && !successNoInfo) {
       switch (config.insertMode) {
@@ -132,6 +146,10 @@ public class BufferedRecords {
       preparedStatement.close();
       preparedStatement = null;
     }
+    if (deletePreparedStatement != null) {
+      deletePreparedStatement.close();
+      deletePreparedStatement = null;
+    }
   }
 
   private String getInsertSql() {
@@ -151,4 +169,25 @@ public class BufferedRecords {
         throw new ConnectException("Invalid insert mode");
     }
   }
+
+  private String getDeleteSql() {
+    String sql = null;
+    switch (config.pkMode) {
+      case NONE:
+      case KAFKA:
+      case RECORD_VALUE:
+        log.info("Delete is only supports for pkMode RECORD_KEY");
+        break;
+      case RECORD_KEY:
+        if (fieldsMetadata.keyFieldNames.isEmpty()) {
+          log.info("Require primary keys to support delete");
+        } else {
+          sql = dbDialect.getDelete(tableName, fieldsMetadata.keyFieldNames);
+        }
+        break;
+    }
+    return sql;
+  }
+
+
 }

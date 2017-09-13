@@ -33,8 +33,8 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.text.ParseException;
 import java.util.Arrays;
-import java.util.Calendar;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -46,7 +46,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-public class PreparedStatementBinderTest {
+public class PreparedStatementsBinderTest {
 
   @Test
   public void bindRecordInsert() throws SQLException, ParseException {
@@ -94,15 +94,20 @@ public class PreparedStatementBinderTest {
 
     PreparedStatement statement = mock(PreparedStatement.class);
 
-    PreparedStatementBinder binder = new PreparedStatementBinder(
-        statement,
-        pkMode,
-        schemaPair,
-        fieldsMetadata,
-        JdbcSinkConfig.InsertMode.INSERT
-    );
+    PreparedStatementsBinder binder = new PreparedStatementsBinder();
 
-    binder.bindRecord(new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));
+    final HashMap<Object, Object> props = new HashMap<>();
+    props.put("connection.url", "mydb");
+    props.put("insert.mode", "insert");
+    props.put("pk.mode", "record_value");
+    JdbcSinkConfig config = new JdbcSinkConfig(props);
+
+    binder.bindRecord(
+        config,
+        statement,
+        null,
+        fieldsMetadata,
+        new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));
 
     int index = 1;
     // key field first
@@ -146,14 +151,20 @@ public class PreparedStatementBinderTest {
 
         PreparedStatement statement = mock(PreparedStatement.class);
 
-        PreparedStatementBinder binder = new PreparedStatementBinder(
-                statement,
-                pkMode,
-                schemaPair,
-                fieldsMetadata, JdbcSinkConfig.InsertMode.UPSERT
-        );
+        PreparedStatementsBinder binder = new PreparedStatementsBinder();
 
-        binder.bindRecord(new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));
+        final HashMap<Object, Object> props = new HashMap<>();
+        props.put("connection.url", "mydb");
+        props.put("insert.mode", "upsert");
+        props.put("pk.mode", "record_value");
+        JdbcSinkConfig config = new JdbcSinkConfig(props);
+
+        binder.bindRecord(
+            config,
+            statement,
+            null,
+            fieldsMetadata,
+            new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));
 
         int index = 1;
         // key field first
@@ -184,14 +195,20 @@ public class PreparedStatementBinderTest {
 
         PreparedStatement statement = mock(PreparedStatement.class);
 
-        PreparedStatementBinder binder = new PreparedStatementBinder(
-                statement,
-                pkMode,
-                schemaPair,
-                fieldsMetadata, JdbcSinkConfig.InsertMode.UPDATE
-        );
+        PreparedStatementsBinder binder = new PreparedStatementsBinder();
 
-        binder.bindRecord(new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));
+        final HashMap<Object, Object> props = new HashMap<>();
+        props.put("connection.url", "mydb");
+        props.put("insert.mode", "update");
+        props.put("pk.mode", "record_value");
+        JdbcSinkConfig config = new JdbcSinkConfig(props);
+
+        binder.bindRecord(
+            config,
+            statement,
+            null,
+            fieldsMetadata,
+            new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));
 
         int index = 1;
 
@@ -249,24 +266,24 @@ public class PreparedStatementBinderTest {
   @Test(expected = ConnectException.class)
   public void bindFieldStructUnsupported() throws SQLException {
     Schema structSchema = SchemaBuilder.struct().field("test", Schema.BOOLEAN_SCHEMA).build();
-    PreparedStatementBinder.bindField(mock(PreparedStatement.class), 1, structSchema, new Struct(structSchema));
+    PreparedStatementsBinder.bindField(mock(PreparedStatement.class), 1, structSchema, new Struct(structSchema));
   }
 
   @Test(expected = ConnectException.class)
   public void bindFieldArrayUnsupported() throws SQLException {
     Schema arraySchema = SchemaBuilder.array(Schema.INT8_SCHEMA);
-    PreparedStatementBinder.bindField(mock(PreparedStatement.class), 1, arraySchema, Collections.emptyList());
+    PreparedStatementsBinder.bindField(mock(PreparedStatement.class), 1, arraySchema, Collections.emptyList());
   }
 
   @Test(expected = ConnectException.class)
   public void bindFieldMapUnsupported() throws SQLException {
     Schema mapSchema = SchemaBuilder.map(Schema.INT8_SCHEMA, Schema.INT8_SCHEMA);
-    PreparedStatementBinder.bindField(mock(PreparedStatement.class), 1, mapSchema, Collections.emptyMap());
+    PreparedStatementsBinder.bindField(mock(PreparedStatement.class), 1, mapSchema, Collections.emptyMap());
   }
 
   private PreparedStatement verifyBindField(int index, Schema schema, Object value) throws SQLException {
     PreparedStatement statement = mock(PreparedStatement.class);
-    PreparedStatementBinder.bindField(statement, index, schema, value);
+    PreparedStatementsBinder.bindField(statement, index, schema, value);
     return verify(statement, times(1));
   }
 

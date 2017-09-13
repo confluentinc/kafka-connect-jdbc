@@ -32,57 +32,53 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
-import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 
-public class PreparedStatementBinder {
+public class PreparedStatementsBinder {
 
-  private final JdbcSinkConfig.PrimaryKeyMode pkMode;
-  private final PreparedStatement statement;
-  private final SchemaPair schemaPair;
-  private final FieldsMetadata fieldsMetadata;
-  private final JdbcSinkConfig.InsertMode insertMode;
-
-  public PreparedStatementBinder(
+  public void bindRecord(
+      JdbcSinkConfig config,
       PreparedStatement statement,
-      JdbcSinkConfig.PrimaryKeyMode pkMode,
-      SchemaPair schemaPair,
+      PreparedStatement deleteStatement,
       FieldsMetadata fieldsMetadata,
-      JdbcSinkConfig.InsertMode insertMode
-  ) {
-    this.pkMode = pkMode;
-    this.statement = statement;
-    this.schemaPair = schemaPair;
-    this.fieldsMetadata = fieldsMetadata;
-    this.insertMode = insertMode;
-  }
-
-  public void bindRecord(SinkRecord record) throws SQLException {
+      SinkRecord record
+  ) throws SQLException {
     final Struct valueStruct = (Struct) record.value();
 
     // Assumption: the relevant SQL has placeholders for keyFieldNames first followed by nonKeyFieldNames, in iteration order for all INSERT/ UPSERT queries
+    //             the relevant SQL has placeholders for keyFieldNames, in iteration order for all DELETE queries
     //             the relevant SQL has placeholders for nonKeyFieldNames first followed by keyFieldNames, in iteration order for all UPDATE queries
 
     int index = 1;
-    switch (insertMode) {
-      case INSERT:
-      case UPSERT:
-        index = bindKeyFields(record, index);
-        bindNonKeyFields(record, valueStruct, index);
-        break;
+    if (valueStruct == null && config.deleteEnabled) {
+      bindKeyFields(config.pkMode, deleteStatement, fieldsMetadata, record, index);
+      deleteStatement.addBatch();
+    } else {
+      switch (config.insertMode) {
+        case INSERT:
+        case UPSERT:
+          index = bindKeyFields(config.pkMode, statement, fieldsMetadata, record, index);
+          bindNonKeyFields(statement, fieldsMetadata, record, valueStruct, index);
+          break;
 
-      case UPDATE:
-        index = bindNonKeyFields(record, valueStruct, index);
-        bindKeyFields(record, index);
-        break;
-      default:
-        throw new AssertionError();
+        case UPDATE:
+          index = bindNonKeyFields(statement, fieldsMetadata, record, valueStruct, index);
+          bindKeyFields(config.pkMode, statement, fieldsMetadata, record, index);
+          break;
+        default:
+          throw new AssertionError();
 
+      }
+      statement.addBatch();
     }
-    statement.addBatch();
   }
 
-  private int bindKeyFields(SinkRecord record, int index) throws SQLException {
+  private int bindKeyFields(
+      JdbcSinkConfig.PrimaryKeyMode pkMode,
+      PreparedStatement statement,
+      FieldsMetadata fieldsMetadata,
+      SinkRecord record,
+      int index) throws SQLException {
     switch (pkMode) {
       case NONE:
         if (!fieldsMetadata.keyFieldNames.isEmpty()) {
@@ -92,20 +88,20 @@ public class PreparedStatementBinder {
 
       case KAFKA: {
         assert fieldsMetadata.keyFieldNames.size() == 3;
-        bindField(index++, Schema.STRING_SCHEMA, record.topic());
-        bindField(index++, Schema.INT32_SCHEMA, record.kafkaPartition());
-        bindField(index++, Schema.INT64_SCHEMA, record.kafkaOffset());
+        bindField(statement, index++, Schema.STRING_SCHEMA, record.topic());
+        bindField(statement, index++, Schema.INT32_SCHEMA, record.kafkaPartition());
+        bindField(statement, index++, Schema.INT64_SCHEMA, record.kafkaOffset());
       }
       break;
 
       case RECORD_KEY: {
-        if (schemaPair.keySchema.type().isPrimitive()) {
+        if (record.keySchema().type().isPrimitive()) {
           assert fieldsMetadata.keyFieldNames.size() == 1;
-          bindField(index++, schemaPair.keySchema, record.key());
+          bindField(statement, index++, record.keySchema(), record.key());
         } else {
           for (String fieldName : fieldsMetadata.keyFieldNames) {
-            final Field field = schemaPair.keySchema.field(fieldName);
-            bindField(index++, field.schema(), ((Struct) record.key()).get(field));
+            final Field field = record.keySchema().field(fieldName);
+            bindField(statement, index++, field.schema(), ((Struct) record.key()).get(field));
           }
         }
       }
@@ -113,8 +109,8 @@ public class PreparedStatementBinder {
 
       case RECORD_VALUE: {
         for (String fieldName : fieldsMetadata.keyFieldNames) {
-          final Field field = schemaPair.valueSchema.field(fieldName);
-          bindField(index++, field.schema(), ((Struct) record.value()).get(field));
+          final Field field = record.valueSchema().field(fieldName);
+          bindField(statement, index++, field.schema(), ((Struct) record.value()).get(field));
         }
       }
       break;
@@ -122,16 +118,17 @@ public class PreparedStatementBinder {
     return index;
   }
 
-  private int bindNonKeyFields(SinkRecord record, Struct valueStruct, int index) throws SQLException {
+  private int bindNonKeyFields(
+      PreparedStatement statement,
+      FieldsMetadata fieldsMetadata,
+      SinkRecord record,
+      Struct valueStruct,
+      int index) throws SQLException {
     for (final String fieldName : fieldsMetadata.nonKeyFieldNames) {
       final Field field = record.valueSchema().field(fieldName);
-      bindField(index++, field.schema(), valueStruct.get(field));
+      bindField(statement, index++, field.schema(), valueStruct.get(field));
     }
     return index;
-  }
-
-  void bindField(int index, Schema schema, Object value) throws SQLException {
-    bindField(statement, index, schema, value);
   }
 
   static void bindField(PreparedStatement statement, int index, Schema schema, Object value) throws SQLException {

@@ -26,6 +26,8 @@ import org.apache.kafka.connect.errors.ConnectException;
 import org.junit.Test;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Map;
 
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
@@ -40,6 +42,26 @@ public class DbDialectTest {
       return "DUMMY";
     }
   };
+
+  @Test
+  public void getInsert() {
+    assertEquals(
+        "INSERT INTO `customers`(`id`,`age`,`firstName`,`lastName`) VALUES(?,?,?,?)",
+        DUMMY_DIALECT.getInsert("customers", Arrays.asList("id"), Arrays.asList("age", "firstName", "lastName"))
+    );
+  }
+
+  @Test
+  public void getDelete() {
+    assertEquals(
+        "DELETE FROM `customers` WHERE `id` = ?",
+        DUMMY_DIALECT.getDelete("customers", Arrays.asList("id"))
+    );
+    assertEquals(
+        "DELETE FROM `users` WHERE `id` = ? AND `name` = ?",
+        DUMMY_DIALECT.getDelete("users", Arrays.asList("id", "name"))
+    );
+  }
 
   @Test
   public void formatColumnValue() {

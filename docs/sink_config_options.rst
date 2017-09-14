@@ -36,13 +36,17 @@ Writes
 
       Use standard SQL ``INSERT`` statements.
 
+  ``update``
+
+      Use standard SQL ``UPDATE`` statements.
+
   ``upsert``
 
       Use the appropriate upsert semantics for the target database if it is supported by the connector, e.g. ``INSERT OR IGNORE``.
 
   * Type: string
   * Default: insert
-  * Valid Values: [insert, upsert]
+  * Valid Values: [insert, update, upsert]
   * Importance: high
 
 ``batch.size``
@@ -51,6 +55,13 @@ Writes
   * Type: int
   * Default: 3000
   * Valid Values: [0,...]
+  * Importance: medium
+
+``delete.enabled``
+  Whether to treat ``null`` record values as deletes. If ``true``, requires ``pk.mode`` to be ``record_key``.
+
+  * Type: boolean
+  * Default: false
   * Importance: medium
 
 Data Mapping

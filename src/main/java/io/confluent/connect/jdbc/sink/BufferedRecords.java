@@ -51,6 +51,7 @@ public class BufferedRecords {
   private PreparedStatement updatePreparedStatement;
   private PreparedStatement deletePreparedStatement;
   private PreparedStatementsBinder preparedStatementsBinder;
+  private boolean deletesInBatch = false;
 
   public BufferedRecords(JdbcSinkConfig config, String tableName, DbDialect dbDialect, DbStructure dbStructure, Connection connection) {
     this.tableName = tableName;
@@ -62,20 +63,30 @@ public class BufferedRecords {
   }
 
   public List<SinkRecord> add(SinkRecord record) throws SQLException {
+    final List<SinkRecord> flushed = new ArrayList<>();
     boolean schemaChanged = false;
     if (!Objects.equals(keySchema, record.keySchema())) {
       keySchema = record.keySchema();
       schemaChanged = true;
     }
-    if (record.valueSchema() != null && !Objects.equals(valueSchema, record.valueSchema())) {
+    if (record.valueSchema() == null) {
       // For deletes, both the value and value schema come in as null.
       // We don't want to treat this as a schema change if key schemas is the same
       // otherwise we flush unnecessarily.
+      if (config.deleteEnabled) {
+        deletesInBatch = true;
+      }
+    } else if (Objects.equals(valueSchema, record.valueSchema())) {
+      if (config.deleteEnabled && deletesInBatch) {
+        // flush so an insert after a delete of same record isn't lost
+        flushed.addAll(flush());
+      }
+    } else {
+      // value schema is not null and has changed. This is a real schema change.
       valueSchema = record.valueSchema();
       schemaChanged = true;
     }
 
-    final List<SinkRecord> flushed = new ArrayList<>();
     if (schemaChanged) {
       // Each batch needs to have the same schemas, so get the buffered records out
       flushed.addAll(flush());
@@ -138,6 +149,7 @@ public class BufferedRecords {
 
     final List<SinkRecord> flushedRecords = records;
     records = new ArrayList<>();
+    deletesInBatch = false;
     return flushedRecords;
   }
 

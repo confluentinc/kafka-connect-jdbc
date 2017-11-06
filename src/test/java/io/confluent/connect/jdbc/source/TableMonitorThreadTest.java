@@ -219,12 +219,12 @@ public class TableMonitorThreadTest {
     provider.closeQuietly();
     EasyMock.expectLastCall().anyTimes();
 
-    EasyMock.replay(provider);
+    PowerMock.replayAll();
 
     tableMonitorThread.start();
     tableMonitorThread.join();
 
-    EasyMock.verify(provider);
+    PowerMock.verifyAll();
   }
 
 

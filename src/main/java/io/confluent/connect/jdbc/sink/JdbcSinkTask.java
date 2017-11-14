@@ -71,9 +71,11 @@ public class JdbcSinkTask extends SinkTask {
       log.warn(
           "Write of {} records failed, remainingRetries={}",
           records.size(),
-          remainingRetries,
-          sqle
+          remainingRetries
       );
+      for (Throwable e: sqle) {
+        log.warn(e.getMessage());
+      }
       if (remainingRetries == 0) {
         throw new ConnectException(sqle);
       } else {

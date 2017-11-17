@@ -23,7 +23,7 @@
     <groupId>io.confluent</groupId>
     <artifactId>kafka-connect-jdbc</artifactId>
     <packaging>jar</packaging>
-    <version>4.0.0-SNAPSHOT</version>
+    <version>4.0.0-touk-1-kafka-0.9.x-SNAPSHOT</version>
     <name>kafka-connect-jdbc</name>
     <organization>
         <name>Confluent, Inc.</name>
@@ -43,11 +43,24 @@
     </licenses>
 
     <scm>
-        <connection>scm:git:git://github.com/confluentinc/kafka-connect-jdbc.git</connection>
-        <developerConnection>scm:git:git@github.com:confluentinc/kafka-connect-jdbc.git</developerConnection>
-        <url>https://github.com/confluentinc/kafka-connect-jdbc</url>
+        <connection>scm:git:git@github.com:TouK/kafka-connect-jdbc.git</connection>
+        <developerConnection>scm:git:git@github.com:TouK/kafka-connect-jdbc.git</developerConnection>
+        <url>scm:git:git@github.com:TouK/kafka-connect-jdbc.git</url>
         <tag>HEAD</tag>
     </scm>
+
+    <distributionManagement>
+        <repository>
+            <id>maven.touk.pl.releases</id>
+            <name>TouK Open source repository</name>
+            <url>https://philanthropist.touk.pl/nexus/content/repositories/releases</url>
+        </repository>
+        <snapshotRepository>
+            <id>maven.touk.pl.snapshots</id>
+            <name>TouK open source snapshot repository</name>
+            <url>https://philanthropist.touk.pl/nexus/content/repositories/snapshots</url>
+        </snapshotRepository>
+    </distributionManagement>
 
     <properties>
         <confluent.version>${project.version}</confluent.version>
@@ -176,6 +189,10 @@
                         </goals>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <artifactId>maven-release-plugin</artifactId>
+                <version>2.5.3</version>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

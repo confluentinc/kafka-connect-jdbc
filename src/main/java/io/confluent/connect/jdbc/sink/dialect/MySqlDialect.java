@@ -16,37 +16,71 @@
 
 package io.confluent.connect.jdbc.sink.dialect;
 
+import org.apache.kafka.connect.data.Date;
+import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.Time;
+import org.apache.kafka.connect.data.Timestamp;
 
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.Map;
 
 import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.joinToBuilder;
-import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.nCopiesToBuilder;
+import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.copiesToBuilder;
 
 public class MySqlDialect extends DbDialect {
 
   public MySqlDialect() {
-    super(getSqlTypeMap(), "`", "`");
-  }
-
-  private static Map<Schema.Type, String> getSqlTypeMap() {
-    Map<Schema.Type, String> map = new HashMap<>();
-    map.put(Schema.Type.INT8, "TINYINT");
-    map.put(Schema.Type.INT16, "SMALLINT");
-    map.put(Schema.Type.INT32, "INT");
-    map.put(Schema.Type.INT64, "BIGINT");
-    map.put(Schema.Type.FLOAT32, "FLOAT");
-    map.put(Schema.Type.FLOAT64, "DOUBLE");
-    map.put(Schema.Type.BOOLEAN, "TINYINT");
-    map.put(Schema.Type.STRING, "VARCHAR(256)");
-    map.put(Schema.Type.BYTES, "VARBINARY(1024)");
-    return map;
+    super("`", "`");
   }
 
   @Override
-  public String getUpsertQuery(final String table, final Collection<String> keyCols, final Collection<String> cols) {
+  protected String getSqlType(String schemaName, Map<String, String> parameters, Schema.Type type) {
+    if (schemaName != null) {
+      switch (schemaName) {
+        case Decimal.LOGICAL_NAME:
+          // Maximum precision supported by MySQL is 65
+          return "DECIMAL(65," + Integer.parseInt(parameters.get(Decimal.SCALE_FIELD)) + ")";
+        case Date.LOGICAL_NAME:
+          return "DATE";
+        case Time.LOGICAL_NAME:
+          return "TIME(3)";
+        case Timestamp.LOGICAL_NAME:
+          return "DATETIME(3)";
+        default:
+          // pass through to primitive types
+      }
+    }
+    switch (type) {
+      case INT8:
+        return "TINYINT";
+      case INT16:
+        return "SMALLINT";
+      case INT32:
+        return "INT";
+      case INT64:
+        return "BIGINT";
+      case FLOAT32:
+        return "FLOAT";
+      case FLOAT64:
+        return "DOUBLE";
+      case BOOLEAN:
+        return "TINYINT";
+      case STRING:
+        return "VARCHAR(256)";
+      case BYTES:
+        return "VARBINARY(1024)";
+      default:
+        return super.getSqlType(schemaName, parameters, type);
+    }
+  }
+
+  @Override
+  public String getUpsertQuery(
+      final String table,
+      final Collection<String> keyCols,
+      final Collection<String> cols
+  ) {
     //MySql doesn't support SQL 2003:merge so here how the upsert is handled
 
     final StringBuilder builder = new StringBuilder();
@@ -55,12 +89,12 @@ public class MySqlDialect extends DbDialect {
     builder.append("(");
     joinToBuilder(builder, ",", keyCols, cols, escaper());
     builder.append(") values(");
-    nCopiesToBuilder(builder, ",", "?", cols.size() + keyCols.size());
+    copiesToBuilder(builder, ",", "?", cols.size() + keyCols.size());
     builder.append(") on duplicate key update ");
     joinToBuilder(
         builder,
         ",",
-        cols,
+        cols.isEmpty() ? keyCols : cols,
         new StringBuilderUtil.Transform<String>() {
           @Override
           public void apply(StringBuilder builder, String col) {
@@ -70,4 +104,5 @@ public class MySqlDialect extends DbDialect {
     );
     return builder.toString();
   }
+
 }

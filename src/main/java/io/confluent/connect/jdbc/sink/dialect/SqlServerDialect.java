@@ -16,11 +16,14 @@
 
 package io.confluent.connect.jdbc.sink.dialect;
 
+import org.apache.kafka.connect.data.Date;
+import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.Time;
+import org.apache.kafka.connect.data.Timestamp;
 
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -31,21 +34,47 @@ import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.joinToBui
 public class SqlServerDialect extends DbDialect {
 
   public SqlServerDialect() {
-    super(getSqlTypeMap(), "[", "]");
+    super("[", "]");
   }
 
-  private static Map<Schema.Type, String> getSqlTypeMap() {
-    Map<Schema.Type, String> map = new HashMap<>();
-    map.put(Schema.Type.INT8, "tinyint");
-    map.put(Schema.Type.INT16, "smallint");
-    map.put(Schema.Type.INT32, "int");
-    map.put(Schema.Type.INT64, "bigint");
-    map.put(Schema.Type.FLOAT32, "real");
-    map.put(Schema.Type.FLOAT64, "float");
-    map.put(Schema.Type.BOOLEAN, "bit");
-    map.put(Schema.Type.STRING, "varchar(max)");
-    map.put(Schema.Type.BYTES, "varbinary(max)");
-    return map;
+  @Override
+  protected String getSqlType(String schemaName, Map<String, String> parameters, Schema.Type type) {
+    if (schemaName != null) {
+      switch (schemaName) {
+        case Decimal.LOGICAL_NAME:
+          return "decimal(38," + parameters.get(Decimal.SCALE_FIELD) + ")";
+        case Date.LOGICAL_NAME:
+          return "date";
+        case Time.LOGICAL_NAME:
+          return "time";
+        case Timestamp.LOGICAL_NAME:
+          return "datetime2";
+        default:
+          // pass through to normal types
+      }
+    }
+    switch (type) {
+      case INT8:
+        return "tinyint";
+      case INT16:
+        return "smallint";
+      case INT32:
+        return "int";
+      case INT64:
+        return "bigint";
+      case FLOAT32:
+        return "real";
+      case FLOAT64:
+        return "float";
+      case BOOLEAN:
+        return "bit";
+      case STRING:
+        return "varchar(max)";
+      case BYTES:
+        return "varbinary(max)";
+      default:
+        return super.getSqlType(schemaName, parameters, type);
+    }
   }
 
   @Override
@@ -64,7 +93,7 @@ public class SqlServerDialect extends DbDialect {
     String tableName = escaped(table);
     builder.append(tableName);
     builder.append(" with (HOLDLOCK) AS target using (select ");
-    joinToBuilder(builder, ", ", cols, keyCols, prefixedEscaper("? AS "));
+    joinToBuilder(builder, ", ", keyCols, cols, prefixedEscaper("? AS "));
     builder.append(") AS incoming on (");
     joinToBuilder(builder, " and ", keyCols, new StringBuilderUtil.Transform<String>() {
       @Override

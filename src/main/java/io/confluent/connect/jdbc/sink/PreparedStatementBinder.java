@@ -16,96 +16,75 @@
 
 package io.confluent.connect.jdbc.sink;
 
-import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Date;
+import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
-import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.sink.SinkRecord;
 
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.util.HashMap;
 
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
+import io.confluent.connect.jdbc.util.DateTimeUtils;
 
 public class PreparedStatementBinder {
 
-  // Convert values in Connect form from their logical types. These logical converters are discovered by logical type
-  // names specified in the field
-  private static final HashMap<String, LogicalTypeConverter> LOGICAL_CONVERTERS = new HashMap<>();
-  static {
-    LOGICAL_CONVERTERS.put(Decimal.LOGICAL_NAME, new LogicalTypeConverter() {
-      @Override
-      public Object convert(Schema schema, Object value) {
-        if (!(value instanceof BigDecimal)) {
-          throw new DataException("Invalid type for Decimal, underlying representation should be BigDecimal but was " + value.getClass());
-        }
-        return Decimal.fromLogical(schema, (BigDecimal) value);
-      }
-    });
-
-    LOGICAL_CONVERTERS.put(Date.LOGICAL_NAME, new LogicalTypeConverter() {
-      @Override
-      public Object convert(Schema schema, Object value) {
-        if (!(value instanceof java.util.Date)) {
-          throw new DataException("Invalid type for Date, underlying representation should be java.util.Date but was " + value.getClass());
-        }
-        return Date.fromLogical(schema, (java.util.Date) value);
-      }
-    });
-
-    LOGICAL_CONVERTERS.put(Time.LOGICAL_NAME, new LogicalTypeConverter() {
-      @Override
-      public Object convert(Schema schema, Object value) {
-        if (!(value instanceof java.util.Date)) {
-          throw new DataException("Invalid type for Date, underlying representation should be java.util.Date but was " + value.getClass());
-        }
-        return Time.fromLogical(schema, (java.util.Date) value);
-      }
-    });
-
-    LOGICAL_CONVERTERS.put(Timestamp.LOGICAL_NAME, new LogicalTypeConverter() {
-      @Override
-      public Object convert(Schema schema, Object value) {
-        if (!(value instanceof java.util.Date)) {
-          throw new DataException("Invalid type for Date, underlying representation should be java.util.Date but was " + value.getClass());
-        }
-        return Timestamp.fromLogical(schema, (java.util.Date) value);
-      }
-    });
-  }
   private final JdbcSinkConfig.PrimaryKeyMode pkMode;
   private final PreparedStatement statement;
   private final SchemaPair schemaPair;
   private final FieldsMetadata fieldsMetadata;
+  private final JdbcSinkConfig.InsertMode insertMode;
 
   public PreparedStatementBinder(
       PreparedStatement statement,
       JdbcSinkConfig.PrimaryKeyMode pkMode,
       SchemaPair schemaPair,
-      FieldsMetadata fieldsMetadata
+      FieldsMetadata fieldsMetadata,
+      JdbcSinkConfig.InsertMode insertMode
   ) {
     this.pkMode = pkMode;
     this.statement = statement;
     this.schemaPair = schemaPair;
     this.fieldsMetadata = fieldsMetadata;
+    this.insertMode = insertMode;
   }
 
   public void bindRecord(SinkRecord record) throws SQLException {
     final Struct valueStruct = (Struct) record.value();
 
-    // Assumption: the relevant SQL has placeholders for keyFieldNames first followed by nonKeyFieldNames, in iteration order
+    // Assumption: the relevant SQL has placeholders for keyFieldNames first followed by
+    //             nonKeyFieldNames, in iteration order for all INSERT/ UPSERT queries
+    //             the relevant SQL has placeholders for nonKeyFieldNames first followed by
+    //             keyFieldNames, in iteration order for all UPDATE queries
 
     int index = 1;
+    switch (insertMode) {
+      case INSERT:
+      case UPSERT:
+        index = bindKeyFields(record, index);
+        bindNonKeyFields(record, valueStruct, index);
+        break;
 
+      case UPDATE:
+        index = bindNonKeyFields(record, valueStruct, index);
+        bindKeyFields(record, index);
+        break;
+      default:
+        throw new AssertionError();
+
+    }
+    statement.addBatch();
+  }
+
+  private int bindKeyFields(SinkRecord record, int index) throws SQLException {
     switch (pkMode) {
       case NONE:
         if (!fieldsMetadata.keyFieldNames.isEmpty()) {
@@ -141,73 +120,120 @@ public class PreparedStatementBinder {
         }
       }
       break;
-    }
 
+      default:
+        throw new ConnectException("Unknown primary key mode: " + pkMode);
+    }
+    return index;
+  }
+
+  private int bindNonKeyFields(
+      SinkRecord record,
+      Struct valueStruct,
+      int index
+  ) throws SQLException {
     for (final String fieldName : fieldsMetadata.nonKeyFieldNames) {
       final Field field = record.valueSchema().field(fieldName);
       bindField(index++, field.schema(), valueStruct.get(field));
     }
-
-    statement.addBatch();
+    return index;
   }
 
   void bindField(int index, Schema schema, Object value) throws SQLException {
     bindField(statement, index, schema, value);
   }
 
-  static void bindField(PreparedStatement statement, int index, Schema schema, Object value) throws SQLException {
+  static void bindField(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
+      Object value
+  ) throws SQLException {
     if (value == null) {
       statement.setObject(index, null);
     } else {
-      if (schema.name() != null) {
-        LogicalTypeConverter logicalConverter = LOGICAL_CONVERTERS.get(schema.name());
-        if (logicalConverter != null) {
-          value = logicalConverter.convert(schema, value);
+      final boolean bound = maybeBindLogical(statement, index, schema, value);
+      if (!bound) {
+        switch (schema.type()) {
+          case INT8:
+            statement.setByte(index, (Byte) value);
+            break;
+          case INT16:
+            statement.setShort(index, (Short) value);
+            break;
+          case INT32:
+            statement.setInt(index, (Integer) value);
+            break;
+          case INT64:
+            statement.setLong(index, (Long) value);
+            break;
+          case FLOAT32:
+            statement.setFloat(index, (Float) value);
+            break;
+          case FLOAT64:
+            statement.setDouble(index, (Double) value);
+            break;
+          case BOOLEAN:
+            statement.setBoolean(index, (Boolean) value);
+            break;
+          case STRING:
+            statement.setString(index, (String) value);
+            break;
+          case BYTES:
+            final byte[] bytes;
+            if (value instanceof ByteBuffer) {
+              final ByteBuffer buffer = ((ByteBuffer) value).slice();
+              bytes = new byte[buffer.remaining()];
+              buffer.get(bytes);
+            } else {
+              bytes = (byte[]) value;
+            }
+            statement.setBytes(index, bytes);
+            break;
+          default:
+            throw new ConnectException("Unsupported source data type: " + schema.type());
         }
-      }
-      switch (schema.type()) {
-        case INT8:
-          statement.setByte(index, (Byte) value);
-          break;
-        case INT16:
-          statement.setShort(index, (Short) value);
-          break;
-        case INT32:
-          statement.setInt(index, (Integer) value);
-          break;
-        case INT64:
-          statement.setLong(index, (Long) value);
-          break;
-        case FLOAT32:
-          statement.setFloat(index, (Float) value);
-          break;
-        case FLOAT64:
-          statement.setDouble(index, (Double) value);
-          break;
-        case BOOLEAN:
-          statement.setBoolean(index, (Boolean) value);
-          break;
-        case STRING:
-          statement.setString(index, (String) value);
-          break;
-        case BYTES:
-          final byte[] bytes;
-          if (value instanceof ByteBuffer) {
-            final ByteBuffer buffer = ((ByteBuffer) value).slice();
-            bytes = new byte[buffer.remaining()];
-            buffer.get(bytes);
-          } else {
-            bytes = (byte[]) value;
-          }
-          statement.setBytes(index, bytes);
-          break;
-        default:
-          throw new ConnectException("Unsupported source data type: " + schema.type());
       }
     }
   }
 
-  private interface LogicalTypeConverter {
-    Object convert(Schema schema, Object value);
+  static boolean maybeBindLogical(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
+      Object value
+  ) throws SQLException {
+    if (schema.name() != null) {
+      switch (schema.name()) {
+        case Date.LOGICAL_NAME:
+          statement.setDate(
+              index,
+              new java.sql.Date(((java.util.Date) value).getTime()),
+              DateTimeUtils.UTC_CALENDAR.get()
+          );
+          return true;
+        case Decimal.LOGICAL_NAME:
+          statement.setBigDecimal(index, (BigDecimal) value);
+          return true;
+        case Time.LOGICAL_NAME:
+          statement.setTime(
+              index,
+              new java.sql.Time(((java.util.Date) value).getTime()),
+              DateTimeUtils.UTC_CALENDAR.get()
+          );
+          return true;
+        case Timestamp.LOGICAL_NAME:
+          statement.setTimestamp(
+              index,
+              new java.sql.Timestamp(((java.util.Date) value).getTime()),
+              DateTimeUtils.UTC_CALENDAR.get()
+          );
+          return true;
+        default:
+          return false;
+      }
+    }
+    return false;
   }
+
 }

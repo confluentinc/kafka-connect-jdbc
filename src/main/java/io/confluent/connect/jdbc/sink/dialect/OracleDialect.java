@@ -16,11 +16,14 @@
 
 package io.confluent.connect.jdbc.sink.dialect;
 
+import org.apache.kafka.connect.data.Date;
+import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.Time;
+import org.apache.kafka.connect.data.Timestamp;
 
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -30,21 +33,47 @@ import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.joinToBui
 
 public class OracleDialect extends DbDialect {
   public OracleDialect() {
-    super(getSqlTypeMap(), "\"", "\"");
+    super("\"", "\"");
   }
 
-  private static Map<Schema.Type, String> getSqlTypeMap() {
-    Map<Schema.Type, String> map = new HashMap<>();
-    map.put(Schema.Type.INT8, "NUMBER(3,0)");
-    map.put(Schema.Type.INT16, "NUMBER(5,0)");
-    map.put(Schema.Type.INT32, "NUMBER(10,0)");
-    map.put(Schema.Type.INT64, "NUMBER(19,0)");
-    map.put(Schema.Type.FLOAT32, "BINARY_FLOAT");
-    map.put(Schema.Type.FLOAT64, "BINARY_DOUBLE");
-    map.put(Schema.Type.BOOLEAN, "NUMBER(1,0)");
-    map.put(Schema.Type.STRING, "NVARCHAR2(4000)");
-    map.put(Schema.Type.BYTES, "BLOB");
-    return map;
+  @Override
+  protected String getSqlType(String schemaName, Map<String, String> parameters, Schema.Type type) {
+    if (schemaName != null) {
+      switch (schemaName) {
+        case Decimal.LOGICAL_NAME:
+          return "NUMBER(*," + parameters.get(Decimal.SCALE_FIELD) + ")";
+        case Date.LOGICAL_NAME:
+          return "DATE";
+        case Time.LOGICAL_NAME:
+          return "DATE";
+        case Timestamp.LOGICAL_NAME:
+          return "TIMESTAMP";
+        default:
+          // fall through to normal types
+      }
+    }
+    switch (type) {
+      case INT8:
+        return "NUMBER(3,0)";
+      case INT16:
+        return "NUMBER(5,0)";
+      case INT32:
+        return "NUMBER(10,0)";
+      case INT64:
+        return "NUMBER(19,0)";
+      case FLOAT32:
+        return "BINARY_FLOAT";
+      case FLOAT64:
+        return "BINARY_DOUBLE";
+      case BOOLEAN:
+        return "NUMBER(1,0)";
+      case STRING:
+        return "CLOB";
+      case BYTES:
+        return "BLOB";
+      default:
+        return super.getSqlType(schemaName, parameters, type);
+    }
   }
 
   @Override
@@ -58,7 +87,11 @@ public class OracleDialect extends DbDialect {
   }
 
   @Override
-  public String getUpsertQuery(final String table, Collection<String> keyCols, Collection<String> cols) {
+  public String getUpsertQuery(
+      final String table,
+      Collection<String> keyCols,
+      Collection<String> cols
+  ) {
     // https://blogs.oracle.com/cmar/entry/using_merge_to_do_an
 
     final StringBuilder builder = new StringBuilder();
@@ -71,7 +104,11 @@ public class OracleDialect extends DbDialect {
     joinToBuilder(builder, " and ", keyCols, new StringBuilderUtil.Transform<String>() {
       @Override
       public void apply(StringBuilder builder, String col) {
-        builder.append(tableName).append(".").append(escaped(col)).append("=incoming.").append(escaped(col));
+        builder.append(tableName)
+            .append(".")
+            .append(escaped(col))
+            .append("=incoming.")
+            .append(escaped(col));
       }
     });
     builder.append(")");
@@ -80,7 +117,11 @@ public class OracleDialect extends DbDialect {
       joinToBuilder(builder, ",", cols, new StringBuilderUtil.Transform<String>() {
         @Override
         public void apply(StringBuilder builder, String col) {
-          builder.append(tableName).append(".").append(escaped(col)).append("=incoming.").append(escaped(col));
+          builder.append(tableName)
+              .append(".")
+              .append(escaped(col))
+              .append("=incoming.")
+              .append(escaped(col));
         }
       });
     }

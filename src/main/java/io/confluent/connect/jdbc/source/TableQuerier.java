@@ -36,19 +36,27 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   }
 
   protected final QueryMode mode;
+  protected final String schemaPattern;
   protected final String name;
   protected final String query;
   protected final String topicPrefix;
+
+  // Mutable state
+
+  protected final boolean mapNumerics;
   protected long lastUpdate;
   protected PreparedStatement stmt;
   protected ResultSet resultSet;
   protected Schema schema;
 
-  public TableQuerier(QueryMode mode, String nameOrQuery, String topicPrefix) {
+  public TableQuerier(QueryMode mode, String nameOrQuery, String topicPrefix,
+                      String schemaPattern, boolean mapNumerics) {
     this.mode = mode;
+    this.schemaPattern = schemaPattern;
     this.name = mode.equals(QueryMode.TABLE) ? nameOrQuery : null;
     this.query = mode.equals(QueryMode.QUERY) ? nameOrQuery : null;
     this.topicPrefix = topicPrefix;
+    this.mapNumerics = mapNumerics;
     this.lastUpdate = 0;
   }
 
@@ -74,7 +82,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     if (resultSet == null) {
       stmt = getOrCreatePreparedStatement(db);
       resultSet = executeQuery();
-      schema = DataConverter.convertSchema(name, resultSet.getMetaData());
+      schema = DataConverter.convertSchema(name, resultSet.getMetaData(), mapNumerics);
     }
   }
 
@@ -86,15 +94,35 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
 
   public abstract SourceRecord extractRecord() throws SQLException;
 
-  public void close(long now) throws SQLException {
-    if (resultSet != null)
-      resultSet.close();
-    resultSet = null;
+  public void reset(long now) {
+    closeResultSetQuietly();
+    closeStatementQuietly();
     // TODO: Can we cache this and quickly check that it's identical for the next query
     // instead of constructing from scratch since it's almost always the same
     schema = null;
-
     lastUpdate = now;
+  }
+
+  private void closeStatementQuietly() {
+    if (stmt != null) {
+      try {
+        stmt.close();
+      } catch (SQLException ignored) {
+        // intentionally ignored
+      }
+    }
+    stmt = null;
+  }
+
+  private void closeResultSetQuietly() {
+    if (resultSet != null) {
+      try {
+        resultSet.close();
+      } catch (SQLException ignored) {
+        // intentionally ignored
+      }
+    }
+    resultSet = null;
   }
 
   @Override

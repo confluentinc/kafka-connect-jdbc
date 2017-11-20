@@ -27,16 +27,13 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.TimeZone;
 
 /**
  * Utilties for interacting with a JDBC database.
@@ -62,49 +59,80 @@ public class JdbcUtils {
   private static final int GET_COLUMNS_IS_AUTOINCREMENT = 23;
 
 
-  private static final ThreadLocal<SimpleDateFormat> DATE_FORMATTER = new ThreadLocal<SimpleDateFormat>() {
-    @Override
-    protected SimpleDateFormat initialValue() {
-      SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
-      sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
-      return sdf;
-    }
-  };
-
   /**
    * Get a list of tables in the database. This uses the default filters, which only include
    * user-defined tables.
    * @param conn database connection
-   * @return a list of tables
-   * @throws SQLException
+   * @return a list of tables; never null
+   * @throws SQLException if there is an error with the database connection
    */
-  public static List<String> getTables(Connection conn) throws SQLException {
-    return getTables(conn, DEFAULT_TABLE_TYPES);
+  public static List<String> getTables(Connection conn, String schemaPattern) throws SQLException {
+    return getTables(conn, schemaPattern, DEFAULT_TABLE_TYPES);
   }
 
   /**
    * Get a list of table names in the database.
    * @param conn database connection
-   * @param types a set of table types that should be included in the results
-   * @throws SQLException
+   * @param types a set of table types that should be included in the results; may not be null
+   *              but may be empty if the tables should be returned regardless of their type
+   * @return a list of tables; never null
+   * @throws SQLException if there is an error with the database connection
    */
-  public static List<String> getTables(Connection conn, Set<String> types) throws SQLException {
+  public static List<String> getTables(
+      Connection conn,
+      String schemaPattern,
+      Set<String> types
+  ) throws SQLException {
     DatabaseMetaData metadata = conn.getMetaData();
-    try (ResultSet rs = metadata.getTables(null, null, "%", null)) {
+    String[] tableTypes = types.isEmpty() ? null : getActualTableTypes(metadata, types);
+
+    try (ResultSet rs = metadata.getTables(null, schemaPattern, "%", tableTypes)) {
       List<String> tableNames = new ArrayList<>();
       while (rs.next()) {
-        if (types.contains(rs.getString(GET_TABLES_TYPE_COLUMN))) {
-          String colName = rs.getString(GET_TABLES_NAME_COLUMN);
-          // SQLite JDBC driver does not correctly mark these as system tables
-          if (metadata.getDatabaseProductName().equals("SQLite") && colName.startsWith("sqlite_")) {
-            continue;
-          }
-
-          tableNames.add(colName);
+        String colName = rs.getString(GET_TABLES_NAME_COLUMN);
+        // SQLite JDBC driver does not correctly mark these as system tables
+        if (metadata.getDatabaseProductName().equals("SQLite") && colName.startsWith("sqlite_")) {
+          continue;
         }
+
+        tableNames.add(colName);
       }
       return tableNames;
     }
+  }
+
+  /**
+   * Find the available table types that are returned by the JDBC driver that case insensitively
+   * match the specified types.
+   *
+   * @param metadata the database metadata; may not be null but may be empty if no table types
+   * @param types the case-independent table types
+   * @return the array of table types take directly from the list of available types returned by
+   *         the JDBC driver; never null
+   * @throws SQLException if there is an error with the database connection
+   */
+  protected static String[] getActualTableTypes(
+      DatabaseMetaData metadata,
+      Set<String> types
+  ) throws SQLException {
+    // Compute the uppercase form of the desired types ...
+    Set<String> uppercaseTypes = new HashSet<>();
+    for (String type : types) {
+      if (type != null) {
+        uppercaseTypes.add(type.toUpperCase());
+      }
+    }
+    // Now find out the available table types ...
+    Set<String> matchingTableTypes = new HashSet<>();
+    try (ResultSet rs = metadata.getTableTypes()) {
+      while (rs.next()) {
+        String tableType = rs.getString(1);
+        if (tableType != null && uppercaseTypes.contains(tableType.toUpperCase())) {
+          matchingTableTypes.add(tableType);
+        }
+      }
+    }
+    return matchingTableTypes.toArray(new String[matchingTableTypes.size()]);
   }
 
   /**
@@ -113,13 +141,17 @@ public class JdbcUtils {
    * @param table the table to
    * @return the name of the column that is an autoincrement column, or null if there is no
    *         autoincrement column or more than one exists
-   * @throws SQLException
+   * @throws SQLException if there is an error with the database connection
    */
-  public static String getAutoincrementColumn(Connection conn, String table) throws SQLException {
+  public static String getAutoincrementColumn(
+      Connection conn,
+      String schemaPattern,
+      String table
+  ) throws SQLException {
     String result = null;
     int matches = 0;
 
-    try (ResultSet rs = conn.getMetaData().getColumns(null, null, table, "%")) {
+    try (ResultSet rs = conn.getMetaData().getColumns(null, schemaPattern, table, "%")) {
       // Some database drivers (SQLite) don't include all the columns
       if (rs.getMetaData().getColumnCount() >= GET_COLUMNS_IS_AUTOINCREMENT) {
         while (rs.next()) {
@@ -137,7 +169,9 @@ public class JdbcUtils {
     log.trace("Falling back to SELECT detection of auto-increment column for {}:{}", conn, table);
     try (Statement stmt = conn.createStatement()) {
       String quoteString = getIdentifierQuoteString(conn);
-      ResultSet rs = stmt.executeQuery("SELECT * FROM " + quoteString + table + quoteString + " LIMIT 1");
+      ResultSet rs = stmt.executeQuery(
+          "SELECT * FROM " + quoteString + table + quoteString + " LIMIT 1"
+      );
       ResultSetMetaData rsmd = rs.getMetaData();
       for (int i = 1; i < rsmd.getColumnCount(); i++) {
         if (rsmd.isAutoIncrement(i)) {
@@ -149,9 +183,13 @@ public class JdbcUtils {
     return (matches == 1 ? result : null);
   }
 
-  public static boolean isColumnNullable(Connection conn, String table, String column)
-      throws SQLException {
-    try (ResultSet rs = conn.getMetaData().getColumns(null, null, table, column)) {
+  public static boolean isColumnNullable(
+      Connection conn,
+      String schemaPattern,
+      String table,
+      String column
+  ) throws SQLException {
+    try (ResultSet rs = conn.getMetaData().getColumns(null, schemaPattern, table, column)) {
       if (rs.getMetaData().getColumnCount() > GET_COLUMNS_IS_NULLABLE) {
         // Should only be one match
         if (!rs.next()) {
@@ -165,19 +203,10 @@ public class JdbcUtils {
   }
 
   /**
-   * Format the given Date assuming UTC timezone in a format supported by SQL.
-   * @param date the date to convert to a String
-   * @return the formatted string
-   */
-  public static String formatUTC(Date date) {
-    return DATE_FORMATTER.get().format(date);
-  }
-
-  /**
    * Get the string used for quoting identifiers in this database's SQL dialect.
    * @param connection the database connection
    * @return the quote string
-   * @throws SQLException
+   * @throws SQLException if there is an error with the database connection
    */
   public static String getIdentifierQuoteString(Connection connection) throws SQLException {
     String quoteString = connection.getMetaData().getIdentifierQuoteString();
@@ -197,33 +226,44 @@ public class JdbcUtils {
 
   /**
    * Return current time at the database
-   * @param conn
-   * @param cal
-   * @return
+   * @param conn database connection
+   * @param cal calendar
+   * @return the current time at the database
    */
-  public static Timestamp getCurrentTimeOnDB(Connection conn, Calendar cal) throws SQLException, ConnectException {
+  public static Timestamp getCurrentTimeOnDB(
+      Connection conn,
+      Calendar cal
+  ) throws SQLException, ConnectException {
     String query;
 
     // This is ugly, but to run a function, everyone does 'select function()'
     // except Oracle that does 'select function() from dual'
-    // and Derby uses either the dummy table SYSIBM.SYSDUMMY1  or values expression (I chose to use values)
+    // and Derby uses either the dummy table SYSIBM.SYSDUMMY1  or values expression (I chose to
+    // use values)
     String dbProduct = conn.getMetaData().getDatabaseProductName();
-    if ("Oracle".equals(dbProduct))
+    if ("Oracle".equals(dbProduct)) {
       query = "select CURRENT_TIMESTAMP from dual";
-    else if ("Apache Derby".equals(dbProduct))
+    } else if ("Apache Derby".equals(dbProduct) || "DB2 UDB for AS/400".equals(dbProduct)) {
       query = "values(CURRENT_TIMESTAMP)";
-    else
+    } else {
       query = "select CURRENT_TIMESTAMP;";
+    }
 
     try (Statement stmt = conn.createStatement()) {
       log.debug("executing query " + query + " to get current time from database");
       ResultSet rs = stmt.executeQuery(query);
-      if (rs.next())
+      if (rs.next()) {
         return rs.getTimestamp(1, cal);
-      else
-        throw new ConnectException("Unable to get current time from DB using query " + query + " on database " + dbProduct);
+      } else {
+        throw new ConnectException(
+            "Unable to get current time from DB using query " + query + " on database " + dbProduct
+        );
+      }
     } catch (SQLException e) {
-      log.error("Failed to get current time from DB using query " + query + " on database " + dbProduct, e);
+      log.error(
+          "Failed to get current time from DB using query " + query + " on database " + dbProduct,
+          e
+      );
       throw e;
     }
   }

@@ -16,7 +16,11 @@
 
 package io.confluent.connect.jdbc.sink.dialect;
 
+import org.apache.kafka.connect.data.Date;
+import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.Time;
+import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
 
 import java.nio.ByteBuffer;
@@ -29,35 +33,71 @@ import java.util.Map;
 import javax.xml.bind.DatatypeConverter;
 
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import io.confluent.connect.jdbc.util.DateTimeUtils;
 
 import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.Transform;
 import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.joinToBuilder;
-import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.nCopiesToBuilder;
+import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.copiesToBuilder;
 
 public abstract class DbDialect {
 
-  private final Map<Schema.Type, String> schemaTypeToSqlTypeMap;
   private final String escapeStart;
   private final String escapeEnd;
 
-  DbDialect(Map<Schema.Type, String> schemaTypeToSqlTypeMap, String escapeStart, String escapeEnd) {
-    this.schemaTypeToSqlTypeMap = schemaTypeToSqlTypeMap;
+  DbDialect(String escapeStart, String escapeEnd) {
     this.escapeStart = escapeStart;
     this.escapeEnd = escapeEnd;
   }
 
-  public final String getInsert(final String tableName, final Collection<String> keyColumns, final Collection<String> nonKeyColumns) {
+  public final String getInsert(
+      final String tableName,
+      final Collection<String> keyColumns,
+      final Collection<String> nonKeyColumns
+  ) {
     StringBuilder builder = new StringBuilder("INSERT INTO ");
     builder.append(escaped(tableName));
     builder.append("(");
     joinToBuilder(builder, ",", keyColumns, nonKeyColumns, escaper());
     builder.append(") VALUES(");
-    nCopiesToBuilder(builder, ",", "?", keyColumns.size() + nonKeyColumns.size());
+    copiesToBuilder(builder, ",", "?", keyColumns.size() + nonKeyColumns.size());
     builder.append(")");
     return builder.toString();
   }
 
-  public abstract String getUpsertQuery(final String table, final Collection<String> keyColumns, final Collection<String> columns);
+  public final String getUpdate(
+      final String tableName,
+      final Collection<String> keyColumns,
+      final Collection<String> nonKeyColumns
+  ) {
+    StringBuilder builder = new StringBuilder("UPDATE ");
+    builder.append(escaped(tableName));
+    builder.append(" SET ");
+
+    Transform<String> updateTransformer = new Transform<String>() {
+      @Override public void apply(StringBuilder builder, String input) {
+        builder.append(escaped(input));
+        builder.append(" = ?");
+      }
+    };
+
+    joinToBuilder(builder, ", ", nonKeyColumns, updateTransformer);
+
+    if (!keyColumns.isEmpty()) {
+      builder.append(" WHERE ");
+    }
+
+    joinToBuilder(builder, ", ", keyColumns, updateTransformer);
+    return builder.toString();
+  }
+
+
+  public String getUpsertQuery(
+      final String table,
+      final Collection<String> keyColumns,
+      final Collection<String> columns
+  ) {
+    throw new UnsupportedOperationException();
+  }
 
   public String getCreateQuery(String tableName, Collection<SinkRecordField> fields) {
     final List<String> pkFieldNames = extractPrimaryKeyFieldNames(fields);
@@ -107,20 +147,54 @@ public abstract class DbDialect {
   }
 
   protected void writeColumnSpec(StringBuilder builder, SinkRecordField f) {
-    builder.append(escaped(f.name));
+    builder.append(escaped(f.name()));
     builder.append(" ");
-    builder.append(getSqlType(f.type));
-    if (f.defaultValue != null) {
+    builder.append(getSqlType(f.schemaName(), f.schemaParameters(), f.schemaType()));
+    if (f.defaultValue() != null) {
       builder.append(" DEFAULT ");
-      formatColumnValue(builder, f.type, f.defaultValue);
-    } else if (f.isOptional) {
+      formatColumnValue(
+          builder,
+          f.schemaName(),
+          f.schemaParameters(),
+          f.schemaType(),
+          f.defaultValue()
+      );
+    } else if (f.isOptional()) {
       builder.append(" NULL");
     } else {
       builder.append(" NOT NULL");
     }
   }
 
-  static void formatColumnValue(StringBuilder builder, Schema.Type type, Object value) {
+  protected void formatColumnValue(
+      StringBuilder builder,
+      String schemaName,
+      Map<String, String> schemaParameters,
+      Schema.Type type,
+      Object value
+  ) {
+    if (schemaName != null) {
+      switch (schemaName) {
+        case Decimal.LOGICAL_NAME:
+          builder.append(value);
+          return;
+        case Date.LOGICAL_NAME:
+          builder.append("'")
+              .append(DateTimeUtils.formatUtcDate((java.util.Date) value)).append("'");
+          return;
+        case Time.LOGICAL_NAME:
+          builder.append("'")
+              .append(DateTimeUtils.formatUtcTime((java.util.Date) value)).append("'");
+          return;
+        case Timestamp.LOGICAL_NAME:
+          builder.append("'")
+              .append(DateTimeUtils.formatUtcTimestamp((java.util.Date) value)).append("'");
+          return;
+        default:
+          // fall through to regular types
+          break;
+      }
+    }
     switch (type) {
       case INT8:
       case INT16:
@@ -154,12 +228,12 @@ public abstract class DbDialect {
     }
   }
 
-  protected String getSqlType(Schema.Type type) {
-    final String sqlType = schemaTypeToSqlTypeMap.get(type);
-    if (sqlType == null) {
-      throw new ConnectException(String.format("%s type doesn't have a mapping to the SQL database column type", type));
-    }
-    return sqlType;
+  protected String getSqlType(String schemaName, Map<String, String> parameters, Schema.Type type) {
+    throw new ConnectException(String.format(
+        "%s (%s) type doesn't have a mapping to the SQL database column type",
+        schemaName,
+        type
+    ));
   }
 
   protected String escaped(String identifier) {
@@ -187,8 +261,8 @@ public abstract class DbDialect {
   static List<String> extractPrimaryKeyFieldNames(Collection<SinkRecordField> fields) {
     final List<String> pks = new ArrayList<>();
     for (SinkRecordField f : fields) {
-      if (f.isPrimaryKey) {
-        pks.add(f.name);
+      if (f.isPrimaryKey()) {
+        pks.add(f.name());
       }
     }
     return pks;
@@ -210,7 +284,11 @@ public abstract class DbDialect {
 
     if (url.startsWith("jdbc:sap")) {
       // HANA url's are in the format : jdbc:sap://$host:3(instance)(port)/
-      return new HANADialect();
+      return new HanaDialect();
+    }
+
+    if (url.startsWith("jdbc:vertica")) {
+      return new VerticaDialect();
     }
 
     final String protocol = extractProtocolFromUrl(url).toLowerCase();

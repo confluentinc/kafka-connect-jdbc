@@ -18,6 +18,7 @@ package io.confluent.connect.jdbc;
 
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.connect.connector.Task;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceConnector;
@@ -25,9 +26,6 @@ import org.apache.kafka.connect.util.ConnectorUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -36,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.source.JdbcSourceTask;
 import io.confluent.connect.jdbc.source.JdbcSourceTaskConfig;
@@ -55,7 +54,7 @@ public class JdbcSourceConnector extends SourceConnector {
 
   private Map<String, String> configProperties;
   private JdbcSourceConnectorConfig config;
-  private Connection db;
+  private CachedConnectionProvider cachedConnectionProvider;
   private TableMonitorThread tableMonitorThread;
 
   @Override
@@ -73,14 +72,27 @@ public class JdbcSourceConnector extends SourceConnector {
                                  + "error", e);
     }
 
-    String dbUrl = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
-    log.debug("Trying to connect to {}", dbUrl);
-    try {
-      db = DriverManager.getConnection(dbUrl);
-    } catch (SQLException e) {
-      log.error("Couldn't open connection to {}: {}", dbUrl, e);
-      throw new ConnectException(e);
-    }
+    final String dbUrl = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
+    final String dbUser = config.getString(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG);
+    final Password dbPassword = config.getPassword(
+        JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG
+    );
+    final int maxConnectionAttempts = config.getInt(
+        JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_CONFIG
+    );
+    final long connectionRetryBackoff = config.getLong(
+        JdbcSourceConnectorConfig.CONNECTION_BACKOFF_CONFIG
+    );
+    cachedConnectionProvider = new CachedConnectionProvider(
+        dbUrl,
+        dbUser,
+        dbPassword == null ? null : dbPassword.value(),
+        maxConnectionAttempts,
+        connectionRetryBackoff
+    );
+
+    // Initial connection attempt
+    cachedConnectionProvider.getValidConnection();
 
     long tablePollMs = config.getLong(JdbcSourceConnectorConfig.TABLE_POLL_INTERVAL_MS_CONFIG);
     List<String> whitelist = config.getList(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG);
@@ -91,21 +103,32 @@ public class JdbcSourceConnector extends SourceConnector {
     Set<String> tableTypesSet =  new HashSet<>(tableTypes);
 
 
-    if (whitelistSet != null && blacklistSet != null)
+    if (whitelistSet != null && blacklistSet != null) {
       throw new ConnectException(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + " and "
                                  + JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG + " are "
                                  + "exclusive.");
+    }
     String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
+    String schemaPattern = config.getString(JdbcSourceConnectorConfig.SCHEMA_PATTERN_CONFIG);
     if (!query.isEmpty()) {
-      if (whitelistSet != null || blacklistSet != null)
+      if (whitelistSet != null || blacklistSet != null) {
         throw new ConnectException(JdbcSourceConnectorConfig.QUERY_CONFIG + " may not be combined"
                                    + " with whole-table copying settings.");
+      }
       // Force filtering out the entire set of tables since the one task we'll generate is for the
       // query.
       whitelistSet = Collections.emptySet();
+
     }
-    tableMonitorThread = new TableMonitorThread(db, context, tablePollMs, whitelistSet,
-                                                blacklistSet, tableTypesSet);
+    tableMonitorThread = new TableMonitorThread(
+        cachedConnectionProvider,
+        context,
+        schemaPattern,
+        tablePollMs,
+        whitelistSet,
+        blacklistSet,
+        tableTypesSet
+    );
     tableMonitorThread.start();
   }
 
@@ -147,13 +170,7 @@ public class JdbcSourceConnector extends SourceConnector {
     } catch (InterruptedException e) {
       // Ignore, shouldn't be interrupted
     }
-
-    log.debug("Trying to close database connection");
-    try {
-      db.close();
-    } catch (SQLException e) {
-      log.error("Failed to close database connection: ", e);
-    }
+    cachedConnectionProvider.closeQuietly();
   }
 
   @Override

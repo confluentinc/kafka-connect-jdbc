@@ -1,19 +1,76 @@
 JDBC Source Configuration Options
 ---------------------------------
 
+Database
+^^^^^^^^
+
 ``connection.url``
-  JDBC connection URL for the database to load.
+  JDBC connection URL.
 
   * Type: string
-  * Default: ""
   * Importance: high
+  * Dependents: ``table.whitelist``, ``table.blacklist``
 
-``topic.prefix``
-  Prefix to prepend to table names to generate the name of the Kafka topic to publish data to, or in the case of a custom query, the full name of the topic to publish to.
+``connection.user``
+  JDBC connection user.
 
   * Type: string
-  * Default: ""
+  * Default: null
   * Importance: high
+
+``connection.password``
+  JDBC connection password.
+
+  * Type: password
+  * Default: null
+  * Importance: high
+
+``table.whitelist``
+  List of tables to include in copying. If specified, table.blacklist may not be set.
+
+  * Type: list
+  * Default: ""
+  * Importance: medium
+
+``connection.attempts``
+  Maximum number of attempts to retrieve a valid JDBC connection.
+
+  * Type: int
+  * Default: 3
+  * Importance: low
+
+``numeric.precision.mapping``
+  Whether or not to attempt mapping NUMERIC values by precision to integral types
+
+  * Type: boolean
+  * Default: false
+  * Importance: low
+
+``table.blacklist``
+  List of tables to exclude from copying. If specified, table.whitelist may not be set.
+
+  * Type: list
+  * Default: ""
+  * Importance: medium
+
+``connection.backoff.ms``
+  Backoff time in milliseconds between connection attempts.
+
+  * Type: long
+  * Default: 10000
+  * Importance: low
+
+``schema.pattern``
+  Schema pattern to fetch tables metadata from the database:
+
+    * "" retrieves those without a schema,  * null (default) means that the schema name should not be used to narrow the search, all tables metadata would be fetched, regardless their schema.
+
+  * Type: string
+  * Default: null
+  * Importance: medium
+
+Mode
+^^^^
 
 ``mode``
   The mode for updating a table each time it is polled. Options include:
@@ -28,21 +85,9 @@ JDBC Source Configuration Options
 
   * Type: string
   * Default: ""
+  * Valid Values: [, bulk, timestamp, incrementing, timestamp+incrementing]
   * Importance: high
-
-``poll.interval.ms``
-  Frequency in ms to poll for new data in each table.
-
-  * Type: int
-  * Default: 5000
-  * Importance: high
-
-``timestamp.delay.interval.ms``
-  How long to wait after a row with certain timestamp appears before we include it in the result. You may choose to add some delay to allow transactions with earlier timestamp to complete. The first execution will fetch all available records (i.e. starting at timestamp 0) until current time minus the delay. Every following execution will get data from the last time we fetched until current time minus the delay.
-
-  * Type: long
-  * Default: 0
-  * Importance: high
+  * Dependents: ``incrementing.column.name``, ``timestamp.column.name``, ``validate.non.null``
 
 ``incrementing.column.name``
   The name of the strictly incrementing column to use to detect new rows. Any empty value indicates the column should be autodetected by looking for an auto-incrementing column. This column may not be nullable.
@@ -51,6 +96,20 @@ JDBC Source Configuration Options
   * Default: ""
   * Importance: medium
 
+``timestamp.column.name``
+  The name of the timestamp column to use to detect new or modified rows. This column may not be nullable.
+
+  * Type: string
+  * Default: ""
+  * Importance: medium
+
+``validate.non.null``
+  By default, the JDBC connector will validate that all incrementing and timestamp tables have NOT NULL set for the columns being used as their ID/timestamp. If the tables don't, JDBC connector will fail to start. Setting this to false will disable these checks.
+
+  * Type: boolean
+  * Default: true
+  * Importance: low
+
 ``query``
   If specified, the query to perform to select new or updated rows. Use this setting if you want to join tables, select subsets of columns in a table, or filter data. If used, this connector will only copy data using this query -- whole-table copying will be disabled. Different query modes may still be used for incremental updates, but in order to properly construct the incremental query, it must be possible to append a WHERE clause to this query (i.e. no WHERE clauses may be used). If you use a WHERE clause, it must handle incremental queries itself.
 
@@ -58,26 +117,15 @@ JDBC Source Configuration Options
   * Default: ""
   * Importance: medium
 
-``table.blacklist``
-  List of tables to exclude from copying. If specified, table.whitelist may not be set.
+Connector
+^^^^^^^^^
 
-  * Type: list
-  * Default: []
-  * Importance: medium
+``poll.interval.ms``
+  Frequency in ms to poll for new data in each table.
 
-``table.whitelist``
-  List of tables to include in copying. If specified, table.blacklist may not be set.
-
-  * Type: list
-  * Default: []
-  * Importance: medium
-
-``timestamp.column.name``
-  The name of the timestamp column to use to detect new or modified rows. This column may not be nullable.
-
-  * Type: string
-  * Default: ""
-  * Importance: medium
+  * Type: int
+  * Default: 5000
+  * Importance: high
 
 ``batch.max.rows``
   Maximum number of rows to include in a single batch when polling for new data. This setting can be used to limit the amount of data buffered internally in the connector.
@@ -92,6 +140,12 @@ JDBC Source Configuration Options
   * Type: long
   * Default: 60000
   * Importance: low
+
+``topic.prefix``
+  Prefix to prepend to table names to generate the name of the Kafka topic to publish data to, or in the case of a custom query, the full name of the topic to publish to.
+
+  * Type: string
+  * Importance: high
 
 ``table.types``
   By default, the JDBC connector will only detect tables with type TABLE from the source Database. This config allows a command separated list of table types to extract. Options include:
@@ -113,13 +167,12 @@ JDBC Source Configuration Options
   In most cases it only makes sense to have either TABLE or VIEW.
 
   * Type: list
-  * Default: [TABLE]
+  * Default: TABLE
   * Importance: low
 
-``validate.non.null``
-  By default, the JDBC connector will validate that all incrementing and timestamp tables have NOT NULL set for the columns being used as their ID/timestamp. If the tables don't, JDBC connector will fail to start. Setting this to false will disable these checks.
+``timestamp.delay.interval.ms``
+  How long to wait after a row with certain timestamp appears before we include it in the result. You may choose to add some delay to allow transactions with earlier timestamp to complete. The first execution will fetch all available records (i.e. starting at timestamp 0) until current time minus the delay. Every following execution will get data from the last time we fetched until current time minus the delay.
 
-  * Type: boolean
-  * Default: true
-  * Importance: low
-
+  * Type: long
+  * Default: 0
+  * Importance: high

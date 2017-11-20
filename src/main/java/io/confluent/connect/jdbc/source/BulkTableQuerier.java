@@ -36,8 +36,9 @@ import io.confluent.connect.jdbc.util.JdbcUtils;
 public class BulkTableQuerier extends TableQuerier {
   private static final Logger log = LoggerFactory.getLogger(BulkTableQuerier.class);
 
-  public BulkTableQuerier(QueryMode mode, String name, String topicPrefix) {
-    super(mode, name, topicPrefix);
+  public BulkTableQuerier(QueryMode mode, String name, String schemaPattern,
+                          String topicPrefix, boolean mapNumerics) {
+    super(mode, name, topicPrefix, schemaPattern, mapNumerics);
   }
 
   @Override
@@ -53,6 +54,8 @@ public class BulkTableQuerier extends TableQuerier {
         log.debug("{} prepared SQL query: {}", this, query);
         stmt = db.prepareStatement(query);
         break;
+      default:
+        throw new ConnectException("Unknown mode: " + mode);
     }
   }
 
@@ -63,7 +66,7 @@ public class BulkTableQuerier extends TableQuerier {
 
   @Override
   public SourceRecord extractRecord() throws SQLException {
-    Struct record = DataConverter.convertRecord(schema, resultSet);
+    Struct record = DataConverter.convertRecord(schema, resultSet, mapNumerics);
     // TODO: key from primary key? partition?
     final String topic;
     final Map<String, String> partition;
@@ -85,11 +88,11 @@ public class BulkTableQuerier extends TableQuerier {
 
   @Override
   public String toString() {
-    return "BulkTableQuerier{" +
-           "name='" + name + '\'' +
-           ", query='" + query + '\'' +
-           ", topicPrefix='" + topicPrefix + '\'' +
-           '}';
+    return "BulkTableQuerier{"
+           + "name='" + name + '\''
+           + ", query='" + query + '\''
+           + ", topicPrefix='" + topicPrefix + '\''
+           + '}';
   }
 
 }

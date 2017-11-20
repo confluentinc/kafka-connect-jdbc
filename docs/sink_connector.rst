@@ -123,30 +123,38 @@ For both auto-creation and auto-evolution, the nullability of a column is based 
 and default values are also specified based on the default value of the corresponding field if applicable.
 We use the following mapping from Connect schema types to database-specific types:
 
-+-------------+-----------------+-----------------+------------------+---------+----------------+
-| Schema Type | MySQL           | Oracle          | PostgreSQL       | SQLite  | SQL Server     |
-+=============+=================+=================+==================+=========+================+
-| INT8        | TINYINT         | NUMBER(3,0)     | SMALLINT         | NUMERIC | TINYINT        |
-+-------------+-----------------+-----------------+------------------+---------+----------------+
-| INT16       | SMALLINT        | NUMBER(5,0)     | SMALLINT         | NUMERIC | SMALLINT       |
-+-------------+-----------------+-----------------+------------------+---------+----------------+
-| INT32       | INT             | NUMBER(10,0)    | INT              | NUMERIC | INT            |
-+-------------+-----------------+-----------------+------------------+---------+----------------+
-| INT64       | BIGINT          | NUMBER(19,0)    | BIGINT           | NUMERIC | BIGINT         |
-+-------------+-----------------+-----------------+------------------+---------+----------------+
-| FLOAT32     | FLOAT           | BINARY_FLOAT    | REAL             | REAL    | REAL           |
-+-------------+-----------------+-----------------+------------------+---------+----------------+
-| FLOAT64     | DOUBLE          | BINARY_DOUBLE   | DOUBLE PRECISION | REAL    | FLOAT          |
-+-------------+-----------------+-----------------+------------------+---------+----------------+
-| BOOLEAN     | TINYINT         | NUMBER(1,0)     | BOOLEAN          | NUMERIC | BIT            |
-+-------------+-----------------+-----------------+------------------+---------+----------------+
-| STRING      | VARCHAR(256)    | NVARCHAR2(4000) | TEXT             | TEXT    | VARCHAR(MAX)   |
-+-------------+-----------------+-----------------+------------------+---------+----------------+
-| BYTES       | VARBINARY(1024) | BLOB            | BYTEA            | BLOB    | VARBINARY(MAX) |
-+-------------+-----------------+-----------------+------------------+---------+----------------+
++-------------+-----------------+-----------------+------------------+---------+----------------+-----------------+
+| Schema Type | MySQL           | Oracle          | PostgreSQL       | SQLite  | SQL Server     | Vertica         |
++=============+=================+=================+==================+=========+================+=================+
+| INT8        | TINYINT         | NUMBER(3,0)     | SMALLINT         | NUMERIC | TINYINT        | INT             |
++-------------+-----------------+-----------------+------------------+---------+----------------+-----------------+
+| INT16       | SMALLINT        | NUMBER(5,0)     | SMALLINT         | NUMERIC | SMALLINT       | INT             |
++-------------+-----------------+-----------------+------------------+---------+----------------+-----------------+
+| INT32       | INT             | NUMBER(10,0)    | INT              | NUMERIC | INT            | INT             |
++-------------+-----------------+-----------------+------------------+---------+----------------+-----------------+
+| INT64       | BIGINT          | NUMBER(19,0)    | BIGINT           | NUMERIC | BIGINT         | INT             |
++-------------+-----------------+-----------------+------------------+---------+----------------+-----------------+
+| FLOAT32     | FLOAT           | BINARY_FLOAT    | REAL             | REAL    | REAL           | FLOAT           |
++-------------+-----------------+-----------------+------------------+---------+----------------+-----------------+
+| FLOAT64     | DOUBLE          | BINARY_DOUBLE   | DOUBLE PRECISION | REAL    | FLOAT          | FLOAT           |
++-------------+-----------------+-----------------+------------------+---------+----------------+-----------------+
+| BOOLEAN     | TINYINT         | NUMBER(1,0)     | BOOLEAN          | NUMERIC | BIT            | BOOLEAN         |
++-------------+-----------------+-----------------+------------------+---------+----------------+-----------------+
+| STRING      | VARCHAR(256)    | NCLOB           | TEXT             | TEXT    | VARCHAR(MAX)   | VARCHAR(1024)   |
++-------------+-----------------+-----------------+------------------+---------+----------------+-----------------+
+| BYTES       | VARBINARY(1024) | BLOB            | BYTEA            | BLOB    | VARBINARY(MAX) | VARBINARY(1024) |
++-------------+-----------------+-----------------+------------------+---------+----------------+-----------------+
+| 'Decimal'   | DECIMAL(65,s)   | NUMBER(*,s)     | DECIMAL          | NUMERIC | DECIMAL(38,s)  | DECIMAL(18,s)   |
++-------------+-----------------+-----------------+------------------+---------+----------------+-----------------+
+| 'Date'      | DATE            | DATE            | DATE             | NUMERIC | DATE           | DATE            |
++-------------+-----------------+-----------------+------------------+---------+----------------+-----------------+
+| 'Time'      | TIME(3)         | DATE            | TIME             | NUMERIC | TIME           | TIME            |
++-------------+-----------------+-----------------+------------------+---------+----------------+-----------------+
+| 'Timestamp' | TIMESTAMP(3)    | TIMESTAMP       | TIMESTAMP        | NUMERIC | DATETIME2      | TIMESTAMP       |
++-------------+-----------------+-----------------+------------------+---------+----------------+-----------------+
 
 Auto-creation or auto-evolution is not supported for databases not mentioned here.
 
 .. important::
-    For backwards-compatible table schema evolution, new fields in record schemas should be optional or have a default value. If you need to delete a field, the table schema should be manually
-    altered to either drop the corresponding column, assign it a default value, or make it nullable.
+    For backwards-compatible table schema evolution, new fields in record schemas must be optional or have a default value.
+    If you need to delete a field, the table schema should be manually altered to either drop the corresponding column, assign it a default value, or make it nullable.

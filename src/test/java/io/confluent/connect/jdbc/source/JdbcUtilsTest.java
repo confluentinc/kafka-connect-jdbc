@@ -23,6 +23,7 @@ import org.junit.Test;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Set;
 
 import io.confluent.connect.jdbc.util.JdbcUtils;
 
@@ -48,13 +49,27 @@ public class JdbcUtilsTest {
 
   @Test
   public void testGetTablesEmpty() throws Exception {
-    assertEquals(Collections.emptyList(), JdbcUtils.getTables(db.getConnection()));
+    assertEquals(Collections.emptyList(), JdbcUtils.getTables(db.getConnection(), null));
   }
 
   @Test
   public void testGetTablesSingle() throws Exception {
     db.createTable("test", "id", "INT");
-    assertEquals(Arrays.asList("test"), JdbcUtils.getTables(db.getConnection()));
+    assertEquals(Arrays.asList("test"), JdbcUtils.getTables(db.getConnection(), null));
+  }
+
+  @Test
+  public void testFindTablesWithKnownTableType() throws Exception {
+    db.createTable("test", "id", "INT");
+    Set<String> types = Collections.singleton("TABLE");
+    assertEquals(Arrays.asList("test"), JdbcUtils.getTables(db.getConnection(), null, types));
+  }
+
+  @Test
+  public void testNotFindTablesWithUnknownTableType() throws Exception {
+    db.createTable("test", "id", "INT");
+    Set<String> types = Collections.singleton("view");
+    assertEquals(Arrays.asList(), JdbcUtils.getTables(db.getConnection(), null, types));
   }
 
   @Test
@@ -63,19 +78,54 @@ public class JdbcUtilsTest {
     db.createTable("foo", "id", "INT", "bar", "VARCHAR(20)");
     db.createTable("zab", "id", "INT");
     assertEquals(
-        new HashSet<String>(Arrays.asList("test", "foo", "zab")),
-        new HashSet<String>(JdbcUtils.getTables(db.getConnection())));
+        new HashSet<>(Arrays.asList("test", "foo", "zab")),
+        new HashSet<>(JdbcUtils.getTables(db.getConnection(), null)));
+  }
+
+  @Test
+  public void testGetTablesNarrowedToSchemas() throws Exception {
+    Set<String> types = Collections.singleton("TABLE");
+
+    db.createTable("some_table", "id", "INT");
+
+    db.execute("CREATE SCHEMA PUBLIC_SCHEMA");
+    db.execute("SET SCHEMA PUBLIC_SCHEMA");
+    db.createTable("public_table", "id", "INT");
+
+    db.execute("CREATE SCHEMA PRIVATE_SCHEMA");
+    db.execute("SET SCHEMA PRIVATE_SCHEMA");
+    db.createTable("private_table", "id", "INT");
+    db.createTable("another_private_table", "id", "INT");
+
+    assertEquals(
+      new HashSet<>(Arrays.asList("public_table")),
+      new HashSet<>(JdbcUtils.getTables(db.getConnection(), "PUBLIC_SCHEMA")));
+    assertEquals(
+      new HashSet<>(Arrays.asList("private_table", "another_private_table")),
+      new HashSet<>(JdbcUtils.getTables(db.getConnection(), "PRIVATE_SCHEMA")));
+    assertEquals(
+      new HashSet<>(Arrays.asList("some_table", "public_table", "private_table", "another_private_table")),
+      new HashSet<>(JdbcUtils.getTables(db.getConnection(), null)));
+    assertEquals(
+      new HashSet<>(Arrays.asList("public_table")),
+      new HashSet<>(JdbcUtils.getTables(db.getConnection(), "PUBLIC_SCHEMA", types)));
+    assertEquals(
+      new HashSet<>(Arrays.asList("private_table", "another_private_table")),
+      new HashSet<>(JdbcUtils.getTables(db.getConnection(), "PRIVATE_SCHEMA", types)));
+    assertEquals(
+      new HashSet<>(Arrays.asList("some_table", "public_table", "private_table", "another_private_table")),
+      new HashSet<>(JdbcUtils.getTables(db.getConnection(), null, types)));
   }
 
   @Test
   public void testGetAutoincrement() throws Exception {
     // Normal case
     db.createTable("test", "id", "INTEGER NOT NULL GENERATED ALWAYS AS IDENTITY", "bar", "INTEGER");
-    assertEquals("id", JdbcUtils.getAutoincrementColumn(db.getConnection(), "test"));
+    assertEquals("id", JdbcUtils.getAutoincrementColumn(db.getConnection(), null, "test"));
 
     // No auto increment
     db.createTable("none", "id", "INTEGER", "bar", "INTEGER");
-    assertNull(JdbcUtils.getAutoincrementColumn(db.getConnection(), "none"));
+    assertNull(JdbcUtils.getAutoincrementColumn(db.getConnection(), null, "none"));
 
     // We can't check multiple columns because Derby ties auto increment to identity and
     // disallows multiple auto increment columns. This is probably ok, multiple auto increment
@@ -86,21 +136,21 @@ public class JdbcUtilsTest {
                    "foo", "INTEGER",
                    "id", "INTEGER NOT NULL GENERATED ALWAYS AS IDENTITY",
                    "bar", "INTEGER");
-    assertEquals("id", JdbcUtils.getAutoincrementColumn(db.getConnection(), "mixed"));
+    assertEquals("id", JdbcUtils.getAutoincrementColumn(db.getConnection(), null, "mixed"));
   }
 
   @Test
   public void testIsColumnNullable() throws Exception {
     db.createTable("test", "id", "INTEGER NOT NULL GENERATED ALWAYS AS IDENTITY", "bar", "INTEGER");
-    assertFalse(JdbcUtils.isColumnNullable(db.getConnection(), "test", "id"));
-    assertTrue(JdbcUtils.isColumnNullable(db.getConnection(), "test", "bar"));
+    assertFalse(JdbcUtils.isColumnNullable(db.getConnection(), null, "test", "id"));
+    assertTrue(JdbcUtils.isColumnNullable(db.getConnection(), null, "test", "bar"));
 
     // Derby does not seem to allow null
     db.createTable("tstest", "ts", "TIMESTAMP NOT NULL", "tsdefault", "TIMESTAMP",
                    "tsnull", "TIMESTAMP DEFAULT NULL");
-    assertFalse(JdbcUtils.isColumnNullable(db.getConnection(), "tstest", "ts"));
+    assertFalse(JdbcUtils.isColumnNullable(db.getConnection(), null, "tstest", "ts"));
     // The default for TIMESTAMP columns can vary between databases, but for Derby it is nullable
-    assertTrue(JdbcUtils.isColumnNullable(db.getConnection(), "tstest", "tsdefault"));
-    assertTrue(JdbcUtils.isColumnNullable(db.getConnection(), "tstest", "tsnull"));
+    assertTrue(JdbcUtils.isColumnNullable(db.getConnection(), null, "tstest", "tsdefault"));
+    assertTrue(JdbcUtils.isColumnNullable(db.getConnection(), null, "tstest", "tsnull"));
   }
 }

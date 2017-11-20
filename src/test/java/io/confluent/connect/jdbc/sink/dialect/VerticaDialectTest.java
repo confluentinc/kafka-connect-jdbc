@@ -23,29 +23,25 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
-import java.util.Arrays;
-import java.util.Collections;
+public class VerticaDialectTest extends BaseDialectTest {
 
-import static org.junit.Assert.assertEquals;
-
-public class PostgreSqlDialectTest extends BaseDialectTest {
-
-  public PostgreSqlDialectTest() {
-    super(new PostgreSqlDialect());
+  public VerticaDialectTest() {
+    super(new VerticaDialect());
   }
 
   @Test
   public void dataTypeMappings() {
-    verifyDataTypeMapping("SMALLINT", Schema.INT8_SCHEMA);
-    verifyDataTypeMapping("SMALLINT", Schema.INT16_SCHEMA);
+    verifyDataTypeMapping("INT", Schema.INT8_SCHEMA);
+    verifyDataTypeMapping("INT", Schema.INT16_SCHEMA);
     verifyDataTypeMapping("INT", Schema.INT32_SCHEMA);
-    verifyDataTypeMapping("BIGINT", Schema.INT64_SCHEMA);
-    verifyDataTypeMapping("REAL", Schema.FLOAT32_SCHEMA);
-    verifyDataTypeMapping("DOUBLE PRECISION", Schema.FLOAT64_SCHEMA);
+    verifyDataTypeMapping("INT", Schema.INT64_SCHEMA);
+    verifyDataTypeMapping("FLOAT", Schema.FLOAT32_SCHEMA);
+    verifyDataTypeMapping("FLOAT", Schema.FLOAT64_SCHEMA);
     verifyDataTypeMapping("BOOLEAN", Schema.BOOLEAN_SCHEMA);
-    verifyDataTypeMapping("TEXT", Schema.STRING_SCHEMA);
-    verifyDataTypeMapping("BLOB", Schema.BYTES_SCHEMA);
-    verifyDataTypeMapping("DECIMAL", Decimal.schema(0));
+    verifyDataTypeMapping("VARCHAR(1024)", Schema.STRING_SCHEMA);
+    verifyDataTypeMapping("VARBINARY(1024)", Schema.BYTES_SCHEMA);
+    verifyDataTypeMapping("DECIMAL(18,0)", Decimal.schema(0));
+    verifyDataTypeMapping("DECIMAL(18,4)", Decimal.schema(4));
     verifyDataTypeMapping("DATE", Date.SCHEMA);
     verifyDataTypeMapping("TIME", Time.SCHEMA);
     verifyDataTypeMapping("TIMESTAMP", Timestamp.SCHEMA);
@@ -87,19 +83,8 @@ public class PostgreSqlDialectTest extends BaseDialectTest {
   @Test
   public void alterAddTwoCol() {
     verifyAlterAddTwoCols(
-        "ALTER TABLE \"test\" " + System.lineSeparator()
-        + "ADD \"newcol1\" INT NULL," + System.lineSeparator()
-        + "ADD \"newcol2\" INT DEFAULT 42"
+        "ALTER TABLE \"test\" ADD \"newcol1\" INT NULL",
+        "ALTER TABLE \"test\" ADD \"newcol2\" INT DEFAULT 42"
     );
   }
-
-  @Test
-  public void upsert() {
-    assertEquals(
-        "INSERT INTO \"Customer\" (\"id\",\"name\",\"salary\",\"address\") "
-        + "VALUES (?,?,?,?) ON CONFLICT (\"id\") DO UPDATE SET \"name\"=EXCLUDED.\"name\",\"salary\"=EXCLUDED.\"salary\",\"address\"=EXCLUDED.\"address\"",
-        dialect.getUpsertQuery("Customer", Collections.singletonList("id"), Arrays.asList("name", "salary", "address"))
-    );
-  }
-
 }

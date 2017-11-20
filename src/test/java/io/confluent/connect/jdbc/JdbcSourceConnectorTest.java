@@ -28,8 +28,8 @@ import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -39,12 +39,14 @@ import io.confluent.connect.jdbc.source.EmbeddedDerby;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.source.JdbcSourceTask;
 import io.confluent.connect.jdbc.source.JdbcSourceTaskConfig;
+import io.confluent.connect.jdbc.util.CachedConnectionProvider;
+import io.confluent.connect.jdbc.util.JdbcUtils;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
 @RunWith(PowerMockRunner.class)
-@PrepareForTest({JdbcSourceConnector.class})
+@PrepareForTest({JdbcSourceConnector.class, JdbcUtils.class})
 @PowerMockIgnore("javax.management.*")
 public class JdbcSourceConnectorTest {
 
@@ -95,17 +97,21 @@ public class JdbcSourceConnectorTest {
 
   @Test
   public void testStartStop() throws Exception {
-    PowerMock.mockStatic(DriverManager.class);
+    CachedConnectionProvider mockCachedConnectionProvider = PowerMock.createMock(CachedConnectionProvider.class);
+    PowerMock.expectNew(CachedConnectionProvider.class, db.getUrl(), null, null,
+      JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_DEFAULT, JdbcSourceConnectorConfig.CONNECTION_BACKOFF_DEFAULT).andReturn(mockCachedConnectionProvider);
 
-    // Should request a connection, then should close it on stop()
+    // Should request a connection, then should close it on stop(). The background thread may also
+    // request connections any time it performs updates.
     Connection conn = PowerMock.createMock(Connection.class);
-    EasyMock.expect(DriverManager.getConnection(db.getUrl()))
-        .andReturn(conn);
+    EasyMock.expect(mockCachedConnectionProvider.getValidConnection()).andReturn(conn).anyTimes();
+
     // Since we're just testing start/stop, we don't worry about the value here but need to stub
     // something since the background thread will be started and try to lookup metadata.
     EasyMock.expect(conn.getMetaData()).andStubThrow(new SQLException());
-    conn.close();
-    PowerMock.expectLastCall();
+    // Close will be invoked both for the SQLExeption and when the connector is stopped
+    mockCachedConnectionProvider.closeQuietly();
+    PowerMock.expectLastCall().times(2);
 
     PowerMock.replayAll();
 
@@ -175,6 +181,23 @@ public class JdbcSourceConnectorTest {
     connProps.put(JdbcSourceConnectorConfig.QUERY_CONFIG, sample_query);
     connProps.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "foo,bar");
     connector.start(connProps);
+  }
+
+  @Test
+  public void testSchemaPatternUsedForConfigValidation() throws Exception {
+    connProps.put(JdbcSourceConnectorConfig.SCHEMA_PATTERN_CONFIG, "SOME_SCHEMA");
+
+    PowerMock.mockStatic(JdbcUtils.class);
+    EasyMock.expect(JdbcUtils.getTables(EasyMock.anyObject(Connection.class), EasyMock.eq("SOME_SCHEMA"),
+            EasyMock.eq(JdbcUtils.DEFAULT_TABLE_TYPES)))
+      .andReturn(new ArrayList<String>())
+      .atLeastOnce();
+
+    PowerMock.replayAll();
+
+    connector.validate(connProps);
+
+    PowerMock.verifyAll();
   }
 
   private void assertTaskConfigsHaveParentConfigs(List<Map<String, String>> configs) {

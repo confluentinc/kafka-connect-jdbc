@@ -360,7 +360,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         MODE_DEPENDENTS_RECOMMENDER
     ).define(
         TIMESTAMP_COLUMN_NAME_CONFIG,
-        Type.STRING,
+        Type.LIST,
         TIMESTAMP_COLUMN_NAME_DEFAULT,
         Importance.MEDIUM,
         TIMESTAMP_COLUMN_NAME_DOC,

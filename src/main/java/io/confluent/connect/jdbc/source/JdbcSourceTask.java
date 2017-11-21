@@ -115,8 +115,8 @@ public class JdbcSourceTask extends SourceTask {
         = config.getString(JdbcSourceTaskConfig.SCHEMA_PATTERN_CONFIG);
     String incrementingColumn
         = config.getString(JdbcSourceTaskConfig.INCREMENTING_COLUMN_NAME_CONFIG);
-    String timestampColumn
-        = config.getString(JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
+    List<String> timestampColumn
+        = config.getList(JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
     Long timestampDelayInterval
         = config.getLong(JdbcSourceTaskConfig.TIMESTAMP_DELAY_INTERVAL_MS_CONFIG);
     boolean validateNonNulls
@@ -151,6 +151,12 @@ public class JdbcSourceTask extends SourceTask {
       boolean mapNumerics
           = config.getBoolean(JdbcSourceTaskConfig.NUMERIC_PRECISION_MAPPING_CONFIG);
 
+      TimestampHelper timestampHelper = new MultiColumnTimestampHelper(timestampColumn);
+
+      if (!mode.equals(JdbcSourceTaskConfig.MODE_BULK) && timestampColumn.size() == 1) {
+        timestampHelper = new SingleColumnTimestampHelper(timestampColumn.get(0));
+      }
+
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(new BulkTableQuerier(queryMode, tableOrQuery, schemaPattern,
                 topicPrefix, mapNumerics));
@@ -160,11 +166,11 @@ public class JdbcSourceTask extends SourceTask {
                 timestampDelayInterval, schemaPattern, mapNumerics));
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
         tableQueue.add(new TimestampIncrementingTableQuerier(
-            queryMode, tableOrQuery, topicPrefix, timestampColumn, null, offset,
+            queryMode, tableOrQuery, topicPrefix, timestampHelper, null, offset,
                 timestampDelayInterval, schemaPattern, mapNumerics));
       } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
         tableQueue.add(new TimestampIncrementingTableQuerier(
-            queryMode, tableOrQuery, topicPrefix, timestampColumn, incrementingColumn,
+            queryMode, tableOrQuery, topicPrefix, timestampHelper, incrementingColumn,
                 offset, timestampDelayInterval, schemaPattern, mapNumerics));
       }
     }
@@ -267,7 +273,7 @@ public class JdbcSourceTask extends SourceTask {
       String schemaPattern,
       String table,
       String incrementingColumn,
-      String timestampColumn
+      List<String> timestampColumn
   ) {
     try {
       final Connection connection = cachedConnectionProvider.getValidConnection();
@@ -283,7 +289,7 @@ public class JdbcSourceTask extends SourceTask {
       }
       if ((incrementalMode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP)
            || incrementalMode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING))
-          && JdbcUtils.isColumnNullable(connection, schemaPattern, table, timestampColumn)) {
+          && JdbcUtils.areAllColumnsNullable(connection, schemaPattern, table, timestampColumn)) {
         throw new ConnectException("Cannot make incremental queries using timestamp column "
                                    + timestampColumn + " on " + table + " because this column is "
                                    + "nullable.");

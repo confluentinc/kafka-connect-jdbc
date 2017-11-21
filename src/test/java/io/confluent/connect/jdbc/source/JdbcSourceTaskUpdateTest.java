@@ -36,7 +36,6 @@ import java.util.List;
 import java.util.Map;
 
 import io.confluent.connect.jdbc.util.DateTimeUtils;
-import io.confluent.connect.jdbc.util.JdbcUtils;
 
 import static org.junit.Assert.assertEquals;
 
@@ -132,7 +131,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     db.insert(SINGLE_TABLE_NAME, "id", 2);
     db.insert(SINGLE_TABLE_NAME, "id", 3);
 
-    verifyPoll(2, "id", Arrays.asList(2, 3), false, true, TOPIC_PREFIX + SINGLE_TABLE_NAME);
+    verifyPoll(2, "id", Arrays.asList(2, 3), false, true, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     PowerMock.verifyAll();
   }
@@ -157,7 +156,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     db.insert(SINGLE_TABLE_NAME, extraColumn, 33.4f);
     db.insert(SINGLE_TABLE_NAME, extraColumn, 35.4f);
 
-    verifyPoll(2, "id", Arrays.asList(2, 3), false, true, TOPIC_PREFIX + SINGLE_TABLE_NAME);
+    verifyPoll(2, "id", Arrays.asList(2, 3), false, true, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     PowerMock.verifyAll();
   }
@@ -183,9 +182,36 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatUtcTimestamp(new Timestamp(11L)), "id", 3);
     db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatUtcTimestamp(new Timestamp(12L)), "id", 4);
 
-    verifyPoll(2, "id", Arrays.asList(3, 4), true, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
+    verifyPoll(2, "id", Arrays.asList(3, 4), true, false, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     PowerMock.verifyAll();
+  }
+
+  @Test
+  public void testMultiColumnTimestamp() throws Exception {
+    expectInitializeNoOffsets(Arrays.asList(SINGLE_TABLE_PARTITION));
+
+    PowerMock.replayAll();
+    // Manage these manually so we can verify the emitted values
+    db.createTable(SINGLE_TABLE_NAME,
+        "modified", "TIMESTAMP",
+        "created", "TIMESTAMP NOT NULL",
+        "id", "INT");
+    db.insert(SINGLE_TABLE_NAME, "created", DateTimeUtils.formatUtcTimestamp(new Timestamp(10L)), "id", 1);
+    startTask("modified, created", null, null);
+    verifyMultiTimestampFirstPoll(TOPIC_PREFIX + SINGLE_TABLE_NAME);
+
+
+    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatUtcTimestamp(new Timestamp(13L)), "created", DateTimeUtils.formatUtcTimestamp(new Timestamp(10L)), "id", 2);
+    db.insert(SINGLE_TABLE_NAME, "created", DateTimeUtils.formatUtcTimestamp(new Timestamp(11L)), "id", 3);
+    db.insert(SINGLE_TABLE_NAME, "created", DateTimeUtils.formatUtcTimestamp(new Timestamp(12L)), "id", 4);
+
+    verifyPoll(3, "id", Arrays.asList(2, 3, 4), false, false, true, TOPIC_PREFIX + SINGLE_TABLE_NAME);
+
+    PowerMock.verifyAll();
+
+
+
   }
 
   @Test
@@ -213,11 +239,11 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     db.insert(SINGLE_TABLE_NAME, "modified", new Timestamp(currentTime+500L).toString(), "id", 4);
     db.insert(SINGLE_TABLE_NAME, "modified", new Timestamp(currentTime+501L).toString(), "id", 5);
 
-    verifyPoll(2, "id", Arrays.asList(2, 3), true, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
+    verifyPoll(2, "id", Arrays.asList(2, 3), true, false, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     // make sure we get the rest
     Thread.sleep(500);
-    verifyPoll(2, "id", Arrays.asList(4, 5), true, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
+    verifyPoll(2, "id", Arrays.asList(4, 5), true, false, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     PowerMock.verifyAll();
   }
@@ -238,12 +264,36 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     startTask("modified", "id", null);
     verifyIncrementingAndTimestampFirstPoll(TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
-    // Should be able to pick up id 2 because of ID despite same timestamp.
+    // Should be able to pick up id 3 because of ID despite same timestamp.
     // Note this is setup so we can reuse some validation code
     db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatUtcTimestamp(new Timestamp(10L)), "id", 3);
     db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatUtcTimestamp(new Timestamp(11L)), "id", 1);
 
-    verifyPoll(2, "id", Arrays.asList(3, 1), true, true, TOPIC_PREFIX + SINGLE_TABLE_NAME);
+    verifyPoll(2, "id", Arrays.asList(3, 1), true, true, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
+
+    PowerMock.verifyAll();
+  }
+
+  @Test
+  public void testMultiColumnTimestampAndIncrementing() throws Exception {
+    expectInitializeNoOffsets(Arrays.asList(SINGLE_TABLE_PARTITION));
+
+    PowerMock.replayAll();
+
+    // Manage these manually so we can verify the emitted values
+    db.createTable(SINGLE_TABLE_NAME,
+        "modified", "TIMESTAMP",
+        "created", "TIMESTAMP NOT NULL",
+        "id", "INT NOT NULL");
+    db.insert(SINGLE_TABLE_NAME, "created", DateTimeUtils.formatUtcTimestamp(new Timestamp(10L)), "id", 1);
+
+    startTask("modified, created", "id", null);
+    verifyIncrementingAndMultiTimestampFirstPoll(TOPIC_PREFIX + SINGLE_TABLE_NAME);
+
+    db.insert(SINGLE_TABLE_NAME, "created", DateTimeUtils.formatUtcTimestamp(new Timestamp(10L)), "id", 3);
+    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatUtcTimestamp(new Timestamp(11L)), "created", DateTimeUtils.formatUtcTimestamp(new Timestamp(10L)), "id", 1);
+
+    verifyPoll(2, "id", Arrays.asList(3, 1), false, true, true, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     PowerMock.verifyAll();
   }
@@ -265,7 +315,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     startTask(null, "id", null);
 
     // Effectively skips first poll
-    verifyPoll(2, "id", Arrays.asList(2, 3), false, true, TOPIC_PREFIX + SINGLE_TABLE_NAME);
+    verifyPoll(2, "id", Arrays.asList(2, 3), false, true, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     PowerMock.verifyAll();
   }
@@ -290,7 +340,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     startTask(null, "", null); // autoincrementing
 
     // Effectively skips first poll
-    verifyPoll(2, "id", Arrays.asList(2L, 3L), false, true, TOPIC_PREFIX + SINGLE_TABLE_NAME);
+    verifyPoll(2, "id", Arrays.asList(2L, 3L), false, true, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     PowerMock.verifyAll();
   }
@@ -315,7 +365,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     startTask("modified", null, null);
 
     // Effectively skips first poll
-    verifyPoll(2, "id", Arrays.asList(3, 4), true, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
+    verifyPoll(2, "id", Arrays.asList(3, 4), true, false, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     PowerMock.verifyAll();
   }
@@ -342,7 +392,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
 
     startTask("modified", "id", null);
 
-    verifyPoll(3, "id", Arrays.asList(4, 5, 1), true, true, TOPIC_PREFIX + SINGLE_TABLE_NAME);
+    verifyPoll(3, "id", Arrays.asList(4, 5, 1), true, true, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     PowerMock.verifyAll();
   }
@@ -416,7 +466,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatUtcTimestamp(new Timestamp(12L)), "id", 4,
               "user_id", 2);
 
-    verifyPoll(2, "id", Arrays.asList(3, 4), true, false, TOPIC_PREFIX);
+    verifyPoll(2, "id", Arrays.asList(3, 4), true, false, false, TOPIC_PREFIX);
 
     PowerMock.verifyAll();
   }
@@ -461,6 +511,16 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     assertRecordsTopic(records, topic);
   }
 
+  private List<SourceRecord> verifyMultiTimestampFirstPoll(String topic) throws Exception {
+    List<SourceRecord> records = task.poll();
+    assertEquals(1, records.size());
+    assertEquals(Collections.singletonMap(1, 1), countIntValues(records, "id"));
+    assertEquals(Collections.singletonMap(10L, 1), countTimestampValues(records, "created"));
+    assertMultiTimestampOffsets(records);
+    assertRecordsTopic(records, topic);
+    return records;
+  }
+
   private List<SourceRecord> verifyTimestampFirstPoll(String topic) throws Exception {
     List<SourceRecord> records = task.poll();
     assertEquals(1, records.size());
@@ -476,8 +536,16 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     assertIncrementingOffsets(records);
   }
 
+  private void verifyIncrementingAndMultiTimestampFirstPoll(String topic) throws Exception {
+    List<SourceRecord> records = verifyMultiTimestampFirstPoll(topic);
+    assertIncrementingOffsets(records);
+  }
+
+
+
   private <T> void verifyPoll(int numRecords, String valueField, List<T> values,
-                          boolean timestampOffsets, boolean incrementingOffsets, String topic)
+      boolean timestampOffsets, boolean incrementingOffsets, boolean multiTimestampOffsets,
+      String topic)
       throws Exception {
     List<SourceRecord> records = task.poll();
     assertEquals(numRecords, records.size());
@@ -493,6 +561,9 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     }
     if (incrementingOffsets) {
       assertIncrementingOffsets(records);
+    }
+    if (multiTimestampOffsets) {
+      assertMultiTimestampOffsets(records);
     }
 
     assertRecordsTopic(records, topic);
@@ -571,6 +642,17 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     // Should use timestamps as offsets
     for(SourceRecord record : records) {
       Timestamp timestampValue = (Timestamp) ((Struct)record.value()).get("modified");
+      Timestamp offsetValue = TimestampIncrementingOffset.fromMap(record.sourceOffset()).getTimestampOffset();
+      assertEquals(timestampValue, offsetValue);
+    }
+  }
+
+  private void assertMultiTimestampOffsets(List<SourceRecord> records) {
+    for(SourceRecord record : records) {
+      Timestamp timestampValue = (Timestamp) ((Struct)record.value()).get("modified");
+      if (timestampValue == null) {
+        timestampValue = (Timestamp) ((Struct)record.value()).get("created");
+      }
       Timestamp offsetValue = TimestampIncrementingOffset.fromMap(record.sourceOffset()).getTimestampOffset();
       assertEquals(timestampValue, offsetValue);
     }

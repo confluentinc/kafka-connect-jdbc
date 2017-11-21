@@ -140,6 +140,19 @@ public class JdbcUtilsTest {
   }
 
   @Test
+  public void testAreColumnsNullable() throws Exception {
+    db.createTable("tstest", "ts", "TIMESTAMP NOT NULL", "tsdefault", "TIMESTAMP",
+        "tsnull", "TIMESTAMP DEFAULT NULL");
+    assertFalse(JdbcUtils.areAllColumnsNullable(db.getConnection(), null,
+        "tstest", Arrays.asList("ts", "tsdefault", "tsnull")));
+
+    db.createTable("tstestnull", "tsdefault", "TIMESTAMP",
+        "tsnull", "TIMESTAMP");
+    assertTrue(JdbcUtils.areAllColumnsNullable(db.getConnection(), null,
+        "tstestnull", Arrays.asList("tsdefault", "tsnull")));
+  }
+
+  @Test
   public void testIsColumnNullable() throws Exception {
     db.createTable("test", "id", "INTEGER NOT NULL GENERATED ALWAYS AS IDENTITY", "bar", "INTEGER");
     assertFalse(JdbcUtils.isColumnNullable(db.getConnection(), null, "test", "id"));

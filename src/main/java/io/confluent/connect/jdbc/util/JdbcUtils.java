@@ -202,6 +202,20 @@ public class JdbcUtils {
     return false;
   }
 
+  public static boolean areAllColumnsNullable(
+      Connection conn,
+      String schemaPattern,
+      String table,
+      List<String> columns
+  ) throws SQLException {
+    for (String column: columns) {
+      if (!isColumnNullable(conn, schemaPattern, table, column)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   /**
    * Get the string used for quoting identifiers in this database's SQL dialect.
    * @param connection the database connection
@@ -222,6 +236,14 @@ public class JdbcUtils {
    */
   public static String quoteString(String orig, String quote) {
     return quote + orig + quote;
+  }
+
+  public static List<String> quoteList(List<String> origs, String quote) {
+    List<String> quotedOrigs = new ArrayList<>();
+    for (String orig: origs) {
+      quotedOrigs.add(quoteString(orig, quote));
+    }
+    return quotedOrigs;
   }
 
   /**

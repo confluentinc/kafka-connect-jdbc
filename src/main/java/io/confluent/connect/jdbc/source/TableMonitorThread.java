@@ -41,6 +41,7 @@ public class TableMonitorThread extends Thread {
 
   private final CachedConnectionProvider cachedConnectionProvider;
   private final String schemaPattern;
+  private final String tableNamePattern;
   private final ConnectorContext context;
   private final CountDownLatch shutdownLatch;
   private final long pollMs;
@@ -53,6 +54,7 @@ public class TableMonitorThread extends Thread {
       CachedConnectionProvider cachedConnectionProvider,
       ConnectorContext context,
       String schemaPattern,
+      String tableNamePattern,
       long pollMs,
       Set<String> whitelist,
       Set<String> blacklist,
@@ -60,6 +62,7 @@ public class TableMonitorThread extends Thread {
   ) {
     this.cachedConnectionProvider = cachedConnectionProvider;
     this.schemaPattern = schemaPattern;
+    this.tableNamePattern = tableNamePattern;
     this.context = context;
     this.shutdownLatch = new CountDownLatch(1);
     this.pollMs = pollMs;
@@ -121,6 +124,7 @@ public class TableMonitorThread extends Thread {
       tables = JdbcUtils.getTables(
           cachedConnectionProvider.getValidConnection(),
           schemaPattern,
+          tableNamePattern,
           tableTypes
       );
       log.debug("Got the following tables: " + Arrays.toString(tables.toArray()));

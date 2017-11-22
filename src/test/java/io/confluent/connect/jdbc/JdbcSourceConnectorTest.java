@@ -62,6 +62,7 @@ public class JdbcSourceConnectorTest {
     connProps.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, db.getUrl());
     connProps.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
     connProps.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, "test-");
+    connProps.put(JdbcSourceConnectorConfig.TABLE_NAME_PATTERN_CONFIG, "%");
   }
 
   @After
@@ -186,9 +187,13 @@ public class JdbcSourceConnectorTest {
   @Test
   public void testSchemaPatternUsedForConfigValidation() throws Exception {
     connProps.put(JdbcSourceConnectorConfig.SCHEMA_PATTERN_CONFIG, "SOME_SCHEMA");
+    connProps.put(JdbcSourceConnectorConfig.TABLE_NAME_PATTERN_CONFIG, "%");
 
     PowerMock.mockStatic(JdbcUtils.class);
-    EasyMock.expect(JdbcUtils.getTables(EasyMock.anyObject(Connection.class), EasyMock.eq("SOME_SCHEMA"),
+    EasyMock.expect(JdbcUtils.getTables(
+            EasyMock.anyObject(Connection.class),
+            EasyMock.eq("SOME_SCHEMA"),
+            EasyMock.eq("%"),
             EasyMock.eq(JdbcUtils.DEFAULT_TABLE_TYPES)))
       .andReturn(new ArrayList<String>())
       .atLeastOnce();

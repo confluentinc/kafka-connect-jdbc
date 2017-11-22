@@ -66,8 +66,12 @@ public class JdbcUtils {
    * @return a list of tables; never null
    * @throws SQLException if there is an error with the database connection
    */
-  public static List<String> getTables(Connection conn, String schemaPattern) throws SQLException {
-    return getTables(conn, schemaPattern, DEFAULT_TABLE_TYPES);
+  public static List<String> getTables(
+      Connection conn,
+      String schemaPattern,
+      String tableNamePattern
+  ) throws SQLException {
+    return getTables(conn, schemaPattern, tableNamePattern, DEFAULT_TABLE_TYPES);
   }
 
   /**
@@ -81,12 +85,13 @@ public class JdbcUtils {
   public static List<String> getTables(
       Connection conn,
       String schemaPattern,
+      String tableNamePattern,
       Set<String> types
   ) throws SQLException {
     DatabaseMetaData metadata = conn.getMetaData();
     String[] tableTypes = types.isEmpty() ? null : getActualTableTypes(metadata, types);
 
-    try (ResultSet rs = metadata.getTables(null, schemaPattern, "%", tableTypes)) {
+    try (ResultSet rs = metadata.getTables(null, schemaPattern, tableNamePattern, tableTypes)) {
       List<String> tableNames = new ArrayList<>();
       while (rs.next()) {
         String colName = rs.getString(GET_TABLES_NAME_COLUMN);

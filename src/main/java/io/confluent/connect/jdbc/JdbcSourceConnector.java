@@ -110,6 +110,7 @@ public class JdbcSourceConnector extends SourceConnector {
     }
     String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
     String schemaPattern = config.getString(JdbcSourceConnectorConfig.SCHEMA_PATTERN_CONFIG);
+    String tableNamePattern = config.getString(JdbcSourceConnectorConfig.TABLE_NAME_PATTERN_CONFIG);
     if (!query.isEmpty()) {
       if (whitelistSet != null || blacklistSet != null) {
         throw new ConnectException(JdbcSourceConnectorConfig.QUERY_CONFIG + " may not be combined"
@@ -124,6 +125,7 @@ public class JdbcSourceConnector extends SourceConnector {
         cachedConnectionProvider,
         context,
         schemaPattern,
+        tableNamePattern,
         tablePollMs,
         whitelistSet,
         blacklistSet,

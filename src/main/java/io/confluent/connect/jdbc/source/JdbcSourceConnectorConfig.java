@@ -155,6 +155,14 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "metadata would be fetched, regardless their schema.";
   private static final String SCHEMA_PATTERN_DISPLAY = "Schema pattern";
 
+  public static final String TABLE_NAME_PATTERN_CONFIG = "table.name.pattern";
+  private static final String TABLE_NAME_PATTERN_DOC =
+      "Table name pattern to fetch tables metadata from the database:\n"
+      + "  * % retrieves all"
+      + "  * %pattern% retrieves based on pattern.";
+  private static final String TABLE_NAME_PATTERN_DISPLAY = "Table name pattern";
+  private static final String TABLE_NAME_PATTERN_DEFAULT = "%";
+
   public static final String QUERY_CONFIG = "query";
   private static final String QUERY_DOC =
       "If specified, the query to perform to select new or updated rows. Use this setting if you "
@@ -312,6 +320,16 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         6,
         Width.SHORT,
         SCHEMA_PATTERN_DISPLAY
+    ).define(
+        TABLE_NAME_PATTERN_CONFIG,
+        Type.STRING,
+        TABLE_NAME_PATTERN_DEFAULT,
+        Importance.MEDIUM,
+        TABLE_NAME_PATTERN_DOC,
+        DATABASE_GROUP,
+        6,
+        Width.SHORT,
+        TABLE_NAME_PATTERN_DISPLAY
     ).define(
         NUMERIC_PRECISION_MAPPING_CONFIG,
         Type.BOOLEAN,
@@ -472,6 +490,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       String dbUser = (String) config.get(CONNECTION_USER_CONFIG);
       Password dbPassword = (Password) config.get(CONNECTION_PASSWORD_CONFIG);
       String schemaPattern = (String) config.get(JdbcSourceTaskConfig.SCHEMA_PATTERN_CONFIG);
+      String tableNamePattern = (String) config.get(JdbcSourceTaskConfig.TABLE_NAME_PATTERN_CONFIG);
       Set<String> tableTypes = new HashSet<>(
           (List<String>) config.get(JdbcSourceTaskConfig.TABLE_TYPE_CONFIG)
       );
@@ -480,7 +499,9 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       }
       String dbPasswordStr = dbPassword == null ? null : dbPassword.value();
       try (Connection db = DriverManager.getConnection(dbUrl, dbUser, dbPasswordStr)) {
-        return new LinkedList<Object>(JdbcUtils.getTables(db, schemaPattern, tableTypes));
+        return new LinkedList<Object>(
+                JdbcUtils.getTables(db, schemaPattern, tableNamePattern, tableTypes)
+        );
       } catch (SQLException e) {
         throw new ConfigException("Couldn't open connection to " + dbUrl, e);
       }

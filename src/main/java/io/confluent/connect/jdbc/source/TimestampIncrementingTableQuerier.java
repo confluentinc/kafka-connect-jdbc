@@ -16,7 +16,6 @@
 
 package io.confluent.connect.jdbc.source;
 
-import java.util.List;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
@@ -66,9 +65,9 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   private TimestampHelper timestampHelper;
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
-                                           TimestampHelper timestampHelper, String incrementingColumn,
-                                           Map<String, Object> offsetMap, Long timestampDelay,
-                                           String schemaPattern, boolean mapNumerics) {
+      TimestampHelper timestampHelper, String incrementingColumn,
+      Map<String, Object> offsetMap, Long timestampDelay,
+      String schemaPattern, boolean mapNumerics) {
     super(mode, name, topicPrefix, schemaPattern, mapNumerics);
     this.incrementingColumn = incrementingColumn;
     this.timestampDelay = timestampDelay;
@@ -125,7 +124,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     //  timestamp 1235, id 22
     //  timestamp 1236, id 23
     // We should capture both id = 22 (an update) and id = 23 (a new row)
-    timestampHelper.incrementingWhereClauseBuilder(builder, incrementingColumn, quoteString);
+    timestampHelper.addWhereClause(builder, quoteString, incrementingColumn);
   }
 
   private void incrementingWhereClause(StringBuilder builder, String quoteString) {
@@ -138,7 +137,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   }
 
   private void timestampWhereClause(StringBuilder builder, String quoteString) {
-    timestampHelper.buildWhereClause(builder, quoteString);
+    timestampHelper.addWhereClause(builder, quoteString);
   }
 
   @Override
@@ -270,11 +269,11 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
 
   @Override
   public String toString() {
-    return "TimestampIncrementingTableQuerier{" +
-        "incrementingColumn='" + incrementingColumn + '\'' +
-        ", timestampDelay=" + timestampDelay +
-        ", offset=" + offset +
-        ", timestampHelper=" + timestampHelper +
-        '}';
+    return "TimestampIncrementingTableQuerier{"
+        + "incrementingColumn='" + incrementingColumn + '\''
+        + ", timestampDelay=" + timestampDelay
+        + ", offset=" + offset
+        + ", timestampHelper=" + timestampHelper
+        + '}';
   }
 }

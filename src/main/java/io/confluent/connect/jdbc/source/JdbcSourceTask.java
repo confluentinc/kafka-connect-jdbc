@@ -115,7 +115,7 @@ public class JdbcSourceTask extends SourceTask {
         = config.getString(JdbcSourceTaskConfig.SCHEMA_PATTERN_CONFIG);
     String incrementingColumn
         = config.getString(JdbcSourceTaskConfig.INCREMENTING_COLUMN_NAME_CONFIG);
-    List<String> timestampColumn
+    List<String> timestampColumns
         = config.getList(JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
     Long timestampDelayInterval
         = config.getLong(JdbcSourceTaskConfig.TIMESTAMP_DELAY_INTERVAL_MS_CONFIG);
@@ -132,7 +132,7 @@ public class JdbcSourceTask extends SourceTask {
                 schemaPattern,
                 tableOrQuery,
                 incrementingColumn,
-                timestampColumn
+                timestampColumns
             );
           }
           partition = Collections.singletonMap(
@@ -151,27 +151,28 @@ public class JdbcSourceTask extends SourceTask {
       boolean mapNumerics
           = config.getBoolean(JdbcSourceTaskConfig.NUMERIC_PRECISION_MAPPING_CONFIG);
 
-      TimestampHelper timestampHelper = new MultiColumnTimestampHelper(timestampColumn);
-
-      if (!mode.equals(JdbcSourceTaskConfig.MODE_BULK) && timestampColumn.size() == 1) {
-        timestampHelper = new SingleColumnTimestampHelper(timestampColumn.get(0));
+      final TimestampHelper timestampHelper;
+      if (timestampColumns.size() == 1) {
+        timestampHelper = new SingleColumnTimestampHelper(timestampColumns.get(0));
+      } else {
+        timestampHelper = new MultiColumnTimestampHelper(timestampColumns);
       }
 
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(new BulkTableQuerier(queryMode, tableOrQuery, schemaPattern,
-                topicPrefix, mapNumerics));
+            topicPrefix, mapNumerics));
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)) {
-        tableQueue.add(new TimestampIncrementingTableQuerier(
-            queryMode, tableOrQuery, topicPrefix, null, incrementingColumn, offset,
-                timestampDelayInterval, schemaPattern, mapNumerics));
+        tableQueue.add(new TimestampIncrementingTableQuerier(queryMode, tableOrQuery, topicPrefix,
+            null, incrementingColumn, offset, timestampDelayInterval, schemaPattern,
+            mapNumerics));
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
-        tableQueue.add(new TimestampIncrementingTableQuerier(
-            queryMode, tableOrQuery, topicPrefix, timestampHelper, null, offset,
-                timestampDelayInterval, schemaPattern, mapNumerics));
+        tableQueue.add(new TimestampIncrementingTableQuerier(queryMode, tableOrQuery, topicPrefix,
+            timestampHelper, null, offset, timestampDelayInterval, schemaPattern,
+            mapNumerics));
       } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
         tableQueue.add(new TimestampIncrementingTableQuerier(
-            queryMode, tableOrQuery, topicPrefix, timestampHelper, incrementingColumn,
-                offset, timestampDelayInterval, schemaPattern, mapNumerics));
+            queryMode, tableOrQuery, topicPrefix, timestampHelper, incrementingColumn, offset,
+            timestampDelayInterval, schemaPattern, mapNumerics));
       }
     }
 

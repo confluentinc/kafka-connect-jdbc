@@ -120,8 +120,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public static final String TIMESTAMP_COLUMN_NAME_CONFIG = "timestamp.column.name";
   private static final String TIMESTAMP_COLUMN_NAME_DOC =
-      "The name of the timestamp column to use to detect new or modified rows. This column may "
-      + "not be nullable.";
+      "Comma separated list of one or more timestamp columns to detect new or modified rows in "
+      + "the order specified. At least one column may not be nullable.";
   public static final String TIMESTAMP_COLUMN_NAME_DEFAULT = "";
   private static final String TIMESTAMP_COLUMN_NAME_DISPLAY = "Timestamp Column Name";
 

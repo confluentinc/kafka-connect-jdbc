@@ -97,9 +97,9 @@ Mode
   * Importance: medium
 
 ``timestamp.column.name``
-  The name of the timestamp column to use to detect new or modified rows. This column may not be nullable.
+  Comma separated list of one or more timestamp columns to detect new or modified rows in the order specified. At least one column may not be nullable.
 
-  * Type: string
+  * Type: list
   * Default: ""
   * Importance: medium
 

@@ -16,6 +16,7 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.JdbcSourceConnector;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -201,7 +202,6 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     startTask("modified, created", null, null);
     verifyMultiTimestampFirstPoll(TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
-
     db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatUtcTimestamp(new Timestamp(13L)), "created", DateTimeUtils.formatUtcTimestamp(new Timestamp(10L)), "id", 2);
     db.insert(SINGLE_TABLE_NAME, "created", DateTimeUtils.formatUtcTimestamp(new Timestamp(11L)), "id", 3);
     db.insert(SINGLE_TABLE_NAME, "created", DateTimeUtils.formatUtcTimestamp(new Timestamp(12L)), "id", 4);
@@ -209,9 +209,6 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     verifyPoll(3, "id", Arrays.asList(2, 3, 4), false, false, true, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     PowerMock.verifyAll();
-
-
-
   }
 
   @Test
@@ -670,5 +667,4 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
       assertEquals(partition, record.sourcePartition());
     }
   }
-
 }

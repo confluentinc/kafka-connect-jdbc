@@ -40,7 +40,7 @@ public class DateTimeUtils {
           sdf.setTimeZone(UTC);
           return sdf;
         }
-      };
+      };   
 
   private static final ThreadLocal<SimpleDateFormat> UTC_TIME_FORMAT
       = new ThreadLocal<SimpleDateFormat>() {
@@ -59,6 +59,14 @@ public class DateTimeUtils {
           return sdf;
         }
       };
+  
+  private static final ThreadLocal<SimpleDateFormat> DEFAULT_TIMESTAMP_FORMAT
+      = new ThreadLocal<SimpleDateFormat>() {
+        protected SimpleDateFormat initialValue() {
+          SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+          return sdf;
+        }
+      };
 
   public static String formatUtcDate(Date date) {
     return UTC_DATE_FORMAT.get().format(date);
@@ -70,6 +78,28 @@ public class DateTimeUtils {
 
   public static String formatUtcTimestamp(Date date) {
     return UTC_TIMESTAMP_FORMAT.get().format(date);
+  }
+  
+  public static String formatDefaultTimestamp(Date date) {
+    return DEFAULT_TIMESTAMP_FORMAT.get().format(date);
+  }
+  
+  private static ThreadLocal<Calendar> specificTimezoneCalendar = null;
+  
+  public static ThreadLocal<Calendar> getSpecificTimezoneCalendarInstance(final String dbTimeZone) {
+    if (specificTimezoneCalendar == null) {
+      synchronized (ThreadLocal.class) {
+        if (specificTimezoneCalendar == null) {
+          specificTimezoneCalendar = new ThreadLocal<Calendar>() {
+            @Override
+            protected Calendar initialValue() {
+              return new GregorianCalendar(TimeZone.getTimeZone(dbTimeZone));
+            }
+          };
+        }
+      }
+    }
+    return specificTimezoneCalendar;
   }
 
 }

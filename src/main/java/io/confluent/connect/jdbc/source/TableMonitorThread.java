@@ -137,8 +137,8 @@ public class TableMonitorThread extends Thread {
     final List<String> filteredTables;
     if (whitelist != null) {
       filteredTables = new ArrayList<>(tables.size());
-      for (String table : tables) {
-        if (whitelist.contains(table)) {
+      for (String table : whitelist) {
+        if (tables.contains(table) || JdbcUtils.isAView(table)) {
           filteredTables.add(table);
         }
       }

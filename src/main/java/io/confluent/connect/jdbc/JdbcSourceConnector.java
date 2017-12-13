@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.Set;
 
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
+import io.confluent.connect.jdbc.util.JdbcUtils;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.source.JdbcSourceTask;
 import io.confluent.connect.jdbc.source.JdbcSourceTaskConfig;
@@ -56,6 +57,7 @@ public class JdbcSourceConnector extends SourceConnector {
   private JdbcSourceConnectorConfig config;
   private CachedConnectionProvider cachedConnectionProvider;
   private TableMonitorThread tableMonitorThread;
+  private Map<String, String> viewsDefinitions;
 
   @Override
   public String version() {
@@ -94,8 +96,10 @@ public class JdbcSourceConnector extends SourceConnector {
     // Initial connection attempt
     cachedConnectionProvider.getValidConnection();
 
-    long tablePollMs = config.getLong(JdbcSourceConnectorConfig.TABLE_POLL_INTERVAL_MS_CONFIG);
     List<String> whitelist = config.getList(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG);
+    this.viewsDefinitions = this.mapDefinitionsToViews(whitelist,
+      StringUtils.getListFromStringValueWithEscapedCommas(
+        config.getString(JdbcSourceConnectorConfig.VIEW_DEFINITION_LIST_CONFIG), false));
     Set<String> whitelistSet = whitelist.isEmpty() ? null : new HashSet<>(whitelist);
     List<String> blacklist = config.getList(JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG);
     Set<String> blacklistSet = blacklist.isEmpty() ? null : new HashSet<>(blacklist);
@@ -120,6 +124,7 @@ public class JdbcSourceConnector extends SourceConnector {
       whitelistSet = Collections.emptySet();
 
     }
+    long tablePollMs = config.getLong(JdbcSourceConnectorConfig.TABLE_POLL_INTERVAL_MS_CONFIG);
     tableMonitorThread = new TableMonitorThread(
         cachedConnectionProvider,
         context,
@@ -152,9 +157,21 @@ public class JdbcSourceConnector extends SourceConnector {
       List<List<String>> tablesGrouped = ConnectorUtils.groupPartitions(currentTables, numGroups);
       List<Map<String, String>> taskConfigs = new ArrayList<>(tablesGrouped.size());
       for (List<String> taskTables : tablesGrouped) {
+        List<String> taskViewsDefinitions = new ArrayList<>();
+        for (String table : taskTables) {
+          if (viewsDefinitions != null && viewsDefinitions.keySet().contains(table)) {
+            taskViewsDefinitions.add(
+                StringUtils.augmentCommaEscapingForTaskConfigParsing(viewsDefinitions.get(table)));
+          }
+        }
+        for (String s : taskViewsDefinitions) {
+          log.debug("taskViewsDefinitions elem : " + s);
+        }
         Map<String, String> taskProps = new HashMap<>(configProperties);
         taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG,
                       StringUtils.join(taskTables, ","));
+        taskProps.put(JdbcSourceTaskConfig.VIEWS_DEFINITIONS,
+            StringUtils.join(taskViewsDefinitions, ","));
         taskConfigs.add(taskProps);
       }
       return taskConfigs;
@@ -176,5 +193,37 @@ public class JdbcSourceConnector extends SourceConnector {
   @Override
   public ConfigDef config() {
     return JdbcSourceConnectorConfig.CONFIG_DEF;
+  }
+  
+  private Map<String, String> mapDefinitionsToViews(List<String> whitelist,
+      List<String> viewsDefinitionsList) {
+    List<String> viewsList = new ArrayList<>();
+    for (String elem : whitelist) {
+      if (JdbcUtils.isAView(elem)) {
+        viewsList.add(elem);
+      }
+    }
+    for (String s : viewsDefinitionsList) {
+      log.debug("viewsDefinitionsList elem : " + s);
+    }
+    Map<String, String> viewsDefinitions = new HashMap<>();
+    if (viewsList.size() > 0) {
+      if (viewsDefinitionsList.isEmpty()) {
+        throw new ConnectException(JdbcSourceConnectorConfig.VIEW_DEFINITION_LIST_CONFIG
+            + " must not be empty when views are declared in "
+                + JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + " (each prefixed by "
+                + JdbcUtils.VIEW_DEFINITION_TAG + ").");
+      }
+      try {
+        viewsDefinitions = StringUtils.listsToMap(viewsList, viewsDefinitionsList);
+      } catch (IllegalArgumentException e) {
+        throw new ConnectException(JdbcSourceConnectorConfig.VIEW_DEFINITION_LIST_CONFIG
+            + " must contain the same number of views definitions than views declared in "
+            + JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + ". Possible solution : "
+            + "check SQL comma escaping (with 4 backslashes before each comma : \\\\\\\\,).");
+      }
+    }
+    log.debug("viewsDefinitions : " + viewsDefinitions);
+    return viewsDefinitions;
   }
 }

@@ -16,6 +16,11 @@
 
 package io.confluent.connect.jdbc.util;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 /**
  * General string utilities that are missing from the standard library and may commonly be
  * required by Connector or Task implementations.
@@ -41,5 +46,38 @@ public class StringUtils {
       result.append(elem);
     }
     return result.toString();
+  }
+  
+  //temporary (ugly) fix as getList(key) in AbstractConfig.java doesn't support escaped String (https://issues.apache.org/jira/browse/KAFKA-4524)
+  public static List<String> getListFromStringValueWithEscapedCommas(String value,
+      boolean removeCommaEscaping) {
+    List<String> list = new ArrayList<String>();
+    String[] parts = value.split("(?<!\\\\),");
+    for (String s : parts) {
+      String s2 = (removeCommaEscaping) ? s.replaceAll("\\\\", "") : s;
+      list.add(s2);
+    }
+    return list;
+  }
+ 
+  public static String augmentCommaEscapingForTaskConfigParsing(String value) {
+    return value.replaceAll("\\\\", "\\\\\\\\\\\\\\\\");
+  }
+ 
+  public static String removeCommaEscaping(String value) {
+    return value.replaceAll("\\\\", "");
+  }
+  
+  public static Map<String, String> listsToMap(List<String> keysList, List<String> valuesList) {
+    if (keysList.size() != valuesList.size()) {
+      throw new IllegalArgumentException("keysList and valuesList must have the same size.");
+    }                                 
+    Map<String, String> mapFromLists = new HashMap<>();
+    int entryNumber = 0;
+    for (String key :keysList) {
+      mapFromLists.put(key, valuesList.get(entryNumber));
+      entryNumber++;
+    }
+    return mapFromLists;
   }
 }

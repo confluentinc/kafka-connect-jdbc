@@ -31,7 +31,6 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Collections;
 import java.util.Map;
-
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.JdbcUtils;
 
@@ -63,22 +62,29 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   private String incrementingColumn;
   private long timestampDelay;
   private TimestampIncrementingOffset offset;
+  private final String dbTimeZone;
+  private final String viewDefinition;
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
                                            String timestampColumn, String incrementingColumn,
                                            Map<String, Object> offsetMap, Long timestampDelay,
-                                           String schemaPattern, boolean mapNumerics) {
+                                           String schemaPattern, boolean mapNumerics,
+                                           final String dbTimeZone, final String viewDefinition) {
     super(mode, name, topicPrefix, schemaPattern, mapNumerics);
     this.timestampColumn = timestampColumn;
     this.incrementingColumn = incrementingColumn;
     this.timestampDelay = timestampDelay;
     this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
+    this.dbTimeZone = dbTimeZone;
+    this.viewDefinition = viewDefinition;
   }
-
+  
   @Override
   protected void createPreparedStatement(Connection db) throws SQLException {
-    // Default when unspecified uses an autoincrementing column
-    if (incrementingColumn != null && incrementingColumn.isEmpty()) {
+    // Default when unspecified uses an autoincrementing column.
+    // Not supported with Connect defined views.
+    if (!JdbcUtils.isAView(this.name) && incrementingColumn != null
+        && incrementingColumn.isEmpty()) {
       incrementingColumn = JdbcUtils.getAutoincrementColumn(db, schemaPattern, name);
     }
 
@@ -89,7 +95,19 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     switch (mode) {
       case TABLE:
         builder.append("SELECT * FROM ");
-        builder.append(JdbcUtils.quoteString(name, quoteString));
+        // Append schema name prefix to table name in case the user is not the owner of the schema.
+        // Views will set the schema prefix in their SQL definition.
+        if (!JdbcUtils.isAView(this.name) && schemaPattern != null) {
+          builder.append(JdbcUtils.quoteString(schemaPattern, quoteString));
+          builder.append(".");
+        }
+        if (JdbcUtils.isAView(this.name)) {
+          builder.append(viewDefinition);
+          // Append an alias for the view, needed by some databases
+          builder.append(" " + this.name);
+        } else {
+          builder.append(JdbcUtils.quoteString(name, quoteString));
+        }
         break;
       case QUERY:
         builder.append(query);
@@ -170,10 +188,29 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
           DateTimeUtils.UTC_CALENDAR.get()
       ).getTime();
       Timestamp endTime = new Timestamp(currentDbTime - timestampDelay);
-      stmt.setTimestamp(1, endTime, DateTimeUtils.UTC_CALENDAR.get());
-      stmt.setTimestamp(2, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
+      if (this.dbTimeZone.equals("UTC") || this.dbTimeZone == null || this.dbTimeZone.isEmpty()) {
+        stmt.setTimestamp(1, endTime, DateTimeUtils.UTC_CALENDAR.get());
+        stmt.setTimestamp(2, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
+        stmt.setTimestamp(4, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
+        //log.debug("tsOffset and endTime timestamps were set using default UTC Calendar");
+      } else {
+        if (this.dbTimeZone.trim().equals(JdbcUtils.JVM_TIMEZONE)) {
+          stmt.setTimestamp(1, endTime);
+          stmt.setTimestamp(2, tsOffset);
+          stmt.setTimestamp(4, tsOffset);
+          //log.debug("tsOffset and endTime timestamps were set using jvm timezone");
+        } else {
+          stmt.setTimestamp(1, endTime,
+              DateTimeUtils.getSpecificTimezoneCalendarInstance(this.dbTimeZone).get());
+          stmt.setTimestamp(2, tsOffset,
+              DateTimeUtils.getSpecificTimezoneCalendarInstance(this.dbTimeZone).get());
+          stmt.setTimestamp(4, tsOffset,
+              DateTimeUtils.getSpecificTimezoneCalendarInstance(this.dbTimeZone).get());
+          //log.info("tsOffset and endTime timestamps were set using "
+          //    + this.dbTimeZone + " timezone");
+        }
+      }
       stmt.setLong(3, incOffset);
-      stmt.setTimestamp(4, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
       log.debug(
           "Executing prepared statement with start time value = {} end time = {} and incrementing"
           + " value = {}",
@@ -184,26 +221,49 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     } else if (incrementingColumn != null) {
       Long incOffset = offset.getIncrementingOffset();
       stmt.setLong(1, incOffset);
-      log.debug("Executing prepared statement with incrementing value = {}", incOffset);
+      log.info("Executing prepared statement with incrementing value = {}", incOffset);
     } else if (timestampColumn != null) {
       Timestamp tsOffset = offset.getTimestampOffset();
       final long currentDbTime = JdbcUtils.getCurrentTimeOnDB(
           stmt.getConnection(),
           DateTimeUtils.UTC_CALENDAR.get()
       ).getTime();
+      
       Timestamp endTime = new Timestamp(currentDbTime - timestampDelay);
-      stmt.setTimestamp(1, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
-      stmt.setTimestamp(2, endTime, DateTimeUtils.UTC_CALENDAR.get());
-      log.debug("Executing prepared statement with timestamp value = {} end time = {}",
+      log.info("endTime : " + endTime + " ; " + "currentDbTime : " + currentDbTime + "; "
+          + "timestampDelay : " + timestampDelay);
+      if (this.dbTimeZone.equals("UTC") || this.dbTimeZone == null || this.dbTimeZone.isEmpty()) {
+        stmt.setTimestamp(1, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
+        stmt.setTimestamp(2, endTime, DateTimeUtils.UTC_CALENDAR.get());
+        log.info("tsOffset and endTime timestamps were set using default UTC Calendar");
+      } else {
+        if (this.dbTimeZone.trim().equals(JdbcUtils.JVM_TIMEZONE)) {
+          stmt.setTimestamp(1, tsOffset);
+          stmt.setTimestamp(2, endTime);
+          log.info("tsOffset and endTime timestamps were set using jvm timezone");
+        } else {
+          stmt.setTimestamp(2, tsOffset,
+              DateTimeUtils.getSpecificTimezoneCalendarInstance(this.dbTimeZone).get());
+          stmt.setTimestamp(2, endTime,
+              DateTimeUtils.getSpecificTimezoneCalendarInstance(this.dbTimeZone).get());
+          log.info("tsOffset and endTime timestamps were set using "
+              + this.dbTimeZone + " timezone");
+        }
+      }
+      /*log.info("Executing prepared statement with timestamp value = {} end time = {}",
                 DateTimeUtils.formatUtcTimestamp(tsOffset),
-                DateTimeUtils.formatUtcTimestamp(endTime));
+                DateTimeUtils.formatUtcTimestamp(endTime));*/
+      log.info("Executing prepared statement with timestamp value = {} end time = {}",
+          DateTimeUtils.formatDefaultTimestamp(tsOffset),
+          DateTimeUtils.formatDefaultTimestamp(endTime));
     }
+    log.debug("Prepared statement is : " + stmt.toString());
     return stmt.executeQuery();
   }
 
   @Override
   public SourceRecord extractRecord() throws SQLException {
-    final Struct record = DataConverter.convertRecord(schema, resultSet, mapNumerics);
+    final Struct record = DataConverter.convertRecord(schema, resultSet, mapNumerics, dbTimeZone);
     offset = extractOffset(schema, record);
     // TODO: Key?
     final String topic;

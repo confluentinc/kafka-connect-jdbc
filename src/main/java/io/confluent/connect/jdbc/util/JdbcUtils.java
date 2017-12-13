@@ -57,8 +57,11 @@ public class JdbcUtils {
   private static final int GET_COLUMNS_COLUMN_NAME = 4;
   private static final int GET_COLUMNS_IS_NULLABLE = 18;
   private static final int GET_COLUMNS_IS_AUTOINCREMENT = 23;
-
-
+  
+  public static final String JVM_TIMEZONE = "jvm";
+  // String tag to be used as an marker to identify a view in table.whitelist config
+  public static final String VIEW_DEFINITION_TAG = "view_";
+  
   /**
    * Get a list of tables in the database. This uses the default filters, which only include
    * user-defined tables.
@@ -266,6 +269,16 @@ public class JdbcUtils {
           e
       );
       throw e;
+    }
+  }
+  
+  public static boolean isAView(String whiteListElement) {
+    log.debug("test if '" + whiteListElement + "' is a view :");
+    if (whiteListElement.startsWith(VIEW_DEFINITION_TAG)) {
+      log.debug("'" + whiteListElement + "' is a view");
+      return true;
+    } else {
+      return false;
     }
   }
 }

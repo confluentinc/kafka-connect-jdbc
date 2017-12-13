@@ -66,7 +66,7 @@ public class BulkTableQuerier extends TableQuerier {
 
   @Override
   public SourceRecord extractRecord() throws SQLException {
-    Struct record = DataConverter.convertRecord(schema, resultSet, mapNumerics);
+    Struct record = DataConverter.convertRecord(schema, resultSet, mapNumerics, null);
     // TODO: key from primary key? partition?
     final String topic;
     final Map<String, String> partition;

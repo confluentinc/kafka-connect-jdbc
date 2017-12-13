@@ -183,6 +183,15 @@ public class JdbcUtils {
     return (matches == 1 ? result : null);
   }
 
+  /**
+   * Checks if the input column is nullable or not
+   * @param conn the database connection
+   * @param schemaPattern the schema pattern as specified in config
+   * @param table the name of the database table to look up the column
+   * @param column name of the column
+   * @return true if the column is nullable or not present; false otherwise
+   * @throws SQLException if there is an error with the database connection
+   */
   public static boolean isColumnNullable(
       Connection conn,
       String schemaPattern,
@@ -202,6 +211,15 @@ public class JdbcUtils {
     return false;
   }
 
+  /**
+   * Checks if all columns are nullable
+   * @param conn database connection
+   * @param schemaPattern the schema pattern as specified in config
+   * @param table the name of the database table to look up the columns
+   * @param columns the list of columns to validate
+   * @return false if any column is not nullable, else true
+   * @throws SQLException if there is an error with the database connection
+   */
   public static boolean areAllColumnsNullable(
       Connection conn,
       String schemaPattern,

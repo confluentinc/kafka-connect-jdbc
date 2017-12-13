@@ -81,6 +81,13 @@ public class JdbcSourceConnectorConfigTest {
   }
 
   @Test
+  public void generateConfig() throws Exception {
+    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, db.getUrl());
+    configDef = JdbcSourceConnectorConfig.baseConfigDef();
+    System.out.println(configDef.toEnrichedRst());
+  }
+
+  @Test
   public void testConfigTableNameRecommenderWithoutSchemaOrTableTypes() throws Exception {
     props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, db.getUrl());
     configDef = JdbcSourceConnectorConfig.baseConfigDef();

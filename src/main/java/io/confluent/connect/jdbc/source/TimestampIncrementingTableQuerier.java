@@ -253,7 +253,8 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       /*log.info("Executing prepared statement with timestamp value = {} end time = {}",
                 DateTimeUtils.formatUtcTimestamp(tsOffset),
                 DateTimeUtils.formatUtcTimestamp(endTime));*/
-      log.info("Executing prepared statement with timestamp value = {} end time = {}",
+      log.info("Executing prepared statement for {} with timestamp value = {} end time = {}",
+          name,
           DateTimeUtils.formatDefaultTimestamp(tsOffset),
           DateTimeUtils.formatDefaultTimestamp(endTime));
     }

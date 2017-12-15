@@ -26,8 +26,8 @@ import org.apache.kafka.connect.data.Struct;
 public interface TimestampHelper {
 
   /**
-   * Builds a SQL query by appending where clause to @link{StringBuilder} with timestamp and incrementing
-   * column ID.
+   * Builds a SQL query by appending where clause to @link{StringBuilder} with timestamp and
+   * incrementing column ID.
    * @param builder SQL statement represented as @link{String}
    * @param quoteString String representation of quotes to use in the SQL statement.
    * @param incrementingColumn name of the incrementing column ID.

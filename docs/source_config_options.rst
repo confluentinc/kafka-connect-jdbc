@@ -1,7 +1,7 @@
 JDBC Source Configuration Options
 ---------------------------------
 
-.. include:: db_connection_security.rst
+.. include:: includes/db_connection_security.rst
 
 Database
 ^^^^^^^^

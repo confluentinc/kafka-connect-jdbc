@@ -194,7 +194,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
         stmt.setTimestamp(4, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
         //log.debug("tsOffset and endTime timestamps were set using default UTC Calendar");
       } else {
-        if (this.dbTimeZone.trim().equals(JdbcUtils.JVM_TIMEZONE)) {
+        if (this.dbTimeZone.trim().equals(DateTimeUtils.JVM_TIMEZONE)) {
           stmt.setTimestamp(1, endTime);
           stmt.setTimestamp(2, tsOffset);
           stmt.setTimestamp(4, tsOffset);
@@ -237,7 +237,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
         stmt.setTimestamp(2, endTime, DateTimeUtils.UTC_CALENDAR.get());
         log.info("tsOffset and endTime timestamps were set using default UTC Calendar");
       } else {
-        if (this.dbTimeZone.trim().equals(JdbcUtils.JVM_TIMEZONE)) {
+        if (this.dbTimeZone.trim().equals(DateTimeUtils.JVM_TIMEZONE)) {
           stmt.setTimestamp(1, tsOffset);
           stmt.setTimestamp(2, endTime);
           log.info("tsOffset and endTime timestamps were set using jvm timezone");

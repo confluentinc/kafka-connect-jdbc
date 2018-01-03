@@ -449,7 +449,7 @@ public class DataConverter {
         if (dbTimeZone.equals("UTC") || dbTimeZone == null || dbTimeZone.isEmpty()) {
           colValue = resultSet.getDate(col, DateTimeUtils.UTC_CALENDAR.get());
         } else {
-          if (dbTimeZone.trim().equals(JdbcUtils.JVM_TIMEZONE)) {
+          if (dbTimeZone.trim().equals(DateTimeUtils.JVM_TIMEZONE)) {
             colValue = resultSet.getDate(col);
           } else {
             colValue = resultSet.getDate(col,
@@ -464,7 +464,7 @@ public class DataConverter {
         if (dbTimeZone.equals("UTC") || dbTimeZone == null || dbTimeZone.isEmpty()) {
           colValue = resultSet.getTime(col, DateTimeUtils.UTC_CALENDAR.get());
         } else {
-          if (dbTimeZone.trim().equals(JdbcUtils.JVM_TIMEZONE)) {
+          if (dbTimeZone.trim().equals(DateTimeUtils.JVM_TIMEZONE)) {
             colValue = resultSet.getTime(col);
           } else {
             colValue = resultSet.getTime(col,
@@ -480,7 +480,7 @@ public class DataConverter {
           colValue = resultSet.getTimestamp(col, DateTimeUtils.UTC_CALENDAR.get());
           log.debug("time utc : " + colValue);
         } else {
-          if (dbTimeZone.trim().equals(JdbcUtils.JVM_TIMEZONE)) {
+          if (dbTimeZone.trim().equals(DateTimeUtils.JVM_TIMEZONE)) {
             colValue = resultSet.getTimestamp(col);
             log.debug("time jvm : " + colValue);
           } else {

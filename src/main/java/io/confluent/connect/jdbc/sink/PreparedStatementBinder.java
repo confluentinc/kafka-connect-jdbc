@@ -33,6 +33,7 @@ import java.sql.SQLException;
 
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
+import io.confluent.connect.jdbc.util.DateTimeUtils;
 
 public class PreparedStatementBinder {
 
@@ -41,19 +42,22 @@ public class PreparedStatementBinder {
   private final SchemaPair schemaPair;
   private final FieldsMetadata fieldsMetadata;
   private final JdbcSinkConfig.InsertMode insertMode;
+  private final String dbTimeZone;
 
   public PreparedStatementBinder(
       PreparedStatement statement,
       JdbcSinkConfig.PrimaryKeyMode pkMode,
       SchemaPair schemaPair,
       FieldsMetadata fieldsMetadata,
-      JdbcSinkConfig.InsertMode insertMode
+      JdbcSinkConfig.InsertMode insertMode,
+      String dbTimeZone
   ) {
     this.pkMode = pkMode;
     this.statement = statement;
     this.schemaPair = schemaPair;
     this.fieldsMetadata = fieldsMetadata;
     this.insertMode = insertMode;
+    this.dbTimeZone = dbTimeZone;
   }
 
   public void bindRecord(SinkRecord record) throws SQLException {
@@ -139,19 +143,20 @@ public class PreparedStatementBinder {
   }
 
   void bindField(int index, Schema schema, Object value) throws SQLException {
-    bindField(statement, index, schema, value);
+    bindField(statement, index, schema, value, dbTimeZone);
   }
 
   static void bindField(
       PreparedStatement statement,
       int index,
       Schema schema,
-      Object value
+      Object value,
+      String dbTimeZone
   ) throws SQLException {
     if (value == null) {
       statement.setObject(index, null);
     } else {
-      final boolean bound = maybeBindLogical(statement, index, schema, value);
+      final boolean bound = maybeBindLogical(statement, index, schema, value, dbTimeZone);
       if (!bound) {
         switch (schema.type()) {
           case INT8:
@@ -200,7 +205,8 @@ public class PreparedStatementBinder {
       PreparedStatement statement,
       int index,
       Schema schema,
-      Object value
+      Object value,
+      String dbTimeZone
   ) throws SQLException {
     if (schema.name() != null) {
       switch (schema.name()) {
@@ -208,7 +214,8 @@ public class PreparedStatementBinder {
           statement.setDate(
               index,
               new java.sql.Date(((java.util.Date) value).getTime())/*,
-              DateTimeUtils.UTC_CALENDAR.get()*/
+              DateTimeUtils.UTC_CALENDAR.get()*/,
+              DateTimeUtils.getPreparedStatementCalendar(dbTimeZone)
           );
           return true;
         case Decimal.LOGICAL_NAME:
@@ -218,14 +225,16 @@ public class PreparedStatementBinder {
           statement.setTime(
               index,
               new java.sql.Time(((java.util.Date) value).getTime())/*,
-              DateTimeUtils.UTC_CALENDAR.get()*/
+              DateTimeUtils.UTC_CALENDAR.get()*/,
+              DateTimeUtils.getPreparedStatementCalendar(dbTimeZone)
           );
           return true;
         case Timestamp.LOGICAL_NAME:
           statement.setTimestamp(
               index,
               new java.sql.Timestamp(((java.util.Date) value).getTime())/*,
-              DateTimeUtils.UTC_CALENDAR.get()*/
+              DateTimeUtils.UTC_CALENDAR.get()*/,
+              DateTimeUtils.getPreparedStatementCalendar(dbTimeZone)
           );
           return true;
         default:

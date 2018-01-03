@@ -20,8 +20,7 @@ import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Type;
 
-import io.confluent.connect.jdbc.util.JdbcUtils;
-
+import io.confluent.connect.jdbc.util.DateTimeUtils;
 import java.util.Map;
 
 /**
@@ -37,7 +36,7 @@ public class JdbcSourceTaskConfig extends JdbcSourceConnectorConfig {
   public static final String DB_TIMEZONE_DEFAULT = "UTC";
   private static final String DB_TIMEZONE_CONFIG_DOC =
       "Alternative TimeZone of the database, to be used by JDBC driver instead of UTC (default)"
-      + "when instantiating PreparedStatements. If set to special value '" + JdbcUtils.JVM_TIMEZONE
+      + "when instantiating PreparedStatements. If set to special value '" + DateTimeUtils.JVM_TIMEZONE
       + "', the driver will use the timezone of the virtual machine running the task.";
 
   public static final String VIEWS_DEFINITIONS = "views.definitions";
@@ -49,7 +48,7 @@ public class JdbcSourceTaskConfig extends JdbcSourceConnectorConfig {
   static ConfigDef config = baseConfigDef()
       .define(TABLES_CONFIG, Type.LIST, Importance.HIGH, TABLES_DOC)
       .define(DB_TIMEZONE_CONFIG, Type.STRING, DB_TIMEZONE_DEFAULT,
-          Importance.LOW, DB_TIMEZONE_CONFIG_DOC)
+          Importance.MEDIUM, DB_TIMEZONE_CONFIG_DOC)
       .define(VIEWS_DEFINITIONS, Type.STRING, VIEWS_DEFINITIONS_DEFAULT,
           Importance.MEDIUM, VIEWS_DEFINITIONS_DOC);
 

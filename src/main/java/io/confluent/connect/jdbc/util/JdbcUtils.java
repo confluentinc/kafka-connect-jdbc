@@ -58,7 +58,6 @@ public class JdbcUtils {
   private static final int GET_COLUMNS_IS_NULLABLE = 18;
   private static final int GET_COLUMNS_IS_AUTOINCREMENT = 23;
   
-  public static final String JVM_TIMEZONE = "jvm";
   // String tag to be used as an marker to identify a view in table.whitelist config
   public static final String VIEW_DEFINITION_TAG = "view_";
   

@@ -19,6 +19,8 @@ package io.confluent.connect.jdbc.sink;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.config.ConfigDef.Importance;
+import org.apache.kafka.common.config.ConfigDef.Type;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -27,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.StringUtils;
 import org.apache.kafka.common.config.types.Password;
 
@@ -163,6 +166,13 @@ public class JdbcSinkConfig extends AbstractConfig {
       + " while this configuration is applicable for the other columns.";
   private static final String FIELDS_WHITELIST_DISPLAY = "Fields Whitelist";
 
+  public static final String DB_TIMEZONE = "db.timezone";
+  public static final String DB_TIMEZONE_DEFAULT = "UTC";
+  private static final String DB_TIMEZONE_DOC =
+      "Alternative TimeZone of the database, to be used by JDBC driver instead of UTC (default)"
+      + "when instantiating PreparedStatements. If set to special value '" + DateTimeUtils.JVM_TIMEZONE
+      + "', the driver will use the timezone of the virtual machine running the task.";
+  
   private static final ConfigDef.Range NON_NEGATIVE_INT_VALIDATOR = ConfigDef.Range.atLeast(0);
 
   private static final String CONNECTION_GROUP = "Connection";
@@ -190,6 +200,8 @@ public class JdbcSinkConfig extends AbstractConfig {
       .define(BATCH_SIZE, ConfigDef.Type.INT, BATCH_SIZE_DEFAULT, NON_NEGATIVE_INT_VALIDATOR,
               ConfigDef.Importance.MEDIUM, BATCH_SIZE_DOC,
               WRITES_GROUP, 2, ConfigDef.Width.SHORT, BATCH_SIZE_DISPLAY)
+      .define(DB_TIMEZONE, Type.STRING, DB_TIMEZONE_DEFAULT,
+          Importance.MEDIUM, DB_TIMEZONE_DOC)
       // Data Mapping
       .define(TABLE_NAME_FORMAT, ConfigDef.Type.STRING, TABLE_NAME_FORMAT_DEFAULT,
               ConfigDef.Importance.MEDIUM, TABLE_NAME_FORMAT_DOC,
@@ -233,6 +245,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final PrimaryKeyMode pkMode;
   public final List<String> pkFields;
   public final Set<String> fieldsWhitelist;
+  public final String dbTimeZone;
 
   public JdbcSinkConfig(Map<?, ?> props) {
     super(CONFIG_DEF, props);
@@ -249,6 +262,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     pkMode = PrimaryKeyMode.valueOf(getString(PK_MODE).toUpperCase());
     pkFields = getList(PK_FIELDS);
     fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
+    dbTimeZone = getString(DB_TIMEZONE).trim();
   }
 
   private String getPasswordValue(String key) {

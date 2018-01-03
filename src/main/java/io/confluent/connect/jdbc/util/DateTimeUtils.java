@@ -24,6 +24,9 @@ import java.util.TimeZone;
 
 public class DateTimeUtils {
 
+  public static final String UTC_TIMEZONE = "utc";
+  public static final String JVM_TIMEZONE = "jvm";
+  
   public static final TimeZone UTC = TimeZone.getTimeZone("UTC");
 
   public static final ThreadLocal<Calendar> UTC_CALENDAR = new ThreadLocal<Calendar>() {
@@ -100,6 +103,18 @@ public class DateTimeUtils {
       }
     }
     return specificTimezoneCalendar;
+  }
+  
+  public static Calendar getPreparedStatementCalendar(final String dbTimeZone) {
+    if (dbTimeZone.equals(DateTimeUtils.UTC_TIMEZONE) || dbTimeZone == null || dbTimeZone.isEmpty()) {
+      return DateTimeUtils.UTC_CALENDAR.get();
+    }
+    else if (dbTimeZone.trim().equals(DateTimeUtils.JVM_TIMEZONE)) {
+      return null;
+    }
+    else {
+      return DateTimeUtils.getSpecificTimezoneCalendarInstance(dbTimeZone).get();
+    }
   }
 
 }

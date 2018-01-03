@@ -215,7 +215,7 @@ public class PreparedStatementBinder {
               index,
               new java.sql.Date(((java.util.Date) value).getTime())/*,
               DateTimeUtils.UTC_CALENDAR.get()*/,
-              DateTimeUtils.getPreparedStatementCalendar(dbTimeZone)
+              DateTimeUtils.getCalendarWithTimeZone(dbTimeZone)
           );
           return true;
         case Decimal.LOGICAL_NAME:
@@ -226,7 +226,7 @@ public class PreparedStatementBinder {
               index,
               new java.sql.Time(((java.util.Date) value).getTime())/*,
               DateTimeUtils.UTC_CALENDAR.get()*/,
-              DateTimeUtils.getPreparedStatementCalendar(dbTimeZone)
+              DateTimeUtils.getCalendarWithTimeZone(dbTimeZone)
           );
           return true;
         case Timestamp.LOGICAL_NAME:
@@ -234,7 +234,7 @@ public class PreparedStatementBinder {
               index,
               new java.sql.Timestamp(((java.util.Date) value).getTime())/*,
               DateTimeUtils.UTC_CALENDAR.get()*/,
-              DateTimeUtils.getPreparedStatementCalendar(dbTimeZone)
+              DateTimeUtils.getCalendarWithTimeZone(dbTimeZone)
           );
           return true;
         default:

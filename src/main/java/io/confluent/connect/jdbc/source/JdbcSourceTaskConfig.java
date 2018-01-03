@@ -36,8 +36,9 @@ public class JdbcSourceTaskConfig extends JdbcSourceConnectorConfig {
   public static final String DB_TIMEZONE_DEFAULT = "UTC";
   private static final String DB_TIMEZONE_CONFIG_DOC =
       "Alternative TimeZone of the database, to be used by JDBC driver instead of UTC (default)"
-      + "when instantiating PreparedStatements. If set to special value '" + DateTimeUtils.JVM_TIMEZONE
-      + "', the driver will use the timezone of the virtual machine running the task.";
+      + "when instantiating PreparedStatements. If set to special value '"
+      + DateTimeUtils.JVM_TIMEZONE + "', the driver will use the timezone of"
+      + "the virtual machine running the task.";
 
   public static final String VIEWS_DEFINITIONS = "views.definitions";
   private static final String VIEWS_DEFINITIONS_DOC =

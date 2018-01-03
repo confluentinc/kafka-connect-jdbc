@@ -170,8 +170,9 @@ public class JdbcSinkConfig extends AbstractConfig {
   public static final String DB_TIMEZONE_DEFAULT = "UTC";
   private static final String DB_TIMEZONE_DOC =
       "Alternative TimeZone of the database, to be used by JDBC driver instead of UTC (default)"
-      + "when instantiating PreparedStatements. If set to special value '" + DateTimeUtils.JVM_TIMEZONE
-      + "', the driver will use the timezone of the virtual machine running the task.";
+      + "when instantiating PreparedStatements. If set to special value '"
+      + DateTimeUtils.JVM_TIMEZONE + "', the driver will use the timezone of"
+      + "the virtual machine running the task.";
   
   private static final ConfigDef.Range NON_NEGATIVE_INT_VALIDATOR = ConfigDef.Range.atLeast(0);
 

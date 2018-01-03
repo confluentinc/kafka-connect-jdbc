@@ -37,7 +37,6 @@ import java.sql.SQLXML;
 import java.sql.Types;
 
 import io.confluent.connect.jdbc.util.DateTimeUtils;
-import io.confluent.connect.jdbc.util.JdbcUtils;
 
 /**
  * DataConverter handles translating table schemas to Kafka Connect schemas and row data to Kafka

@@ -188,28 +188,9 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
           DateTimeUtils.UTC_CALENDAR.get()
       ).getTime();
       Timestamp endTime = new Timestamp(currentDbTime - timestampDelay);
-      if (this.dbTimeZone.equals("UTC") || this.dbTimeZone == null || this.dbTimeZone.isEmpty()) {
-        stmt.setTimestamp(1, endTime, DateTimeUtils.UTC_CALENDAR.get());
-        stmt.setTimestamp(2, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
-        stmt.setTimestamp(4, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
-        //log.debug("tsOffset and endTime timestamps were set using default UTC Calendar");
-      } else {
-        if (this.dbTimeZone.trim().equals(DateTimeUtils.JVM_TIMEZONE)) {
-          stmt.setTimestamp(1, endTime);
-          stmt.setTimestamp(2, tsOffset);
-          stmt.setTimestamp(4, tsOffset);
-          //log.debug("tsOffset and endTime timestamps were set using jvm timezone");
-        } else {
-          stmt.setTimestamp(1, endTime,
-              DateTimeUtils.getSpecificTimezoneCalendarInstance(this.dbTimeZone).get());
-          stmt.setTimestamp(2, tsOffset,
-              DateTimeUtils.getSpecificTimezoneCalendarInstance(this.dbTimeZone).get());
-          stmt.setTimestamp(4, tsOffset,
-              DateTimeUtils.getSpecificTimezoneCalendarInstance(this.dbTimeZone).get());
-          //log.info("tsOffset and endTime timestamps were set using "
-          //    + this.dbTimeZone + " timezone");
-        }
-      }
+      stmt.setTimestamp(1, endTime, DateTimeUtils.getCalendarWithTimeZone(dbTimeZone));
+      stmt.setTimestamp(2, tsOffset, DateTimeUtils.getCalendarWithTimeZone(dbTimeZone));
+      stmt.setTimestamp(4, tsOffset, DateTimeUtils.getCalendarWithTimeZone(dbTimeZone));
       stmt.setLong(3, incOffset);
       log.debug(
           "Executing prepared statement with start time value = {} end time = {} and incrementing"
@@ -232,27 +213,8 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       Timestamp endTime = new Timestamp(currentDbTime - timestampDelay);
       log.info("endTime : " + endTime + " ; " + "currentDbTime : " + currentDbTime + "; "
           + "timestampDelay : " + timestampDelay);
-      if (this.dbTimeZone.equals("UTC") || this.dbTimeZone == null || this.dbTimeZone.isEmpty()) {
-        stmt.setTimestamp(1, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
-        stmt.setTimestamp(2, endTime, DateTimeUtils.UTC_CALENDAR.get());
-        log.info("tsOffset and endTime timestamps were set using default UTC Calendar");
-      } else {
-        if (this.dbTimeZone.trim().equals(DateTimeUtils.JVM_TIMEZONE)) {
-          stmt.setTimestamp(1, tsOffset);
-          stmt.setTimestamp(2, endTime);
-          log.info("tsOffset and endTime timestamps were set using jvm timezone");
-        } else {
-          stmt.setTimestamp(2, tsOffset,
-              DateTimeUtils.getSpecificTimezoneCalendarInstance(this.dbTimeZone).get());
-          stmt.setTimestamp(2, endTime,
-              DateTimeUtils.getSpecificTimezoneCalendarInstance(this.dbTimeZone).get());
-          log.info("tsOffset and endTime timestamps were set using "
-              + this.dbTimeZone + " timezone");
-        }
-      }
-      /*log.info("Executing prepared statement with timestamp value = {} end time = {}",
-                DateTimeUtils.formatUtcTimestamp(tsOffset),
-                DateTimeUtils.formatUtcTimestamp(endTime));*/
+      stmt.setTimestamp(1, tsOffset, DateTimeUtils.getCalendarWithTimeZone(dbTimeZone));
+      stmt.setTimestamp(2, endTime, DateTimeUtils.getCalendarWithTimeZone(dbTimeZone));
       log.info("Executing prepared statement for {} with timestamp value = {} end time = {}",
           name,
           DateTimeUtils.formatDefaultTimestamp(tsOffset),

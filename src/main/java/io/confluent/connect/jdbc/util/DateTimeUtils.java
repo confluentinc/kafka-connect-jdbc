@@ -22,7 +22,12 @@ import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.TimeZone;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class DateTimeUtils {
+  
+  private static final Logger log = LoggerFactory.getLogger(DateTimeUtils.class);
 
   public static final String UTC_TIMEZONE = "utc";
   public static final String JVM_TIMEZONE = "jvm";
@@ -105,14 +110,16 @@ public class DateTimeUtils {
     return specificTimezoneCalendar;
   }
   
-  public static Calendar getPreparedStatementCalendar(final String dbTimeZone) {
-    if (dbTimeZone.equals(DateTimeUtils.UTC_TIMEZONE) || dbTimeZone == null || dbTimeZone.isEmpty()) {
+  public static Calendar getCalendarWithTimeZone(final String dbTimeZone) {
+    if (dbTimeZone.equals(DateTimeUtils.UTC_TIMEZONE) || dbTimeZone == null
+        || dbTimeZone.isEmpty()) {
+      log.debug("using using default UTC Calendar");
       return DateTimeUtils.UTC_CALENDAR.get();
-    }
-    else if (dbTimeZone.trim().equals(DateTimeUtils.JVM_TIMEZONE)) {
+    } else if (dbTimeZone.trim().equals(DateTimeUtils.JVM_TIMEZONE)) {
+      log.debug("using using jvm timezone");
       return null;
-    }
-    else {
+    } else {
+      log.debug("using using " + dbTimeZone + " timezone");
       return DateTimeUtils.getSpecificTimezoneCalendarInstance(dbTimeZone).get();
     }
   }

@@ -30,6 +30,7 @@ import org.powermock.modules.junit4.PowerMockRunner;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -175,6 +176,31 @@ public class JdbcSourceConnectorTest {
     connector.stop();
   }
 
+  @Test
+  public void testPartitioningViews() throws Exception {
+    // Tests "partitioning" when config specifies inline views
+    // Commas in view definitions must be escaped with \\\\
+    final String sampleWhiteList= "view_test1, view_test2";
+    final String sampleViewsDefinitions = "(SELECT id\\\\, foo\\\\, bar FROM test1 JOIN test2 on test1.id = test2.id),"
+        + "SELECT id\\\\\\\\, foo\\\\\\\\, bar FROM test2 JOIN test3 on test2.id = test3.id";
+    connProps.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, sampleWhiteList);
+    connProps.put(JdbcSourceConnectorConfig.VIEW_DEFINITION_LIST_CONFIG, sampleViewsDefinitions);
+    connector.start(connProps);
+    List<Map<String, String>> configs = connector.taskConfigs(3);
+    assertEquals(2, configs.size());
+    assertTaskConfigsHaveParentConfigs(configs);
+
+    System.out.println ("configs : " + configs);
+    List<String> views = Arrays.asList(configs.get(0).get(JdbcSourceTaskConfig.TABLES_CONFIG),
+        configs.get(1).get(JdbcSourceTaskConfig.TABLES_CONFIG));
+    Collections.sort(views);
+    assertEquals(Arrays.asList(sampleWhiteList).toString(), views.toString());
+    assertNull(configs.get(0).get(JdbcSourceTaskConfig.QUERY_CONFIG));
+    assertNull(configs.get(1).get(JdbcSourceTaskConfig.QUERY_CONFIG));
+
+    connector.stop();
+  }
+  
   @Test(expected = ConnectException.class)
   public void testConflictingQueryTableSettings() {
     final String sample_query = "SELECT foo, bar FROM sample_table";

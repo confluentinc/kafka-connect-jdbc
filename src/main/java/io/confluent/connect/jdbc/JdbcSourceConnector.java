@@ -203,8 +203,13 @@ public class JdbcSourceConnector extends SourceConnector {
         viewsList.add(elem);
       }
     }
-    for (String s : viewsDefinitionsList) {
-      log.debug("viewsDefinitionsList elem : " + s);
+    for (String viewDefinition : viewsDefinitionsList) {
+      log.debug("viewsDefinitionsList elem : " + viewDefinition);
+      if (! (viewDefinition.trim().startsWith("(") && viewDefinition.trim().endsWith(")"))) {
+        throw new ConnectException("Each view definition in "
+            + JdbcSourceConnectorConfig.VIEW_DEFINITION_LIST_CONFIG + "must be enclosed "
+                + "in parentheses.");
+      }
     }
     Map<String, String> viewsDefinitions = new HashMap<>();
     if (viewsList.size() > 0) {

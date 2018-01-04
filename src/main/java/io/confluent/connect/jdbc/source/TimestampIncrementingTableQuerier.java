@@ -124,7 +124,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       timestampWhereClause(builder, quoteString);
     }
     String queryString = builder.toString();
-    log.debug("{} prepared SQL query: {}", this, queryString);
+    log.debug("{} queryString: {}", this, queryString);
     stmt = db.prepareStatement(queryString);
   }
 
@@ -207,12 +207,12 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       Timestamp tsOffset = offset.getTimestampOffset();
       final long currentDbTime = JdbcUtils.getCurrentTimeOnDB(
           stmt.getConnection(),
-          DateTimeUtils.UTC_CALENDAR.get()
+          /*DateTimeUtils.UTC_CALENDAR.get()*/
+          DateTimeUtils.getCalendarWithTimeZone(dbTimeZone)
       ).getTime();
       
       Timestamp endTime = new Timestamp(currentDbTime - timestampDelay);
-      log.info("endTime : " + endTime + " ; " + "currentDbTime : " + currentDbTime + "; "
-          + "timestampDelay : " + timestampDelay);
+      log.info("endTime : " + endTime + " ; " + "timestampDelay : " + timestampDelay);
       stmt.setTimestamp(1, tsOffset, DateTimeUtils.getCalendarWithTimeZone(dbTimeZone));
       stmt.setTimestamp(2, endTime, DateTimeUtils.getCalendarWithTimeZone(dbTimeZone));
       log.info("Executing prepared statement for {} with timestamp value = {} end time = {}",
@@ -220,7 +220,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
           DateTimeUtils.formatDefaultTimestamp(tsOffset),
           DateTimeUtils.formatDefaultTimestamp(endTime));
     }
-    log.debug("Prepared statement is : " + stmt.toString());
+    log.info("Prepared statement is : " + stmt.toString());
     return stmt.executeQuery();
   }
 

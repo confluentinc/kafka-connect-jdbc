@@ -445,49 +445,19 @@ public class DataConverter {
 
       // Date is day + moth + year
       case Types.DATE: {
-        if (dbTimeZone.equals("UTC") || dbTimeZone == null || dbTimeZone.isEmpty()) {
-          colValue = resultSet.getDate(col, DateTimeUtils.UTC_CALENDAR.get());
-        } else {
-          if (dbTimeZone.trim().equals(DateTimeUtils.JVM_TIMEZONE)) {
-            colValue = resultSet.getDate(col);
-          } else {
-            colValue = resultSet.getDate(col,
-                DateTimeUtils.getSpecificTimezoneCalendarInstance(dbTimeZone).get());
-          }
-        }
+        colValue = resultSet.getDate(col, DateTimeUtils.getCalendarWithTimeZone(dbTimeZone));
         break;
       }
 
       // Time is a time of day -- hour, minute, seconds, nanoseconds
       case Types.TIME: {
-        if (dbTimeZone.equals("UTC") || dbTimeZone == null || dbTimeZone.isEmpty()) {
-          colValue = resultSet.getTime(col, DateTimeUtils.UTC_CALENDAR.get());
-        } else {
-          if (dbTimeZone.trim().equals(DateTimeUtils.JVM_TIMEZONE)) {
-            colValue = resultSet.getTime(col);
-          } else {
-            colValue = resultSet.getTime(col,
-                DateTimeUtils.getSpecificTimezoneCalendarInstance(dbTimeZone).get());
-          }
-        }
+        colValue = resultSet.getTime(col, DateTimeUtils.getCalendarWithTimeZone(dbTimeZone));
         break;
       }
 
       // Timestamp is a date + time
       case Types.TIMESTAMP: {
-        if (dbTimeZone.equals("UTC") || dbTimeZone == null || dbTimeZone.isEmpty()) {
-          colValue = resultSet.getTimestamp(col, DateTimeUtils.UTC_CALENDAR.get());
-          log.debug("time utc : " + colValue);
-        } else {
-          if (dbTimeZone.trim().equals(DateTimeUtils.JVM_TIMEZONE)) {
-            colValue = resultSet.getTimestamp(col);
-            log.debug("time jvm : " + colValue);
-          } else {
-            colValue = resultSet.getTimestamp(col,
-                DateTimeUtils.getSpecificTimezoneCalendarInstance(dbTimeZone).get());
-            log.debug("time specific : " + colValue);
-          }
-        }
+        colValue = resultSet.getTimestamp(col, DateTimeUtils.getCalendarWithTimeZone(dbTimeZone));
         break;
       }
 

@@ -21,15 +21,37 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.junit.Before;
 import org.junit.Test;
 
+import io.confluent.connect.jdbc.util.CachedConnectionProvider;
+import io.confluent.connect.jdbc.util.DateTimeUtils;
+
 import java.math.BigDecimal;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.sql.Types;
+import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.Date;
+import java.util.TimeZone;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 
 public class TimestampIncrementingTableQuerierTest {
+  
+  private EmbeddedDerby db;
+  private CachedConnectionProvider cachedConnectionProvider;
+  
+  @Before
+  public void setup() {
+    db = new EmbeddedDerby();
+    cachedConnectionProvider = new CachedConnectionProvider(db.getUrl());
+  }
 
   @Test
   public void extractIntOffset() throws SQLException {
@@ -69,8 +91,36 @@ public class TimestampIncrementingTableQuerierTest {
     newQuerier().extractOffset(schema, record).getIncrementingOffset();
   }
 
+  @Test
+  public void tesCreatePreparedStatemenInTimeStampMode() throws Exception {
+    String tableName = "test1";
+    TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
+    SimpleDateFormat derbySdf = new SimpleDateFormat("yyyy-MM-dd-HH.mm.ss");
+    derbySdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+    int pastOffsetInMinutes = 10;
+    String dbDateUTC = derbySdf.format(new Date().getTime() - (60000*pastOffsetInMinutes));
+    db.createTable(tableName, "id", "INT NOT NULL", "ts", "TIMESTAMP NOT NULL");
+    db.insert(tableName, "id", 1, "ts", dbDateUTC);
+    TimestampIncrementingTableQuerier querier =
+        newQuerier(TableQuerier.QueryMode.TABLE, tableName, "ts", null, "UTC");
+    querier.createPreparedStatement(cachedConnectionProvider.getValidConnection());
+    ResultSet rs = querier.executeQuery();
+    
+    rs.next();
+    int id = rs.getInt("id");
+    String ts = derbySdf.format(rs.getTimestamp("ts", DateTimeUtils.UTC_CALENDAR.get()));
+
+    assertEquals(1, id);
+    assertEquals(ts, dbDateUTC);
+    
+  }
+  
   private TimestampIncrementingTableQuerier newQuerier() {
     return new TimestampIncrementingTableQuerier(TableQuerier.QueryMode.TABLE, null, "", null, "id", Collections.<String, Object>emptyMap(), 0L, null, false, null, null);
+  }
+  
+  private TimestampIncrementingTableQuerier newQuerier(TableQuerier.QueryMode mode, String name, String timestampColumn, String incrementingColumn, String timezone) {
+    return new TimestampIncrementingTableQuerier(mode, name, "", timestampColumn, incrementingColumn, Collections.<String, Object>emptyMap(), 0L, null, false, timezone, null);
   }
 
 }

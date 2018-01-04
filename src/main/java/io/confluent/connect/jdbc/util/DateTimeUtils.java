@@ -111,15 +111,15 @@ public class DateTimeUtils {
   }
   
   public static Calendar getCalendarWithTimeZone(final String dbTimeZone) {
-    if (dbTimeZone.equals(DateTimeUtils.UTC_TIMEZONE) || dbTimeZone == null
-        || dbTimeZone.isEmpty()) {
-      log.debug("using using default UTC Calendar");
+    if (dbTimeZone == null || dbTimeZone.isEmpty()
+        || dbTimeZone.equals(DateTimeUtils.UTC_TIMEZONE)) {
+      log.info("using using default UTC Calendar");
       return DateTimeUtils.UTC_CALENDAR.get();
     } else if (dbTimeZone.trim().equals(DateTimeUtils.JVM_TIMEZONE)) {
-      log.debug("using using jvm timezone");
+      log.info("using using jvm timezone");
       return null;
     } else {
-      log.debug("using using " + dbTimeZone + " timezone");
+      log.info("using using " + dbTimeZone + " timezone");
       return DateTimeUtils.getSpecificTimezoneCalendarInstance(dbTimeZone).get();
     }
   }

@@ -20,6 +20,8 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.GregorianCalendar;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.TimeZone;
 
 import org.slf4j.Logger;
@@ -92,22 +94,20 @@ public class DateTimeUtils {
     return DEFAULT_TIMESTAMP_FORMAT.get().format(date);
   }
   
-  private static ThreadLocal<Calendar> specificTimezoneCalendar = null;
+  private static Map<String, ThreadLocal<Calendar>> specificTimezoneCalendars = new HashMap<>();
   
   public static ThreadLocal<Calendar> getSpecificTimezoneCalendarInstance(final String dbTimeZone) {
-    if (specificTimezoneCalendar == null) {
+    if (! specificTimezoneCalendars.containsKey(dbTimeZone)) {
       synchronized (ThreadLocal.class) {
-        if (specificTimezoneCalendar == null) {
-          specificTimezoneCalendar = new ThreadLocal<Calendar>() {
+        specificTimezoneCalendars.put(dbTimeZone, new ThreadLocal<Calendar>() {
             @Override
             protected Calendar initialValue() {
               return new GregorianCalendar(TimeZone.getTimeZone(dbTimeZone));
             }
-          };
-        }
+          });
       }
     }
-    return specificTimezoneCalendar;
+    return specificTimezoneCalendars.get(dbTimeZone);
   }
   
   public static Calendar getCalendarWithTimeZone(final String dbTimeZone) {

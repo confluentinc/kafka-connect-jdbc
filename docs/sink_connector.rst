@@ -26,7 +26,7 @@ Load the JDBC Sink Connector
 
 Load the predefined JDBC sink connector.
 
-#.  Optional: View available connectors with this command:
+#.  Optional: View the available predefined connectors with this command:
 
     .. sourcecode:: bash
 

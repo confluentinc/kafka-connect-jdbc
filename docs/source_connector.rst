@@ -33,7 +33,7 @@ Load the JDBC Source Connector
 
 Load the predefined JDBC source connector.
 
-#.  Optional: View available connectors with this command:
+#.  Optional: View the available predefined connectors with this command:
 
     .. sourcecode:: bash
 
@@ -120,7 +120,7 @@ You can switch back to the console consumer and see the new record is added and,
     {"id":3,"name":{"string":"cathy"}}
 
 Note that the default polling interval is five seconds, so it may take a few seconds to show up. Depending on your expected
-rate up updates or desired latency, a smaller poll interval could be used to deliver updates more quickly.
+rate of updates or desired latency, a smaller poll interval could be used to deliver updates more quickly.
 
 :ref:`All the features of Kafka Connect<connect_userguide>`, including offset management and fault tolerance, work with
 the source connector. You can restart and kill the processes and they will pick up where they left off, copying only new

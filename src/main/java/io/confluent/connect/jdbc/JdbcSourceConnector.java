@@ -97,9 +97,14 @@ public class JdbcSourceConnector extends SourceConnector {
     cachedConnectionProvider.getValidConnection();
 
     List<String> whitelist = config.getList(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG);
+    String viewDefinitionTag = config.getString(JdbcSourceConnectorConfig
+        .VIEW_DEFINITION_TAG_CONFIG);
     this.viewsDefinitions = this.mapDefinitionsToViews(whitelist,
       StringUtils.getListFromStringValueWithEscapedCommas(
-        config.getString(JdbcSourceConnectorConfig.VIEW_DEFINITION_LIST_CONFIG), false));
+          config.getString(JdbcSourceConnectorConfig.VIEW_DEFINITION_LIST_CONFIG), false),
+          viewDefinitionTag
+      );
+    //}
     Set<String> whitelistSet = whitelist.isEmpty() ? null : new HashSet<>(whitelist);
     List<String> blacklist = config.getList(JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG);
     Set<String> blacklistSet = blacklist.isEmpty() ? null : new HashSet<>(blacklist);
@@ -132,7 +137,8 @@ public class JdbcSourceConnector extends SourceConnector {
         tablePollMs,
         whitelistSet,
         blacklistSet,
-        tableTypesSet
+        tableTypesSet,
+        viewDefinitionTag
     );
     tableMonitorThread.start();
   }
@@ -164,14 +170,13 @@ public class JdbcSourceConnector extends SourceConnector {
                 StringUtils.augmentCommaEscapingForTaskConfigParsing(viewsDefinitions.get(table)));
           }
         }
-        for (String s : taskViewsDefinitions) {
-          log.debug("taskViewsDefinitions elem : " + s);
-        }
         Map<String, String> taskProps = new HashMap<>(configProperties);
         taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG,
                       StringUtils.join(taskTables, ","));
         taskProps.put(JdbcSourceTaskConfig.VIEWS_DEFINITIONS,
             StringUtils.join(taskViewsDefinitions, ","));
+        taskProps.put(JdbcSourceConnectorConfig.VIEW_DEFINITION_TAG_CONFIG,
+            config.getString(JdbcSourceConnectorConfig.VIEW_DEFINITION_TAG_CONFIG));
         taskConfigs.add(taskProps);
       }
       return taskConfigs;
@@ -196,39 +201,46 @@ public class JdbcSourceConnector extends SourceConnector {
   }
   
   private Map<String, String> mapDefinitionsToViews(List<String> whitelist,
-      List<String> viewsDefinitionsList) {
+      List<String> viewsDefinitionsList, String viewDefinitionTag) {
     List<String> viewsList = new ArrayList<>();
     for (String elem : whitelist) {
-      if (JdbcUtils.isAView(elem)) {
+      if (JdbcUtils.isAView(elem, viewDefinitionTag)) {
         viewsList.add(elem);
       }
+    }
+    System.out.println("viewsList : " + viewsList + " ; " + viewsList.size());
+    if (viewsList.size() == 0) {
+      log.debug("no views were listed in " + JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG);
+      return null;
+    }
+    System.out.println("viewsDefinitionsList : " + viewsDefinitionsList + " ; "
+        + viewsDefinitionsList.size());
+    if (viewsDefinitionsList.isEmpty()) {
+      throw new ConnectException(JdbcSourceConnectorConfig.VIEW_DEFINITION_LIST_CONFIG
+          + " must not be empty when views are declared in "
+              + JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + " (each prefixed by "
+              + JdbcSourceConnectorConfig.VIEW_DEFINITION_TAG_CONFIG + ").");
     }
     for (String viewDefinition : viewsDefinitionsList) {
       log.debug("viewsDefinitionsList elem : " + viewDefinition);
       if (! (viewDefinition.trim().startsWith("(") && viewDefinition.trim().endsWith(")"))) {
         throw new ConnectException("Each view definition in "
-            + JdbcSourceConnectorConfig.VIEW_DEFINITION_LIST_CONFIG + "must be enclosed "
+            + JdbcSourceConnectorConfig.VIEW_DEFINITION_LIST_CONFIG + " must be enclosed "
                 + "in parentheses.");
       }
     }
-    Map<String, String> viewsDefinitions = new HashMap<>();
-    if (viewsList.size() > 0) {
-      if (viewsDefinitionsList.isEmpty()) {
-        throw new ConnectException(JdbcSourceConnectorConfig.VIEW_DEFINITION_LIST_CONFIG
-            + " must not be empty when views are declared in "
-                + JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + " (each prefixed by "
-                + JdbcUtils.VIEW_DEFINITION_TAG + ").");
-      }
-      try {
-        viewsDefinitions = StringUtils.listsToMap(viewsList, viewsDefinitionsList);
-      } catch (IllegalArgumentException e) {
-        throw new ConnectException(JdbcSourceConnectorConfig.VIEW_DEFINITION_LIST_CONFIG
-            + " must contain the same number of views definitions than views declared in "
-            + JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + ". Possible solution : "
-            + "check SQL comma escaping (with 4 backslashes before each comma : \\\\\\\\,).");
-      }
+    Map<String, String> viewsDefinitionsMap = new HashMap<>();
+    try {
+      viewsDefinitionsMap = StringUtils.listsToMap(viewsList, viewsDefinitionsList);
+    } catch (IllegalArgumentException e) {
+      throw new ConnectException(JdbcSourceConnectorConfig.VIEW_DEFINITION_LIST_CONFIG
+          + " must contain the same number of views definitions than views declared in "
+          + JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + ", in the same order."
+          + "Possible solution : check SQL comma escaping (with 4 backslashes before "
+          + "each comma : \\\\\\\\,).");
     }
-    log.debug("viewsDefinitions : " + viewsDefinitions);
-    return viewsDefinitions;
+    log.debug("viewsDefinitions : " + viewsDefinitionsMap);
+    return viewsDefinitionsMap;
   }
+  
 }

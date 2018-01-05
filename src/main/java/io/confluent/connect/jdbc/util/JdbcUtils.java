@@ -59,8 +59,8 @@ public class JdbcUtils {
   private static final int GET_COLUMNS_IS_AUTOINCREMENT = 23;
   
   // String tag to be used as an marker to identify a view in table.whitelist config
-  public static final String VIEW_DEFINITION_TAG = "view_";
-  
+  //private static String VIEW_DEFINITION_TAG;
+
   /**
    * Get a list of tables in the database. This uses the default filters, which only include
    * user-defined tables.
@@ -271,9 +271,47 @@ public class JdbcUtils {
     }
   }
   
-  public static boolean isAView(String whiteListElement) {
+  /*public static boolean isAView(String whiteListElement) {
     log.debug("test if '" + whiteListElement + "' is a view :");
     if (whiteListElement.startsWith(VIEW_DEFINITION_TAG)) {
+      log.debug("'" + whiteListElement + "' is a view");
+      return true;
+    } else {
+      return false;
+    }
+  }*/
+  
+  /*private static boolean testIsAViewFromtag(String whiteListElement) {
+    if (VIEW_DEFINITION_TAG == null) {
+      log.debug("Cannot determine if element is a view because "
+          + "VIEW_DEFINITION_TAG is not initialized");
+      return false;
+    }
+    if (whiteListElement.startsWith(VIEW_DEFINITION_TAG)) {
+      log.debug("'" + whiteListElement + "' is a view");
+      return true;
+    } else {
+      return false;
+    }
+  }
+  
+  public static boolean isAView(String whiteListElement, String viewTag) {
+    log.debug("test if '" + whiteListElement + "' is a view (viewTag : " + viewTag + ":");
+    log.debug("initializing VIEW_DEFINITION_TAG to : " + viewTag);
+    if (VIEW_DEFINITION_TAG == null) {
+      VIEW_DEFINITION_TAG = viewTag;
+    }
+    return testIsAViewFromtag(whiteListElement);
+  }
+  
+  public static boolean isAView(String whiteListElement) {
+    log.debug("test if '" + whiteListElement + "' is a view :");
+    return testIsAViewFromtag(whiteListElement);
+  }*/
+  
+  public static boolean isAView(String whiteListElement, String viewTag) {
+    log.debug("test if '" + whiteListElement + "' is a view :");
+    if (whiteListElement.startsWith(viewTag)) {
       log.debug("'" + whiteListElement + "' is a view");
       return true;
     } else {

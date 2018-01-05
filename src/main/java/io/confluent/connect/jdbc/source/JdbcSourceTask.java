@@ -135,7 +135,8 @@ public class JdbcSourceTask extends SourceTask {
     for (String tableOrQuery : tablesOrQuery) {
       final Map<String, String> partition;
       final Boolean isView = (queryMode == TableQuerier.QueryMode.QUERY)
-          ? new Boolean(false) : JdbcUtils.isAView(tableOrQuery);
+          ? new Boolean(false) : JdbcUtils.isAView(tableOrQuery,
+              config.getString(JdbcSourceConnectorConfig.VIEW_DEFINITION_TAG_CONFIG));
       switch (queryMode) {
         case TABLE:
           // view validation is not yet supported, would need view sql parsing

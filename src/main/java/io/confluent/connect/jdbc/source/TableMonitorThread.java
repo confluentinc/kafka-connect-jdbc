@@ -48,6 +48,7 @@ public class TableMonitorThread extends Thread {
   private Set<String> blacklist;
   private List<String> tables;
   private Set<String> tableTypes;
+  private String viewDefinitionTag;
 
   public TableMonitorThread(
       CachedConnectionProvider cachedConnectionProvider,
@@ -56,7 +57,8 @@ public class TableMonitorThread extends Thread {
       long pollMs,
       Set<String> whitelist,
       Set<String> blacklist,
-      Set<String> tableTypes
+      Set<String> tableTypes,
+      String viewDefinitionTag
   ) {
     this.cachedConnectionProvider = cachedConnectionProvider;
     this.schemaPattern = schemaPattern;
@@ -67,6 +69,7 @@ public class TableMonitorThread extends Thread {
     this.blacklist = blacklist;
     this.tables = null;
     this.tableTypes = tableTypes;
+    this.viewDefinitionTag = viewDefinitionTag;
   }
 
   @Override
@@ -138,7 +141,7 @@ public class TableMonitorThread extends Thread {
     if (whitelist != null) {
       filteredTables = new ArrayList<>(tables.size());
       for (String table : whitelist) {
-        if (tables.contains(table) || JdbcUtils.isAView(table)) {
+        if (tables.contains(table) || JdbcUtils.isAView(table, viewDefinitionTag)) {
           filteredTables.add(table);
         }
       }

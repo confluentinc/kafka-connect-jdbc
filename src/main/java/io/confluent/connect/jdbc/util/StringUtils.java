@@ -55,7 +55,9 @@ public class StringUtils {
     String[] parts = value.split("(?<!\\\\),");
     for (String s : parts) {
       String s2 = (removeCommaEscaping) ? s.replaceAll("\\\\", "") : s;
-      list.add(s2);
+      if (! (s2.isEmpty())) {
+        list.add(s2);
+      }
     }
     return list;
   }

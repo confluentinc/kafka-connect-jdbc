@@ -82,8 +82,8 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   @Override
   protected void createPreparedStatement(Connection db) throws SQLException {
     // Default when unspecified uses an autoincrementing column.
-    // Not supported with Connect defined views.
-    if (!JdbcUtils.isAView(this.name) && incrementingColumn != null
+    // Not supported with in-config defined views.
+    if (this.viewDefinition == null && incrementingColumn != null
         && incrementingColumn.isEmpty()) {
       incrementingColumn = JdbcUtils.getAutoincrementColumn(db, schemaPattern, name);
     }
@@ -97,11 +97,11 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
         builder.append("SELECT * FROM ");
         // Append schema name prefix to table name in case the user is not the owner of the schema.
         // Views will set the schema prefix in their SQL definition.
-        if (!JdbcUtils.isAView(this.name) && schemaPattern != null) {
+        if (this.viewDefinition == null && schemaPattern != null) {
           builder.append(JdbcUtils.quoteString(schemaPattern, quoteString));
           builder.append(".");
         }
-        if (JdbcUtils.isAView(this.name)) {
+        if (this.viewDefinition != null) {
           builder.append(viewDefinition);
           // Append an alias for the view, needed by some databases
           builder.append(" " + this.name);

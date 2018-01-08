@@ -70,10 +70,27 @@
     <repositories>
         <repository>
             <id>confluent</id>
-            <name>Confluent</name>
-            <url>${confluent.maven.repo}</url>
+            <url>http://packages.confluent.io/maven/</url>
+        </repository>
+        <repository>
+            <id>confluent-snapshots</id>
+            <url>https://s3-us-west-2.amazonaws.com/confluent-snapshots/</url>
         </repository>
     </repositories>
+
+    <pluginRepositories>
+        <pluginRepository>
+            <id>confluent</id>
+            <url>http://packages.confluent.io/maven/</url>
+        </pluginRepository>
+        <pluginRepository>
+            <id>confluent-snapshots</id>
+            <url>https://s3-us-west-2.amazonaws.com/confluent-snapshots/</url>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </pluginRepository>
+    </pluginRepositories>
 
     <dependencies>
         <dependency>

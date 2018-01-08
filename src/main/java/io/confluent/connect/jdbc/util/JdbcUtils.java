@@ -86,7 +86,10 @@ public class JdbcUtils {
     DatabaseMetaData metadata = conn.getMetaData();
     String[] tableTypes = types.isEmpty() ? null : getActualTableTypes(metadata, types);
 
-    try (ResultSet rs = metadata.getTables(null, schemaPattern, "%", tableTypes)) {
+    // Respect the catalog passed in the connection string, if available.
+    String catalog = conn.getCatalog() == "" ? null : conn.getCatalog();
+
+    try (ResultSet rs = metadata.getTables(catalog, schemaPattern, "%", tableTypes)) {
       List<String> tableNames = new ArrayList<>();
       while (rs.next()) {
         String colName = rs.getString(GET_TABLES_NAME_COLUMN);

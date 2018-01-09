@@ -146,6 +146,15 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String TABLE_BLACKLIST_DEFAULT = "";
   private static final String TABLE_BLACKLIST_DISPLAY = "Table Blacklist";
 
+  public static final String CATALOG_CONFIG = "catalog";
+  private static final String CATALOG_DOC =
+      "Catalog to fetch tables metadata from the database:\n"
+      + "  * \"\" retrieves those without a catalog,"
+      + "  * null (default) means that the catalog name should not be used to narrow the search, "
+      + "all tables "
+      + "metadata would be fetched, regardless their catalog.";
+  private static final String CATALOG_DISPLAY = "Database Catalog";
+
   public static final String SCHEMA_PATTERN_CONFIG = "schema.pattern";
   private static final String SCHEMA_PATTERN_DOC =
       "Schema pattern to fetch tables metadata from the database:\n"
@@ -302,6 +311,16 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Width.LONG,
         TABLE_BLACKLIST_DISPLAY,
         TABLE_RECOMMENDER
+    ).define(
+        CATALOG_CONFIG,
+        Type.STRING,
+        null,
+        Importance.MEDIUM,
+        CATALOG_DOC,
+        DATABASE_GROUP,
+        6,
+        Width.SHORT,
+        CATALOG_DISPLAY
     ).define(
         SCHEMA_PATTERN_CONFIG,
         Type.STRING,
@@ -471,6 +490,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       String dbUrl = (String) config.get(CONNECTION_URL_CONFIG);
       String dbUser = (String) config.get(CONNECTION_USER_CONFIG);
       Password dbPassword = (Password) config.get(CONNECTION_PASSWORD_CONFIG);
+      String catalog = (String) config.get(JdbcSourceTaskConfig.CATALOG_CONFIG);
       String schemaPattern = (String) config.get(JdbcSourceTaskConfig.SCHEMA_PATTERN_CONFIG);
       Set<String> tableTypes = new HashSet<>(
           (List<String>) config.get(JdbcSourceTaskConfig.TABLE_TYPE_CONFIG)
@@ -480,6 +500,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       }
       String dbPasswordStr = dbPassword == null ? null : dbPassword.value();
       try (Connection db = DriverManager.getConnection(dbUrl, dbUser, dbPasswordStr)) {
+        db.setCatalog(catalog);
         return new LinkedList<Object>(JdbcUtils.getTables(db, schemaPattern, tableTypes));
       } catch (SQLException e) {
         throw new ConfigException("Couldn't open connection to " + dbUrl, e);

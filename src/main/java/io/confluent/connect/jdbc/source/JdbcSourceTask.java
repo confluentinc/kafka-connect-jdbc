@@ -177,6 +177,8 @@ public class JdbcSourceTask extends SourceTask {
     final String dbUser = config.getString(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG);
     final Password dbPassword
         = config.getPassword(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG);
+    final String catalog = config.getString(JdbcSourceConnectorConfig.CATALOG_CONFIG);
+    final String schemaPattern = config.getString(JdbcSourceConnectorConfig.SCHEMA_PATTERN_CONFIG);
     final int maxConnectionAttempts
         = config.getInt(JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_CONFIG);
     final long connectionRetryBackoff
@@ -184,6 +186,8 @@ public class JdbcSourceTask extends SourceTask {
     cachedConnectionProvider = new CachedConnectionProvider(
         dbUrl,
         dbUser,
+        catalog,
+        schemaPattern,
         dbPassword == null ? null : dbPassword.value(),
         maxConnectionAttempts,
         connectionRetryBackoff

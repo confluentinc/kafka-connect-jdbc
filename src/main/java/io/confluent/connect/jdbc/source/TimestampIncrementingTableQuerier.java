@@ -26,6 +26,7 @@ import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -61,16 +62,19 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
 
   private String timestampColumn;
   private String incrementingColumn;
+  private String timestampColumnType;
   private long timestampDelay;
   private TimestampIncrementingOffset offset;
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
                                            String timestampColumn, String incrementingColumn,
+                                           String timestampColumnType,
                                            Map<String, Object> offsetMap, Long timestampDelay,
                                            String schemaPattern, boolean mapNumerics) {
     super(mode, name, topicPrefix, schemaPattern, mapNumerics);
     this.timestampColumn = timestampColumn;
     this.incrementingColumn = incrementingColumn;
+    this.timestampColumnType = timestampColumnType;
     this.timestampDelay = timestampDelay;
     this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
   }
@@ -170,10 +174,19 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
           DateTimeUtils.UTC_CALENDAR.get()
       ).getTime();
       Timestamp endTime = new Timestamp(currentDbTime - timestampDelay);
-      stmt.setTimestamp(1, endTime, DateTimeUtils.UTC_CALENDAR.get());
-      stmt.setTimestamp(2, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
-      stmt.setLong(3, incOffset);
-      stmt.setTimestamp(4, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
+      if ("DATE".equals(timestampColumnType)) {
+        log.debug("Timestamp column's data type is DATE");
+        stmt.setDate(1, new Date(endTime.getTime()), DateTimeUtils.UTC_CALENDAR.get());
+        stmt.setDate(2, new Date(tsOffset.getTime()), DateTimeUtils.UTC_CALENDAR.get());
+        stmt.setLong(3, incOffset);
+        stmt.setDate(4, new Date(tsOffset.getTime()), DateTimeUtils.UTC_CALENDAR.get());
+      } else {
+        log.debug("Timestamp column's data type is TIMESTAMP");
+        stmt.setTimestamp(1, endTime, DateTimeUtils.UTC_CALENDAR.get());
+        stmt.setTimestamp(2, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
+        stmt.setLong(3, incOffset);
+        stmt.setTimestamp(4, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
+      }
       log.debug(
           "Executing prepared statement with start time value = {} end time = {} and incrementing"
           + " value = {}",
@@ -192,8 +205,16 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
           DateTimeUtils.UTC_CALENDAR.get()
       ).getTime();
       Timestamp endTime = new Timestamp(currentDbTime - timestampDelay);
-      stmt.setTimestamp(1, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
-      stmt.setTimestamp(2, endTime, DateTimeUtils.UTC_CALENDAR.get());
+      if ("DATE".equals(timestampColumnType)) {
+        log.debug("Timestamp column's data type is DATE");
+        stmt.setDate(1, new Date(tsOffset.getTime()), DateTimeUtils.UTC_CALENDAR.get());
+        stmt.setDate(2, new Date(endTime.getTime()), DateTimeUtils.UTC_CALENDAR.get());
+      } else {
+        log.debug("Timestamp column's data type is TIMESTAMP");
+        stmt.setTimestamp(1, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
+        stmt.setTimestamp(2, endTime, DateTimeUtils.UTC_CALENDAR.get());
+      }
+
       log.debug("Executing prepared statement with timestamp value = {} end time = {}",
                 DateTimeUtils.formatUtcTimestamp(tsOffset),
                 DateTimeUtils.formatUtcTimestamp(endTime));

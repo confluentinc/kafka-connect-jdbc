@@ -31,6 +31,7 @@ import java.util.concurrent.TimeUnit;
 
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.JdbcUtils;
+import static io.confluent.connect.jdbc.JdbcSourceConnector.isAView;
 
 /**
  * Thread that monitors the database for changes to the set of tables in the database that this
@@ -141,7 +142,7 @@ public class TableMonitorThread extends Thread {
     if (whitelist != null) {
       filteredTables = new ArrayList<>(tables.size());
       for (String table : whitelist) {
-        if (tables.contains(table) || JdbcUtils.isAView(table, viewDefinitionTag)) {
+        if (tables.contains(table) || isAView(table, viewDefinitionTag)) {
           filteredTables.add(table);
         }
       }

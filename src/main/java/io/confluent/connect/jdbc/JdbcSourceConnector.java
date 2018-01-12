@@ -204,7 +204,7 @@ public class JdbcSourceConnector extends SourceConnector {
       List<String> viewsDefinitionsList, String viewDefinitionTag) {
     List<String> viewsList = new ArrayList<>();
     for (String elem : whitelist) {
-      if (JdbcUtils.isAView(elem, viewDefinitionTag)) {
+      if (isAView(elem, viewDefinitionTag)) {
         viewsList.add(elem);
       }
     }
@@ -241,6 +241,16 @@ public class JdbcSourceConnector extends SourceConnector {
     }
     log.debug("viewsDefinitions : " + viewsDefinitionsMap);
     return viewsDefinitionsMap;
+  }
+  
+  public static boolean isAView(String whiteListElement, String viewTag) {
+    log.debug("test if '" + whiteListElement + "' is a view :");
+    if (whiteListElement.startsWith(viewTag)) {
+      log.debug("'" + whiteListElement + "' is a view");
+      return true;
+    } else {
+      return false;
+    }
   }
   
 }

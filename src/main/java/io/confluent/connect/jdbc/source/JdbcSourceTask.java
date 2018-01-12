@@ -39,6 +39,7 @@ import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.JdbcUtils;
 import io.confluent.connect.jdbc.util.StringUtils;
 import io.confluent.connect.jdbc.util.Version;
+import static io.confluent.connect.jdbc.JdbcSourceConnector.isAView;
 
 /**
  * JdbcSourceTask is a Kafka Connect SourceTask implementation that reads from JDBC databases and
@@ -135,7 +136,7 @@ public class JdbcSourceTask extends SourceTask {
     for (String tableOrQuery : tablesOrQuery) {
       final Map<String, String> partition;
       final Boolean isView = (queryMode == TableQuerier.QueryMode.QUERY)
-          ? new Boolean(false) : JdbcUtils.isAView(tableOrQuery,
+          ? new Boolean(false) : isAView(tableOrQuery,
               config.getString(JdbcSourceConnectorConfig.VIEW_DEFINITION_TAG_CONFIG));
       switch (queryMode) {
         case TABLE:

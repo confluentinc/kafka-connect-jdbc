@@ -54,6 +54,7 @@ public class TimestampIncrementingTableQuerierTest {
   public void setup() {
     db = new EmbeddedDerby();
     cachedConnectionProvider = new CachedConnectionProvider(db.getUrl());
+    TimeZone.setDefault(null);
   }
   
   @After
@@ -104,6 +105,7 @@ public class TimestampIncrementingTableQuerierTest {
   public void testCreatePreparedStatemenInTimeStampMode() throws Exception {
     String tableName = "test1";
     SimpleDateFormat derbySdf = new SimpleDateFormat("yyyy-MM-dd-HH.mm.ss");
+    derbySdf.setTimeZone(TimeZone.getTimeZone("UTC"));
     int pastOffsetInMinutes = 10;
     String dbDateUTC = derbySdf.format(new Date().getTime() - (60000*pastOffsetInMinutes));
     db.createTable(tableName, "id", "INT NOT NULL", "ts", "TIMESTAMP NOT NULL");
@@ -121,22 +123,20 @@ public class TimestampIncrementingTableQuerierTest {
   
   @Test
   public void testCreatePreparedStatemenInTimeStampModeForInlineView() throws Exception {
-    db.createTable("parent", "id", "INT NOT NULL", "foo", "VARCHAR(20)", "creation_ts", "TIMESTAMP NOT NULL", "update_ts", "TIMESTAMP");
-    db.createTable("child", "id", "INT NOT NULL", "bar", "VARCHAR(20)");
+    db.createTable("parent", "id", "INT NOT NULL", "parent_val", "VARCHAR(20)", "creation_ts", "TIMESTAMP NOT NULL", "update_ts", "TIMESTAMP");
+    db.createTable("child", "id", "INT NOT NULL", "child_val", "VARCHAR(20)");
     SimpleDateFormat derbySdf = new SimpleDateFormat("yyyy-MM-dd-HH.mm.ss.SSS");
+    derbySdf.setTimeZone(TimeZone.getTimeZone("UTC"));
     long now = new Date().getTime();
     String creationTs = derbySdf.format(now - (60000*30));
     String updateTs = derbySdf.format(now - (60000*5));
-    System.out.println("now: " + now);
-    System.out.println("creationTs: " + creationTs);
-    System.out.println("updateTs: " + updateTs);
-    db.insert("parent", "id", 1, "foo", "fooVal1", "creation_ts", creationTs);
-    db.insert("parent", "id", 2, "foo", "fooVal2",
+    db.insert("parent", "id", 1, "parent_val", "val1", "creation_ts", creationTs);
+    db.insert("parent", "id", 2, "parent_val", "val2",
         "creation_ts", creationTs, "update_ts", updateTs);
-    db.insert("child", "id", 1, "bar", "barVal1");
-    db.insert("child", "id", 2, "bar", "barVal2");
+    db.insert("child", "id", 1, "child_val", "val3");
+    db.insert("child", "id", 2, "child_val", "val4");
     final String inlineViewName= "V_test";
-    final String inlineViewDefinition = "(SELECT \"parent\".\"id\", \"parent\".\"foo\", \"child\".\"bar\","
+    final String inlineViewDefinition = "(SELECT \"parent\".\"id\", \"parent\".\"parent_val\", \"child\".\"child_val\","
         + "coalesce(\"parent\".\"update_ts\", \"parent\".\"creation_ts\") AS \"ts\" "
         + "FROM \"parent\" "
         + "JOIN \"child\" ON \"child\".\"id\" = \"parent\".\"id\""
@@ -150,27 +150,25 @@ public class TimestampIncrementingTableQuerierTest {
    
     Struct struct = DataConverter.convertRecord(DataConverter.convertSchema(inlineViewName, rs.getMetaData(),
         false), rs, false, null);
-    System.out.println("struct: " + struct);
-    int id = rs.getInt("id");
-    String foo = rs.getString("foo");
-    String bar = rs.getString("bar");
-    String ts = derbySdf.format(rs.getTimestamp("ts"));
+    int id = struct.getInt32("id");
+    String parentVal = struct.getString("parent_val");
+    String childVal = struct.getString("child_val");
+    String ts = derbySdf.format(((java.sql.Timestamp)struct.get("ts")).getTime());
     assertEquals(1, id);
-    assertEquals("fooVal1", foo);
-    assertEquals("barVal1", bar);
+    assertEquals("val1", parentVal);
+    assertEquals("val3", childVal);
     assertEquals(ts, creationTs);
     
     rs.next();
     struct = DataConverter.convertRecord(DataConverter.convertSchema(inlineViewName, rs.getMetaData(),
         false), rs, false, null);
-    System.out.println("struct: " + struct);
-    id = rs.getInt("id");
-    foo = rs.getString("foo");
-    bar = rs.getString("bar");
-    ts = derbySdf.format(rs.getTimestamp("ts"));
+    id = struct.getInt32("id");
+    parentVal = struct.getString("parent_val");
+    childVal = struct.getString("child_val");
+    ts = derbySdf.format(((java.sql.Timestamp)struct.get("ts")).getTime());
     assertEquals(2, id);
-    assertEquals("fooVal2", foo);
-    assertEquals("barVal2", bar);
+    assertEquals("val2", parentVal);
+    assertEquals("val4", childVal);
     assertEquals(ts, updateTs);
   }
   
@@ -178,17 +176,15 @@ public class TimestampIncrementingTableQuerierTest {
   public void testConvertValuesFromDbColumnTypeTimeStampWithoutTimezone() throws Exception {
     // This test is an attempt to show that when dealing with SQL types similar to
     // 'timestamp without timezone', in a DB running with a timezone different than UTC,
-    // a calendar may be necessary to retrieve and store the correct value in Kafka.
+    // a Calendar may be necessary to retrieve and store the correct value in Kafka.
     String tableName = "test1";
     int timeShift = 5;
     String dbTimezone = "GMT-" + timeShift;
-    // here we simulate a database clock running in timezone different than UTC
+    // We simulate a database clock running in a timezone different than UTC.
     TimeZone.setDefault(TimeZone.getTimeZone(dbTimezone));
     SimpleDateFormat derbySdf = new SimpleDateFormat("yyyy-MM-dd-HH.mm.ss.SSS");
     long dbTime = new Date().getTime();
-    System.out.println("dbTime: " + dbTime);
     String dbTimestampWithoutTimezone = derbySdf.format(dbTime);
-    System.out.println("dbTimestampWithoutTimezone: " + dbTimestampWithoutTimezone);
     db.createTable(tableName, "id", "INT NOT NULL", "ts", "TIMESTAMP NOT NULL");
     db.insert(tableName, "id", 1, "ts", dbTimestampWithoutTimezone);
     
@@ -198,26 +194,20 @@ public class TimestampIncrementingTableQuerierTest {
     System.out.println("timeWrittenInTable: " + timeWrittenInTable);
     assertEquals(dbTime, timeWrittenInTable);
     
+    // The Calendar used to retrieve the time is not the same than the one used to store the value.
     Timestamp dbTimeUTC = JdbcUtils.getCurrentTimeOnDB(cachedConnectionProvider.getValidConnection(),
         DateTimeUtils.UTC_CALENDAR.get());
+    // Here it is the same.
     Timestamp dbTimeDbTimeZone = JdbcUtils.getCurrentTimeOnDB(cachedConnectionProvider.getValidConnection(),
         DateTimeUtils.getCalendarWithTimeZone(dbTimezone));
     Timestamp dbTimeJvmTimeZone = JdbcUtils.getCurrentTimeOnDB(cachedConnectionProvider.getValidConnection(),
         null);
     
-    System.out.println("dbTimeUTC: " + dbTimeUTC);
-    System.out.println("dbTimeDbTimeZone: " + dbTimeDbTimeZone);
-    System.out.println("dbTimeJvmTimeZone: " + dbTimeJvmTimeZone);
-    System.out.println("dbTimeUTCTimezoneOffset: " + dbTimeUTC.getTimezoneOffset());
-    System.out.println("dbTimeDbTimeZoneTimezoneOffset: " + dbTimeDbTimeZone.getTimezoneOffset());
-    System.out.println("dbTimeJvmTimeZoneTimezoneOffset: " + dbTimeJvmTimeZone.getTimezoneOffset());
-    System.out.println("dbTimeUTCTime " + dbTimeUTC.getTime());
-    System.out.println("dbTimeDbTime: " + dbTimeDbTimeZone.getTime());
-    System.out.println("dbTimeJvmTime: " + dbTimeJvmTimeZone.getTime());
     assertTrue(dbTimeUTC.getTime() < dbTimeJvmTimeZone.getTime());
-    assertEquals(dbTimeDbTimeZone.getTime(), dbTimeJvmTimeZone.getTime());
+    SimpleDateFormat compareHourSdf = new SimpleDateFormat("yyyy-MM-dd-HH.mm.ss");
+    assertEquals(compareHourSdf.format(dbTimeDbTimeZone), compareHourSdf.format(dbTimeJvmTimeZone));
     
-    // here the querier will use UTC calendar to get current time on db and determine query window end time
+    // Here the querier will use UTC calendar to get current time on db and determine query window end time
     // it works even if previous test shown that db time get with UTC Calendar is lower than the one
     // get with the jvm time zone. Anyway this doesn't change the retrieved value since only the window
     // end time is concerned. 
@@ -231,15 +221,15 @@ public class TimestampIncrementingTableQuerierTest {
     Struct struct = DataConverter.convertRecord(DataConverter.convertSchema(tableName, rs.getMetaData(),
         false), rs, false, "UTC");
     Timestamp ts1 = (Timestamp)struct.get("ts");
-    System.out.println("ts 1: " + ts1.getTime());
     
     rs = querier.executeQuery();
     rs.next();
     struct = DataConverter.convertRecord(DataConverter.convertSchema(tableName, rs.getMetaData(),
         false), rs, false, dbTimezone);
     Timestamp ts2 = (Timestamp)struct.get("ts");
-    System.out.println("ts 2: " + ts2.getTime());
     
+    // By transitivity, data converted with default Calendar (UTC) gives incorrect time values
+    // relative to database timezone
     assertNotEquals(ts1.getTime(), ts2.getTime());
     assertEquals(dbTime, ts2.getTime());
   }

@@ -177,21 +177,21 @@ public class JdbcSourceConnectorTest {
   }
 
   @Test
-  public void testPartitioningViews() throws Exception {
+  public void testPartitioningInlineViews() throws Exception {
     // Tests "partitioning" when config specifies inline views
-    // Commas in view definitions must be escaped with \\\\
-    System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!testPartitioningViews : ");
-    db.createTable("test1", "id", "INT NOT NULL");
-    db.createTable("test2", "id", "INT NOT NULL");
+    // Commas in inline view definitions must be escaped with \\\\ (4 anti-slashes)
+    // actually inline views are not checked against the schema so table creation here is not needed
+    // for the partitioning.
+    db.createTable("test1", "id", "INT NOT NULL", "val1", "VARCHAR(20)");
+    db.createTable("test2", "id", "INT NOT NULL", "val2", "VARCHAR(20)");
+    db.createTable("test3", "id", "INT NOT NULL", "val3", "VARCHAR(20)");
     final String sampleWhiteList= "view_test1, view_test2";
-    final String sampleViewsDefinitions = "(SELECT id\\\\, foo\\\\, bar FROM test1 JOIN test2 on test1.id = test2.id),"
-        + "(SELECT id\\\\\\\\, foo\\\\\\\\, bar FROM test2 JOIN test3 on test2.id = test3.id)";
+    final String sampleInlineViewsDefinitions = "(SELECT id\\\\, val1\\\\, val2 FROM test1 JOIN test2 on test1.id = test2.id),"
+        + "(SELECT id\\\\\\\\, val2\\\\\\\\, val3 FROM test2 JOIN test3 on test2.id = test3.id)";
     connProps.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, sampleWhiteList);
-    connProps.put(JdbcSourceConnectorConfig.VIEW_DEFINITION_LIST_CONFIG, sampleViewsDefinitions);
+    connProps.put(JdbcSourceConnectorConfig.INLINE_VIEWS_DEFINITIONS_CONFIG, sampleInlineViewsDefinitions);
     connector.start(connProps);
-    System.out.println("connector : " + connector);
     List<Map<String, String>> configs = connector.taskConfigs(3);
-    System.out.println("configs 3 : " + configs);
     assertEquals(2, configs.size());
     assertTaskConfigsHaveParentConfigs(configs);
 
@@ -206,22 +206,19 @@ public class JdbcSourceConnectorTest {
   }
   
   @Test
-  public void testPartitioningViewsAndTables() throws Exception {
+  public void testPartitioningInlineViewsAndTables() throws Exception {
     // Tests "partitioning" when config specifies inline views mixed with tables
-    // Commas in view definitions must be escaped with \\\\
-    System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!testPartitioningViewsAndTables : ");
-    db.createTable("test1", "id", "INT NOT NULL");
-    db.createTable("test2", "id", "INT NOT NULL");
-    db.createTable("test3", "id", "INT NOT NULL");
+    // Commas in inline view definitions must be escaped with \\\\
+    db.createTable("test1", "id", "INT NOT NULL", "val1", "VARCHAR(20)");
+    db.createTable("test2", "id", "INT NOT NULL", "val2", "VARCHAR(20)");
+    db.createTable("test3", "id", "INT NOT NULL", "val3", "VARCHAR(20)");
     final String sampleWhiteList= "test1, view_test1, test2, view_test2, test3";
-    final String sampleViewsDefinitions = "(SELECT id\\\\, foo\\\\, bar FROM test1 JOIN test2 on test1.id = test2.id),"
-        + "(SELECT id\\\\\\\\, foo\\\\\\\\, bar FROM test2 JOIN test3 on test2.id = test3.id)";
+    final String sampleInlineViewsDefinitions = "(SELECT id\\\\, val1\\\\, val2 FROM test1 JOIN test2 on test1.id = test2.id),"
+        + "(SELECT id\\\\\\\\, val2\\\\\\\\, val3 FROM test2 JOIN test3 on test2.id = test3.id)";
     connProps.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, sampleWhiteList);
-    connProps.put(JdbcSourceConnectorConfig.VIEW_DEFINITION_LIST_CONFIG, sampleViewsDefinitions);
+    connProps.put(JdbcSourceConnectorConfig.INLINE_VIEWS_DEFINITIONS_CONFIG, sampleInlineViewsDefinitions);
     connector.start(connProps);
-    System.out.println("connector : " + connector);
     List<Map<String, String>> configs = connector.taskConfigs(5);
-    System.out.println("configs 5 : " + configs);
     assertEquals(5, configs.size());
     assertTaskConfigsHaveParentConfigs(configs);
 
@@ -233,88 +230,82 @@ public class JdbcSourceConnectorTest {
     Collections.sort(tableAndViews);
     assertEquals(Arrays.asList("test1, test2, test3, view_test1, view_test2").toString(),
         tableAndViews.toString());
-    //assertNull(configs.get(0).get(JdbcSourceTaskConfig.QUERY_CONFIG));
-    //assertNull(configs.get(1).get(JdbcSourceTaskConfig.QUERY_CONFIG));
 
     connector.stop();
   }
   
   @Test(expected = ConnectException.class)
-  public void testViewDefinitionsAreEnclosedInParentheses() throws Exception {
-    // View definitions must be enclosed in parentheses
-    db.createTable("test1", "id", "INT NOT NULL");
-    db.createTable("test2", "id", "INT NOT NULL");
+  public void testInlineViewsDefinitionsAreEnclosedInParentheses() throws Exception {
+    // Inline views definitions must be enclosed in parentheses
+    db.createTable("test1", "id", "INT NOT NULL", "val1", "VARCHAR(20)");
+    db.createTable("test2", "id", "INT NOT NULL", "val2", "VARCHAR(20)");
+    db.createTable("test3", "id", "INT NOT NULL", "val3", "VARCHAR(20)");
     final String sampleWhiteList= "view_test1, view_test2";
-    final String sampleViewsDefinitions = "(SELECT id\\\\, foo\\\\, bar FROM test1 JOIN test2 on test1.id = test2.id),"
-        + "SELECT id\\\\\\\\, foo\\\\\\\\, bar FROM test2 JOIN test3 on test2.id = test3.id";
+    final String sampleInlineViewsDefinitions = "(SELECT id\\\\, val1\\\\, val2 FROM test1 JOIN test2 on test1.id = test2.id),"
+        + "SELECT id\\\\\\\\, val1\\\\\\\\, val2 FROM test2 JOIN test3 on test2.id = test3.id";
     connProps.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, sampleWhiteList);
-    connProps.put(JdbcSourceConnectorConfig.VIEW_DEFINITION_LIST_CONFIG, sampleViewsDefinitions);
+    connProps.put(JdbcSourceConnectorConfig.INLINE_VIEWS_DEFINITIONS_CONFIG, sampleInlineViewsDefinitions);
     connector.start(connProps);
   }
   
   @Test(expected = ConnectException.class)
-  public void testNoViewDefinitions() throws Exception {
-    System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!testNoViewDefinitions : ");
-    // View definitions must not be empty when views are declared in table.whitelist
-    db.createTable("test1", "id", "INT NOT NULL");
-    db.createTable("test2", "id", "INT NOT NULL");
+  public void testNoInlineViewDefinitions() throws Exception {
+    // Inline views definitions must not be empty when views are declared in table.whitelist
+    db.createTable("test1", "id", "INT NOT NULL", "val1", "VARCHAR(20)");
+    db.createTable("test2", "id", "INT NOT NULL", "val2", "VARCHAR(20)");
+    db.createTable("test3", "id", "INT NOT NULL", "val3", "VARCHAR(20)");
     final String sampleWhiteList= "view_test1, view_test2";
-    final String sampleViewsDefinitions = "";
+    final String sampleInlineViewsDefinitions = "";
     connProps.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, sampleWhiteList);
-    connProps.put(JdbcSourceConnectorConfig.VIEW_DEFINITION_LIST_CONFIG, sampleViewsDefinitions);
-    System.out.println("ici : ");
+    connProps.put(JdbcSourceConnectorConfig.INLINE_VIEWS_DEFINITIONS_CONFIG, sampleInlineViewsDefinitions);
     connector.start(connProps);
-    System.out.println("là ");
     connector.stop();
-    System.out.println("là 2 ");
   }
   
   @Test(expected = ConnectException.class)
-  public void testMissingSomeViewDefinitions() throws Exception {
-    // The number of views definitions must be the same than views declared in table.whitelist
-    db.createTable("test1", "id", "INT NOT NULL");
-    db.createTable("test2", "id", "INT NOT NULL");
+  public void testMissingSomeInlineViewDefinitions() throws Exception {
+    // The number of inline views definitions must be the same than views declared in table.whitelist
+    db.createTable("test1", "id", "INT NOT NULL", "val1", "VARCHAR(20)");
+    db.createTable("test2", "id", "INT NOT NULL", "val2", "VARCHAR(20)");
+    db.createTable("test3", "id", "INT NOT NULL", "val3", "VARCHAR(20)");
     final String sampleWhiteList= "view_test1, view_test2";
-    final String sampleViewsDefinitions = "(SELECT id\\\\\\\\, foo\\\\\\\\, bar FROM test1 JOIN test2 on test1.id = test2.id)";
+    final String sampleInlineViewsDefinitions = "(SELECT id\\\\\\\\, val1\\\\\\\\, val2 FROM test1 JOIN test2 on test1.id = test2.id)";
     connProps.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, sampleWhiteList);
-    connProps.put(JdbcSourceConnectorConfig.VIEW_DEFINITION_LIST_CONFIG, sampleViewsDefinitions);
+    connProps.put(JdbcSourceConnectorConfig.INLINE_VIEWS_DEFINITIONS_CONFIG, sampleInlineViewsDefinitions);
     connector.start(connProps);
     connector.stop();
   }
   
   @Test
-  public void testCustomViewDefinitionTag() throws Exception {
-    System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!testCustomViewDefinitionTag : ");
-    db.createTable("test1", "id", "INT NOT NULL");
-    db.createTable("test2", "id", "INT NOT NULL");
+  public void testCustomInlineViewDefinitionTag() throws Exception {
+    db.createTable("test1", "id", "INT NOT NULL", "val1", "VARCHAR(20)");
+    db.createTable("test2", "id", "INT NOT NULL", "val2", "VARCHAR(20)");
+    db.createTable("test3", "id", "INT NOT NULL", "val3", "VARCHAR(20)");
     final String sampleWhiteList= "V_test1, V_test2";
-    final String sampleViewsDefinitions = "(SELECT id\\\\, foo\\\\, bar FROM test1 JOIN test2 on test1.id = test2.id),"
-        + "(SELECT id\\\\\\\\, foo\\\\\\\\, bar FROM test2 JOIN test3 on test2.id = test3.id)";
+    final String sampleInlineViewsDefinitions = "(SELECT id\\\\, val1\\\\, val2 FROM test1 JOIN test2 on test1.id = test2.id),"
+        + "(SELECT id\\\\\\\\, val2\\\\\\\\, val3 FROM test2 JOIN test3 on test2.id = test3.id)";
     connProps.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, sampleWhiteList);
-    connProps.put(JdbcSourceConnectorConfig.VIEW_DEFINITION_LIST_CONFIG, sampleViewsDefinitions);
-    connProps.put(JdbcSourceConnectorConfig.VIEW_DEFINITION_TAG_CONFIG, "V_");
+    connProps.put(JdbcSourceConnectorConfig.INLINE_VIEWS_DEFINITIONS_CONFIG, sampleInlineViewsDefinitions);
+    connProps.put(JdbcSourceConnectorConfig.INLINE_VIEW_TAG_CONFIG, "V_");
     connector.start(connProps);
-    System.out.println("connector : " + connector);
     List<Map<String, String>> configs = connector.taskConfigs(3);
-    System.out.println("configs 3 : " + configs);
     assertEquals(2, configs.size());
     assertTaskConfigsHaveParentConfigs(configs);
     connector.stop();
   }
   
   @Test(expected = IllegalArgumentException.class)
-  public void testMissingViewDefinitionTagConfig() throws Exception {
-    System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!testCustomViewDefinitionTag : ");
-    db.createTable("test1", "id", "INT NOT NULL");
-    db.createTable("test2", "id", "INT NOT NULL");
+  public void testMissingInlineViewDefinitionTagConfig() throws Exception {
+    db.createTable("test1", "id", "INT NOT NULL", "val1", "VARCHAR(20)");
+    db.createTable("test2", "id", "INT NOT NULL", "val2", "VARCHAR(20)");
+    db.createTable("test3", "id", "INT NOT NULL", "val3", "VARCHAR(20)");
     final String sampleWhiteList= "V_test1, V_test2";
-    final String sampleViewsDefinitions = "(SELECT id\\\\, foo\\\\, bar FROM test1 JOIN test2 on test1.id = test2.id),"
-        + "(SELECT id\\\\\\\\, foo\\\\\\\\, bar FROM test2 JOIN test3 on test2.id = test3.id)";
+    final String sampleInlineViewsDefinitions = "(SELECT id\\\\, val1\\\\, val2 FROM test1 JOIN test2 on test1.id = test2.id),"
+        + "(SELECT id\\\\\\\\, val2\\\\\\\\, val3 FROM test2 JOIN test3 on test2.id = test3.id)";
     connProps.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, sampleWhiteList);
-    connProps.put(JdbcSourceConnectorConfig.VIEW_DEFINITION_LIST_CONFIG, sampleViewsDefinitions);
+    connProps.put(JdbcSourceConnectorConfig.INLINE_VIEWS_DEFINITIONS_CONFIG, sampleInlineViewsDefinitions);
     connector.start(connProps);
     List<Map<String, String>> configs = connector.taskConfigs(3);
-    System.out.println("configs : " + configs);
     connector.stop();
   }
   

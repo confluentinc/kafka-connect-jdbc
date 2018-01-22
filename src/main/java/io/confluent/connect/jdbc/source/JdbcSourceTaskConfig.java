@@ -30,7 +30,8 @@ import java.util.Map;
 public class JdbcSourceTaskConfig extends JdbcSourceConnectorConfig {
 
   public static final String TABLES_CONFIG = "tables";
-  private static final String TABLES_DOC = "List of tables for this task to watch for changes.";
+  private static final String TABLES_DOC = "List of tables or inline views for this task to "
+      + "watch for changes.";
 
   public static final String DB_TIMEZONE_CONFIG = "db.timezone";
   public static final String DB_TIMEZONE_DEFAULT = "UTC";
@@ -40,18 +41,19 @@ public class JdbcSourceTaskConfig extends JdbcSourceConnectorConfig {
       + DateTimeUtils.JVM_TIMEZONE + "', the driver will use the timezone of"
       + "the virtual machine running the task.";
 
-  public static final String VIEWS_DEFINITIONS = "views.definitions";
-  private static final String VIEWS_DEFINITIONS_DOC =
-      "List of views SQL definitions for this task, in the same order than views tags appearing"
-      + "in TABLES_CONFIG. Each SQL definition must be enclosed in parenthesis.";
-  public static final String VIEWS_DEFINITIONS_DEFAULT = "";
+  public static final String TASK_INLINE_VIEWS_DEFINITIONS_CONFIG = "task.inline.views.definitions";
+  private static final String TASK_INLINE_VIEWS_DEFINITIONS_DOC =
+      "List of inline view definitions (SQL) for this task, in the same order than views tags "
+      + "appearing in " + TABLES_CONFIG + ". Each SQL definition must be enclosed in parenthesis.";
+  public static final String TASK_INLINE_VIEWS_DEFINITIONS_DEFAULT = "";
   
   static ConfigDef config = baseConfigDef()
       .define(TABLES_CONFIG, Type.LIST, Importance.HIGH, TABLES_DOC)
       .define(DB_TIMEZONE_CONFIG, Type.STRING, DB_TIMEZONE_DEFAULT,
           Importance.MEDIUM, DB_TIMEZONE_CONFIG_DOC)
-      .define(VIEWS_DEFINITIONS, Type.STRING, VIEWS_DEFINITIONS_DEFAULT,
-          Importance.MEDIUM, VIEWS_DEFINITIONS_DOC);
+      .define(TASK_INLINE_VIEWS_DEFINITIONS_CONFIG, Type.STRING,
+          TASK_INLINE_VIEWS_DEFINITIONS_DEFAULT,
+          Importance.MEDIUM, TASK_INLINE_VIEWS_DEFINITIONS_DOC);
 
   public JdbcSourceTaskConfig(Map<String, String> props) {
     super(config, props);

@@ -63,27 +63,28 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   private long timestampDelay;
   private TimestampIncrementingOffset offset;
   private final String dbTimeZone;
-  private final String viewDefinition;
+  private final String inlineViewDefinition;
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
                                            String timestampColumn, String incrementingColumn,
                                            Map<String, Object> offsetMap, Long timestampDelay,
                                            String schemaPattern, boolean mapNumerics,
-                                           final String dbTimeZone, final String viewDefinition) {
+                                           final String dbTimeZone,
+                                           final String inlineViewDefinition) {
     super(mode, name, topicPrefix, schemaPattern, mapNumerics);
     this.timestampColumn = timestampColumn;
     this.incrementingColumn = incrementingColumn;
     this.timestampDelay = timestampDelay;
     this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
     this.dbTimeZone = dbTimeZone;
-    this.viewDefinition = viewDefinition;
+    this.inlineViewDefinition = inlineViewDefinition;
   }
   
   @Override
   protected void createPreparedStatement(Connection db) throws SQLException {
     // Default when unspecified uses an autoincrementing column.
-    // Not supported with in-config defined views.
-    if (this.viewDefinition == null && incrementingColumn != null
+    // Not supported with inline views (defined in config).
+    if (this.inlineViewDefinition == null && incrementingColumn != null
         && incrementingColumn.isEmpty()) {
       incrementingColumn = JdbcUtils.getAutoincrementColumn(db, schemaPattern, name);
     }
@@ -96,13 +97,13 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       case TABLE:
         builder.append("SELECT * FROM ");
         // Append schema name prefix to table name in case the user is not the owner of the schema.
-        // Views will set the schema prefix in their SQL definition.
-        if (this.viewDefinition == null && schemaPattern != null) {
+        // Inline views will set the schema prefix in their SQL definition.
+        if (this.inlineViewDefinition == null && schemaPattern != null) {
           builder.append(JdbcUtils.quoteString(schemaPattern, quoteString));
           builder.append(".");
         }
-        if (this.viewDefinition != null) {
-          builder.append(viewDefinition);
+        if (this.inlineViewDefinition != null) {
+          builder.append(inlineViewDefinition);
           // Append an alias for the view, needed by some databases
           builder.append(" " + this.name);
         } else {
@@ -207,7 +208,6 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       Timestamp tsOffset = offset.getTimestampOffset();
       final long currentDbTime = JdbcUtils.getCurrentTimeOnDB(
           stmt.getConnection(),
-          /*DateTimeUtils.UTC_CALENDAR.get()*/
           DateTimeUtils.getCalendarWithTimeZone(dbTimeZone)
       ).getTime();
       

@@ -31,7 +31,6 @@ import java.util.concurrent.TimeUnit;
 
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.JdbcUtils;
-import static io.confluent.connect.jdbc.JdbcSourceConnector.isAView;
 
 /**
  * Thread that monitors the database for changes to the set of tables in the database that this
@@ -49,7 +48,7 @@ public class TableMonitorThread extends Thread {
   private Set<String> blacklist;
   private List<String> tables;
   private Set<String> tableTypes;
-  private String viewDefinitionTag;
+  private String inlineViewTag;
 
   public TableMonitorThread(
       CachedConnectionProvider cachedConnectionProvider,
@@ -59,7 +58,7 @@ public class TableMonitorThread extends Thread {
       Set<String> whitelist,
       Set<String> blacklist,
       Set<String> tableTypes,
-      String viewDefinitionTag
+      String inlineViewTag
   ) {
     this.cachedConnectionProvider = cachedConnectionProvider;
     this.schemaPattern = schemaPattern;
@@ -70,7 +69,7 @@ public class TableMonitorThread extends Thread {
     this.blacklist = blacklist;
     this.tables = null;
     this.tableTypes = tableTypes;
-    this.viewDefinitionTag = viewDefinitionTag;
+    this.inlineViewTag = inlineViewTag;
   }
 
   @Override
@@ -142,7 +141,8 @@ public class TableMonitorThread extends Thread {
     if (whitelist != null) {
       filteredTables = new ArrayList<>(tables.size());
       for (String table : whitelist) {
-        if (tables.contains(table) || isAView(table, viewDefinitionTag)) {
+        // inline views are always kept in filter
+        if (tables.contains(table) || table.startsWith(inlineViewTag)) {
           filteredTables.add(table);
         }
       }

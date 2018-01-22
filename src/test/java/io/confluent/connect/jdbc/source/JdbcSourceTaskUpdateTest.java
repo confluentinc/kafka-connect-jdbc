@@ -187,6 +187,34 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
 
     PowerMock.verifyAll();
   }
+  
+  @Test
+  public void testInlineView() throws Exception {
+    Map<String, Object> inlineViewPartition = new HashMap<>();
+    inlineViewPartition.put(JdbcSourceConnectorConstants.TABLE_NAME_KEY, INLINE_VIEW_NAME);
+    expectInitializeNoOffsets(Arrays.asList(inlineViewPartition));
+    PowerMock.replayAll();
+    
+    db.createTable(SINGLE_TABLE_NAME, "id", "INT", "modified", "TIMESTAMP NOT NULL");
+    db.createTable(SECOND_TABLE_NAME, "id", "INT", "attr", "VARCHAR(20)");
+    db.insert(SINGLE_TABLE_NAME, "id", 1, "modified", DateTimeUtils.formatUtcTimestamp(new Timestamp(10L)));
+    db.insert(SECOND_TABLE_NAME, "id", 1, "attr", "value1");
+    
+    initializeTask();
+    task.start(inlineViewConfig());
+    verifyTimestampFirstPoll(TOPIC_PREFIX + INLINE_VIEW_NAME);
+    
+    db.insert(SINGLE_TABLE_NAME, "id", 2, "modified", DateTimeUtils.formatUtcTimestamp(new Timestamp(10L)));
+    db.insert(SECOND_TABLE_NAME, "id", 2, "attr", "value2");
+    db.insert(SINGLE_TABLE_NAME, "id", 3, "modified", DateTimeUtils.formatUtcTimestamp(new Timestamp(11L)));
+    db.insert(SECOND_TABLE_NAME, "id", 3, "attr", "value3");
+    db.insert(SINGLE_TABLE_NAME, "id", 4, "modified", DateTimeUtils.formatUtcTimestamp(new Timestamp(12L)));
+    db.insert(SECOND_TABLE_NAME, "id", 4, "attr", "value4");
+    
+    verifyPoll(2, "attr", Arrays.asList("value3", "value4"), true, false, TOPIC_PREFIX + INLINE_VIEW_NAME);
+    
+    PowerMock.verifyAll();
+  }
 
   @Test
   public void testTimestampWithDelay() throws Exception {

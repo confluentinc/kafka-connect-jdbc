@@ -213,8 +213,7 @@ public class PreparedStatementBinder {
         case Date.LOGICAL_NAME:
           statement.setDate(
               index,
-              new java.sql.Date(((java.util.Date) value).getTime())/*,
-              DateTimeUtils.UTC_CALENDAR.get()*/,
+              new java.sql.Date(((java.util.Date) value).getTime()),
               DateTimeUtils.getCalendarWithTimeZone(dbTimeZone)
           );
           return true;
@@ -224,16 +223,14 @@ public class PreparedStatementBinder {
         case Time.LOGICAL_NAME:
           statement.setTime(
               index,
-              new java.sql.Time(((java.util.Date) value).getTime())/*,
-              DateTimeUtils.UTC_CALENDAR.get()*/,
+              new java.sql.Time(((java.util.Date) value).getTime()),
               DateTimeUtils.getCalendarWithTimeZone(dbTimeZone)
           );
           return true;
         case Timestamp.LOGICAL_NAME:
           statement.setTimestamp(
               index,
-              new java.sql.Timestamp(((java.util.Date) value).getTime())/*,
-              DateTimeUtils.UTC_CALENDAR.get()*/,
+              new java.sql.Timestamp(((java.util.Date) value).getTime()),
               DateTimeUtils.getCalendarWithTimeZone(dbTimeZone)
           );
           return true;

@@ -191,24 +191,21 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final long TIMESTAMP_DELAY_INTERVAL_MS_DEFAULT = 0;
   private static final String TIMESTAMP_DELAY_INTERVAL_MS_DISPLAY = "Delay Interval (ms)";
 
-  public static final String VIEW_DEFINITION_TAG_CONFIG = "view.tag";
-  private static final String VIEW_DEFINITION_TAG_DOC =
+  public static final String INLINE_VIEW_TAG_CONFIG = "inline.view.tag";
+  private static final String INLINE_VIEW_TAG_DOC =
       "String tag to be used as an marker to identify an inline view in table.whitelist config.";
-  public static final String VIEW_DEFINITION_TAG_DEFAULT = "view_";
+  public static final String INLINE_VIEW_TAG_DEFAULT = "view_";
   
-  public static final String VIEW_DEFINITION_LIST_CONFIG = "view.definition.list";
-  private static final String VIEW_DEFINITION_LIST_DOC =
-      "List of views SQL definitions to be matched with views declaration in table.whitelist,"
-      + "in the same order. Commas in SQL must be escaped with \\\\. If specified, table.whitelist"
-      + "must be set and must contain the same number of views names, "
-      + "all prefixed by view.definition.tag string, and appearing in the same order.";
-  public static final String VIEW_DEFINITION_LIST_DEFAULT = "";
-  
-  /*public static final String VIEW_DEFINITION_TAG_CONFIG = "view.definition.tag";
-  private static final String VIEW_DEFINITION_TAG_DOC =
-      "String tag to be used as an marker to identify a view in table.whitelist config.";
-  public static final String VIEW_DEFINITION_TAG_DEFAULT = "view_";*/
-  
+  public static final String INLINE_VIEWS_DEFINITIONS_CONFIG = "inline.views.definitions";
+  private static final String INLINE_VIEWS_DEFINITIONS_DOC =
+      "List of inline views definitions (SQL enclosed in parentheses) to be matched with "
+      + "views declaration in " + TABLE_WHITELIST_CONFIG + ", in the same order."
+      + "Commas in SQL must be escaped with \\\\ (four antislashes)."
+      + "If specified, " + TABLE_WHITELIST_CONFIG + " must be set and must "
+      + "contain the same number of views names, all prefixed by " + INLINE_VIEW_TAG_CONFIG
+      + " string, and appearing in the same order.";
+  public static final String INLINE_VIEWS_DEFINITIONS_DEFAULT = "";
+ 
   public static final String DATABASE_GROUP = "Database";
   public static final String MODE_GROUP = "Mode";
   public static final String CONNECTOR_GROUP = "Connector";
@@ -341,17 +338,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Width.SHORT,
         NUMERIC_PRECISION_MAPPING_DISPLAY
     ).define(
-        VIEW_DEFINITION_TAG_CONFIG,
+        INLINE_VIEW_TAG_CONFIG,
         Type.STRING,
-        VIEW_DEFINITION_TAG_DEFAULT,
+        INLINE_VIEW_TAG_DEFAULT,
         Importance.MEDIUM,
-        VIEW_DEFINITION_TAG_DOC
+        INLINE_VIEW_TAG_DOC
     ).define(
-        VIEW_DEFINITION_LIST_CONFIG,
+        INLINE_VIEWS_DEFINITIONS_CONFIG,
         Type.STRING,
-        VIEW_DEFINITION_LIST_DEFAULT,
+        INLINE_VIEWS_DEFINITIONS_DEFAULT,
         Importance.MEDIUM,
-        VIEW_DEFINITION_LIST_DOC);
+        INLINE_VIEWS_DEFINITIONS_DOC);
   }
 
   private static final void addModeOptions(ConfigDef config) {

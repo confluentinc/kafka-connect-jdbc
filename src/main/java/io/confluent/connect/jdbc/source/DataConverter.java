@@ -438,7 +438,7 @@ public class DataConverter {
       case Types.BINARY:
       case Types.VARBINARY:
       case Types.LONGVARBINARY: {
-        colValue = resultSet.getBytes(col);
+        colValue = resultSet.getObject(col);
         break;
       }
 

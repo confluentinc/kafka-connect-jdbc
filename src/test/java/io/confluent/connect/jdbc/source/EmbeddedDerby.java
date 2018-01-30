@@ -16,20 +16,17 @@
 
 package io.confluent.connect.jdbc.source;
 
-import org.apache.commons.io.FileUtils;
 import org.apache.derby.jdbc.EmbeddedDriver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.io.IOException;
+import javax.xml.bind.DatatypeConverter;
 import java.sql.Blob;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 
-import javax.xml.bind.DatatypeConverter;
 
 /**
  * Embedded Derby server useful for testing against a real JDBC database.
@@ -41,7 +38,7 @@ public class EmbeddedDerby {
   // Try to avoid conflicting with other files since databases are created in the current
   // directory. This also makes it easier to clean up if something goes wrong
   private static final String NAME_PREFIX = "__test_database_";
-  private static final String PROTOCOL = "jdbc:derby:";
+  private static final String PROTOCOL = "jdbc:derby:memory:";
 
   private String name;
   private Connection conn;
@@ -55,7 +52,7 @@ public class EmbeddedDerby {
     // Make sure any existing on-disk data is cleared.
     try {
       dropDatabase();
-    } catch (IOException e) {
+    } catch (SQLException e) {
       // Ignore. Could be missing file, and any real issues will cause problems later
     }
     // Derby seems to have problems with shutdown + restart with new connection in a process. We
@@ -93,6 +90,10 @@ public class EmbeddedDerby {
 
   private String getShutdownUrl() {
     return PROTOCOL + getRawName() + ";shutdown=true";
+  }
+
+  private String getDropUrl() {
+    return PROTOCOL + getRawName() + ";drop=true";
   }
 
   public Connection getConnection() {
@@ -166,10 +167,18 @@ public class EmbeddedDerby {
    * Drops the database by deleting it's files from disk. This assumes the working directory
    * isn't changing so the database files can be found relative to the current working directory.
    */
-  public void dropDatabase() throws IOException {
-    File dbDir = new File(getRawName());
-    log.debug("Dropping database {} by removing directory {}", name, dbDir.getAbsoluteFile());
-    FileUtils.deleteDirectory(dbDir);
+  public void dropDatabase() throws SQLException {
+    try {
+      DriverManager.getConnection(getDropUrl());
+    } catch (SQLException se) {
+      if (((se.getErrorCode() == 45000)
+           && ("08006".equals(se.getSQLState())))) {
+        // Note that for single database shutdown, the expected
+        // SQL state is "08006", and the error code is 45000.
+      } else {
+        throw se;
+      }
+    }
   }
 
   /**

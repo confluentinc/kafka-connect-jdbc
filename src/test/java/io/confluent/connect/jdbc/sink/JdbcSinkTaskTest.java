@@ -40,7 +40,6 @@ import static org.easymock.EasyMock.expectLastCall;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Mockito.mock;
 
 public class JdbcSinkTaskTest extends EasyMockSupport {
   private final SqliteHelper sqliteHelper = new SqliteHelper(getClass().getSimpleName());
@@ -92,6 +91,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
         .put("age", 21);
 
     final String topic = "atopic";
+    sqliteHelper.deleteTable(topic);
 
     task.put(Collections.singleton(
         new SinkRecord(topic, 1, null, null, SCHEMA, struct, 42)
@@ -133,7 +133,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     task.initialize(mock(SinkTaskContext.class));
 
     final String topic = "atopic";
-
+    sqliteHelper.deleteTable(topic);
     sqliteHelper.createTable(
         "CREATE TABLE " + topic + "(" +
         "    firstName  TEXT," +

@@ -16,6 +16,7 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.util.DateTimeUtils;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -30,8 +31,6 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import io.confluent.connect.jdbc.util.DateTimeUtils;
 
 import static org.junit.Assert.assertEquals;
 
@@ -142,7 +141,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
             extraColumn, "FLOAT");
     db.insert(SINGLE_TABLE_NAME, extraColumn, 32.4f);
 
-    startTask(null, "", null); // auto-incrementing
+    startTask(null, "id", null); // auto-incrementing
     verifyIncrementingFirstPoll(TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     // Adding records should result in only those records during the next poll()
@@ -279,7 +278,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     db.insert(SINGLE_TABLE_NAME, extraColumn, 33.4f);
     db.insert(SINGLE_TABLE_NAME, extraColumn, 35.4f);
 
-    startTask(null, "", null); // autoincrementing
+    startTask(null, "id", null); // autoincrementing
 
     // Effectively skips first poll
     verifyPoll(2, "id", Arrays.asList(2L, 3L), false, true, TOPIC_PREFIX + SINGLE_TABLE_NAME);

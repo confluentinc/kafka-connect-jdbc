@@ -16,6 +16,9 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.util.CachedConnectionProvider;
+import io.confluent.connect.jdbc.util.JdbcUtils;
+import io.confluent.connect.jdbc.util.Version;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.utils.SystemTime;
@@ -30,14 +33,11 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import io.confluent.connect.jdbc.util.CachedConnectionProvider;
-import io.confluent.connect.jdbc.util.JdbcUtils;
-import io.confluent.connect.jdbc.util.Version;
 
 /**
  * JdbcSourceTask is a Kafka Connect SourceTask implementation that reads from JDBC databases and
@@ -115,12 +115,23 @@ public class JdbcSourceTask extends SourceTask {
         = config.getString(JdbcSourceTaskConfig.SCHEMA_PATTERN_CONFIG);
     String incrementingColumn
         = config.getString(JdbcSourceTaskConfig.INCREMENTING_COLUMN_NAME_CONFIG);
+    String incrementingColumnQualifier
+        = config.getString(JdbcSourceTaskConfig.INCREMENTING_COLUMN_NAME_QUALIFIER_CONFIG);
     String timestampColumn
         = config.getString(JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
+    String timestampColumnQualifier
+        = config.getString(JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_QUALIFIER_CONFIG);
     Long timestampDelayInterval
         = config.getLong(JdbcSourceTaskConfig.TIMESTAMP_DELAY_INTERVAL_MS_CONFIG);
     boolean validateNonNulls
         = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
+    Integer incrementSpan
+        = config.getInt(JdbcSourceTaskConfig.INCREMENTING_SPAN_MAX_CONFIG);
+    Integer timestampSpanDays
+        = config.getInt(JdbcSourceTaskConfig.TIMESTAMP_SPAN_DAYS_MAX_CONFIG);
+    Boolean requireZeroScaleIncrementer
+        = config.getBoolean(JdbcSourceTaskConfig.REQUIRE_NON_ZERO_SCALE_INCREMENTER_CONFIG);
+
 
     for (String tableOrQuery : tablesOrQuery) {
       final Map<String, String> partition;
@@ -145,27 +156,37 @@ public class JdbcSourceTask extends SourceTask {
         default:
           throw new ConnectException("Unexpected query mode: " + queryMode);
       }
-      Map<String, Object> offset = offsets == null ? null : offsets.get(partition);
+
+      Map<String, Object> offset = new HashMap<>();
+      offset.put(TimestampIncrementingOffset.INCREMENTING_SPAN_FIELD, incrementSpan);
+      offset.put(TimestampIncrementingOffset.TIMESTAMP_SPAN_DAYS_FIELD, timestampSpanDays);
+
+      if (offsets != null && offsets.get(partition) != null) {
+        offset.putAll(offsets.get(partition));
+      }
 
       String topicPrefix = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
       boolean mapNumerics
           = config.getBoolean(JdbcSourceTaskConfig.NUMERIC_PRECISION_MAPPING_CONFIG);
 
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
-        tableQueue.add(new BulkTableQuerier(queryMode, tableOrQuery, schemaPattern,
-                topicPrefix, mapNumerics));
+        tableQueue.add(new BulkTableQuerier(queryMode, tableOrQuery, schemaPattern, topicPrefix,
+                mapNumerics));
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)) {
-        tableQueue.add(new TimestampIncrementingTableQuerier(
-            queryMode, tableOrQuery, topicPrefix, null, incrementingColumn, offset,
-                timestampDelayInterval, schemaPattern, mapNumerics));
+        tableQueue.add(
+                new TimestampIncrementingTableQuerier(queryMode, tableOrQuery, topicPrefix, null,
+                        new ColumnName(incrementingColumn, incrementingColumnQualifier), offset,
+                        timestampDelayInterval, schemaPattern, mapNumerics,
+                        requireZeroScaleIncrementer));
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
-        tableQueue.add(new TimestampIncrementingTableQuerier(
-            queryMode, tableOrQuery, topicPrefix, timestampColumn, null, offset,
-                timestampDelayInterval, schemaPattern, mapNumerics));
+        tableQueue.add(new TimestampIncrementingTableQuerier(queryMode, tableOrQuery, topicPrefix,
+                new ColumnName(timestampColumn, timestampColumnQualifier), null, offset,
+                timestampDelayInterval, schemaPattern, mapNumerics, requireZeroScaleIncrementer));
       } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
-        tableQueue.add(new TimestampIncrementingTableQuerier(
-            queryMode, tableOrQuery, topicPrefix, timestampColumn, incrementingColumn,
-                offset, timestampDelayInterval, schemaPattern, mapNumerics));
+        tableQueue.add(new TimestampIncrementingTableQuerier(queryMode, tableOrQuery, topicPrefix,
+                new ColumnName(timestampColumn, timestampColumnQualifier),
+                new ColumnName(incrementingColumn, incrementingColumnQualifier), offset,
+                timestampDelayInterval, schemaPattern, mapNumerics, requireZeroScaleIncrementer));
       }
     }
 

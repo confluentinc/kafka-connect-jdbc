@@ -42,4 +42,9 @@ public class StringUtils {
     }
     return result.toString();
   }
+
+
+  public static boolean isBlank(String string) {
+    return string == null || string.trim().isEmpty();
+  }
 }

@@ -16,6 +16,7 @@
 
 package io.confluent.connect.jdbc.util;
 
+import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
@@ -72,4 +73,21 @@ public class DateTimeUtils {
     return UTC_TIMESTAMP_FORMAT.get().format(date);
   }
 
+  /**
+   * Find the earliest of the given timestamps.
+   */
+  public static Timestamp min(Timestamp... timestamps) {
+    if (timestamps == null || timestamps.length == 0) {
+      return null;
+    }
+
+    Timestamp result = timestamps[0];
+    for (Timestamp timestamp : timestamps) {
+      if (timestamp != null && timestamp.getTime() < result.getTime()) {
+        result = timestamp;
+      }
+    }
+
+    return result;
+  }
 }

@@ -18,7 +18,8 @@ package io.confluent.connect.jdbc.source;
 
 import io.confluent.connect.jdbc.util.JdbcUtils;
 import io.confluent.connect.jdbc.util.StringUtils;
-
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -29,6 +30,8 @@ import java.util.Objects;
 public class ColumnName {
   private final String name;
   private final String qualifier;
+  private static final String PATH_DELIMITER = ".";
+  private static final String PATH_DELIMITER_REGEX = "\\.";
 
 
   public static ColumnName empty() {
@@ -56,12 +59,23 @@ public class ColumnName {
    * Get the fully qualified name quoted at every level with the given quote string.
    */
   public String getQuotedQualifiedName(String quoteString) {
-    String qualifiedAndQuoted = JdbcUtils.quoteString(name, quoteString);
-    if (!StringUtils.isBlank(qualifier)) {
-      qualifiedAndQuoted = JdbcUtils.quoteString(qualifier, quoteString) + "." + qualifiedAndQuoted;
+    if (isEmpty()) {
+      return "";
     }
 
-    return qualifiedAndQuoted;
+    String qualifiedAndQuoted = name;
+
+    if (!StringUtils.isBlank(qualifier)) {
+      qualifiedAndQuoted = qualifier + "." + qualifiedAndQuoted;
+    }
+
+    String[] split = qualifiedAndQuoted.split(PATH_DELIMITER_REGEX);
+    List<String> quoted = new ArrayList<>();
+    for (String particle : split) {
+      quoted.add(JdbcUtils.quoteString(particle.replaceAll(quoteString, ""), quoteString));
+    }
+
+    return StringUtils.join(quoted, PATH_DELIMITER);
   }
 
 

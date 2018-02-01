@@ -50,7 +50,7 @@ public class LimitedIncrementRangeTest extends JdbcSourceTaskTestBase {
 
     // when we initialise a span limited incrementing source task
     long maxIncrementSpan = 5;
-    JdbcSourceTask sourceTask = initialiseSpanLimitedIncrementingSourceTask(incrementingColumnName, maxIncrementSpan);
+    JdbcSourceTask sourceTask = startSpanLimitedIncrementingSourceTask(incrementingColumnName, maxIncrementSpan);
 
     // then (accounting for initial increment value of -1 and a span of 5)
 
@@ -79,7 +79,7 @@ public class LimitedIncrementRangeTest extends JdbcSourceTaskTestBase {
     // when we initialise a span limited incrementing source task
     long maxIncrementSpan = 2;
     JdbcSourceTask sourceTask =
-        initialiseSpanLimitedIncrementingSourceTask(incrementingColumnName, maxIncrementSpan);
+        startSpanLimitedIncrementingSourceTask(incrementingColumnName, maxIncrementSpan);
 
     // and we poll enough times to get all the row
     final List<Object> records = new ArrayList<>();
@@ -95,17 +95,19 @@ public class LimitedIncrementRangeTest extends JdbcSourceTaskTestBase {
     }
   }
 
-  private JdbcSourceTask initialiseSpanLimitedIncrementingSourceTask(String incrementingColumnName, long maxIncrementSpan) {
+  private JdbcSourceTask startSpanLimitedIncrementingSourceTask(String incrementingColumnName,
+                                                                long maxIncrementSpan) {
     final Map<String, String> taskConfig = singleTableConfig();
 
     // and we're querying in incrementing mode
     taskConfig.put(MODE_CONFIG, "incrementing");
     taskConfig.put(INCREMENTING_COLUMN_NAME_CONFIG, incrementingColumnName);
 
-    // when we limit the span to 5 and start the task
+    // and we limit the span to n
     taskConfig.put(INCREMENTING_SPAN_MAX_CONFIG, String.valueOf(maxIncrementSpan));
 
 
+    // and we initialise and start the task
     JdbcSourceTask sourceTask = new JdbcSourceTask();
     sourceTask.initialize(taskContext);
     sourceTask.start(taskConfig);

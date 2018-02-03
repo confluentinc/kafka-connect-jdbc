@@ -52,7 +52,7 @@ public class LimitedIncrementRangeTest extends JdbcSourceTaskTestBase {
     initialiseAndFeedTable(SINGLE_TABLE_NAME, incrementingColumnName, 1000, 1001, 1002, 1003, 1004);
 
     // when we initialise a span limited incrementing source task with an increment start of
-    // 999 exclusive with enough span to cover the whole test table in one step assuming it starts
+    // 999 exclusive with enough span to cover the whole test table in one step when it starts
     // in the right place
     long maxIncrementSpan = 10;
     JdbcSourceTask sourceTask = startSpanLimitedIncrementingSourceTask(incrementingColumnName,

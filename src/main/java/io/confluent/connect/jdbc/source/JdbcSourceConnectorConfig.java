@@ -16,6 +16,7 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.JdbcUtils;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -147,6 +148,13 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final Integer INCREMENTING_SPAN_MAX_DEFAULT = 5000000;
   public static final String INCREMENTING_SPAN_MAX_DISPLAY = "Incrementing Span Max";
 
+  public static final String INCREMENTING_START_CONFIG = "incrementing.start";
+  public static final String INCREMENTING_START_DOC =
+          "The starting point for an incrementer. This is useful where a max span has been "
+              + "set and the earliest increment is not 0.";
+  public static final Long INCREMENTING_START_DEFAULT = -1L;
+  public static final String INCREMENTING_START_DISPLAY = "Incrementing Start";
+
   public static final String TIMESTAMP_COLUMN_NAME_CONFIG = "timestamp.column.name";
   private static final String TIMESTAMP_COLUMN_NAME_DOC =
       "The name of the timestamp column to use to detect new or modified rows. This column may "
@@ -170,6 +178,14 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
                   + "query results size on very large tables.";
   public static final Integer TIMESTAMP_SPAN_DAYS_MAX_DEFAULT = 100000;
   public static final String TIMESTAMP_SPAN_DAYS_MAX_DISPLAY = "Timestamp Span Days Max";
+
+  public static final String TIMESTAMP_START_CONFIG = "timestamp.start.utc";
+  public static final String TIMESTAMP_START_DOC =
+      "The initial timestamp to start rolling from. This is useful where a max timestamp span"
+          + " has been set and the earliest timestamp in the database is not 1970-01-01. "
+          + " Assume UTC and use format " + DateTimeUtils.UTC_TIMESTAMP_FORMAT_PATTERN + ".";
+  public static final String TIMESTAMP_START_DEFAULT = "1970-01-01 00:00:00.000";
+  public static final String TIMESTAMP_START_DISPLAY = "Timestamp Start (ISO)";
 
 
   public static final String TABLE_POLL_INTERVAL_MS_CONFIG = "table.poll.interval.ms";
@@ -372,6 +388,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   }
 
   private static final void addModeOptions(ConfigDef config) {
+    int position = 1;
     config.define(
         MODE_CONFIG,
         Type.STRING,
@@ -386,7 +403,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Importance.HIGH,
         MODE_DOC,
         MODE_GROUP,
-        1,
+        position++,
         Width.MEDIUM,
         MODE_DISPLAY,
         Arrays.asList(
@@ -404,7 +421,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Importance.MEDIUM,
         INCREMENTING_COLUMN_NAME_DOC,
         MODE_GROUP,
-        2,
+        position++,
         Width.MEDIUM,
         INCREMENTING_COLUMN_NAME_DISPLAY,
         MODE_DEPENDENTS_RECOMMENDER
@@ -415,7 +432,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Importance.MEDIUM,
         INCREMENTING_COLUMN_NAME_QUALIFIER_DOC,
         MODE_GROUP,
-        3,
+        position++,
         Width.MEDIUM,
         INCREMENTING_COLUMN_NAME_QUALIFIER_DISPLAY
     ).define(
@@ -425,7 +442,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Importance.LOW,
         INCREMENTING_SPAN_MAX_DOC,
         MODE_GROUP,
-        4,
+        position++,
+        Width.SHORT,
+        INCREMENTING_SPAN_MAX_DISPLAY
+    ).define(
+        INCREMENTING_START_CONFIG,
+        Type.LONG,
+        INCREMENTING_START_DEFAULT,
+        Importance.LOW,
+        INCREMENTING_START_DOC,
+        MODE_GROUP,
+        position++,
         Width.SHORT,
         INCREMENTING_SPAN_MAX_DISPLAY
     ).define(
@@ -435,7 +462,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Importance.LOW,
         REQUIRE_NON_ZERO_SCALE_INCREMENTER_DOC,
         MODE_GROUP,
-        5,
+        position++,
         Width.SHORT,
         REQUIRE_NON_ZERO_SCALE_INCREMENTER_DISPLAY
     ).define(
@@ -445,7 +472,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Importance.MEDIUM,
         TIMESTAMP_COLUMN_NAME_DOC,
         MODE_GROUP,
-        6,
+        position++,
         Width.MEDIUM,
         TIMESTAMP_COLUMN_NAME_DISPLAY,
         MODE_DEPENDENTS_RECOMMENDER
@@ -456,7 +483,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Importance.MEDIUM,
         TIMESTAMP_COLUMN_NAME_QUALIFIER_DOC,
         MODE_GROUP,
-        7,
+        position++,
         Width.MEDIUM,
         TIMESTAMP_COLUMN_NAME_QUALIFIER_DISPLAY
     ).define(
@@ -466,9 +493,19 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Importance.LOW,
         TIMESTAMP_SPAN_DAYS_MAX_DOC,
         MODE_GROUP,
-        8,
+        position++,
         Width.SHORT,
         TIMESTAMP_SPAN_DAYS_MAX_DISPLAY
+    ).define(
+        TIMESTAMP_START_CONFIG,
+        Type.STRING,
+        TIMESTAMP_START_DEFAULT,
+        Importance.LOW,
+        TIMESTAMP_START_DOC,
+        MODE_GROUP,
+        position++,
+        Width.MEDIUM,
+        TIMESTAMP_START_DISPLAY
     ).define(
         VALIDATE_NON_NULL_CONFIG,
         Type.BOOLEAN,
@@ -476,7 +513,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Importance.LOW,
         VALIDATE_NON_NULL_DOC,
         MODE_GROUP,
-        9,
+        position++,
         Width.SHORT,
         VALIDATE_NON_NULL_DISPLAY,
         MODE_DEPENDENTS_RECOMMENDER
@@ -487,7 +524,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Importance.MEDIUM,
         QUERY_DOC,
         MODE_GROUP,
-        10,
+        position++,
         Width.SHORT,
         QUERY_DISPLAY);
   }

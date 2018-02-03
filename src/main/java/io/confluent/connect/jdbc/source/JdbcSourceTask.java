@@ -17,8 +17,20 @@
 package io.confluent.connect.jdbc.source;
 
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
+import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.JdbcUtils;
 import io.confluent.connect.jdbc.util.Version;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.PriorityQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.utils.SystemTime;
@@ -28,16 +40,6 @@ import org.apache.kafka.connect.source.SourceRecord;
 import org.apache.kafka.connect.source.SourceTask;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.PriorityQueue;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * JdbcSourceTask is a Kafka Connect SourceTask implementation that reads from JDBC databases and
@@ -117,18 +119,23 @@ public class JdbcSourceTask extends SourceTask {
         = config.getString(JdbcSourceTaskConfig.INCREMENTING_COLUMN_NAME_CONFIG);
     String incrementingColumnQualifier
         = config.getString(JdbcSourceTaskConfig.INCREMENTING_COLUMN_NAME_QUALIFIER_CONFIG);
+    Integer incrementSpan
+        = config.getInt(JdbcSourceTaskConfig.INCREMENTING_SPAN_MAX_CONFIG);
+    Long incrementStart
+        = config.getLong(JdbcSourceTaskConfig.INCREMENTING_START_CONFIG);
     String timestampColumn
         = config.getString(JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
     String timestampColumnQualifier
         = config.getString(JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_QUALIFIER_CONFIG);
     Long timestampDelayInterval
         = config.getLong(JdbcSourceTaskConfig.TIMESTAMP_DELAY_INTERVAL_MS_CONFIG);
-    boolean validateNonNulls
-        = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
-    Integer incrementSpan
-        = config.getInt(JdbcSourceTaskConfig.INCREMENTING_SPAN_MAX_CONFIG);
     Integer timestampSpanDays
         = config.getInt(JdbcSourceTaskConfig.TIMESTAMP_SPAN_DAYS_MAX_CONFIG);
+    Timestamp timestampStart
+        = DateTimeUtils.parseUtcTimestamp(
+            config.getString(JdbcSourceTaskConfig.TIMESTAMP_START_CONFIG));
+    boolean validateNonNulls
+        = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
     Boolean requireZeroScaleIncrementer
         = config.getBoolean(JdbcSourceTaskConfig.REQUIRE_NON_ZERO_SCALE_INCREMENTER_CONFIG);
 
@@ -158,7 +165,9 @@ public class JdbcSourceTask extends SourceTask {
       }
 
       Map<String, Object> offset = new HashMap<>();
+      offset.put(TimestampIncrementingOffset.INCREMENTING_FIELD, incrementStart);
       offset.put(TimestampIncrementingOffset.INCREMENTING_SPAN_FIELD, incrementSpan);
+      offset.put(TimestampIncrementingOffset.TIMESTAMP_FIELD, timestampStart.getTime());
       offset.put(TimestampIncrementingOffset.TIMESTAMP_SPAN_DAYS_FIELD, timestampSpanDays);
 
       if (offsets != null && offsets.get(partition) != null) {

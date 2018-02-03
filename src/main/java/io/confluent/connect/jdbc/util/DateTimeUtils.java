@@ -17,6 +17,7 @@
 package io.confluent.connect.jdbc.util;
 
 import java.sql.Timestamp;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
@@ -52,10 +53,11 @@ public class DateTimeUtils {
         }
       };
 
+  public static final String UTC_TIMESTAMP_FORMAT_PATTERN = "yyyy-MM-dd HH:mm:ss.SSS";
   private static final ThreadLocal<SimpleDateFormat> UTC_TIMESTAMP_FORMAT
       = new ThreadLocal<SimpleDateFormat>() {
         protected SimpleDateFormat initialValue() {
-          SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+          SimpleDateFormat sdf = new SimpleDateFormat(UTC_TIMESTAMP_FORMAT_PATTERN);
           sdf.setTimeZone(UTC);
           return sdf;
         }
@@ -89,5 +91,13 @@ public class DateTimeUtils {
     }
 
     return result;
+  }
+
+  public static Timestamp parseUtcTimestamp(String utcTimestampString) {
+    try {
+      return new Timestamp(UTC_TIMESTAMP_FORMAT.get().parse(utcTimestampString).getTime());
+    } catch (ParseException e) {
+      throw new RuntimeException("Unable to parse '" + utcTimestampString + "' to timestamp.");
+    }
   }
 }

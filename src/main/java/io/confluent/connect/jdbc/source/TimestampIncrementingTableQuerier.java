@@ -187,7 +187,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     builder.append(qualifiedTimestampColumn);
     builder.append(" > ? AND ");
     builder.append(qualifiedTimestampColumn);
-    builder.append(" < ? ORDER BY ");
+    builder.append(" <= ? ORDER BY ");
     builder.append(qualifiedTimestampColumn);
     builder.append(" ASC");
   }

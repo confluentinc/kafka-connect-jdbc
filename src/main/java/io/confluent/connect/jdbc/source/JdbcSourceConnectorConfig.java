@@ -183,7 +183,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String TIMESTAMP_START_DOC =
       "The initial timestamp to start rolling from. This is useful where a max timestamp span"
           + " has been set and the earliest timestamp in the database is not 1970-01-01. "
-          + " Assume UTC and use format " + DateTimeUtils.UTC_TIMESTAMP_FORMAT_PATTERN + ".";
+          + "Assume UTC and use format " + DateTimeUtils.UTC_TIMESTAMP_FORMAT_PATTERN + ".";
   public static final String TIMESTAMP_START_DEFAULT = "1970-01-01 00:00:00.000";
   public static final String TIMESTAMP_START_DISPLAY = "Timestamp Start (ISO)";
 

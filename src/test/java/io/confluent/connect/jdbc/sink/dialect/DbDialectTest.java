@@ -27,6 +27,7 @@ import org.junit.Test;
 
 import java.math.BigDecimal;
 import java.util.Map;
+import java.util.Optional;
 
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 
@@ -103,39 +104,39 @@ public class DbDialectTest {
 
   @Test
   public void detectSqlite() {
-    assertEquals(SqliteDialect.class, DbDialect.fromConnectionString("jdbc:sqlite:/folder/db.file").getClass());
+    assertEquals(SqliteDialect.class, DbDialect.fromConnectionString("jdbc:sqlite:/folder/db.file", Optional.empty()).getClass());
   }
 
   @Test
   public void detectOracle() {
-    assertEquals(OracleDialect.class, DbDialect.fromConnectionString("jdbc:oracle:thin:@localhost:1521:xe").getClass());
+    assertEquals(OracleDialect.class, DbDialect.fromConnectionString("jdbc:oracle:thin:@localhost:1521:xe",  Optional.empty()).getClass());
   }
 
   @Test
   public void detectMysql() {
-    assertEquals(MySqlDialect.class, DbDialect.fromConnectionString("jdbc:mysql://HOST/DATABASE").getClass());
+    assertEquals(MySqlDialect.class, DbDialect.fromConnectionString("jdbc:mysql://HOST/DATABASE",  Optional.empty()).getClass());
   }
 
   @Test
   public void detectSqlServer() {
-    assertEquals(SqlServerDialect.class, DbDialect.fromConnectionString("jdbc:microsoft:sqlserver://HOST:1433;DatabaseName=DATABASE").getClass());
-    assertEquals(SqlServerDialect.class, DbDialect.fromConnectionString("jdbc:sqlserver://what.amazonaws.com:1433/jdbc_sink_01").getClass());
-    assertEquals(SqlServerDialect.class, DbDialect.fromConnectionString("jdbc:jtds:sqlserver://localhost;instance=SQLEXPRESS;DatabaseName=jdbc_sink_01").getClass());
+    assertEquals(SqlServerDialect.class, DbDialect.fromConnectionString("jdbc:microsoft:sqlserver://HOST:1433;DatabaseName=DATABASE",  Optional.empty()).getClass());
+    assertEquals(SqlServerDialect.class, DbDialect.fromConnectionString("jdbc:sqlserver://what.amazonaws.com:1433/jdbc_sink_01",  Optional.empty()).getClass());
+    assertEquals(SqlServerDialect.class, DbDialect.fromConnectionString("jdbc:jtds:sqlserver://localhost;instance=SQLEXPRESS;DatabaseName=jdbc_sink_01",  Optional.empty()).getClass());
   }
 
   @Test
   public void detectPostgres() {
-    assertEquals(PostgreSqlDialect.class, DbDialect.fromConnectionString("jdbc:postgresql://HOST:1433;DatabaseName=DATABASE").getClass());
+    assertEquals(PostgreSqlDialect.class, DbDialect.fromConnectionString("jdbc:postgresql://HOST:1433;DatabaseName=DATABASE", Optional.empty()).getClass());
   }
 
   @Test
   public void detectGeneric() {
-    assertEquals(GenericDialect.class, DbDialect.fromConnectionString("jdbc:other://host:42").getClass());
+    assertEquals(GenericDialect.class, DbDialect.fromConnectionString("jdbc:other://host:42",  Optional.empty()).getClass());
   }
 
   @Test
   public void detectVertica() {
-    assertEquals(VerticaDialect.class, DbDialect.fromConnectionString("jdbc:vertica://host:5433/db").getClass());
+    assertEquals(VerticaDialect.class, DbDialect.fromConnectionString("jdbc:vertica://host:5433/db",  Optional.empty()).getClass());
   }
 
 }

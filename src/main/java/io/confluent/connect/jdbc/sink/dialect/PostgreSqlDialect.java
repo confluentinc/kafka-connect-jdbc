@@ -24,14 +24,17 @@ import org.apache.kafka.connect.data.Timestamp;
 
 import java.util.Collection;
 import java.util.Map;
+import java.util.Optional;
 
 import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.joinToBuilder;
 import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.nCopiesToBuilder;
 
 public class PostgreSqlDialect extends DbDialect {
 
-  public PostgreSqlDialect() {
+  private final Optional<String> overridenSchema;
+  public PostgreSqlDialect(Optional<String> overridenSchema) {
     super("\"", "\"");
+    this.overridenSchema = overridenSchema;
   }
 
   @Override
@@ -71,10 +74,34 @@ public class PostgreSqlDialect extends DbDialect {
     return super.getSqlType(schemaName, parameters, type);
   }
 
+
+  public final String getInsert(final String tableName, final Collection<String> keyColumns, final Collection<String> nonKeyColumns) {
+    StringBuilder builder = new StringBuilder("INSERT INTO ");
+    overridenSchema.ifPresent(
+        schema -> {
+          builder.append(escaped(schema));
+          builder.append('.');
+        }
+    );
+    builder.append(escaped(tableName));
+    builder.append(" (");
+    joinToBuilder(builder, ",", keyColumns, nonKeyColumns, escaper());
+    builder.append(") VALUES (");
+    nCopiesToBuilder(builder, ",", "?", keyColumns.size() + nonKeyColumns.size());
+    builder.append(")");
+    return builder.toString();
+  }
+
+
   @Override
   public String getUpsertQuery(final String table, final Collection<String> keyCols, final Collection<String> cols) {
-    final StringBuilder builder = new StringBuilder();
-    builder.append("INSERT INTO ");
+    StringBuilder builder = new StringBuilder("INSERT INTO ");
+    overridenSchema.ifPresent(
+        schema -> {
+          builder.append(escaped(schema));
+          builder.append('.');
+        }
+    );
     builder.append(escaped(table));
     builder.append(" (");
     joinToBuilder(builder, ",", keyCols, cols, escaper());

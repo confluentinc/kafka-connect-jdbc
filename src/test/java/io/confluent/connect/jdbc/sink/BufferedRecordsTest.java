@@ -33,6 +33,7 @@ import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Optional;
 
 import io.confluent.connect.jdbc.sink.dialect.DbDialect;
 import org.mockito.Matchers;
@@ -58,7 +59,7 @@ public class BufferedRecordsTest {
 
   @Test
   public void correctBatching() throws SQLException {
-    final DbDialect dbDialect = DbDialect.fromConnectionString(sqliteHelper.sqliteUri());
+    final DbDialect dbDialect = DbDialect.fromConnectionString(sqliteHelper.sqliteUri(), Optional.empty());
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
     final HashMap<Object, Object> props = new HashMap<>();
@@ -102,7 +103,7 @@ public class BufferedRecordsTest {
 
   @Test
   public void testFlushSuccessNoInfo() throws SQLException {
-    final DbDialect dbDialect = DbDialect.fromConnectionString(sqliteHelper.sqliteUri());
+    final DbDialect dbDialect = DbDialect.fromConnectionString(sqliteHelper.sqliteUri(),Optional.empty());
     final HashMap<Object, Object> props = new HashMap<>();
     props.put("connection.url", "");
     props.put("auto.create", true);
@@ -144,7 +145,7 @@ public class BufferedRecordsTest {
 
   @Test
   public void testInsertModeUpdate() throws SQLException {
-    final DbDialect dbDialect = DbDialect.fromConnectionString(sqliteHelper.sqliteUri());
+    final DbDialect dbDialect = DbDialect.fromConnectionString(sqliteHelper.sqliteUri(),Optional.empty());
     final HashMap<Object, Object> props = new HashMap<>();
     props.put("connection.url", "");
     props.put("auto.create", true);

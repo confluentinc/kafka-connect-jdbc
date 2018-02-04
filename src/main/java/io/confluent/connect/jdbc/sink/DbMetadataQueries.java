@@ -24,11 +24,13 @@ import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Optional;
+import java.util.Set;
+import java.util.List;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Objects;
-import java.util.Set;
+
 
 import io.confluent.connect.jdbc.sink.metadata.DbTable;
 import io.confluent.connect.jdbc.sink.metadata.DbTableColumn;
@@ -36,13 +38,13 @@ import io.confluent.connect.jdbc.sink.metadata.DbTableColumn;
 public abstract class DbMetadataQueries {
   private static final Logger log = LoggerFactory.getLogger(DbMetadataQueries.class);
 
-  public static boolean doesTableExist(final Connection connection, final String tableName) throws SQLException {
+  public static boolean doesTableExist(final Connection connection, Optional<String> overridenSchema, final String tableName) throws SQLException {
     final String catalog = connection.getCatalog();
 
     final DatabaseMetaData meta = connection.getMetaData();
 
     final String product = meta.getDatabaseProductName();
-    final String schema = getSchema(connection, product);
+    final String schema = getSchema(connection, product, overridenSchema);
 
     log.info("Checking table:{} exists for product:{} schema:{} catalog:", tableName, product, schema, catalog);
 
@@ -53,12 +55,12 @@ public abstract class DbMetadataQueries {
     }
   }
 
-  public static DbTable getTableMetadata(final Connection connection, final String tableName) throws SQLException {
+  public static DbTable getTableMetadata(final Connection connection, Optional<String> overridenSchema, final String tableName) throws SQLException {
     final DatabaseMetaData dbMetaData = connection.getMetaData();
     final String product = dbMetaData.getDatabaseProductName();
     final String catalog = connection.getCatalog();
 
-    final String schema = getSchema(connection, product);
+    final String schema = getSchema(connection, product, overridenSchema);
     final String tableNameForQuery = product.equalsIgnoreCase("oracle") ? tableName.toUpperCase() : tableName;
 
     log.info("Querying column metadata for product:{} schema:{} catalog:{} table:{}", product, schema, catalog, tableNameForQuery);
@@ -86,23 +88,29 @@ public abstract class DbMetadataQueries {
     return new DbTable(tableName, columns);
   }
 
-  private static String getSchema(final Connection connection, final String product) throws SQLException {
-    if (product.equalsIgnoreCase("oracle")) {
-      // Use SQL to retrieve the database name for Oracle, apparently the JDBC API doesn't work as expected
-      try (
-          Statement statement = connection.createStatement();
-          ResultSet rs = statement.executeQuery("select sys_context('userenv','current_schema') x from dual")
-      ) {
-        if (rs.next()) {
-          return rs.getString("x").toUpperCase();
-        } else {
-          throw new SQLException("Failed to determine Oracle schema");
-        }
-      }
-    } else if (product.toLowerCase().startsWith("postgre")) {
-      return connection.getSchema();
+  private static String getSchema(final Connection connection, final String product, Optional<String> overridenSchema) throws SQLException {
+    if (overridenSchema.isPresent()) {
+      log.info("Using overriden schema from configuration {}", overridenSchema.get());
+      return overridenSchema.get();
     } else {
-      return null;
+      log.info("No schema override provided: using autodetection from connection");
+      if (product.equalsIgnoreCase("oracle")) {
+        // Use SQL to retrieve the database name for Oracle, apparently the JDBC API doesn't work as expected
+        try (
+                Statement statement = connection.createStatement();
+                ResultSet rs = statement.executeQuery("select sys_context('userenv','current_schema') x from dual")
+        ) {
+          if (rs.next()) {
+            return rs.getString("x").toUpperCase();
+          } else {
+            throw new SQLException("Failed to determine Oracle schema");
+          }
+        }
+      } else if (product.toLowerCase().startsWith("postgre")) {
+        return connection.getSchema();
+      } else {
+        return null;
+      }
     }
   }
 }

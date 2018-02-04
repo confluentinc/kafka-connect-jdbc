@@ -57,13 +57,13 @@ public class DbStructure {
       final String tableName,
       final FieldsMetadata fieldsMetadata
   ) throws SQLException {
-    if (tableMetadataLoadingCache.get(connection, tableName) == null) {
+    if (tableMetadataLoadingCache.get(connection, config.overridenSchema, tableName) == null) {
       try {
         create(config, connection, tableName, fieldsMetadata);
       } catch (SQLException sqle) {
         log.warn("Create failed, will attempt amend if table already exists", sqle);
-        if (DbMetadataQueries.doesTableExist(connection, tableName)) {
-          tableMetadataLoadingCache.refresh(connection, tableName);
+        if (DbMetadataQueries.doesTableExist(connection, config.overridenSchema, tableName)) {
+          tableMetadataLoadingCache.refresh(connection, config.overridenSchema, tableName);
         } else {
           throw sqle;
         }
@@ -90,7 +90,7 @@ public class DbStructure {
       statement.executeUpdate(sql);
       connection.commit();
     }
-    tableMetadataLoadingCache.refresh(connection, tableName);
+    tableMetadataLoadingCache.refresh(connection, config.overridenSchema, tableName);
   }
 
   /**
@@ -108,7 +108,7 @@ public class DbStructure {
     //   The table might have extra columns defined (hopefully with default values), which is not a case we check for here.
     //   We also don't check if the data types for columns that do line-up are compatible.
 
-    final DbTable tableMetadata = tableMetadataLoadingCache.get(connection, tableName);
+    final DbTable tableMetadata = tableMetadataLoadingCache.get(connection, config.overridenSchema, tableName);
     final Map<String, DbTableColumn> dbColumns = tableMetadata.columns;
 
 // FIXME: SQLite JDBC driver seems to not always return the PK column names?
@@ -150,7 +150,7 @@ public class DbStructure {
         );
       }
       log.warn("Amend failed, re-attempting", sqle);
-      tableMetadataLoadingCache.refresh(connection, tableName);
+      tableMetadataLoadingCache.refresh(connection, config.overridenSchema, tableName);
       // Perhaps there was a race with other tasks to add the columns
       return amendIfNecessary(
           config,
@@ -161,7 +161,7 @@ public class DbStructure {
       );
     }
 
-    tableMetadataLoadingCache.refresh(connection, tableName);
+    tableMetadataLoadingCache.refresh(connection, config.overridenSchema, tableName);
     return true;
   }
 

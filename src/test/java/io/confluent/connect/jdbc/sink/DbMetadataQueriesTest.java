@@ -25,6 +25,7 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Optional;
 
 import io.confluent.connect.jdbc.sink.metadata.DbTable;
 import io.confluent.connect.jdbc.sink.metadata.DbTableColumn;
@@ -49,25 +50,25 @@ public class DbMetadataQueriesTest {
 
   @Test
   public void tableExistsOnEmptyDb() throws SQLException {
-    assertFalse(DbMetadataQueries.doesTableExist(sqliteHelper.connection, "somerandomtable"));
+    assertFalse(DbMetadataQueries.doesTableExist(sqliteHelper.connection, Optional.<String>empty(),"somerandomtable"));
   }
 
   @Test
   public void tableExists() throws SQLException {
     sqliteHelper.createTable("create table somerandomtable (id int)");
-    assertTrue(DbMetadataQueries.doesTableExist(sqliteHelper.connection, "somerandomtable"));
-    assertFalse(DbMetadataQueries.doesTableExist(sqliteHelper.connection, "someotherrandomtable"));
+    assertTrue(DbMetadataQueries.doesTableExist(sqliteHelper.connection, Optional.<String>empty(),"somerandomtable"));
+    assertFalse(DbMetadataQueries.doesTableExist(sqliteHelper.connection, Optional.<String>empty(),"someotherrandomtable"));
   }
 
   @Test(expected =  SQLException.class)
   public void tableOnEmptyDb() throws SQLException {
-    DbMetadataQueries.getTableMetadata(sqliteHelper.connection, "somerand");
+    DbMetadataQueries.getTableMetadata(sqliteHelper.connection, Optional.<String>empty(), "somerand");
   }
 
   @Test
   public void basicTable() throws SQLException {
     sqliteHelper.createTable("create table x (id int primary key, name text not null, optional_age int null)");
-    DbTable metadata = DbMetadataQueries.getTableMetadata(sqliteHelper.connection, "x");
+    DbTable metadata = DbMetadataQueries.getTableMetadata(sqliteHelper.connection, Optional.<String>empty(), "x");
     assertEquals(metadata.name, "x");
 
     assertEquals(Collections.singleton("id"), metadata.primaryKeyColumnNames);

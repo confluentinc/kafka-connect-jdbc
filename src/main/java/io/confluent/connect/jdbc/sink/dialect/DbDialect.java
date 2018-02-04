@@ -24,10 +24,11 @@ import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
 
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
+import java.util.Optional;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 
 import javax.xml.bind.DatatypeConverter;
@@ -49,7 +50,7 @@ public abstract class DbDialect {
     this.escapeEnd = escapeEnd;
   }
 
-  public final String getInsert(final String tableName, final Collection<String> keyColumns, final Collection<String> nonKeyColumns) {
+  public String getInsert(final String tableName, final Collection<String> keyColumns, final Collection<String> nonKeyColumns) {
     StringBuilder builder = new StringBuilder("INSERT INTO ");
     builder.append(escaped(tableName));
     builder.append("(");
@@ -234,7 +235,7 @@ public abstract class DbDialect {
     return pks;
   }
 
-  public static DbDialect fromConnectionString(final String url) {
+  public static DbDialect fromConnectionString(final String url, Optional<String> overridenSchema) {
     if (!url.startsWith("jdbc:")) {
       throw new ConnectException(String.format("Not a valid JDBC URL: %s", url));
     }
@@ -267,7 +268,7 @@ public abstract class DbDialect {
       case "mysql":
         return new MySqlDialect();
       case "postgresql":
-        return new PostgreSqlDialect();
+        return new PostgreSqlDialect(overridenSchema);
       default:
         return new GenericDialect();
     }

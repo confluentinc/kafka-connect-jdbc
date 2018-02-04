@@ -25,6 +25,7 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import io.confluent.connect.jdbc.sink.metadata.DbTable;
 import io.confluent.connect.jdbc.sink.metadata.DbTableColumn;
@@ -71,7 +72,7 @@ public class SqliteHelperTest {
 
     final Map<String, DbTable> tables = new HashMap<>();
     for (String tableName : JdbcUtils.getTables(sqliteHelper.connection, null)) {
-      tables.put(tableName, DbMetadataQueries.getTableMetadata(sqliteHelper.connection, tableName));
+      tables.put(tableName, DbMetadataQueries.getTableMetadata(sqliteHelper.connection, Optional.<String>empty(), tableName));
     }
 
     assertEquals(tables.size(), 3);

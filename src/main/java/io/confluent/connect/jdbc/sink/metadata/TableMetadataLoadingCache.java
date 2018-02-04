@@ -23,6 +23,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import io.confluent.connect.jdbc.sink.DbMetadataQueries;
 
@@ -31,11 +32,11 @@ public class TableMetadataLoadingCache {
 
   private final Map<String, DbTable> cache = new HashMap<>();
 
-  public DbTable get(final Connection connection, final String tableName) throws SQLException {
+  public DbTable get(final Connection connection, final Optional<String> overridenSchema, final String tableName) throws SQLException {
     DbTable dbTable = cache.get(tableName);
     if (dbTable == null) {
-      if (DbMetadataQueries.doesTableExist(connection, tableName)) {
-        dbTable = DbMetadataQueries.getTableMetadata(connection, tableName);
+      if (DbMetadataQueries.doesTableExist(connection, overridenSchema, tableName)) {
+        dbTable = DbMetadataQueries.getTableMetadata(connection, overridenSchema, tableName);
         cache.put(tableName, dbTable);
       } else {
         return null;
@@ -44,8 +45,8 @@ public class TableMetadataLoadingCache {
     return dbTable;
   }
 
-  public DbTable refresh(final Connection connection, final String tableName) throws SQLException {
-    DbTable dbTable = DbMetadataQueries.getTableMetadata(connection, tableName);
+  public DbTable refresh(final Connection connection, final Optional<String> overridenSchema, final String tableName) throws SQLException {
+    DbTable dbTable = DbMetadataQueries.getTableMetadata(connection, overridenSchema, tableName);
     log.info("Updating cached metadata -- {}", dbTable);
     cache.put(dbTable.name, dbTable);
     return dbTable;

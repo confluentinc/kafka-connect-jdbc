@@ -20,12 +20,13 @@ import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Arrays;
 
 import io.confluent.connect.jdbc.util.StringUtils;
 import org.apache.kafka.common.config.types.Password;
@@ -157,6 +158,14 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String DDL_GROUP = "DDL Support";
   private static final String RETRIES_GROUP = "Retries";
 
+  public static final String SCHEMA_OVERRIDE_CONFIG = "schema.override";
+  private static final String SCHEMA_OVERRIDE_DOC =
+          "Schema override to fetch tables metadata from the database and write to.:\n"
+                  + "  * \"\"  Some specific configurations require you to set connectionSchema to a certain value while "
+                  + " writing to other tables. See  ";
+
+  private static final String SCHEMA_OVERRIDE_DISPLAY = "Schema override";
+
   public static final ConfigDef CONFIG_DEF = new ConfigDef()
       // Connection
       .define(CONNECTION_URL, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE,
@@ -168,7 +177,8 @@ public class JdbcSinkConfig extends AbstractConfig {
       .define(CONNECTION_PASSWORD, ConfigDef.Type.PASSWORD, null,
               ConfigDef.Importance.HIGH, CONNECTION_PASSWORD_DOC,
               CONNECTION_GROUP, 3, ConfigDef.Width.MEDIUM, CONNECTION_PASSWORD_DISPLAY)
-      // Writes
+      .define(SCHEMA_OVERRIDE_CONFIG, ConfigDef.Type.STRING, null, ConfigDef.Importance.MEDIUM, SCHEMA_OVERRIDE_DOC, CONNECTION_GROUP, 6, ConfigDef.Width.SHORT, SCHEMA_OVERRIDE_DISPLAY)
+    // Writes
       .define(INSERT_MODE, ConfigDef.Type.STRING, INSERT_MODE_DEFAULT, EnumValidator.in(InsertMode.values()),
               ConfigDef.Importance.HIGH, INSERT_MODE_DOC,
               WRITES_GROUP, 1, ConfigDef.Width.MEDIUM, INSERT_MODE_DISPLAY)
@@ -207,6 +217,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final String connectionUser;
   public final String connectionPassword;
   public final String tableNameFormat;
+  public final Optional<String> overridenSchema;
   public final int batchSize;
   public final int maxRetries;
   public final int retryBackoffMs;
@@ -231,6 +242,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     insertMode = InsertMode.valueOf(getString(INSERT_MODE).toUpperCase());
     pkMode = PrimaryKeyMode.valueOf(getString(PK_MODE).toUpperCase());
     pkFields = getList(PK_FIELDS);
+    overridenSchema = Optional.ofNullable(getString(SCHEMA_OVERRIDE_CONFIG));
     fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
   }
 

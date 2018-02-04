@@ -23,7 +23,7 @@
     <groupId>io.confluent</groupId>
     <artifactId>kafka-connect-jdbc</artifactId>
     <packaging>jar</packaging>
-    <version>3.3.2-SNAPSHOT</version>
+    <version>3.3.1</version>
     <name>kafka-connect-jdbc</name>
     <organization>
         <name>Confluent, Inc.</name>
@@ -51,7 +51,7 @@
 
     <properties>
         <confluent.version>${project.version}</confluent.version>
-        <kafka.version>0.11.0.3-SNAPSHOT</kafka.version>
+        <kafka.version>0.11.0.1-cp1</kafka.version>
         <junit.version>4.12</junit.version>
         <easymock.version>3.0</easymock.version>
         <powermock.version>1.6.2</powermock.version>
@@ -95,7 +95,11 @@
             <version>9.4-1206-jdbc41</version>
             <scope>runtime</scope>
         </dependency>
-
+        <dependency>
+            <groupId>org.apache.avro</groupId>
+            <artifactId>avro</artifactId>
+            <version>1.7.7</version>
+        </dependency>
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
@@ -154,8 +158,8 @@
                 <version>2.5.1</version>
                 <inherited>true</inherited>
                 <configuration>
-                    <source>1.7</source>
-                    <target>1.7</target>
+                    <source>1.8</source>
+                    <target>1.8</target>
                 </configuration>
             </plugin>
             <plugin>

@@ -126,19 +126,26 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   }
 
   private void timestampIncrementingWhereClause(StringBuilder builder, String quoteString) {
-    // This version combines two possible conditions. The first checks timestamp == last
-    // timestamp and incrementing > last incrementing. The timestamp alone would include
-    // duplicates, but adding the incrementing condition ensures no duplicates, e.g. you would
-    // get only the row with id = 23:
+    // This version combines two possible conditions.
+    //
+    // The first check ensures new rows are captured where the timestamp hasn't moved forward since
+    // the last poll. It checks timestamp == last timestamp and incrementing > last incrementing.
+    // The timestamp alone would include duplicates, but adding the incrementing condition ensures
+    // no duplicates.
+    // e.g. you would get only the row with id = 23 in the following scenario:
     //  timestamp 1234, id 22 <- last
     //  timestamp 1234, id 23
-    // The second check only uses the timestamp >= last timestamp. This covers everything new,
+
+    // The second check only uses the timestamp > last timestamp. This covers everything new,
     // even if it is an update of the existing row. If we previously had:
     //  timestamp 1234, id 22 <- last
     // and then these rows were written:
     //  timestamp 1235, id 22
     //  timestamp 1236, id 23
     // We should capture both id = 22 (an update) and id = 23 (a new row)
+
+    // note that both checks are limited by the max increment and max timestamp days span settings.
+
     builder.append(" WHERE ");
 
     String qualifiedIncrementingColumn = this.incrementingColumn.getQuotedQualifiedName(
@@ -147,13 +154,15 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     String qualifiedTimestampColumn = this.timestampColumn.getQuotedQualifiedName(quoteString);
 
     builder.append(qualifiedTimestampColumn);
-    builder.append(" <= ? AND ((");
+    builder.append(" < ? AND ((");
     builder.append(qualifiedTimestampColumn);
     builder.append(" = ? AND ");
     builder.append(qualifiedIncrementingColumn);
     builder.append(" > ? AND ");
     builder.append(qualifiedIncrementingColumn);
-    builder.append(" <= ?) OR ");
+
+    // limiting the increment span to prevent single step overload
+    builder.append(" < ?) OR ");
     builder.append(qualifiedTimestampColumn);
     builder.append(" > ?)");
     builder.append(" ORDER BY ");
@@ -172,7 +181,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     builder.append(qualifiedIncrementingColumn);
     builder.append(" > ? AND ");
     builder.append(qualifiedIncrementingColumn);
-    builder.append(" <= ? ORDER BY ");
+    builder.append(" < ? ORDER BY ");
     builder.append(qualifiedIncrementingColumn);
     builder.append(" ASC");
   }
@@ -187,7 +196,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     builder.append(qualifiedTimestampColumn);
     builder.append(" > ? AND ");
     builder.append(qualifiedTimestampColumn);
-    builder.append(" <= ? ORDER BY ");
+    builder.append(" < ? ORDER BY ");
     builder.append(qualifiedTimestampColumn);
     builder.append(" ASC");
   }
@@ -204,24 +213,26 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
           DateTimeUtils.UTC_CALENDAR.get()
       ).getTime();
       Timestamp endTime = new Timestamp(currentDbTime - timestampDelay);
-      stmt.setTimestamp(1, min(endTime, tsEndOffset), DateTimeUtils.UTC_CALENDAR.get());
+      final Timestamp adjustedEndTime = min(endTime, tsEndOffset);
+      stmt.setTimestamp(1, adjustedEndTime, DateTimeUtils.UTC_CALENDAR.get());
       stmt.setTimestamp(2, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
       stmt.setLong(3, incOffset);
       stmt.setLong(4, incEndOffset);
       stmt.setTimestamp(5, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
       log.debug(
-          "Executing prepared statement with start time value = {} end time = {} and incrementing"
-          + " value = {}",
+          "Executing prepared statement with start time > {} and end time <= {} and incrementing"
+          + " value > {} and < {}",
           DateTimeUtils.formatUtcTimestamp(tsOffset),
-          DateTimeUtils.formatUtcTimestamp(endTime),
-          incOffset
+          DateTimeUtils.formatUtcTimestamp(adjustedEndTime),
+          incOffset, incEndOffset
       );
     } else if (!incrementingColumn.isEmpty()) {
       Long incOffset = offset.getIncrementingOffset();
       Long incEndOffset = offset.getIncrementingSpanEndOffset();
       stmt.setLong(1, incOffset);
       stmt.setLong(2, incEndOffset);
-      log.debug("Executing prepared statement with incrementing value = {}", incOffset);
+      log.debug("Executing prepared statement with incrementing value > {} and < {}",
+          incOffset, incEndOffset);
     } else if (!timestampColumn.isEmpty()) {
       Timestamp tsOffset = offset.getTimestampOffset();
       Timestamp tsSpanEndOffset = offset.getTimestampSpanEndOffset();
@@ -231,10 +242,11 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       ).getTime();
       Timestamp endTime = new Timestamp(currentDbTime - timestampDelay);
       stmt.setTimestamp(1, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
-      stmt.setTimestamp(2, min(endTime, tsSpanEndOffset), DateTimeUtils.UTC_CALENDAR.get());
-      log.debug("Executing prepared statement with timestamp value = {} end time = {}",
+      final Timestamp adjustedEndTime = min(endTime, tsSpanEndOffset);
+      stmt.setTimestamp(2, adjustedEndTime, DateTimeUtils.UTC_CALENDAR.get());
+      log.debug("Executing prepared statement with timestamp value > {} end time < {}",
                 DateTimeUtils.formatUtcTimestamp(tsOffset),
-                DateTimeUtils.formatUtcTimestamp(endTime));
+                DateTimeUtils.formatUtcTimestamp(adjustedEndTime));
     }
     return stmt.executeQuery();
   }

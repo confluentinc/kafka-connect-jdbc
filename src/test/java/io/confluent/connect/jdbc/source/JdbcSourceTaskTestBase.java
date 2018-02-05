@@ -16,6 +16,13 @@
 
 package io.confluent.connect.jdbc.source;
 
+import static io.confluent.connect.jdbc.util.DateTimeUtils.formatUtcTimestamp;
+
+import java.sql.SQLException;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
+
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.source.SourceTaskContext;
 import org.apache.kafka.connect.storage.OffsetStorageReader;
@@ -23,10 +30,6 @@ import org.easymock.EasyMock;
 import org.junit.After;
 import org.junit.Before;
 import org.powermock.api.easymock.PowerMock;
-
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
 
 public class JdbcSourceTaskTestBase {
 
@@ -119,4 +122,20 @@ public class JdbcSourceTaskTestBase {
     task.initialize(taskContext);
   }
 
+
+  protected void initialiseAndFeedTable(String tableName, String incrementingColumn,
+                                      String timestampColumn, IdTimestampTuple... tuples)
+      throws SQLException {
+
+    // Need extra column to be able to insert anything, extra is ignored.
+    db.createTable(tableName,
+        incrementingColumn, "INT NOT NULL",
+        timestampColumn, "TIMESTAMP NOT NULL");
+
+    for (IdTimestampTuple tuple : tuples) {
+      db.insert(tableName,
+          incrementingColumn, tuple.id,
+          timestampColumn, formatUtcTimestamp(tuple.timestamp));
+    }
+  }
 }

@@ -11,7 +11,10 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.Map;
 
+import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.Timeout;
 import org.powermock.api.easymock.PowerMock;
 
 /**
@@ -20,13 +23,14 @@ import org.powermock.api.easymock.PowerMock;
  * This is required to support queries with joins that may have colliding column names within the
  * query and so must be qualified via the table name in the FROM clause.
  */
-public class QualifiedTableNamesTest extends JdbcSourceTaskTestBase {
+public class QualifiedIncrementingColumnNameTest extends JdbcSourceTaskTestBase {
+
+  @Rule
+  public Timeout timelimit = Timeout.seconds(30);
 
   @Test
-  public void incrementColumnCollisionsInCustomQueryAreHandledByQualifyingTheColumns() throws SQLException, InterruptedException {
-    expectInitializeNoOffsets(Collections.singletonList(JOIN_QUERY_PARTITION));
-
-    PowerMock.replayAll();
+  public void incrementColumnCollisionsInCustomQueryAreHandledByQualifyingTheColumns()
+      throws SQLException, InterruptedException {
 
     // given
     final int expectedRecordCount = 10;
@@ -78,5 +82,15 @@ public class QualifiedTableNamesTest extends JdbcSourceTaskTestBase {
     for (int i = 0; i < rowCount; i++) {
       db.insert(tableName, extraColumn, "unimportant data");
     }
+  }
+
+  @Before
+  @Override
+  public void setup() throws Exception {
+    super.setup();
+
+    expectInitializeNoOffsets(Collections.singletonList(JOIN_QUERY_PARTITION));
+
+    PowerMock.replayAll();
   }
 }

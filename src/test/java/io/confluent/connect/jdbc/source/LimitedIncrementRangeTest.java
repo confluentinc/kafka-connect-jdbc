@@ -31,7 +31,10 @@ import java.util.Map;
 
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.source.SourceRecord;
+import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.Timeout;
 import org.powermock.api.easymock.PowerMock;
 
 /**
@@ -42,6 +45,8 @@ import org.powermock.api.easymock.PowerMock;
  */
 public class LimitedIncrementRangeTest extends JdbcSourceTaskTestBase {
 
+  @Rule
+  public Timeout timelimit = Timeout.seconds(30);
 
   @Test
   public void incrementStartConfigSettingIsRespected() throws SQLException, InterruptedException {
@@ -74,7 +79,8 @@ public class LimitedIncrementRangeTest extends JdbcSourceTaskTestBase {
 
     // when we initialise a span limited incrementing source task
     long maxIncrementSpan = 5;
-    JdbcSourceTask sourceTask = startSpanLimitedIncrementingSourceTask(incrementingColumnName, maxIncrementSpan);
+    JdbcSourceTask sourceTask =
+        startSpanLimitedIncrementingSourceTask(incrementingColumnName, maxIncrementSpan);
 
     // then (accounting for initial increment value of -1 and a span of 5)
 
@@ -97,23 +103,23 @@ public class LimitedIncrementRangeTest extends JdbcSourceTaskTestBase {
 
     // given we're at first start and have a 'totalRowCount' row table with even increments of 1
     final String incrementingColumnName = "id";
-    final int totalRowCount = 5;
+    final int totalRowCount = 10;
     initialiseAndFeedTable(SINGLE_TABLE_NAME, incrementingColumnName, totalRowCount);
 
     // when we initialise a span limited incrementing source task
-    long maxIncrementSpan = 2;
+    long maxIncrementSpan = 4;
     JdbcSourceTask sourceTask =
         startSpanLimitedIncrementingSourceTask(incrementingColumnName, maxIncrementSpan);
 
-    // and we poll enough times to get all the row
+    // and we poll enough times to get all the rows
     final List<Object> records = new ArrayList<>();
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
       for (SourceRecord sourceRecord : sourceTask.poll()) {
         records.add(((Struct) sourceRecord.value()).get(incrementingColumnName));
       }
     }
 
-    // then all the rows are collected
+    // then all the rows are collected - i.e. none are missed
     for (int i = 1; i <= totalRowCount; i++) {
       assertTrue("record id '" + i + "' missing.", records.contains(i));
     }
@@ -161,10 +167,6 @@ public class LimitedIncrementRangeTest extends JdbcSourceTaskTestBase {
   private void initialiseAndFeedTable(String tableName, String incrementingColumn, Integer... ids)
       throws SQLException {
 
-    expectInitializeNoOffsets(Collections.singletonList(SINGLE_TABLE_PARTITION));
-
-    PowerMock.replayAll();
-
     // Need extra column to be able to insert anything, extra is ignored.
     String extraColumn = "extra";
     db.createTable(tableName,
@@ -175,6 +177,16 @@ public class LimitedIncrementRangeTest extends JdbcSourceTaskTestBase {
       db.insert(tableName, incrementingColumn, id, extraColumn, "unimportant data");
 
     }
+  }
+
+  @Before
+  @Override
+  public void setup() throws Exception {
+    super.setup();
+
+    expectInitializeNoOffsets(Collections.singletonList(SINGLE_TABLE_PARTITION));
+
+    PowerMock.replayAll();
   }
 }
 

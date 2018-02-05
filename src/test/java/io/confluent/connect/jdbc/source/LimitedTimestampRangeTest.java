@@ -67,7 +67,7 @@ public class LimitedTimestampRangeTest extends JdbcSourceTaskTestBase {
     initialiseAndFeedTable(SINGLE_TABLE_NAME, timestampColumnName, timestamps);
 
     // when we initialise a span limited incrementing source task
-    long maxTimestampSpan = 4;
+    long maxTimestampSpan = 5;
     final int startTimeAdjustment = -1;
     JdbcSourceTask sourceTask =
         startSpanLimitedIncrementingSourceTask(timestampColumnName, maxTimestampSpan,
@@ -76,15 +76,17 @@ public class LimitedTimestampRangeTest extends JdbcSourceTaskTestBase {
     // we get 4 rows in the first poll after adjusting the start timestamp to the day before
     // the earliest timestamp
     final List<SourceRecord> poll1 = sourceTask.poll();
-    assertEquals(maxTimestampSpan, poll1.size());
+    final long poll1ExpectedCount = maxTimestampSpan - 1;
+    assertEquals(poll1ExpectedCount, poll1.size());
 
     // then 4 rows each subsequent poll
     final List<SourceRecord> poll2 = sourceTask.poll();
-    assertEquals(maxTimestampSpan, poll2.size());
+    final long poll2ExpectedCount = maxTimestampSpan - 1;
+    assertEquals(poll2ExpectedCount, poll2.size());
 
     // until we reach the end and get only what is left
     final List<SourceRecord> poll3 = sourceTask.poll();
-    assertEquals(totalRowCount - 2 * maxTimestampSpan, poll3.size());
+    assertEquals(totalRowCount - poll2ExpectedCount - poll1ExpectedCount, poll3.size());
   }
 
   /**

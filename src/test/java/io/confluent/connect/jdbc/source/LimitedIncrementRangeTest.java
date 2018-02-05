@@ -86,11 +86,11 @@ public class LimitedIncrementRangeTest extends JdbcSourceTaskTestBase {
 
     // we get 4 rows in the first poll
     long startingPoint = -1;
-    long firstCycleRowCount = maxIncrementSpan + startingPoint;
+    long firstCycleRowCount = maxIncrementSpan - 1 + startingPoint;
     assertEquals(firstCycleRowCount, sourceTask.poll().size());
 
     // then 5 rows each subsequent poll
-    long secondCycleRowCount = maxIncrementSpan;
+    long secondCycleRowCount = maxIncrementSpan - 1;
     assertEquals(secondCycleRowCount, sourceTask.poll().size());
 
     // until we reach the end and get only what is left

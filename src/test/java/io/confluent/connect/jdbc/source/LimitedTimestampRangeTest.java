@@ -105,14 +105,14 @@ public class LimitedTimestampRangeTest extends JdbcSourceTaskTestBase {
     initialiseAndFeedTable(SINGLE_TABLE_NAME, timestampColumnName, timestamps);
 
     // when we initialise a span limited incrementing source task
-    long maxTimestampSpan = 3;
+    long maxTimestampSpan = 4;
     JdbcSourceTask sourceTask =
         startSpanLimitedIncrementingSourceTask(timestampColumnName, maxTimestampSpan,
             plusDays(timestamps[0], -1, 0));
 
     // and we poll enough times to get all the row
     final Set<Object> records = new HashSet<>();
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 2; i++) {
       final List<SourceRecord> pollResult = sourceTask.poll();
       for (SourceRecord sourceRecord : pollResult) {
         records.add(((Struct) sourceRecord.value()).get(timestampColumnName));

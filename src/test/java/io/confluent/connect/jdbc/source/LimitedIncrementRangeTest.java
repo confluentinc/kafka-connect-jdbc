@@ -107,13 +107,13 @@ public class LimitedIncrementRangeTest extends JdbcSourceTaskTestBase {
     initialiseAndFeedTable(SINGLE_TABLE_NAME, incrementingColumnName, totalRowCount);
 
     // when we initialise a span limited incrementing source task
-    long maxIncrementSpan = 4;
+    long maxIncrementSpan = 7;
     JdbcSourceTask sourceTask =
         startSpanLimitedIncrementingSourceTask(incrementingColumnName, maxIncrementSpan);
 
     // and we poll enough times to get all the rows
     final List<Object> records = new ArrayList<>();
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 2; i++) {
       for (SourceRecord sourceRecord : sourceTask.poll()) {
         records.add(((Struct) sourceRecord.value()).get(incrementingColumnName));
       }

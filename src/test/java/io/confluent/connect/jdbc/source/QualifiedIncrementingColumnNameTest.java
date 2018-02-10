@@ -15,7 +15,11 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.Timeout;
+import org.junit.runner.RunWith;
 import org.powermock.api.easymock.PowerMock;
+import org.powermock.core.classloader.annotations.PowerMockIgnore;
+import org.powermock.core.classloader.annotations.PrepareForTest;
+import org.powermock.modules.junit4.PowerMockRunner;
 
 /**
  * Tests to verify that a qualified column name can be used for incremental and timestamp columns.
@@ -23,6 +27,9 @@ import org.powermock.api.easymock.PowerMock;
  * This is required to support queries with joins that may have colliding column names within the
  * query and so must be qualified via the table name in the FROM clause.
  */
+@RunWith(PowerMockRunner.class)
+@PrepareForTest({JdbcSourceTask.class})
+@PowerMockIgnore("javax.management.*")
 public class QualifiedIncrementingColumnNameTest extends JdbcSourceTaskTestBase {
 
   @Rule

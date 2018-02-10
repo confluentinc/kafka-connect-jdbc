@@ -35,7 +35,11 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.Timeout;
+import org.junit.runner.RunWith;
 import org.powermock.api.easymock.PowerMock;
+import org.powermock.core.classloader.annotations.PowerMockIgnore;
+import org.powermock.core.classloader.annotations.PrepareForTest;
+import org.powermock.modules.junit4.PowerMockRunner;
 
 /**
  * Limited Increment Range means you can limit the number of rows a source will swallow in a single
@@ -43,6 +47,9 @@ import org.powermock.api.easymock.PowerMock;
  * requires also having an Incrementing Start setting to prevent unnecessary cycling from the
  * default start point of -1 where increments start with a high number.
  */
+@RunWith(PowerMockRunner.class)
+@PrepareForTest({JdbcSourceTask.class})
+@PowerMockIgnore("javax.management.*")
 public class LimitedIncrementRangeTest extends JdbcSourceTaskTestBase {
 
   @Rule

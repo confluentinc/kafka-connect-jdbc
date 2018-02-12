@@ -46,7 +46,7 @@ import io.confluent.connect.jdbc.util.JdbcUtils;
  *   At least one of the two columns must be specified (or left as "" for the incrementing column
  *   to indicate use of an auto-increment column). If both columns are provided, they are both
  *   used to ensure only new or updated rows are reported and to totally order updates so
- *   recovery can occur no matter when offsets were committed. If only the incrementing keyFields is
+ *   recovery can occur no matter when offsets were committed. If only the incrementing fields is
  *   provided, new rows will be detected but not updates. If only the timestamp field is
  *   provided, both new and updated rows will be detected, but stream offsets will not be unique
  *   so failures may cause duplicates or losses.

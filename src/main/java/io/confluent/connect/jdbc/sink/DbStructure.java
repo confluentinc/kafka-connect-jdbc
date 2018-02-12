@@ -132,11 +132,11 @@ public class DbStructure {
     }
 
     if (!config.autoEvolve) {
-      throw new ConnectException(String.format("Table %s is missing keyFields (%s) and auto-evolution is disabled", tableName, missingFields));
+      throw new ConnectException(String.format("Table %s is missing fields (%s) and auto-evolution is disabled", tableName, missingFields));
     }
 
     final List<String> amendTableQueries = dbDialect.getAlterTable(tableName, missingFields);
-    log.info("Amending table to add missing keyFields:{} maxRetries:{} with SQL: {}", missingFields, maxRetries, amendTableQueries);
+    log.info("Amending table to add missing fields:{} maxRetries:{} with SQL: {}", missingFields, maxRetries, amendTableQueries);
     try (Statement statement = connection.createStatement()) {
       for (String amendTableQuery : amendTableQueries) {
         statement.executeUpdate(amendTableQuery);
@@ -145,7 +145,7 @@ public class DbStructure {
     } catch (SQLException sqle) {
       if (maxRetries <= 0) {
         throw new ConnectException(
-            String.format("Failed to amend table '%s' to add missing keyFields: %s", tableName, missingFields),
+            String.format("Failed to amend table '%s' to add missing fields: %s", tableName, missingFields),
             sqle
         );
       }

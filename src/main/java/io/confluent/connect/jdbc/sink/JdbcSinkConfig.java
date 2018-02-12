@@ -114,7 +114,7 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "    Use the appropriate update semantics for the target database if it is supported by the connector, e.g. ``UPDATE``.";
   private static final String INSERT_MODE_DISPLAY = "Insert Mode";
 
-  public static final String PK_FIELDS = "pk.keyFields";
+  public static final String PK_FIELDS = "pk.fields";
   private static final String PK_FIELDS_DEFAULT = "";
   private static final String PK_FIELDS_DOC =
       "List of comma-separated primary key field names. The runtime interpretation of this config depends on the ``pk.mode``:\n"

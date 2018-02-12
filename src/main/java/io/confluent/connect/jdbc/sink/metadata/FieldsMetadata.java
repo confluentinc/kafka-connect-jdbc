@@ -20,12 +20,7 @@ import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 
@@ -120,8 +115,14 @@ public class FieldsMetadata {
       }
       break;
     }
-    PrimaryKeyStrategy.PrimaryKeyFields fields = primaryKeyStrategy.get(configuredPkFields,tableName);
-    return extract(tableName, fields.keyFieldNames,fields.keyFields,fieldsWhitelist,valueSchema);
+    Set<String> keyFieldNames = new LinkedHashSet<>();
+    Map<String,SinkRecordField> keyFields = new HashMap<>();
+    if(primaryKeyStrategy!=null){
+      PrimaryKeyStrategy.PrimaryKeyFields fields = primaryKeyStrategy.get(configuredPkFields,tableName);
+      keyFieldNames.addAll(fields.keyFieldNames);
+      keyFields.putAll(fields.keyFields);
+    }
+    return extract(tableName, keyFieldNames,keyFields,fieldsWhitelist,valueSchema);
   }
 
   @Override

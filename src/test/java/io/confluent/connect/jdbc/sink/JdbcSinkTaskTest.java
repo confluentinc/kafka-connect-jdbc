@@ -73,7 +73,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     props.put("connection.url", sqliteHelper.sqliteUri());
     props.put("auto.create", "true");
     props.put("pk.mode", "kafka");
-    props.put("pk.keyFields", "kafka_topic,kafka_partition,kafka_offset");
+    props.put("pk.fields", "kafka_topic,kafka_partition,kafka_offset");
 
     JdbcSinkTask task = new JdbcSinkTask();
     task.initialize(mock(SinkTaskContext.class));
@@ -127,7 +127,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     Map<String, String> props = new HashMap<>();
     props.put("connection.url", sqliteHelper.sqliteUri());
     props.put("pk.mode", "record_value");
-    props.put("pk.keyFields", "firstName,lastName");
+    props.put("pk.fields", "firstName,lastName");
 
     JdbcSinkTask task = new JdbcSinkTask();
     task.initialize(mock(SinkTaskContext.class));

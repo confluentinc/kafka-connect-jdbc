@@ -145,7 +145,7 @@ public class FieldsMetadataTest {
 
   /**
    * RECORD_KEY test cases:
-   * if keySchema is a struct, pkCols must be a subset of the keySchema fields
+   * if keySchema is a struct, pkCols must be a subset of the keySchema keyFields
    */
 
   @Test

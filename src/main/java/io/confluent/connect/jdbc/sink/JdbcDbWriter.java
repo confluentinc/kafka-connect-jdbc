@@ -16,67 +16,89 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import jdk.nashorn.internal.runtime.options.Option;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
 
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.sink.dialect.DbDialect;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 
 public class JdbcDbWriter {
 
-  private final JdbcSinkConfig config;
-  private final DbDialect dbDialect;
-  private final DbStructure dbStructure;
-  final CachedConnectionProvider cachedConnectionProvider;
+    private final JdbcSinkConfig config;
+    private final DbDialect dbDialect;
+    private final DbStructure dbStructure;
+    final CachedConnectionProvider cachedConnectionProvider;
+    final Optional<JdbcRecordConverter> converter;
 
-  JdbcDbWriter(final JdbcSinkConfig config, DbDialect dbDialect, DbStructure dbStructure) {
-    this.config = config;
-    this.dbDialect = dbDialect;
-    this.dbStructure = dbStructure;
-
-    this.cachedConnectionProvider = new CachedConnectionProvider(config.connectionUrl, config.connectionUser, config.connectionPassword) {
-      @Override
-      protected void onConnect(Connection connection) throws SQLException {
-        connection.setAutoCommit(false);
-      }
-    };
-  }
-
-  void write(final Collection<SinkRecord> records) throws SQLException {
-    final Connection connection = cachedConnectionProvider.getValidConnection();
-
-    final Map<String, BufferedRecords> bufferByTable = new HashMap<>();
-    for (SinkRecord record : records) {
-      final String table = destinationTable(record.topic());
-      BufferedRecords buffer = bufferByTable.get(table);
-      if (buffer == null) {
-        buffer = new BufferedRecords(config, table, dbDialect, dbStructure, connection);
-        bufferByTable.put(table, buffer);
-      }
-      buffer.add(record);
+    JdbcDbWriter(final JdbcSinkConfig config, DbDialect dbDialect, DbStructure dbStructure) {
+        this.config = config;
+        this.dbDialect = dbDialect;
+        this.dbStructure = dbStructure;
+        this.cachedConnectionProvider = new CachedConnectionProvider(config.connectionUrl, config.connectionUser, config.connectionPassword) {
+            @Override
+            protected void onConnect(Connection connection) throws SQLException {
+                connection.setAutoCommit(false);
+            }
+        };
+        this.converter = createSinkConverter(config);
     }
-    for (BufferedRecords buffer : bufferByTable.values()) {
-      buffer.flush();
-      buffer.close();
-    }
-    connection.commit();
-  }
 
-  void closeQuietly() {
-    cachedConnectionProvider.closeQuietly();
-  }
+    private static Optional<JdbcRecordConverter> createSinkConverter(JdbcSinkConfig config) {
+        if (config.sinkRecordConverter.isPresent()) {
+            String converterClassName = config.sinkRecordConverter.get();
+            try {
 
-  String destinationTable(String topic) {
-    final String tableName = config.tableNameFormat.replace("${topic}", topic);
-    if (tableName.isEmpty()) {
-      throw new ConnectException(String.format("Destination table name for topic '%s' is empty using the format string '%s'", topic, config.tableNameFormat));
+                JdbcRecordConverter converter = (JdbcRecordConverter) Class.forName(converterClassName).newInstance();
+                return Optional.of(converter);
+            } catch (Exception e) {
+                throw new IllegalArgumentException("Cannot create an instance of sink record converter with class " + converterClassName);
+            }
+        } else {
+            return Optional.empty();
+        }
     }
-    return tableName;
-  }
+
+
+     void write(final Collection<SinkRecord> records) throws SQLException {
+        List<? extends WriteableRecord> writeableRecords =  records.stream().flatMap( s -> flatten(s).stream()).collect(Collectors.toList());
+        writeTransactionally(writeableRecords);
+     }
+
+     Collection<? extends WriteableRecord> flatten(SinkRecord record) {
+        Optional<Collection<? extends WriteableRecord>> collection  = converter.map( s-> s.convert(record));
+        return collection.orElseGet(() -> Collections.singletonList(new DynamicTableRecord(record)));
+     }
+
+
+
+    private void writeTransactionally(final Collection<? extends WriteableRecord> records) throws SQLException {
+        final Connection connection = cachedConnectionProvider.getValidConnection();
+        final Map<String, BufferedRecords> bufferByTable = new HashMap<>();
+        for (WriteableRecord record : records) {
+            final String table = record.getTableName(config);
+            BufferedRecords buffer = bufferByTable.get(table);
+            if (buffer == null) {
+                buffer = new BufferedRecords(config, table, dbDialect, dbStructure, connection);
+                bufferByTable.put(table, buffer);
+            }
+            buffer.add(record.getRecord(), record.getMetadataExtractor());
+        }
+        for (BufferedRecords buffer : bufferByTable.values()) {
+            buffer.flush();
+            buffer.close();
+        }
+        connection.commit();
+    }
+
+    void closeQuietly() {
+        cachedConnectionProvider.closeQuietly();
+    }
+
+
 }

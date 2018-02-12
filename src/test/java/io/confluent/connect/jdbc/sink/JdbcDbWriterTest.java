@@ -81,7 +81,7 @@ public class JdbcDbWriterTest {
     props.put("auto.create", "true");
     props.put("auto.evolve", "true");
     props.put("pk.mode", "record_key");
-    props.put("pk.fields", "id"); // assigned name for the primitive key
+    props.put("pk.keyFields", "id"); // assigned name for the primitive key
 
     writer = newWriter(props);
 
@@ -167,7 +167,7 @@ public class JdbcDbWriterTest {
     props.put("connection.url", sqliteHelper.sqliteUri());
     props.put("auto.create", "true");
     props.put("pk.mode", pkMode.toString());
-    props.put("pk.fields", pkFields);
+    props.put("pk.keyFields", pkFields);
     props.put("insert.mode", insertMode.toString());
 
     writer = newWriter(props);

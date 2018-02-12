@@ -12,7 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class JDBCSinkTask2Test {
+public class JDBCSinkTaskSchemaOverrideTest {
 
     @Test
     public void testInsertOnNotPublicSchema() {

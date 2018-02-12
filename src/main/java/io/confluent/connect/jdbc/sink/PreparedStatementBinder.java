@@ -86,7 +86,7 @@ public class PreparedStatementBinder {
     switch (pkMode) {
       case NONE:
         if (!fieldsMetadata.keyFieldNames.isEmpty()) {
-          throw new AssertionError();
+          throw new AssertionError("Field metadata contains  primary key fields but the primary key mode is NONE, so they will not be bound. Did you forget changing primary key mode?");
         }
         break;
 

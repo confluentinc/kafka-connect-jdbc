@@ -66,6 +66,21 @@
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
     </properties>
 
+    
+    <distributionManagement>
+        <snapshotRepository>
+            <id>snapshots</id>
+            <name>instapartners-snapshots</name>
+            <url>https://instapartners.jfrog.io/instapartners/Credimi-snapshots</url>
+            <!--<url>https://instapartners.jfrog.io/instapartners/libs-snapshot-local</url>-->
+        </snapshotRepository>
+        <repository>
+            <id>central</id>
+            <name>instapartners-central</name>
+            <url>https://instapartners.jfrog.io/instapartners/Credimi-releases</url>
+        </repository>
+    </distributionManagement>
+
     <repositories>
         <repository>
             <id>confluent</id>

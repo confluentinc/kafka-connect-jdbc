@@ -16,6 +16,7 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import io.confluent.connect.jdbc.sink.metadata.MetadataExtractor;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.slf4j.Logger;
@@ -56,13 +57,13 @@ public class BufferedRecords {
     this.connection = connection;
   }
 
-  public List<SinkRecord> add(SinkRecord record) throws SQLException {
+  public List<SinkRecord> add(SinkRecord record, MetadataExtractor metadataExtractor) throws SQLException {
     final SchemaPair schemaPair = new SchemaPair(record.keySchema(), record.valueSchema());
 
     if (currentSchemaPair == null) {
       currentSchemaPair = schemaPair;
       // re-initialize everything that depends on the record schema
-      fieldsMetadata = FieldsMetadata.extract(tableName, config.pkMode, config.pkFields, config.fieldsWhitelist, currentSchemaPair);
+      fieldsMetadata = metadataExtractor.extract(tableName,config,schemaPair);
       dbStructure.createOrAmendIfNecessary(config, connection, tableName, fieldsMetadata);
       final String insertSql = getInsertSql();
       log.debug("{} sql: {}", config.insertMode, insertSql);
@@ -84,7 +85,7 @@ public class BufferedRecords {
       // Each batch needs to have the same SchemaPair, so get the buffered records out, reset state and re-attempt the add
       flushed = flush();
       currentSchemaPair = null;
-      flushed.addAll(add(record));
+      flushed.addAll(add(record,metadataExtractor));
     }
     return flushed;
   }

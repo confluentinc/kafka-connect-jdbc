@@ -114,18 +114,18 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "    Use the appropriate update semantics for the target database if it is supported by the connector, e.g. ``UPDATE``.";
   private static final String INSERT_MODE_DISPLAY = "Insert Mode";
 
-  public static final String PK_FIELDS = "pk.fields";
+  public static final String PK_FIELDS = "pk.keyFields";
   private static final String PK_FIELDS_DEFAULT = "";
   private static final String PK_FIELDS_DOC =
       "List of comma-separated primary key field names. The runtime interpretation of this config depends on the ``pk.mode``:\n"
       + "``none``\n"
-      + "    Ignored as no fields are used as primary key in this mode.\n"
+      + "    Ignored as no keyFields are used as primary key in this mode.\n"
       + "``kafka``\n"
       + "    Must be a trio representing the Kafka coordinates, defaults to ``" + StringUtils.join(DEFAULT_KAFKA_PK_NAMES, ",") + "`` if empty.\n"
       + "``record_key``\n"
-      + "    If empty, all fields from the key struct will be used, otherwise used to extract the desired fields - for primitive key only a single field name must be configured.\n"
+      + "    If empty, all keyFields from the key struct will be used, otherwise used to extract the desired keyFields - for primitive key only a single field name must be configured.\n"
       + "``record_value``\n"
-      + "    If empty, all fields from the value struct will be used, otherwise used to extract the desired fields.";
+      + "    If empty, all keyFields from the value struct will be used, otherwise used to extract the desired keyFields.";
   private static final String PK_FIELDS_DISPLAY = "Primary Key Fields";
 
   public static final String PK_MODE = "pk.mode";
@@ -142,10 +142,10 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "    Field(s) from the record value are used, which must be a struct.";
   private static final String PK_MODE_DISPLAY = "Primary Key Mode";
 
-  public static final String FIELDS_WHITELIST = "fields.whitelist";
+  public static final String FIELDS_WHITELIST = "keyFields.whitelist";
   private static final String FIELDS_WHITELIST_DEFAULT = "";
   private static final String FIELDS_WHITELIST_DOC =
-      "List of comma-separated record value field names. If empty, all fields from the record value are utilized, otherwise used to filter to the desired fields.\n"
+      "List of comma-separated record value field names. If empty, all keyFields from the record value are utilized, otherwise used to filter to the desired keyFields.\n"
       + "Note that ``" + PK_FIELDS + "`` is applied independently in the context of which field(s) form the primary key columns in the destination database,"
       + " while this configuration is applicable for the other columns.";
   private static final String FIELDS_WHITELIST_DISPLAY = "Fields Whitelist";
@@ -163,6 +163,12 @@ public class JdbcSinkConfig extends AbstractConfig {
           "Schema override to fetch tables metadata from the database and write to.:\n"
                   + "  * \"\"  Some specific configurations require you to set connectionSchema to a certain value while "
                   + " writing to other tables. See  ";
+
+  public static final String SINK_RECORD_CONVERTER = "sinkrecord.converter";
+  private static final String SINK_RECORD_CONVERTER_DISPLAY = "Sink Record Converter";
+  private static final String SINK_RECORD_CONVERTER_DOC =
+          "A class implementing io.confluent.connect.jdbc.JdbcRecordConverter. " +
+                  "This class will be invoekd to convert a single message in multiple records which will be updated under a single transaction";
 
   private static final String SCHEMA_OVERRIDE_DISPLAY = "Schema override";
 
@@ -198,7 +204,9 @@ public class JdbcSinkConfig extends AbstractConfig {
       .define(FIELDS_WHITELIST, ConfigDef.Type.LIST, FIELDS_WHITELIST_DEFAULT,
               ConfigDef.Importance.MEDIUM, FIELDS_WHITELIST_DOC,
               DATAMAPPING_GROUP, 4, ConfigDef.Width.LONG, FIELDS_WHITELIST_DISPLAY)
-      // DDL
+      .define(SINK_RECORD_CONVERTER,ConfigDef.Type.STRING, null,
+                  ConfigDef.Importance.MEDIUM, SINK_RECORD_CONVERTER_DOC,DATAMAPPING_GROUP,5,ConfigDef.Width.LONG, SINK_RECORD_CONVERTER_DISPLAY)
+  // DDL
       .define(AUTO_CREATE, ConfigDef.Type.BOOLEAN, AUTO_CREATE_DEFAULT,
               ConfigDef.Importance.MEDIUM, AUTO_CREATE_DOC,
               DDL_GROUP, 1, ConfigDef.Width.SHORT, AUTO_CREATE_DISPLAY)
@@ -218,6 +226,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final String connectionPassword;
   public final String tableNameFormat;
   public final Optional<String> overridenSchema;
+  public final Optional<String> sinkRecordConverter;
   public final int batchSize;
   public final int maxRetries;
   public final int retryBackoffMs;
@@ -242,6 +251,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     insertMode = InsertMode.valueOf(getString(INSERT_MODE).toUpperCase());
     pkMode = PrimaryKeyMode.valueOf(getString(PK_MODE).toUpperCase());
     pkFields = getList(PK_FIELDS);
+    sinkRecordConverter = Optional.ofNullable(getString((SINK_RECORD_CONVERTER)));
     overridenSchema = Optional.ofNullable(getString(SCHEMA_OVERRIDE_CONFIG));
     fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
   }

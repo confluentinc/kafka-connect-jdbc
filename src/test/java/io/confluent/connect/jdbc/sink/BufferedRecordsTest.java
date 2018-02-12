@@ -16,6 +16,7 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import io.confluent.connect.jdbc.sink.metadata.DefaultFieldsMetadataExtractor;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -90,13 +91,13 @@ public class BufferedRecordsTest {
     // test records are batched correctly based on schema equality as records are added
     //   (schemaA,schemaA,schemaA,schemaB,schemaA) -> ([schemaA,schemaA,schemaA],[schemaB],[schemaA])
 
-    assertEquals(Collections.emptyList(), buffer.add(recordA));
-    assertEquals(Collections.emptyList(), buffer.add(recordA));
-    assertEquals(Collections.emptyList(), buffer.add(recordA));
+    assertEquals(Collections.emptyList(), buffer.add(recordA, DefaultFieldsMetadataExtractor.Instance));
+    assertEquals(Collections.emptyList(), buffer.add(recordA,DefaultFieldsMetadataExtractor.Instance));
+    assertEquals(Collections.emptyList(), buffer.add(recordA,DefaultFieldsMetadataExtractor.Instance));
 
-    assertEquals(Arrays.asList(recordA, recordA, recordA), buffer.add(recordB));
+    assertEquals(Arrays.asList(recordA, recordA, recordA), buffer.add(recordB,DefaultFieldsMetadataExtractor.Instance));
 
-    assertEquals(Collections.singletonList(recordB), buffer.add(recordA));
+    assertEquals(Collections.singletonList(recordB), buffer.add(recordA,DefaultFieldsMetadataExtractor.Instance));
 
     assertEquals(Collections.singletonList(recordA), buffer.flush());
   }
@@ -132,12 +133,12 @@ public class BufferedRecordsTest {
     final Schema schemaA = SchemaBuilder.struct().field("name", Schema.STRING_SCHEMA).build();
     final Struct valueA = new Struct(schemaA).put("name", "cuba");
     final SinkRecord recordA = new SinkRecord("dummy", 0, null, null, schemaA, valueA, 0);
-    buffer.add(recordA);
+    buffer.add(recordA,DefaultFieldsMetadataExtractor.Instance);
 
     final Schema schemaB = SchemaBuilder.struct().field("name", Schema.STRING_SCHEMA).build();
     final Struct valueB = new Struct(schemaA).put("name", "cubb");
     final SinkRecord recordB = new SinkRecord("dummy", 0, null, null, schemaB, valueB, 0);
-    buffer.add(recordB);
+    buffer.add(recordB,DefaultFieldsMetadataExtractor.Instance);
     buffer.flush();
 
   }
@@ -166,7 +167,7 @@ public class BufferedRecordsTest {
     final Schema schemaA = SchemaBuilder.struct().field("name", Schema.STRING_SCHEMA).build();
     final Struct valueA = new Struct(schemaA).put("name", "cuba");
     final SinkRecord recordA = new SinkRecord("dummy", 0, null, null, schemaA, valueA, 0);
-    buffer.add(recordA);
+    buffer.add(recordA,DefaultFieldsMetadataExtractor.Instance);
 
     Mockito.verify(connectionMock, Mockito.times(1)).prepareStatement(Matchers.eq("UPDATE `dummy` SET `name` = ?"));
 

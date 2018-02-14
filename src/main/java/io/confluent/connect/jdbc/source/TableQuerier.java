@@ -17,11 +17,11 @@
 package io.confluent.connect.jdbc.source;
 
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
+import io.confluent.connect.jdbc.util.NamedParameterStatement;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.source.SourceRecord;
 
 import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
@@ -46,7 +46,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
 
   protected final boolean mapNumerics;
   protected long lastUpdate;
-  protected PreparedStatement stmt;
+  protected NamedParameterStatement stmt;
   protected ResultSet resultSet;
   protected Schema schema;
 
@@ -65,7 +65,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     return lastUpdate;
   }
 
-  public PreparedStatement getOrCreatePreparedStatement(Connection db) throws SQLException {
+  public NamedParameterStatement getOrCreatePreparedStatement(Connection db) throws SQLException {
     if (stmt != null) {
       return stmt;
     }

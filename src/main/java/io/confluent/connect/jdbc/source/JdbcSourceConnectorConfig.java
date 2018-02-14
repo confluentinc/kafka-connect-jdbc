@@ -195,6 +195,15 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String MODE_GROUP = "Mode";
   public static final String CONNECTOR_GROUP = "Connector";
 
+  public static final String APPEND_INCREMENT_CONTROL_CONFIG = "query.append.increment.control";
+  private static final String APPEND_INCREMENT_CONTROL_DOC =
+      "By default, the JDBC connector will append increment control when use QUERY mode."
+      + "You may choose to add your  increment control. Setting this to false "
+      + "will disable append increment control.";
+  public static final boolean APPEND_INCREMENT_CONTROL_DEFAULT = true;
+  private static final String APPEND_INCREMENT_CONTROL_DISPLAY = "Append Increment Control";
+
+
   // We want the table recommender to only cache values for a short period of time so that the
   // blacklist and whitelist config properties can use a single query.
   private static final Recommender TABLE_RECOMMENDER = new CachingRecommender(
@@ -321,7 +330,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         DATABASE_GROUP,
         4,
         Width.SHORT,
-        NUMERIC_PRECISION_MAPPING_DISPLAY);
+        NUMERIC_PRECISION_MAPPING_DISPLAY
+    ).define(
+        APPEND_INCREMENT_CONTROL_CONFIG,
+        Type.BOOLEAN,
+        APPEND_INCREMENT_CONTROL_DEFAULT,
+        Importance.LOW,
+        APPEND_INCREMENT_CONTROL_DOC,
+        DATABASE_GROUP,
+        7,
+        Width.SHORT,
+        APPEND_INCREMENT_CONTROL_DISPLAY);
   }
 
   private static final void addModeOptions(ConfigDef config) {

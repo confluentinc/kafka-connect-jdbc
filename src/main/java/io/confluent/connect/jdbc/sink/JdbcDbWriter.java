@@ -57,7 +57,7 @@ public class JdbcDbWriter {
                 JdbcRecordConverter converter = (JdbcRecordConverter) Class.forName(converterClassName).newInstance();
                 return Optional.of(converter);
             } catch (Exception e) {
-                throw new IllegalArgumentException("Cannot create an instance of sink record converter with class " + converterClassName);
+                throw new IllegalArgumentException("Cannot create an instance of sink record converter with class " + converterClassName,e);
             }
         } else {
             return Optional.empty();

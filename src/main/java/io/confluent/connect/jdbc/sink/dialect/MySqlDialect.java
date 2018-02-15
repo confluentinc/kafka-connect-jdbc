@@ -67,7 +67,7 @@ public class MySqlDialect extends DbDialect {
       case BOOLEAN:
         return "TINYINT";
       case STRING:
-        return "VARCHAR(256)";
+        return "TEXT";
       case BYTES:
         return "VARBINARY(1024)";
       default:

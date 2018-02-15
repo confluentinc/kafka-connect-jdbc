@@ -43,7 +43,7 @@ public class MySqlDialectTest extends BaseDialectTest {
     verifyDataTypeMapping("FLOAT", Schema.FLOAT32_SCHEMA);
     verifyDataTypeMapping("DOUBLE", Schema.FLOAT64_SCHEMA);
     verifyDataTypeMapping("TINYINT", Schema.BOOLEAN_SCHEMA);
-    verifyDataTypeMapping("VARCHAR(256)", Schema.STRING_SCHEMA);
+    verifyDataTypeMapping("TEXT", Schema.STRING_SCHEMA);
     verifyDataTypeMapping("VARBINARY(1024)", Schema.BYTES_SCHEMA);
     verifyDataTypeMapping("DECIMAL(65,0)", Decimal.schema(0));
     verifyDataTypeMapping("DECIMAL(65,2)", Decimal.schema(2));

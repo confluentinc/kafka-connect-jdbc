@@ -92,6 +92,19 @@ public abstract class DbDialect {
     return builder.toString();
   }
 
+  /**
+   * This function can be overwritten by all dialects that need additional metadata information.
+   *
+   * For dialects that don't need any additional data, this will dispatch to an implementation without FieldsMetadata.
+   */
+  public String getUpsertQuery(
+      final String table,
+      final Collection<String> keyColumns,
+      final Collection<String> columns,
+      final FieldsMetadata fieldsMetadata
+  ){
+    return getUpsertQuery(table, keyColumns, columns);
+  }
 
   public String getUpsertQuery(
       final String table,

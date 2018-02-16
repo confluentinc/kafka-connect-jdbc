@@ -39,6 +39,19 @@ public class JdbcSinkConfig extends AbstractConfig {
 
   }
 
+  public enum SqlDialects {
+    DEFAULT,
+    SQLITE,
+    ORACLE,
+    SAP,
+    HANA,
+    VERTICA,
+    SQLSERVER,
+    MARIADB,
+    MYSQL,
+    POSTGRESQL;
+  }
+
   public enum PrimaryKeyMode {
     NONE,
     KAFKA,
@@ -72,6 +85,13 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "For example, ``kafka_${topic}`` for the topic 'orders' will map to the table name "
       + "'kafka_orders'.";
   private static final String TABLE_NAME_FORMAT_DISPLAY = "Table Name Format";
+
+  public static final String SQL_DIALECT = "sql.dialect";
+  private static final String SQL_DIALECT_DEFAULT = "DEFAULT";
+  private static final String SQL_DIALECT_DOC =
+      "The SQL dialect to use for writes to the database.\n"
+      + "If empty, will automatically infer dialect based on the JDBC connection string";
+  private static final String SQL_DIALECT_DISPLAY = "Use SQL Dialect";
 
   public static final String MAX_RETRIES = "max.retries";
   private static final int MAX_RETRIES_DEFAULT = 10;
@@ -204,6 +224,10 @@ public class JdbcSinkConfig extends AbstractConfig {
       .define(FIELDS_WHITELIST, ConfigDef.Type.LIST, FIELDS_WHITELIST_DEFAULT,
               ConfigDef.Importance.MEDIUM, FIELDS_WHITELIST_DOC,
               DATAMAPPING_GROUP, 4, ConfigDef.Width.LONG, FIELDS_WHITELIST_DISPLAY)
+      .define(SQL_DIALECT, ConfigDef.Type.STRING, SQL_DIALECT_DEFAULT,
+              EnumValidator.in(SqlDialects.values()), ConfigDef.Importance.LOW,
+              SQL_DIALECT_DOC, DATAMAPPING_GROUP, 5,
+              ConfigDef.Width.MEDIUM, SQL_DIALECT_DISPLAY)
       // DDL
       .define(AUTO_CREATE, ConfigDef.Type.BOOLEAN, AUTO_CREATE_DEFAULT,
               ConfigDef.Importance.MEDIUM, AUTO_CREATE_DOC,
@@ -224,6 +248,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final String connectionUser;
   public final String connectionPassword;
   public final String tableNameFormat;
+  public final String sqlDialect;
   public final int batchSize;
   public final int maxRetries;
   public final int retryBackoffMs;
@@ -240,6 +265,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     connectionUser = getString(CONNECTION_USER);
     connectionPassword = getPasswordValue(CONNECTION_PASSWORD);
     tableNameFormat = getString(TABLE_NAME_FORMAT).trim();
+    sqlDialect = getString(SQL_DIALECT).trim();
     batchSize = getInt(BATCH_SIZE);
     maxRetries = getInt(MAX_RETRIES);
     retryBackoffMs = getInt(RETRY_BACKOFF_MS);

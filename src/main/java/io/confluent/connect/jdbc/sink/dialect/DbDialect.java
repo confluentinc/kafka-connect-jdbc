@@ -314,6 +314,8 @@ public abstract class DbDialect {
         return new MySqlDialect();
       case("postgresql"):
         return new PostgreSqlDialect();
+      case("debezium"):
+        return new DebeziumMySqlDialect();
       default:
         throw new ConnectException(String.format("Not a valid SQL dialect name: %s", dialectName));
     }

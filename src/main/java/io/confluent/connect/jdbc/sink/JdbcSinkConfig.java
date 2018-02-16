@@ -49,6 +49,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     SQLSERVER,
     MARIADB,
     MYSQL,
+    DEBEZIUM,
     POSTGRESQL;
   }
 

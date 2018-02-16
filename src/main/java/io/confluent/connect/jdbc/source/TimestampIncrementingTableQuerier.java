@@ -63,16 +63,27 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   private String incrementingColumn;
   private long timestampDelay;
   private TimestampIncrementingOffset offset;
+  private String currentTimestampQuery;
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
                                            String timestampColumn, String incrementingColumn,
                                            Map<String, Object> offsetMap, Long timestampDelay,
                                            String schemaPattern, boolean mapNumerics) {
+    this(mode, name, topicPrefix, timestampColumn, incrementingColumn, offsetMap, timestampDelay,
+            schemaPattern, mapNumerics, null);
+  }
+
+  public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
+                                           String timestampColumn, String incrementingColumn,
+                                           Map<String, Object> offsetMap, Long timestampDelay,
+                                           String schemaPattern, boolean mapNumerics,
+                                           String currentTimestampQuery) {
     super(mode, name, topicPrefix, schemaPattern, mapNumerics);
     this.timestampColumn = timestampColumn;
     this.incrementingColumn = incrementingColumn;
     this.timestampDelay = timestampDelay;
     this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
+    this.currentTimestampQuery = currentTimestampQuery;
   }
 
   @Override
@@ -167,7 +178,8 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       Long incOffset = offset.getIncrementingOffset();
       final long currentDbTime = JdbcUtils.getCurrentTimeOnDB(
           stmt.getConnection(),
-          DateTimeUtils.UTC_CALENDAR.get()
+          DateTimeUtils.UTC_CALENDAR.get(),
+          this.currentTimestampQuery
       ).getTime();
       Timestamp endTime = new Timestamp(currentDbTime - timestampDelay);
       stmt.setTimestamp(1, endTime, DateTimeUtils.UTC_CALENDAR.get());
@@ -189,8 +201,8 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       Timestamp tsOffset = offset.getTimestampOffset();
       final long currentDbTime = JdbcUtils.getCurrentTimeOnDB(
           stmt.getConnection(),
-          DateTimeUtils.UTC_CALENDAR.get()
-      ).getTime();
+          DateTimeUtils.UTC_CALENDAR.get(),
+              this.currentTimestampQuery).getTime();
       Timestamp endTime = new Timestamp(currentDbTime - timestampDelay);
       stmt.setTimestamp(1, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
       stmt.setTimestamp(2, endTime, DateTimeUtils.UTC_CALENDAR.get());

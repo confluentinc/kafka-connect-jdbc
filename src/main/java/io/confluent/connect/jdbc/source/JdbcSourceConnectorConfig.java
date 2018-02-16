@@ -125,6 +125,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String TIMESTAMP_COLUMN_NAME_DEFAULT = "";
   private static final String TIMESTAMP_COLUMN_NAME_DISPLAY = "Timestamp Column Name";
 
+  public static final String TIMESTAMP_CURRENT_TIME_QUERY_CONFIG = "timestamp.current.time.query";
+  public static final String TIMESTAMP_CURRENT_TIME_QUERY_DOC = "The query that should be performed"
+      + " on the database, in order to retrieve the current timestamp";
+  public static final String TIMESTAMP_CURRENT_TIME_QUERY_DISPLAY = "Current Timestamp Query";
+  public static final String TIMESTAMP_CURRENT_TIME_QUERY_DEFAULT = "";
+
   public static final String TABLE_POLL_INTERVAL_MS_CONFIG = "table.poll.interval.ms";
   private static final String TABLE_POLL_INTERVAL_MS_DOC =
       "Frequency in ms to poll for new or removed tables, which may result in updated task "
@@ -143,6 +149,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String TABLE_BLACKLIST_CONFIG = "table.blacklist";
   private static final String TABLE_BLACKLIST_DOC =
       "List of tables to exclude from copying. If specified, table.whitelist may not be set.";
+
   public static final String TABLE_BLACKLIST_DEFAULT = "";
   private static final String TABLE_BLACKLIST_DISPLAY = "Table Blacklist";
 
@@ -370,13 +377,24 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         TIMESTAMP_COLUMN_NAME_DISPLAY,
         MODE_DEPENDENTS_RECOMMENDER
     ).define(
+        TIMESTAMP_CURRENT_TIME_QUERY_CONFIG,
+        Type.STRING,
+        TIMESTAMP_CURRENT_TIME_QUERY_DEFAULT,
+        Importance.MEDIUM,
+        TIMESTAMP_CURRENT_TIME_QUERY_DOC,
+        MODE_GROUP,
+        4,
+        Width.MEDIUM,
+        TIMESTAMP_CURRENT_TIME_QUERY_DISPLAY,
+        MODE_DEPENDENTS_RECOMMENDER
+    ).define(
         VALIDATE_NON_NULL_CONFIG,
         Type.BOOLEAN,
         VALIDATE_NON_NULL_DEFAULT,
         Importance.LOW,
         VALIDATE_NON_NULL_DOC,
         MODE_GROUP,
-        4,
+        5,
         Width.SHORT,
         VALIDATE_NON_NULL_DISPLAY,
         MODE_DEPENDENTS_RECOMMENDER
@@ -387,7 +405,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Importance.MEDIUM,
         QUERY_DOC,
         MODE_GROUP,
-        5,
+        6,
         Width.SHORT,
         QUERY_DISPLAY);
   }

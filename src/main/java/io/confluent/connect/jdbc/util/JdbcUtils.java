@@ -228,26 +228,29 @@ public class JdbcUtils {
    * Return current time at the database
    * @param conn database connection
    * @param cal calendar
+   * @param currentTimestampQuery query to get the current timestamp
    * @return the current time at the database
    */
   public static Timestamp getCurrentTimeOnDB(
-      Connection conn,
-      Calendar cal
-  ) throws SQLException, ConnectException {
-    String query;
-
-    // This is ugly, but to run a function, everyone does 'select function()'
-    // except Oracle that does 'select function() from dual'
-    // and Derby uses either the dummy table SYSIBM.SYSDUMMY1  or values expression (I chose to
-    // use values)
+          Connection conn,
+          Calendar cal,
+          String currentTimestampQuery) throws SQLException, ConnectException {
+    String query = currentTimestampQuery;
     String dbProduct = conn.getMetaData().getDatabaseProductName();
-    if ("Oracle".equals(dbProduct)) {
-      query = "select CURRENT_TIMESTAMP from dual";
-    } else if ("Apache Derby".equals(dbProduct)
-        || (dbProduct != null && dbProduct.startsWith("DB2"))) {
-      query = "values(CURRENT_TIMESTAMP)";
-    } else {
-      query = "select CURRENT_TIMESTAMP;";
+
+    if (query == null || query.isEmpty()) {
+      // This is ugly, but to run a function, everyone does 'select function()'
+      // except Oracle that does 'select function() from dual'
+      // and Derby uses either the dummy table SYSIBM.SYSDUMMY1  or values expression (I chose to
+      // use values)
+      if ("Oracle".equals(dbProduct)) {
+        query = "select CURRENT_TIMESTAMP from dual";
+      } else if ("Apache Derby".equals(dbProduct)
+              || (dbProduct != null && dbProduct.startsWith("DB2"))) {
+        query = "values(CURRENT_TIMESTAMP)";
+      } else {
+        query = "select CURRENT_TIMESTAMP;";
+      }
     }
 
     try (Statement stmt = conn.createStatement()) {

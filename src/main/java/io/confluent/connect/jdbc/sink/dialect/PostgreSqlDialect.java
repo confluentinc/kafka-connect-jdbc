@@ -28,6 +28,7 @@ import java.util.Optional;
 
 import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.joinToBuilder;
 import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.nCopiesToBuilder;
+import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.Transform;
 
 public class PostgreSqlDialect extends DbDialect {
 

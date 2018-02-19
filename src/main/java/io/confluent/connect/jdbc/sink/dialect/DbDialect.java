@@ -16,6 +16,7 @@
 
 package io.confluent.connect.jdbc.sink.dialect;
 
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -268,6 +269,15 @@ public abstract class DbDialect {
     return pks;
   }
 
+  public static DbDialect fromCustomDBDialect(final String dbDialectClass) {
+    try {
+      return (DbDialect) Class.forName(dbDialectClass).newInstance();
+    } catch(ClassNotFoundException | IllegalAccessException | InstantiationException e) {
+      throw new ConfigException(
+              String.format("Could not create class %s: %s", dbDialectClass, e.getMessage())
+      );
+    }
+  }
   public static DbDialect fromConnectionString(final String url) {
     if (!url.startsWith("jdbc:")) {
       throw new ConnectException(String.format("Not a valid JDBC URL: %s", url));

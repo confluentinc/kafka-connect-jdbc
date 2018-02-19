@@ -138,4 +138,20 @@ public class DbDialectTest {
     assertEquals(VerticaDialect.class, DbDialect.fromConnectionString("jdbc:vertica://host:5433/db").getClass());
   }
 
+  @Test
+  public void customDialect() {
+    final Class[] fixture = {
+            PostgreSqlDialect.class,
+            GenericDialect.class,
+            VerticaDialect.class,
+            SqlServerDialect.class,
+            MySqlDialect.class
+    };
+    for (Class clazz: fixture) {
+      assertEquals(
+              clazz,
+              DbDialect.fromCustomDBDialect(clazz.getName()).getClass());
+    }
+  }
+
 }

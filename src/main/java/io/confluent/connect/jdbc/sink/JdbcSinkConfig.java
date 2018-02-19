@@ -68,7 +68,8 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String CONNECTION_PASSWORD_DISPLAY = "JDBC Password";
 
   public static final String CONNECTION_DIALECT = "connection.dialect";
-  private static final String CONNECTION_DIALECT_DOC = "Custom io.confluent.connect.jdbc.sink.dialect.DbDialect class name";
+  private static final String CONNECTION_DIALECT_DOC =
+          "Custom io.confluent.connect.jdbc.sink.dialect.DbDialect class name";
   private static final String CONNECTION_DIALECT_DISPLAY = "Custom Db Dialect class name";
 
   public static final String TABLE_NAME_FORMAT = "table.name.format";
@@ -244,6 +245,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final PrimaryKeyMode pkMode;
   public final List<String> pkFields;
   public final Set<String> fieldsWhitelist;
+
   public JdbcSinkConfig(Map<?, ?> props) {
     super(CONFIG_DEF, props);
     connectionUrl = getString(CONNECTION_URL);

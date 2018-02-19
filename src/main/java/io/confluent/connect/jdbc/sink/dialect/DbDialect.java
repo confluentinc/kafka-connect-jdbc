@@ -272,12 +272,13 @@ public abstract class DbDialect {
   public static DbDialect fromCustomDBDialect(final String dbDialectClass) {
     try {
       return (DbDialect) Class.forName(dbDialectClass).newInstance();
-    } catch(ClassNotFoundException | IllegalAccessException | InstantiationException e) {
+    } catch (ClassNotFoundException | IllegalAccessException | InstantiationException e) {
       throw new ConfigException(
               String.format("Could not create class %s: %s", dbDialectClass, e.getMessage())
       );
     }
   }
+
   public static DbDialect fromConnectionString(final String url) {
     if (!url.startsWith("jdbc:")) {
       throw new ConnectException(String.format("Not a valid JDBC URL: %s", url));

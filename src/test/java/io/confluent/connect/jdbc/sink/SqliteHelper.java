@@ -53,14 +53,24 @@ public final class SqliteHelper {
   }
 
   public void setUp() throws SQLException, IOException {
-    Files.deleteIfExists(dbPath);
+    dropDatabase();
     connection = DriverManager.getConnection(sqliteUri());
     connection.setAutoCommit(false);
   }
 
   public void tearDown() throws SQLException, IOException {
     connection.close();
-    Files.deleteIfExists(dbPath);
+
+    dropDatabase();
+  }
+
+
+  private void dropDatabase() {
+    try {
+      Files.deleteIfExists(dbPath);
+    } catch (IOException ioe) {
+      // nothing - best efforts only
+    }
   }
 
   public void createTable(final String createSql) throws SQLException {

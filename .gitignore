@@ -17,3 +17,4 @@ derby.log
 __test_database_*
 test.sqlite
 *.db-journal
+/JdbcSinkTaskTest.db

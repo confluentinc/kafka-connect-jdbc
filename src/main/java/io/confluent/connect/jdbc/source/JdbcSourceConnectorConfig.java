@@ -16,19 +16,8 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.JdbcUtils;
-import org.apache.kafka.common.config.AbstractConfig;
-import org.apache.kafka.common.config.ConfigDef;
-import org.apache.kafka.common.config.ConfigDef.Importance;
-import org.apache.kafka.common.config.ConfigDef.Recommender;
-import org.apache.kafka.common.config.ConfigDef.Type;
-import org.apache.kafka.common.config.ConfigDef.Width;
-import org.apache.kafka.common.config.ConfigException;
-import org.apache.kafka.common.config.types.Password;
-import org.apache.kafka.common.utils.Time;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -40,6 +29,18 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+
+import org.apache.kafka.common.config.AbstractConfig;
+import org.apache.kafka.common.config.ConfigDef;
+import org.apache.kafka.common.config.ConfigDef.Importance;
+import org.apache.kafka.common.config.ConfigDef.Recommender;
+import org.apache.kafka.common.config.ConfigDef.Type;
+import org.apache.kafka.common.config.ConfigDef.Width;
+import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.config.types.Password;
+import org.apache.kafka.common.utils.Time;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class JdbcSourceConnectorConfig extends AbstractConfig {
 
@@ -118,12 +119,74 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String INCREMENTING_COLUMN_NAME_DEFAULT = "";
   private static final String INCREMENTING_COLUMN_NAME_DISPLAY = "Incrementing Column Name";
 
+  public static final String INCREMENTING_COLUMN_NAME_QUALIFIER_CONFIG
+          = "incrementing.column.name.qualifier";
+  private static final String INCREMENTING_COLUMN_NAME_QUALIFIER_DOC =
+          "The qualifier for the incrementing column if it's necessary. "
+                  + "Use this to specify table alias for the column name where "
+                  + "there is a conflict with other tables within the specified query.";
+  public static final String INCREMENTING_COLUMN_NAME_QUALIFIER_DEFAULT = "";
+  private static final String INCREMENTING_COLUMN_NAME_QUALIFIER_DISPLAY
+          = "Incrementing Column Name Qualifier";
+
+
+  public static final String REQUIRE_NON_ZERO_SCALE_INCREMENTER_CONFIG =
+          "require.non.zero.scale.incrementer";
+  public static final String REQUIRE_NON_ZERO_SCALE_INCREMENTER_DOC =
+          "Usually an incrementing column has a scale of zero however many "
+                  + "databases are tolerant of non-zero physical scale and assume "
+                  + "a logical scale of zero anyway. Use this field to force the "
+                  + "connector to ignore a non-zero physical scale.";
+  public static final boolean REQUIRE_NON_ZERO_SCALE_INCREMENTER_DEFAULT = true;
+  public static final String REQUIRE_NON_ZERO_SCALE_INCREMENTER_DISPLAY =
+          "Require Non-Zero Scale Incrementer";
+
+  public static final String INCREMENTING_SPAN_MAX_CONFIG = "incrementing.span.max";
+  public static final String INCREMENTING_SPAN_MAX_DOC =
+          "The maximum increment span to include in the query. Useful to limit query results "
+                  + "size on very large tables";
+  public static final Integer INCREMENTING_SPAN_MAX_DEFAULT = 5000000;
+  public static final String INCREMENTING_SPAN_MAX_DISPLAY = "Incrementing Span Max";
+
+  public static final String INCREMENTING_START_CONFIG = "incrementing.start";
+  public static final String INCREMENTING_START_DOC =
+          "The starting point for an incrementer. This is useful where a max span has been "
+              + "set and the earliest increment is not 0.";
+  public static final Long INCREMENTING_START_DEFAULT = -1L;
+  public static final String INCREMENTING_START_DISPLAY = "Incrementing Start";
+
   public static final String TIMESTAMP_COLUMN_NAME_CONFIG = "timestamp.column.name";
   private static final String TIMESTAMP_COLUMN_NAME_DOC =
       "The name of the timestamp column to use to detect new or modified rows. This column may "
       + "not be nullable.";
   public static final String TIMESTAMP_COLUMN_NAME_DEFAULT = "";
   private static final String TIMESTAMP_COLUMN_NAME_DISPLAY = "Timestamp Column Name";
+
+  public static final String TIMESTAMP_COLUMN_NAME_QUALIFIER_CONFIG
+          = "timestamp.column.name.qualifier";
+  private static final String TIMESTAMP_COLUMN_NAME_QUALIFIER_DOC =
+          "The qualifier for the timestamp column if it's necessary. "
+                  + "Use this to specify table alias for the column name where "
+                  + "there is a conflict with other tables within the specified query.";
+  public static final String TIMESTAMP_COLUMN_NAME_QUALIFIER_DEFAULT = "";
+  private static final String TIMESTAMP_COLUMN_NAME_QUALIFIER_DISPLAY
+          = "Timestamp Column Name Qualifier";
+
+  public static final String TIMESTAMP_SPAN_DAYS_MAX_CONFIG = "timestamp.span.days.max";
+  public static final String TIMESTAMP_SPAN_DAYS_MAX_DOC =
+          "The maximum number of days to include in a timestamp based offset span. Useful to limit "
+                  + "query results size on very large tables.";
+  public static final Integer TIMESTAMP_SPAN_DAYS_MAX_DEFAULT = 100000;
+  public static final String TIMESTAMP_SPAN_DAYS_MAX_DISPLAY = "Timestamp Span Days Max";
+
+  public static final String TIMESTAMP_START_CONFIG = "timestamp.start.utc";
+  public static final String TIMESTAMP_START_DOC =
+      "The initial timestamp to start rolling from. This is useful where a max timestamp span"
+          + " has been set and the earliest timestamp in the database is not 1970-01-01. "
+          + "Assume UTC and use format " + DateTimeUtils.UTC_TIMESTAMP_FORMAT_PATTERN + ".";
+  public static final String TIMESTAMP_START_DEFAULT = "1970-01-01 00:00:00.000";
+  public static final String TIMESTAMP_START_DISPLAY = "Timestamp Start (ISO)";
+
 
   public static final String TABLE_POLL_INTERVAL_MS_CONFIG = "table.poll.interval.ms";
   private static final String TABLE_POLL_INTERVAL_MS_DOC =
@@ -325,6 +388,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   }
 
   private static final void addModeOptions(ConfigDef config) {
+    int position = 1;
     config.define(
         MODE_CONFIG,
         Type.STRING,
@@ -339,13 +403,16 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Importance.HIGH,
         MODE_DOC,
         MODE_GROUP,
-        1,
+        position++,
         Width.MEDIUM,
         MODE_DISPLAY,
         Arrays.asList(
             INCREMENTING_COLUMN_NAME_CONFIG,
             TIMESTAMP_COLUMN_NAME_CONFIG,
-            VALIDATE_NON_NULL_CONFIG
+            VALIDATE_NON_NULL_CONFIG,
+            INCREMENTING_SPAN_MAX_CONFIG,
+            INCREMENTING_COLUMN_NAME_QUALIFIER_CONFIG,
+            TIMESTAMP_SPAN_DAYS_MAX_CONFIG
         )
     ).define(
         INCREMENTING_COLUMN_NAME_CONFIG,
@@ -354,10 +421,50 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Importance.MEDIUM,
         INCREMENTING_COLUMN_NAME_DOC,
         MODE_GROUP,
-        2,
+        position++,
         Width.MEDIUM,
         INCREMENTING_COLUMN_NAME_DISPLAY,
         MODE_DEPENDENTS_RECOMMENDER
+    ).define(
+        INCREMENTING_COLUMN_NAME_QUALIFIER_CONFIG,
+        Type.STRING,
+        INCREMENTING_COLUMN_NAME_QUALIFIER_DEFAULT,
+        Importance.MEDIUM,
+        INCREMENTING_COLUMN_NAME_QUALIFIER_DOC,
+        MODE_GROUP,
+        position++,
+        Width.MEDIUM,
+        INCREMENTING_COLUMN_NAME_QUALIFIER_DISPLAY
+    ).define(
+        INCREMENTING_SPAN_MAX_CONFIG,
+        Type.INT,
+        INCREMENTING_SPAN_MAX_DEFAULT,
+        Importance.LOW,
+        INCREMENTING_SPAN_MAX_DOC,
+        MODE_GROUP,
+        position++,
+        Width.SHORT,
+        INCREMENTING_SPAN_MAX_DISPLAY
+    ).define(
+        INCREMENTING_START_CONFIG,
+        Type.LONG,
+        INCREMENTING_START_DEFAULT,
+        Importance.LOW,
+        INCREMENTING_START_DOC,
+        MODE_GROUP,
+        position++,
+        Width.SHORT,
+        INCREMENTING_SPAN_MAX_DISPLAY
+    ).define(
+        REQUIRE_NON_ZERO_SCALE_INCREMENTER_CONFIG,
+        Type.BOOLEAN,
+        REQUIRE_NON_ZERO_SCALE_INCREMENTER_DEFAULT,
+        Importance.LOW,
+        REQUIRE_NON_ZERO_SCALE_INCREMENTER_DOC,
+        MODE_GROUP,
+        position++,
+        Width.SHORT,
+        REQUIRE_NON_ZERO_SCALE_INCREMENTER_DISPLAY
     ).define(
         TIMESTAMP_COLUMN_NAME_CONFIG,
         Type.STRING,
@@ -365,10 +472,40 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Importance.MEDIUM,
         TIMESTAMP_COLUMN_NAME_DOC,
         MODE_GROUP,
-        3,
+        position++,
         Width.MEDIUM,
         TIMESTAMP_COLUMN_NAME_DISPLAY,
         MODE_DEPENDENTS_RECOMMENDER
+    ).define(
+        TIMESTAMP_COLUMN_NAME_QUALIFIER_CONFIG,
+        Type.STRING,
+        TIMESTAMP_COLUMN_NAME_QUALIFIER_DEFAULT,
+        Importance.MEDIUM,
+        TIMESTAMP_COLUMN_NAME_QUALIFIER_DOC,
+        MODE_GROUP,
+        position++,
+        Width.MEDIUM,
+        TIMESTAMP_COLUMN_NAME_QUALIFIER_DISPLAY
+    ).define(
+        TIMESTAMP_SPAN_DAYS_MAX_CONFIG,
+        Type.INT,
+        TIMESTAMP_SPAN_DAYS_MAX_DEFAULT,
+        Importance.LOW,
+        TIMESTAMP_SPAN_DAYS_MAX_DOC,
+        MODE_GROUP,
+        position++,
+        Width.SHORT,
+        TIMESTAMP_SPAN_DAYS_MAX_DISPLAY
+    ).define(
+        TIMESTAMP_START_CONFIG,
+        Type.STRING,
+        TIMESTAMP_START_DEFAULT,
+        Importance.LOW,
+        TIMESTAMP_START_DOC,
+        MODE_GROUP,
+        position++,
+        Width.MEDIUM,
+        TIMESTAMP_START_DISPLAY
     ).define(
         VALIDATE_NON_NULL_CONFIG,
         Type.BOOLEAN,
@@ -376,7 +513,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Importance.LOW,
         VALIDATE_NON_NULL_DOC,
         MODE_GROUP,
-        4,
+        position++,
         Width.SHORT,
         VALIDATE_NON_NULL_DISPLAY,
         MODE_DEPENDENTS_RECOMMENDER
@@ -387,7 +524,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Importance.MEDIUM,
         QUERY_DOC,
         MODE_GROUP,
-        5,
+        position++,
         Width.SHORT,
         QUERY_DISPLAY);
   }

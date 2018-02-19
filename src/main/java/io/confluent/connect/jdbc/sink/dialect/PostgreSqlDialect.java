@@ -28,6 +28,7 @@ import java.util.Optional;
 
 import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.joinToBuilder;
 import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.nCopiesToBuilder;
+import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.Transform;
 
 public class PostgreSqlDialect extends DbDialect {
 
@@ -74,7 +75,6 @@ public class PostgreSqlDialect extends DbDialect {
     return super.getSqlType(schemaName, parameters, type);
   }
 
-
   public final String getInsert(final String tableName, final Collection<String> keyColumns, final Collection<String> nonKeyColumns) {
     StringBuilder builder = new StringBuilder("INSERT INTO ");
     overridenSchema.ifPresent(
@@ -92,6 +92,34 @@ public class PostgreSqlDialect extends DbDialect {
     return builder.toString();
   }
 
+  @Override
+  public final String getUpdate(final String tableName, final Collection<String> keyColumns, final Collection<String> nonKeyColumns) {
+    StringBuilder builder = new StringBuilder("UPDATE ");
+    overridenSchema.ifPresent(
+        schema -> {
+            builder.append(escaped(schema));
+            builder.append('.');
+        }
+    );
+    builder.append(escaped(tableName));
+    builder.append(" SET ");
+
+    Transform<String> updateTransformer = new Transform<String>() {
+      @Override public void apply(StringBuilder builder, String input) {
+        builder.append(escaped(input));
+        builder.append(" = ?");
+      }
+    };
+
+    joinToBuilder(builder, ", ", nonKeyColumns, updateTransformer);
+
+    if (!keyColumns.isEmpty()) {
+      builder.append(" WHERE ");
+    }
+
+    joinToBuilder(builder, ", ", keyColumns, updateTransformer);
+    return builder.toString();
+  }
 
   @Override
   public String getUpsertQuery(final String table, final Collection<String> keyCols, final Collection<String> cols) {

@@ -61,7 +61,7 @@ public abstract class DbDialect {
     return builder.toString();
   }
 
-  public final String getUpdate(final String tableName, final Collection<String> keyColumns, final Collection<String> nonKeyColumns) {
+  public String getUpdate(final String tableName, final Collection<String> keyColumns, final Collection<String> nonKeyColumns) {
     StringBuilder builder = new StringBuilder("UPDATE ");
     builder.append(escaped(tableName));
     builder.append(" SET ");

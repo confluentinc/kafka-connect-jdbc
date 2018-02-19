@@ -67,6 +67,10 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String CONNECTION_PASSWORD_DOC = "JDBC connection password.";
   private static final String CONNECTION_PASSWORD_DISPLAY = "JDBC Password";
 
+  public static final String CONNECTION_DIALECT = "connection.dialect";
+  private static final String CONNECTION_DIALECT_DOC = "Custom io.confluent.connect.jdbc.sink.dialect.DbDialect class name";
+  private static final String CONNECTION_DIALECT_DISPLAY = "Custom Db Dialect class name";
+
   public static final String TABLE_NAME_FORMAT = "table.name.format";
   private static final String TABLE_NAME_FORMAT_DEFAULT = "${topic}";
   private static final String TABLE_NAME_FORMAT_DOC =
@@ -185,6 +189,9 @@ public class JdbcSinkConfig extends AbstractConfig {
       .define(CONNECTION_PASSWORD, ConfigDef.Type.PASSWORD, null,
               ConfigDef.Importance.HIGH, CONNECTION_PASSWORD_DOC,
               CONNECTION_GROUP, 3, ConfigDef.Width.MEDIUM, CONNECTION_PASSWORD_DISPLAY)
+      .define(CONNECTION_DIALECT, ConfigDef.Type.CLASS, null,
+              ConfigDef.Importance.LOW, CONNECTION_DIALECT_DOC,
+              CONNECTION_GROUP, 4, ConfigDef.Width.LONG, CONNECTION_DIALECT_DISPLAY)
       // Writes
       .define(INSERT_MODE, ConfigDef.Type.STRING, INSERT_MODE_DEFAULT,
               EnumValidator.in(InsertMode.values()),
@@ -226,6 +233,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final String connectionUrl;
   public final String connectionUser;
   public final String connectionPassword;
+  public final String connectionDialect;
   public final String tableNameFormat;
   public final int batchSize;
   public final int maxRetries;
@@ -236,12 +244,12 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final PrimaryKeyMode pkMode;
   public final List<String> pkFields;
   public final Set<String> fieldsWhitelist;
-
   public JdbcSinkConfig(Map<?, ?> props) {
     super(CONFIG_DEF, props);
     connectionUrl = getString(CONNECTION_URL);
     connectionUser = getString(CONNECTION_USER);
     connectionPassword = getPasswordValue(CONNECTION_PASSWORD);
+    connectionDialect = getString(CONNECTION_DIALECT);
     tableNameFormat = getString(TABLE_NAME_FORMAT).trim();
     batchSize = getInt(BATCH_SIZE);
     maxRetries = getInt(MAX_RETRIES);

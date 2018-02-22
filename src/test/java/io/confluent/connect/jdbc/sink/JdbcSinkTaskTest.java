@@ -16,6 +16,7 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import io.confluent.connect.jdbc.sink.dialect.SqliteDialect;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -242,4 +243,27 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     verifyAll();
   }
 
+
+  public static class CustomDialect extends SqliteDialect {
+      private static int CUSTOM_DIALECT_INSTANCES = 0;
+      public CustomDialect() {
+        super();
+        CUSTOM_DIALECT_INSTANCES++;
+      }
+  }
+
+  @Test
+  public void customDialect() throws Exception {
+    try {
+        assertEquals(0, CustomDialect.CUSTOM_DIALECT_INSTANCES);
+        Map<String, String> props = new HashMap<>();
+        props.put("connection.url", sqliteHelper.sqliteUri());
+        props.put("connection.dialect", CustomDialect.class.getName());
+        JdbcSinkTask task = new JdbcSinkTask();
+        task.start(props);
+        assertEquals(1, CustomDialect.CUSTOM_DIALECT_INSTANCES);
+    } finally {
+        CustomDialect.CUSTOM_DIALECT_INSTANCES = 0;
+    }
+  }
 }

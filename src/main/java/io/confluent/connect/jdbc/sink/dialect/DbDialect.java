@@ -16,6 +16,7 @@
 
 package io.confluent.connect.jdbc.sink.dialect;
 
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -266,6 +267,18 @@ public abstract class DbDialect {
       }
     }
     return pks;
+  }
+
+  public static DbDialect fromCustomDBDialect(final Class dbDialectClass) {
+    try {
+      return (DbDialect) dbDialectClass.newInstance();
+    } catch (IllegalAccessException | InstantiationException e) {
+      throw new ConfigException(
+              String.format(
+                      "Could not create instance for class %s: %s",
+                      dbDialectClass, e.getMessage())
+      );
+    }
   }
 
   public static DbDialect fromConnectionString(final String url) {

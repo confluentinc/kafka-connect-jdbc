@@ -184,7 +184,8 @@ public class BufferedRecords {
         return dbDialect.getUpsertQuery(
             tableName,
             fieldsMetadata.keyFieldNames,
-            fieldsMetadata.nonKeyFieldNames
+            fieldsMetadata.nonKeyFieldNames,
+            fieldsMetadata
         );
       case UPDATE:
         return  dbDialect.getUpdate(

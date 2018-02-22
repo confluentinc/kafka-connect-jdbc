@@ -16,6 +16,8 @@
 
 package io.confluent.connect.jdbc.sink.dialect;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -90,6 +92,19 @@ public abstract class DbDialect {
     return builder.toString();
   }
 
+  /**
+   * This function can be overwritten by all dialects that need additional metadata information.
+   *
+   * For dialects that don't need any additional data, this will dispatch to an implementation without FieldsMetadata.
+   */
+  public String getUpsertQuery(
+      final String table,
+      final Collection<String> keyColumns,
+      final Collection<String> columns,
+      final FieldsMetadata fieldsMetadata
+  ){
+    return getUpsertQuery(table, keyColumns, columns);
+  }
 
   public String getUpsertQuery(
       final String table,
@@ -266,6 +281,44 @@ public abstract class DbDialect {
       }
     }
     return pks;
+  }
+
+  public static DbDialect fromConfig(JdbcSinkConfig config){
+    if (config.sqlDialect.equalsIgnoreCase("default")){
+      return DbDialect.fromConnectionString(config.connectionUrl);
+    } else{
+      return DbDialect.fromDialectName(config.sqlDialect);
+    }
+  }
+
+  /**
+   * Return a DbDialect instance corresponsing to the value given in the sink config as "sql.dialect".
+   * @param dialectName
+   * @return
+   */
+  public static DbDialect fromDialectName(final String dialectName) {
+    switch(dialectName.toLowerCase()){
+      case("sqlite"):
+        return new SqliteDialect();
+      case("oracle"):
+        return new OracleDialect();
+      case("sap"):
+      case("hana"):
+        return new HanaDialect();
+      case("vertica"):
+        return new VerticaDialect();
+      case("sqlserver"):
+        return new SqlServerDialect();
+      case("mariadb"):
+      case("mysql"):
+        return new MySqlDialect();
+      case("postgresql"):
+        return new PostgreSqlDialect();
+      case("debezium"):
+        return new DebeziumMySqlDialect();
+      default:
+        throw new ConnectException(String.format("Not a valid SQL dialect name: %s", dialectName));
+    }
   }
 
   public static DbDialect fromConnectionString(final String url) {

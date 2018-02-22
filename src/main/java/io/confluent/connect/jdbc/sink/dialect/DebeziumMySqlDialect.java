@@ -27,7 +27,7 @@ public class DebeziumMySqlDialect extends DbDialect {
     SCHEMA_NAME_CASTING_MAP.put("io.debezium.data.Json", "?");
     SCHEMA_NAME_CASTING_MAP.put("io.debezium.data.Enum", "?");
     SCHEMA_NAME_CASTING_MAP.put("io.debezium.data.EnumSet", "?");
-    SCHEMA_NAME_CASTING_MAP.put("io.debezium.time.Date", "DAYS");
+    SCHEMA_NAME_CASTING_MAP.put("io.debezium.time.Date", "MAKEDATE(1970, ?)");
     SCHEMA_NAME_CASTING_MAP.put("io.debezium.time.Timestamp", "FROM_UNIXTIME(? / 1000)");
     SCHEMA_NAME_CASTING_MAP.put("io.debezium.time.ZonedTimestamp", "?");
     SCHEMA_NAME_CASTING_MAP.put("io.debezium.time.MicroTimestamp", "FROM_UNIXTIME(FLOOR(? / 1000))");
@@ -46,7 +46,7 @@ public class DebeziumMySqlDialect extends DbDialect {
     // constraint for enums is enforced by the source data
     SCHEMA_NAME_DATATYPE_MAP.put("io.debezium.data.Enum", "TEXT");
     SCHEMA_NAME_DATATYPE_MAP.put("io.debezium.data.EnumSet", "TEXT");
-    SCHEMA_NAME_DATATYPE_MAP.put("io.debezium.time.Date", "DAYS");
+    SCHEMA_NAME_DATATYPE_MAP.put("io.debezium.time.Date", "DATE");
     SCHEMA_NAME_DATATYPE_MAP.put("io.debezium.time.Timestamp", "DATETIME");
     SCHEMA_NAME_DATATYPE_MAP.put("io.debezium.time.ZonedTimestamp", "DATETIME");
     SCHEMA_NAME_DATATYPE_MAP.put("io.debezium.time.MicroTimestamp", "DATETIME");

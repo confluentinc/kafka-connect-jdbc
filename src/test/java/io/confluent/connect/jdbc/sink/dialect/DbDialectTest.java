@@ -150,7 +150,7 @@ public class DbDialectTest {
     for (Class clazz: fixture) {
       assertEquals(
               clazz,
-              DbDialect.fromCustomDBDialect(clazz.getName()).getClass());
+              DbDialect.fromCustomDBDialect(clazz).getClass());
     }
   }
 

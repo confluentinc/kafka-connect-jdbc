@@ -234,7 +234,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final String connectionUrl;
   public final String connectionUser;
   public final String connectionPassword;
-  public final String connectionDialect;
+  public final Class connectionDialect;
   public final String tableNameFormat;
   public final int batchSize;
   public final int maxRetries;
@@ -251,7 +251,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     connectionUrl = getString(CONNECTION_URL);
     connectionUser = getString(CONNECTION_USER);
     connectionPassword = getPasswordValue(CONNECTION_PASSWORD);
-    connectionDialect = getString(CONNECTION_DIALECT);
+    connectionDialect = getClass(CONNECTION_DIALECT);
     tableNameFormat = getString(TABLE_NAME_FORMAT).trim();
     batchSize = getInt(BATCH_SIZE);
     maxRetries = getInt(MAX_RETRIES);

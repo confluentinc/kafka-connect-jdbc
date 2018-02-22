@@ -269,12 +269,14 @@ public abstract class DbDialect {
     return pks;
   }
 
-  public static DbDialect fromCustomDBDialect(final String dbDialectClass) {
+  public static DbDialect fromCustomDBDialect(final Class dbDialectClass) {
     try {
-      return (DbDialect) Class.forName(dbDialectClass).newInstance();
-    } catch (ClassNotFoundException | IllegalAccessException | InstantiationException e) {
+      return (DbDialect) dbDialectClass.newInstance();
+    } catch (IllegalAccessException | InstantiationException e) {
       throw new ConfigException(
-              String.format("Could not create class %s: %s", dbDialectClass, e.getMessage())
+              String.format(
+                      "Could not create instance for class %s: %s",
+                      dbDialectClass, e.getMessage())
       );
     }
   }

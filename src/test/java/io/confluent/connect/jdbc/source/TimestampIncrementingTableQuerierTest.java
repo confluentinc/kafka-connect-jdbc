@@ -204,7 +204,7 @@ public class TimestampIncrementingTableQuerierTest {
         null);
     
     assertTrue(dbTimeUTC.getTime() < dbTimeJvmTimeZone.getTime());
-    SimpleDateFormat compareHourSdf = new SimpleDateFormat("yyyy-MM-dd-HH.mm.ss");
+    SimpleDateFormat compareHourSdf = new SimpleDateFormat("yyyy-MM-dd-HH.mm");
     assertEquals(compareHourSdf.format(dbTimeDbTimeZone), compareHourSdf.format(dbTimeJvmTimeZone));
     
     // Here the querier will use UTC calendar to get current time on db and determine query window end time

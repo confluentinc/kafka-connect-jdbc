@@ -191,6 +191,21 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final long TIMESTAMP_DELAY_INTERVAL_MS_DEFAULT = 0;
   private static final String TIMESTAMP_DELAY_INTERVAL_MS_DISPLAY = "Delay Interval (ms)";
 
+  public static final String INLINE_VIEW_TAG_CONFIG = "inline.view.tag";
+  private static final String INLINE_VIEW_TAG_DOC =
+      "String tag to be used as an marker to identify an inline view in table.whitelist config.";
+  public static final String INLINE_VIEW_TAG_DEFAULT = "view_";
+  
+  public static final String INLINE_VIEWS_DEFINITIONS_CONFIG = "inline.views.definitions";
+  private static final String INLINE_VIEWS_DEFINITIONS_DOC =
+      "List of inline views definitions (SQL enclosed in parentheses) to be matched with "
+      + "views declaration in " + TABLE_WHITELIST_CONFIG + ", in the same order."
+      + "Commas in SQL must be escaped with \\\\ (four antislashes)."
+      + "If specified, " + TABLE_WHITELIST_CONFIG + " must be set and must "
+      + "contain the same number of views names, all prefixed by " + INLINE_VIEW_TAG_CONFIG
+      + " string, and appearing in the same order.";
+  public static final String INLINE_VIEWS_DEFINITIONS_DEFAULT = "";
+ 
   public static final String DATABASE_GROUP = "Database";
   public static final String MODE_GROUP = "Mode";
   public static final String CONNECTOR_GROUP = "Connector";
@@ -321,7 +336,19 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         DATABASE_GROUP,
         4,
         Width.SHORT,
-        NUMERIC_PRECISION_MAPPING_DISPLAY);
+        NUMERIC_PRECISION_MAPPING_DISPLAY
+    ).define(
+        INLINE_VIEW_TAG_CONFIG,
+        Type.STRING,
+        INLINE_VIEW_TAG_DEFAULT,
+        Importance.MEDIUM,
+        INLINE_VIEW_TAG_DOC
+    ).define(
+        INLINE_VIEWS_DEFINITIONS_CONFIG,
+        Type.STRING,
+        INLINE_VIEWS_DEFINITIONS_DEFAULT,
+        Importance.MEDIUM,
+        INLINE_VIEWS_DEFINITIONS_DOC);
   }
 
   private static final void addModeOptions(ConfigDef config) {

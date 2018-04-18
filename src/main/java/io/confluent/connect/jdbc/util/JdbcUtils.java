@@ -57,7 +57,9 @@ public class JdbcUtils {
   private static final int GET_COLUMNS_COLUMN_NAME = 4;
   private static final int GET_COLUMNS_IS_NULLABLE = 18;
   private static final int GET_COLUMNS_IS_AUTOINCREMENT = 23;
-
+  
+  // String tag to be used as an marker to identify a view in table.whitelist config
+  //private static String VIEW_DEFINITION_TAG;
 
   /**
    * Get a list of tables in the database. This uses the default filters, which only include

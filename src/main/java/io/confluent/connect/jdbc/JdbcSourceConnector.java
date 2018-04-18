@@ -56,6 +56,7 @@ public class JdbcSourceConnector extends SourceConnector {
   private JdbcSourceConnectorConfig config;
   private CachedConnectionProvider cachedConnectionProvider;
   private TableMonitorThread tableMonitorThread;
+  private Map<String, String> inlineViewsDefinitions;
 
   @Override
   public String version() {
@@ -94,8 +95,15 @@ public class JdbcSourceConnector extends SourceConnector {
     // Initial connection attempt
     cachedConnectionProvider.getValidConnection();
 
-    long tablePollMs = config.getLong(JdbcSourceConnectorConfig.TABLE_POLL_INTERVAL_MS_CONFIG);
     List<String> whitelist = config.getList(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG);
+    String inlineViewTag = config.getString(JdbcSourceConnectorConfig
+        .INLINE_VIEW_TAG_CONFIG);
+    this.inlineViewsDefinitions = this.mapDefinitionsToInlineViews(whitelist,
+      StringUtils.getListFromStringValueWithEscapedCommas(
+          config.getString(JdbcSourceConnectorConfig.INLINE_VIEWS_DEFINITIONS_CONFIG), false),
+          inlineViewTag
+      );
+    
     Set<String> whitelistSet = whitelist.isEmpty() ? null : new HashSet<>(whitelist);
     List<String> blacklist = config.getList(JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG);
     Set<String> blacklistSet = blacklist.isEmpty() ? null : new HashSet<>(blacklist);
@@ -120,6 +128,7 @@ public class JdbcSourceConnector extends SourceConnector {
       whitelistSet = Collections.emptySet();
 
     }
+    long tablePollMs = config.getLong(JdbcSourceConnectorConfig.TABLE_POLL_INTERVAL_MS_CONFIG);
     tableMonitorThread = new TableMonitorThread(
         cachedConnectionProvider,
         context,
@@ -127,7 +136,8 @@ public class JdbcSourceConnector extends SourceConnector {
         tablePollMs,
         whitelistSet,
         blacklistSet,
-        tableTypesSet
+        tableTypesSet,
+        inlineViewTag
     );
     tableMonitorThread.start();
   }
@@ -152,9 +162,19 @@ public class JdbcSourceConnector extends SourceConnector {
       List<List<String>> tablesGrouped = ConnectorUtils.groupPartitions(currentTables, numGroups);
       List<Map<String, String>> taskConfigs = new ArrayList<>(tablesGrouped.size());
       for (List<String> taskTables : tablesGrouped) {
+        List<String> taskInlineViewsDefinitions = new ArrayList<>();
+        for (String table : taskTables) {
+          if (inlineViewsDefinitions != null && inlineViewsDefinitions.keySet().contains(table)) {
+            taskInlineViewsDefinitions.add(
+                StringUtils.augmentCommaEscapingForTaskConfigParsing(
+                    inlineViewsDefinitions.get(table)));
+          }
+        }
         Map<String, String> taskProps = new HashMap<>(configProperties);
         taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG,
                       StringUtils.join(taskTables, ","));
+        taskProps.put(JdbcSourceTaskConfig.TASK_INLINE_VIEWS_DEFINITIONS_CONFIG,
+            StringUtils.join(taskInlineViewsDefinitions, ","));
         taskConfigs.add(taskProps);
       }
       return taskConfigs;
@@ -177,4 +197,50 @@ public class JdbcSourceConnector extends SourceConnector {
   public ConfigDef config() {
     return JdbcSourceConnectorConfig.CONFIG_DEF;
   }
+  
+  private Map<String, String> mapDefinitionsToInlineViews(List<String> whitelist,
+      List<String> inlineViewsDefinitionsConfig, String viewDefinitionTag) {
+    List<String> inlineViewsList = new ArrayList<>();
+    for (String whiteListElement : whitelist) {
+      if (whiteListElement.startsWith(viewDefinitionTag)) {
+        log.debug("'" + whiteListElement + "' is a view");
+        inlineViewsList.add(whiteListElement);
+      }
+    }
+    if (inlineViewsList.size() == 0) {
+      log.debug("no inline views were listed in "
+          + JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG);
+      return null;
+    }
+    if (inlineViewsDefinitionsConfig.isEmpty()) {
+      throw new ConnectException(JdbcSourceConnectorConfig.INLINE_VIEWS_DEFINITIONS_CONFIG
+          + " must not be empty when views are declared in "
+              + JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + " (each prefixed by "
+              + JdbcSourceConnectorConfig.INLINE_VIEW_TAG_CONFIG + ").");
+    }
+    for (String inlineViewDefinition : inlineViewsDefinitionsConfig) {
+      log.debug(JdbcSourceConnectorConfig.INLINE_VIEWS_DEFINITIONS_CONFIG + " element : "
+          + inlineViewDefinition);
+      if (! (inlineViewDefinition.trim().startsWith("(")
+          && inlineViewDefinition.trim().endsWith(")"))) {
+        throw new ConnectException("Each view definition in "
+            + JdbcSourceConnectorConfig.INLINE_VIEWS_DEFINITIONS_CONFIG + " must be enclosed "
+                + "in parentheses.");
+      }
+    }
+    Map<String, String> inlineViewsWithDefinition = new HashMap<>();
+    try {
+      inlineViewsWithDefinition = StringUtils.listsToMap(inlineViewsList,
+          inlineViewsDefinitionsConfig);
+    } catch (IllegalArgumentException e) {
+      throw new ConnectException(JdbcSourceConnectorConfig.INLINE_VIEWS_DEFINITIONS_CONFIG
+          + " must contain the same number of views definitions than views declared in "
+          + JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + ", in the same order."
+          + "Possible solution : check SQL comma escaping (with 4 backslashes before "
+          + "each comma : \\\\\\\\,).");
+    }
+    log.debug("inlineViewsWithDefinition : " + inlineViewsWithDefinition);
+    return inlineViewsWithDefinition;
+  }
+  
 }

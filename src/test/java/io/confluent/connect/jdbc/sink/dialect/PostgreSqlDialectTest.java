@@ -44,7 +44,7 @@ public class PostgreSqlDialectTest extends BaseDialectTest {
     verifyDataTypeMapping("DOUBLE PRECISION", Schema.FLOAT64_SCHEMA);
     verifyDataTypeMapping("BOOLEAN", Schema.BOOLEAN_SCHEMA);
     verifyDataTypeMapping("TEXT", Schema.STRING_SCHEMA);
-    verifyDataTypeMapping("BLOB", Schema.BYTES_SCHEMA);
+    verifyDataTypeMapping("BYTEA", Schema.BYTES_SCHEMA);
     verifyDataTypeMapping("DECIMAL", Decimal.schema(0));
     verifyDataTypeMapping("DATE", Date.SCHEMA);
     verifyDataTypeMapping("TIME", Time.SCHEMA);

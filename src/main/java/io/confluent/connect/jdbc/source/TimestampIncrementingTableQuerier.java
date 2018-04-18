@@ -31,7 +31,6 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Collections;
 import java.util.Map;
-
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.JdbcUtils;
 
@@ -63,22 +62,30 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   private String incrementingColumn;
   private long timestampDelay;
   private TimestampIncrementingOffset offset;
+  private final String dbTimeZone;
+  private final String inlineViewDefinition;
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
                                            String timestampColumn, String incrementingColumn,
                                            Map<String, Object> offsetMap, Long timestampDelay,
-                                           String schemaPattern, boolean mapNumerics) {
+                                           String schemaPattern, boolean mapNumerics,
+                                           final String dbTimeZone,
+                                           final String inlineViewDefinition) {
     super(mode, name, topicPrefix, schemaPattern, mapNumerics);
     this.timestampColumn = timestampColumn;
     this.incrementingColumn = incrementingColumn;
     this.timestampDelay = timestampDelay;
     this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
+    this.dbTimeZone = dbTimeZone;
+    this.inlineViewDefinition = inlineViewDefinition;
   }
-
+  
   @Override
   protected void createPreparedStatement(Connection db) throws SQLException {
-    // Default when unspecified uses an autoincrementing column
-    if (incrementingColumn != null && incrementingColumn.isEmpty()) {
+    // Default when unspecified uses an autoincrementing column.
+    // Not supported with inline views (defined in config).
+    if (this.inlineViewDefinition == null && incrementingColumn != null
+        && incrementingColumn.isEmpty()) {
       incrementingColumn = JdbcUtils.getAutoincrementColumn(db, schemaPattern, name);
     }
 
@@ -89,7 +96,19 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     switch (mode) {
       case TABLE:
         builder.append("SELECT * FROM ");
-        builder.append(JdbcUtils.quoteString(name, quoteString));
+        // Append schema name prefix to table name in case the user is not the owner of the schema.
+        // Inline views will set the schema prefix in their SQL definition.
+        if (this.inlineViewDefinition == null && schemaPattern != null) {
+          builder.append(JdbcUtils.quoteString(schemaPattern, quoteString));
+          builder.append(".");
+        }
+        if (this.inlineViewDefinition != null) {
+          builder.append(inlineViewDefinition);
+          // Append an alias for the view, needed by some databases
+          builder.append(" " + this.name);
+        } else {
+          builder.append(JdbcUtils.quoteString(name, quoteString));
+        }
         break;
       case QUERY:
         builder.append(query);
@@ -106,7 +125,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       timestampWhereClause(builder, quoteString);
     }
     String queryString = builder.toString();
-    log.debug("{} prepared SQL query: {}", this, queryString);
+    log.debug("{} queryString: {}", this, queryString);
     stmt = db.prepareStatement(queryString);
   }
 
@@ -170,10 +189,10 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
           DateTimeUtils.UTC_CALENDAR.get()
       ).getTime();
       Timestamp endTime = new Timestamp(currentDbTime - timestampDelay);
-      stmt.setTimestamp(1, endTime, DateTimeUtils.UTC_CALENDAR.get());
-      stmt.setTimestamp(2, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
+      stmt.setTimestamp(1, endTime, DateTimeUtils.getCalendarWithTimeZone(dbTimeZone));
+      stmt.setTimestamp(2, tsOffset, DateTimeUtils.getCalendarWithTimeZone(dbTimeZone));
+      stmt.setTimestamp(4, tsOffset, DateTimeUtils.getCalendarWithTimeZone(dbTimeZone));
       stmt.setLong(3, incOffset);
-      stmt.setTimestamp(4, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
       log.debug(
           "Executing prepared statement with start time value = {} end time = {} and incrementing"
           + " value = {}",
@@ -184,26 +203,30 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     } else if (incrementingColumn != null) {
       Long incOffset = offset.getIncrementingOffset();
       stmt.setLong(1, incOffset);
-      log.debug("Executing prepared statement with incrementing value = {}", incOffset);
+      log.info("Executing prepared statement with incrementing value = {}", incOffset);
     } else if (timestampColumn != null) {
       Timestamp tsOffset = offset.getTimestampOffset();
       final long currentDbTime = JdbcUtils.getCurrentTimeOnDB(
           stmt.getConnection(),
-          DateTimeUtils.UTC_CALENDAR.get()
+          DateTimeUtils.getCalendarWithTimeZone(dbTimeZone)
       ).getTime();
+      
       Timestamp endTime = new Timestamp(currentDbTime - timestampDelay);
-      stmt.setTimestamp(1, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
-      stmt.setTimestamp(2, endTime, DateTimeUtils.UTC_CALENDAR.get());
-      log.debug("Executing prepared statement with timestamp value = {} end time = {}",
-                DateTimeUtils.formatUtcTimestamp(tsOffset),
-                DateTimeUtils.formatUtcTimestamp(endTime));
+      log.info("endTime : " + endTime + " ; " + "timestampDelay : " + timestampDelay);
+      stmt.setTimestamp(1, tsOffset, DateTimeUtils.getCalendarWithTimeZone(dbTimeZone));
+      stmt.setTimestamp(2, endTime, DateTimeUtils.getCalendarWithTimeZone(dbTimeZone));
+      log.info("Executing prepared statement for {} with timestamp value = {} end time = {}",
+          name,
+          DateTimeUtils.formatDefaultTimestamp(tsOffset),
+          DateTimeUtils.formatDefaultTimestamp(endTime));
     }
+    log.info("Prepared statement is : " + stmt.toString());
     return stmt.executeQuery();
   }
 
   @Override
   public SourceRecord extractRecord() throws SQLException {
-    final Struct record = DataConverter.convertRecord(schema, resultSet, mapNumerics);
+    final Struct record = DataConverter.convertRecord(schema, resultSet, mapNumerics, dbTimeZone);
     offset = extractOffset(schema, record);
     // TODO: Key?
     final String topic;

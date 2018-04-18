@@ -20,4 +20,7 @@
 
     <suppress checks="MethodLength"
               files="DataConverter.java"/>
+              
+    <suppress checks="ParameterNumber"
+              files="TimestampIncrementingTableQuerier.java"/>
 </suppressions>

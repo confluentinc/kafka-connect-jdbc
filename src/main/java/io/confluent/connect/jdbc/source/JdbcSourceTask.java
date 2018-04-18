@@ -37,6 +37,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.JdbcUtils;
+import io.confluent.connect.jdbc.util.StringUtils;
 import io.confluent.connect.jdbc.util.Version;
 
 /**
@@ -77,6 +78,8 @@ public class JdbcSourceTask extends SourceTask {
     createConnectionProvider();
 
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
+    List<String> inlineViewsDefinitions = StringUtils.getListFromStringValueWithEscapedCommas(
+        config.getString(JdbcSourceTaskConfig.TASK_INLINE_VIEWS_DEFINITIONS_CONFIG), true);
     String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
     if ((tables.isEmpty() && query.isEmpty()) || (!tables.isEmpty() && !query.isEmpty())) {
       throw new ConnectException("Invalid configuration: each JdbcSourceTask must have at "
@@ -122,11 +125,18 @@ public class JdbcSourceTask extends SourceTask {
     boolean validateNonNulls
         = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
 
+    // Only used in table mode, if some elements of table.whitelist are inline views.
+    int inlineViewNumber = 0;
     for (String tableOrQuery : tablesOrQuery) {
       final Map<String, String> partition;
+      final boolean isInlineView = (queryMode == TableQuerier.QueryMode.QUERY)
+          ? false : tableOrQuery.startsWith(
+              config.getString(JdbcSourceConnectorConfig.INLINE_VIEW_TAG_CONFIG));
       switch (queryMode) {
         case TABLE:
-          if (validateNonNulls) {
+          // Inline views inc/timestamp cols validation is not yet supported,
+          // it would need view sql parsing.
+          if (!isInlineView && validateNonNulls) {
             validateNonNullable(
                 mode,
                 schemaPattern,
@@ -151,21 +161,28 @@ public class JdbcSourceTask extends SourceTask {
       boolean mapNumerics
           = config.getBoolean(JdbcSourceTaskConfig.NUMERIC_PRECISION_MAPPING_CONFIG);
 
+      String dbTimeZone = config.getString(JdbcSourceTaskConfig.DB_TIMEZONE_CONFIG);
+      String inlineViewDefinition = (isInlineView)
+          ? inlineViewsDefinitions.get(inlineViewNumber++) : null;
+      
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(new BulkTableQuerier(queryMode, tableOrQuery, schemaPattern,
                 topicPrefix, mapNumerics));
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)) {
         tableQueue.add(new TimestampIncrementingTableQuerier(
             queryMode, tableOrQuery, topicPrefix, null, incrementingColumn, offset,
-                timestampDelayInterval, schemaPattern, mapNumerics));
+                timestampDelayInterval, schemaPattern, mapNumerics,
+                dbTimeZone, inlineViewDefinition));
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
         tableQueue.add(new TimestampIncrementingTableQuerier(
             queryMode, tableOrQuery, topicPrefix, timestampColumn, null, offset,
-                timestampDelayInterval, schemaPattern, mapNumerics));
+                timestampDelayInterval, schemaPattern, mapNumerics,
+                dbTimeZone, inlineViewDefinition));
       } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
         tableQueue.add(new TimestampIncrementingTableQuerier(
             queryMode, tableOrQuery, topicPrefix, timestampColumn, incrementingColumn,
-                offset, timestampDelayInterval, schemaPattern, mapNumerics));
+                offset, timestampDelayInterval, schemaPattern, mapNumerics,
+                dbTimeZone, inlineViewDefinition));
       }
     }
 

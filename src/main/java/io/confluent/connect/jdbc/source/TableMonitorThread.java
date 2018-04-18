@@ -48,6 +48,7 @@ public class TableMonitorThread extends Thread {
   private Set<String> blacklist;
   private List<String> tables;
   private Set<String> tableTypes;
+  private String inlineViewTag;
 
   public TableMonitorThread(
       CachedConnectionProvider cachedConnectionProvider,
@@ -56,7 +57,8 @@ public class TableMonitorThread extends Thread {
       long pollMs,
       Set<String> whitelist,
       Set<String> blacklist,
-      Set<String> tableTypes
+      Set<String> tableTypes,
+      String inlineViewTag
   ) {
     this.cachedConnectionProvider = cachedConnectionProvider;
     this.schemaPattern = schemaPattern;
@@ -67,6 +69,7 @@ public class TableMonitorThread extends Thread {
     this.blacklist = blacklist;
     this.tables = null;
     this.tableTypes = tableTypes;
+    this.inlineViewTag = inlineViewTag;
   }
 
   @Override
@@ -137,8 +140,9 @@ public class TableMonitorThread extends Thread {
     final List<String> filteredTables;
     if (whitelist != null) {
       filteredTables = new ArrayList<>(tables.size());
-      for (String table : tables) {
-        if (whitelist.contains(table)) {
+      for (String table : whitelist) {
+        // inline views are always kept in filter
+        if (tables.contains(table) || table.startsWith(inlineViewTag)) {
           filteredTables.add(table);
         }
       }

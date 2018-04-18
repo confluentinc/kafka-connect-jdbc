@@ -99,7 +99,8 @@ public class PreparedStatementBinderTest {
         pkMode,
         schemaPair,
         fieldsMetadata,
-        JdbcSinkConfig.InsertMode.INSERT
+        JdbcSinkConfig.InsertMode.INSERT,
+        DateTimeUtils.UTC_TIMEZONE
     );
 
     binder.bindRecord(new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));
@@ -150,7 +151,8 @@ public class PreparedStatementBinderTest {
                 statement,
                 pkMode,
                 schemaPair,
-                fieldsMetadata, JdbcSinkConfig.InsertMode.UPSERT
+                fieldsMetadata, JdbcSinkConfig.InsertMode.UPSERT,
+                DateTimeUtils.UTC_TIMEZONE
         );
 
         binder.bindRecord(new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));
@@ -188,7 +190,8 @@ public class PreparedStatementBinderTest {
                 statement,
                 pkMode,
                 schemaPair,
-                fieldsMetadata, JdbcSinkConfig.InsertMode.UPDATE
+                fieldsMetadata, JdbcSinkConfig.InsertMode.UPDATE,
+                DateTimeUtils.UTC_TIMEZONE
         );
 
         binder.bindRecord(new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));
@@ -249,24 +252,24 @@ public class PreparedStatementBinderTest {
   @Test(expected = ConnectException.class)
   public void bindFieldStructUnsupported() throws SQLException {
     Schema structSchema = SchemaBuilder.struct().field("test", Schema.BOOLEAN_SCHEMA).build();
-    PreparedStatementBinder.bindField(mock(PreparedStatement.class), 1, structSchema, new Struct(structSchema));
+    PreparedStatementBinder.bindField(mock(PreparedStatement.class), 1, structSchema, new Struct(structSchema), DateTimeUtils.UTC_TIMEZONE);
   }
 
   @Test(expected = ConnectException.class)
   public void bindFieldArrayUnsupported() throws SQLException {
     Schema arraySchema = SchemaBuilder.array(Schema.INT8_SCHEMA);
-    PreparedStatementBinder.bindField(mock(PreparedStatement.class), 1, arraySchema, Collections.emptyList());
+    PreparedStatementBinder.bindField(mock(PreparedStatement.class), 1, arraySchema, Collections.emptyList(), DateTimeUtils.UTC_TIMEZONE);
   }
 
   @Test(expected = ConnectException.class)
   public void bindFieldMapUnsupported() throws SQLException {
     Schema mapSchema = SchemaBuilder.map(Schema.INT8_SCHEMA, Schema.INT8_SCHEMA);
-    PreparedStatementBinder.bindField(mock(PreparedStatement.class), 1, mapSchema, Collections.emptyMap());
+    PreparedStatementBinder.bindField(mock(PreparedStatement.class), 1, mapSchema, Collections.emptyMap(), DateTimeUtils.UTC_TIMEZONE);
   }
 
   private PreparedStatement verifyBindField(int index, Schema schema, Object value) throws SQLException {
     PreparedStatement statement = mock(PreparedStatement.class);
-    PreparedStatementBinder.bindField(statement, index, schema, value);
+    PreparedStatementBinder.bindField(statement, index, schema, value, DateTimeUtils.UTC_TIMEZONE);
     return verify(statement, times(1));
   }
 

@@ -20,10 +20,20 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.GregorianCalendar;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.TimeZone;
 
-public class DateTimeUtils {
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+public class DateTimeUtils {
+  
+  private static final Logger log = LoggerFactory.getLogger(DateTimeUtils.class);
+
+  public static final String UTC_TIMEZONE = "utc";
+  public static final String JVM_TIMEZONE = "jvm";
+  
   public static final TimeZone UTC = TimeZone.getTimeZone("UTC");
 
   public static final ThreadLocal<Calendar> UTC_CALENDAR = new ThreadLocal<Calendar>() {
@@ -40,7 +50,7 @@ public class DateTimeUtils {
           sdf.setTimeZone(UTC);
           return sdf;
         }
-      };
+      };   
 
   private static final ThreadLocal<SimpleDateFormat> UTC_TIME_FORMAT
       = new ThreadLocal<SimpleDateFormat>() {
@@ -59,6 +69,14 @@ public class DateTimeUtils {
           return sdf;
         }
       };
+  
+  private static final ThreadLocal<SimpleDateFormat> DEFAULT_TIMESTAMP_FORMAT
+      = new ThreadLocal<SimpleDateFormat>() {
+        protected SimpleDateFormat initialValue() {
+          SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+          return sdf;
+        }
+      };
 
   public static String formatUtcDate(Date date) {
     return UTC_DATE_FORMAT.get().format(date);
@@ -70,6 +88,40 @@ public class DateTimeUtils {
 
   public static String formatUtcTimestamp(Date date) {
     return UTC_TIMESTAMP_FORMAT.get().format(date);
+  }
+  
+  public static String formatDefaultTimestamp(Date date) {
+    return DEFAULT_TIMESTAMP_FORMAT.get().format(date);
+  }
+  
+  private static Map<String, ThreadLocal<Calendar>> specificTimezoneCalendars = new HashMap<>();
+  
+  public static ThreadLocal<Calendar> getSpecificTimezoneCalendarInstance(final String dbTimeZone) {
+    if (! specificTimezoneCalendars.containsKey(dbTimeZone)) {
+      synchronized (ThreadLocal.class) {
+        specificTimezoneCalendars.put(dbTimeZone, new ThreadLocal<Calendar>() {
+            @Override
+            protected Calendar initialValue() {
+              return new GregorianCalendar(TimeZone.getTimeZone(dbTimeZone));
+            }
+          });
+      }
+    }
+    return specificTimezoneCalendars.get(dbTimeZone);
+  }
+  
+  public static Calendar getCalendarWithTimeZone(final String dbTimeZone) {
+    if (dbTimeZone == null || dbTimeZone.isEmpty()
+        || dbTimeZone.equals(DateTimeUtils.UTC_TIMEZONE)) {
+      log.debug("using using default UTC Calendar");
+      return DateTimeUtils.UTC_CALENDAR.get();
+    } else if (dbTimeZone.trim().equals(DateTimeUtils.JVM_TIMEZONE)) {
+      log.debug("using using jvm timezone");
+      return null;
+    } else {
+      log.debug("using using " + dbTimeZone + " timezone");
+      return DateTimeUtils.getSpecificTimezoneCalendarInstance(dbTimeZone).get();
+    }
   }
 
 }

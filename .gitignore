@@ -17,3 +17,4 @@ derby.log
 __test_database_*
 test.sqlite
 *.db-journal
+/target/kafka-connect-jdbc-4.1.0-SNAPSHOT-package/share/java/kafka-connect-jdbc/*.jar

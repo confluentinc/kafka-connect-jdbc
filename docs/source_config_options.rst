@@ -99,9 +99,9 @@ Mode
   * Importance: medium
 
 ``timestamp.column.name``
-  The name of the timestamp column to use to detect new or modified rows. This column may not be nullable.
+  Comma separated list of one or more timestamp columns to detect new or modified rows using the COALESCE SQL function. Rows whose first non-null timestamp value is greater than the largest previous timestamp value seen will be discovered with each poll. At least one column should not be nullable.
 
-  * Type: string
+  * Type: list
   * Default: ""
   * Importance: medium
 

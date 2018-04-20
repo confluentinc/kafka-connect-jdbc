@@ -59,20 +59,20 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
 
   private static final BigDecimal LONG_MAX_VALUE_AS_BIGDEC = new BigDecimal(Long.MAX_VALUE);
 
-  private String timestampColumn;
   private String incrementingColumn;
   private long timestampDelay;
   private TimestampIncrementingOffset offset;
+  private TimestampHelper timestampHelper;
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
-                                           String timestampColumn, String incrementingColumn,
-                                           Map<String, Object> offsetMap, Long timestampDelay,
-                                           String schemaPattern, boolean mapNumerics) {
+      TimestampHelper timestampHelper, String incrementingColumn,
+      Map<String, Object> offsetMap, Long timestampDelay,
+      String schemaPattern, boolean mapNumerics) {
     super(mode, name, topicPrefix, schemaPattern, mapNumerics);
-    this.timestampColumn = timestampColumn;
     this.incrementingColumn = incrementingColumn;
     this.timestampDelay = timestampDelay;
     this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
+    this.timestampHelper = timestampHelper;
   }
 
   @Override
@@ -98,11 +98,11 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
         throw new ConnectException("Unknown mode encountered when preparing query: " + mode);
     }
 
-    if (incrementingColumn != null && timestampColumn != null) {
+    if (incrementingColumn != null && timestampHelper != null) {
       timestampIncrementingWhereClause(builder, quoteString);
     } else if (incrementingColumn != null) {
       incrementingWhereClause(builder, quoteString);
-    } else if (timestampColumn != null) {
+    } else if (timestampHelper != null) {
       timestampWhereClause(builder, quoteString);
     }
     String queryString = builder.toString();
@@ -124,21 +124,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     //  timestamp 1235, id 22
     //  timestamp 1236, id 23
     // We should capture both id = 22 (an update) and id = 23 (a new row)
-    builder.append(" WHERE ");
-    builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-    builder.append(" < ? AND ((");
-    builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-    builder.append(" = ? AND ");
-    builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
-    builder.append(" > ?");
-    builder.append(") OR ");
-    builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-    builder.append(" > ?)");
-    builder.append(" ORDER BY ");
-    builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-    builder.append(",");
-    builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
-    builder.append(" ASC");
+    timestampHelper.addWhereClause(builder, quoteString, incrementingColumn);
   }
 
   private void incrementingWhereClause(StringBuilder builder, String quoteString) {
@@ -151,18 +137,12 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   }
 
   private void timestampWhereClause(StringBuilder builder, String quoteString) {
-    builder.append(" WHERE ");
-    builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-    builder.append(" > ? AND ");
-    builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-    builder.append(" < ? ORDER BY ");
-    builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-    builder.append(" ASC");
+    timestampHelper.addWhereClause(builder, quoteString);
   }
 
   @Override
   protected ResultSet executeQuery() throws SQLException {
-    if (incrementingColumn != null && timestampColumn != null) {
+    if (incrementingColumn != null && timestampHelper != null) {
       Timestamp tsOffset = offset.getTimestampOffset();
       Long incOffset = offset.getIncrementingOffset();
       final long currentDbTime = JdbcUtils.getCurrentTimeOnDB(
@@ -185,7 +165,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       Long incOffset = offset.getIncrementingOffset();
       stmt.setLong(1, incOffset);
       log.debug("Executing prepared statement with incrementing value = {}", incOffset);
-    } else if (timestampColumn != null) {
+    } else if (timestampHelper != null) {
       Timestamp tsOffset = offset.getTimestampOffset();
       final long currentDbTime = JdbcUtils.getCurrentTimeOnDB(
           stmt.getConnection(),
@@ -227,8 +207,8 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   // Visible for testing
   TimestampIncrementingOffset extractOffset(Schema schema, Struct record) {
     final Timestamp extractedTimestamp;
-    if (timestampColumn != null) {
-      extractedTimestamp = (Timestamp) record.get(timestampColumn);
+    if (timestampHelper != null) {
+      extractedTimestamp = timestampHelper.extractOffset(record);
       Timestamp timestampOffset = offset.getTimestampOffset();
       assert timestampOffset != null && timestampOffset.compareTo(extractedTimestamp) <= 0;
     } else {
@@ -259,7 +239,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       Long incrementingOffset = offset.getIncrementingOffset();
       assert incrementingOffset == -1L
              || extractedId > incrementingOffset
-             || timestampColumn != null;
+             || timestampHelper != null;
     } else {
       extractedId = null;
     }
@@ -290,11 +270,10 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   @Override
   public String toString() {
     return "TimestampIncrementingTableQuerier{"
-           + "name='" + name + '\''
-           + ", query='" + query + '\''
-           + ", topicPrefix='" + topicPrefix + '\''
-           + ", timestampColumn='" + timestampColumn + '\''
-           + ", incrementingColumn='" + incrementingColumn + '\''
-           + '}';
+        + "incrementingColumn='" + incrementingColumn + '\''
+        + ", timestampDelay=" + timestampDelay
+        + ", offset=" + offset
+        + ", timestampHelper=" + timestampHelper
+        + '}';
   }
 }

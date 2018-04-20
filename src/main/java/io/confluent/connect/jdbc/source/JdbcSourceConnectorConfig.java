@@ -120,8 +120,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public static final String TIMESTAMP_COLUMN_NAME_CONFIG = "timestamp.column.name";
   private static final String TIMESTAMP_COLUMN_NAME_DOC =
-      "The name of the timestamp column to use to detect new or modified rows. This column may "
-      + "not be nullable.";
+      "Comma separated list of one or more timestamp columns to detect new or modified rows using "
+      + "the COALESCE SQL function. Rows whose first non-null timestamp value is greater than the "
+      + "largest previous timestamp value seen will be discovered with each poll. At least one "
+      + "column should not be nullable.";
+
   public static final String TIMESTAMP_COLUMN_NAME_DEFAULT = "";
   private static final String TIMESTAMP_COLUMN_NAME_DISPLAY = "Timestamp Column Name";
 
@@ -360,7 +363,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         MODE_DEPENDENTS_RECOMMENDER
     ).define(
         TIMESTAMP_COLUMN_NAME_CONFIG,
-        Type.STRING,
+        Type.LIST,
         TIMESTAMP_COLUMN_NAME_DEFAULT,
         Importance.MEDIUM,
         TIMESTAMP_COLUMN_NAME_DOC,

@@ -79,7 +79,7 @@ public class JdbcSourceConnectorConfigTest {
     db.close();
     db.dropDatabase();
   }
-
+  
   @Test
   public void testConfigTableNameRecommenderWithoutSchemaOrTableTypes() throws Exception {
     props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, db.getUrl());

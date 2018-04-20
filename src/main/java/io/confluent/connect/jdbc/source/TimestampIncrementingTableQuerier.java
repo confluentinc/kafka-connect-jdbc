@@ -16,6 +16,7 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.util.NamedParameterStatement;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
@@ -62,16 +63,19 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   private String timestampColumn;
   private String incrementingColumn;
   private long timestampDelay;
+  private final boolean appendIncrementControl;
   private TimestampIncrementingOffset offset;
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
                                            String timestampColumn, String incrementingColumn,
                                            Map<String, Object> offsetMap, Long timestampDelay,
-                                           String schemaPattern, boolean mapNumerics) {
+                                           String schemaPattern, boolean mapNumerics,
+                                           boolean appendIncrementControl) {
     super(mode, name, topicPrefix, schemaPattern, mapNumerics);
     this.timestampColumn = timestampColumn;
     this.incrementingColumn = incrementingColumn;
     this.timestampDelay = timestampDelay;
+    this.appendIncrementControl = appendIncrementControl;
     this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
   }
 
@@ -98,16 +102,19 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
         throw new ConnectException("Unknown mode encountered when preparing query: " + mode);
     }
 
-    if (incrementingColumn != null && timestampColumn != null) {
-      timestampIncrementingWhereClause(builder, quoteString);
-    } else if (incrementingColumn != null) {
-      incrementingWhereClause(builder, quoteString);
-    } else if (timestampColumn != null) {
-      timestampWhereClause(builder, quoteString);
+    if (mode == QueryMode.TABLE || appendIncrementControl) {
+      if (incrementingColumn != null && timestampColumn != null) {
+        timestampIncrementingWhereClause(builder, quoteString);
+      } else if (incrementingColumn != null) {
+        incrementingWhereClause(builder, quoteString);
+      } else if (timestampColumn != null) {
+        timestampWhereClause(builder, quoteString);
+      }
     }
+
     String queryString = builder.toString();
     log.debug("{} prepared SQL query: {}", this, queryString);
-    stmt = db.prepareStatement(queryString);
+    stmt = new NamedParameterStatement(db, queryString);
   }
 
   private void timestampIncrementingWhereClause(StringBuilder builder, String quoteString) {
@@ -126,14 +133,14 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     // We should capture both id = 22 (an update) and id = 23 (a new row)
     builder.append(" WHERE ");
     builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-    builder.append(" < ? AND ((");
+    builder.append(" < :endTime AND ((");
     builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-    builder.append(" = ? AND ");
+    builder.append(" = :startTime AND ");
     builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
-    builder.append(" > ?");
+    builder.append(" > :incOffset");
     builder.append(") OR ");
     builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-    builder.append(" > ?)");
+    builder.append(" > :startTime)");
     builder.append(" ORDER BY ");
     builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
     builder.append(",");
@@ -144,7 +151,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   private void incrementingWhereClause(StringBuilder builder, String quoteString) {
     builder.append(" WHERE ");
     builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
-    builder.append(" > ?");
+    builder.append(" > :incOffset");
     builder.append(" ORDER BY ");
     builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
     builder.append(" ASC");
@@ -153,9 +160,9 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   private void timestampWhereClause(StringBuilder builder, String quoteString) {
     builder.append(" WHERE ");
     builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-    builder.append(" > ? AND ");
+    builder.append(" > :startTime AND ");
     builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-    builder.append(" < ? ORDER BY ");
+    builder.append(" < :endTime ORDER BY ");
     builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
     builder.append(" ASC");
   }
@@ -170,10 +177,9 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
           DateTimeUtils.UTC_CALENDAR.get()
       ).getTime();
       Timestamp endTime = new Timestamp(currentDbTime - timestampDelay);
-      stmt.setTimestamp(1, endTime, DateTimeUtils.UTC_CALENDAR.get());
-      stmt.setTimestamp(2, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
-      stmt.setLong(3, incOffset);
-      stmt.setTimestamp(4, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
+      stmt.setTimestamp("endTime", endTime, DateTimeUtils.UTC_CALENDAR.get());
+      stmt.setTimestamp("startTime", tsOffset, DateTimeUtils.UTC_CALENDAR.get());
+      stmt.setLong("incOffset", incOffset);
       log.debug(
           "Executing prepared statement with start time value = {} end time = {} and incrementing"
           + " value = {}",
@@ -183,7 +189,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       );
     } else if (incrementingColumn != null) {
       Long incOffset = offset.getIncrementingOffset();
-      stmt.setLong(1, incOffset);
+      stmt.setLong("incOffset", incOffset);
       log.debug("Executing prepared statement with incrementing value = {}", incOffset);
     } else if (timestampColumn != null) {
       Timestamp tsOffset = offset.getTimestampOffset();
@@ -192,8 +198,8 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
           DateTimeUtils.UTC_CALENDAR.get()
       ).getTime();
       Timestamp endTime = new Timestamp(currentDbTime - timestampDelay);
-      stmt.setTimestamp(1, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
-      stmt.setTimestamp(2, endTime, DateTimeUtils.UTC_CALENDAR.get());
+      stmt.setTimestamp("startTime", tsOffset, DateTimeUtils.UTC_CALENDAR.get());
+      stmt.setTimestamp("endTime", endTime, DateTimeUtils.UTC_CALENDAR.get());
       log.debug("Executing prepared statement with timestamp value = {} end time = {}",
                 DateTimeUtils.formatUtcTimestamp(tsOffset),
                 DateTimeUtils.formatUtcTimestamp(endTime));

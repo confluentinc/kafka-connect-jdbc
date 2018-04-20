@@ -16,6 +16,7 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.util.NamedParameterStatement;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -48,11 +49,11 @@ public class BulkTableQuerier extends TableQuerier {
         String quoteString = JdbcUtils.getIdentifierQuoteString(db);
         String queryString = "SELECT * FROM " + JdbcUtils.quoteString(name, quoteString);
         log.debug("{} prepared SQL query: {}", this, queryString);
-        stmt = db.prepareStatement(queryString);
+        stmt = new NamedParameterStatement(db, queryString);
         break;
       case QUERY:
         log.debug("{} prepared SQL query: {}", this, query);
-        stmt = db.prepareStatement(query);
+        stmt = new NamedParameterStatement(db, query);
         break;
       default:
         throw new ConnectException("Unknown mode: " + mode);

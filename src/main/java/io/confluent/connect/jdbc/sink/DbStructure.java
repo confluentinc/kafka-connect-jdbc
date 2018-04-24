@@ -173,6 +173,10 @@ public class DbStructure {
       }
     }
 
+    if (missingFields.isEmpty()) {
+      return missingFields;
+    }
+
     // check if the missing fields can be located by ignoring case
     Set<String> columnNamesLowerCase = new HashSet<>();
     for (String columnName: dbColumnNames) {

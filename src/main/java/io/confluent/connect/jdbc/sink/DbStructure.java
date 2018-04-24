@@ -180,8 +180,10 @@ public class DbStructure {
     }
 
     if (columnNamesLowerCase.size() != dbColumnNames.size()) {
-      log.warn("Table has column names which differ only with case sensitivity. Original "
-          + "columns={}", dbColumnNames);
+      log.warn(
+          "Table has column names that differ only by case. Original columns={}",
+          dbColumnNames
+      );
     }
 
     final Set<SinkRecordField> missingFieldsIgnoreCase = new HashSet<>();

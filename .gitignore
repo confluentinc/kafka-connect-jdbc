@@ -1,6 +1,8 @@
 # Build products
 target/
 
+.gradle/
+
 # IntelliJ data
 *.iml
 .idea/

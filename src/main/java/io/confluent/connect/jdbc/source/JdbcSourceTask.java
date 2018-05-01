@@ -16,6 +16,8 @@
 
 package io.confluent.connect.jdbc.source;
 
+import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.NumericMapping;
+
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.JdbcUtils;
@@ -175,8 +177,7 @@ public class JdbcSourceTask extends SourceTask {
       }
 
       String topicPrefix = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
-      boolean mapNumerics
-          = config.getBoolean(JdbcSourceTaskConfig.NUMERIC_PRECISION_MAPPING_CONFIG);
+      NumericMapping mapNumerics = NumericMapping.get(config);
 
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(new BulkTableQuerier(queryMode, tableOrQuery, schemaPattern, topicPrefix,

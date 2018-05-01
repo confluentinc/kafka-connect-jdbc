@@ -16,13 +16,13 @@
 
 package io.confluent.connect.jdbc.sink.dialect;
 
-import org.apache.kafka.connect.data.Date;
-import org.apache.kafka.connect.data.Decimal;
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.Time;
-import org.apache.kafka.connect.data.Timestamp;
-import org.apache.kafka.connect.errors.ConnectException;
+import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.Transform;
+import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.copiesToBuilder;
+import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.joinToBuilder;
 
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import io.confluent.connect.jdbc.util.DateTimeUtils;
+import javax.xml.bind.DatatypeConverter;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -30,14 +30,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import javax.xml.bind.DatatypeConverter;
-
-import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
-import io.confluent.connect.jdbc.util.DateTimeUtils;
-
-import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.Transform;
-import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.joinToBuilder;
-import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.copiesToBuilder;
+import org.apache.kafka.connect.data.Date;
+import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.Time;
+import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.connect.errors.ConnectException;
 
 public abstract class DbDialect {
 
@@ -311,9 +309,12 @@ public abstract class DbDialect {
     if (!url.startsWith("jdbc:")) {
       throw new ConnectException(String.format("Not a valid JDBC URL: %s", url));
     }
-    final int index = url.indexOf("://", "jdbc:".length());
+    int index = url.indexOf("://", "jdbc:".length());
     if (index < 0) {
-      throw new ConnectException(String.format("Not a valid JDBC URL: %s", url));
+      index = url.indexOf(":", "jdbc:".length());
+      if (index < 0) {
+        throw new ConnectException(String.format("Not a valid JDBC URL: %s", url));
+      }
     }
     return url.substring("jdbc:".length(), index);
   }

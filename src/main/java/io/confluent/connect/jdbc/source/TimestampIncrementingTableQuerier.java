@@ -1,12 +1,12 @@
 /**
  * Copyright 2015 Confluent Inc.
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
+ * <p>
  * http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -18,6 +18,7 @@ package io.confluent.connect.jdbc.source;
 
 import static io.confluent.connect.jdbc.util.DateTimeUtils.min;
 
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.NumericMapping;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.JdbcUtils;
 import java.math.BigDecimal;
@@ -38,19 +39,19 @@ import org.slf4j.LoggerFactory;
 
 /**
  * <p>
- *   TimestampIncrementingTableQuerier performs incremental loading of data using two mechanisms: a
- *   timestamp column provides monotonically incrementing values that can be used to detect new or
- *   modified rows and a strictly incrementing (e.g. auto increment) column allows detecting new
- *   rows or combined with the timestamp provide a unique identifier for each update to the row.
+ * TimestampIncrementingTableQuerier performs incremental loading of data using two mechanisms: a
+ * timestamp column provides monotonically incrementing values that can be used to detect new or
+ * modified rows and a strictly incrementing (e.g. auto increment) column allows detecting new
+ * rows or combined with the timestamp provide a unique identifier for each update to the row.
  * </p>
  * <p>
- *   At least one of the two columns must be specified (or left as "" for the incrementing column
- *   to indicate use of an auto-increment column). If both columns are provided, they are both
- *   used to ensure only new or updated rows are reported and to totally order updates so
- *   recovery can occur no matter when offsets were committed. If only the incrementing fields is
- *   provided, new rows will be detected but not updates. If only the timestamp field is
- *   provided, both new and updated rows will be detected, but stream offsets will not be unique
- *   so failures may cause duplicates or losses.
+ * At least one of the two columns must be specified (or left as "" for the incrementing column
+ * to indicate use of an auto-increment column). If both columns are provided, they are both
+ * used to ensure only new or updated rows are reported and to totally order updates so
+ * recovery can occur no matter when offsets were committed. If only the incrementing fields is
+ * provided, new rows will be detected but not updates. If only the timestamp field is
+ * provided, both new and updated rows will be detected, but stream offsets will not be unique
+ * so failures may cause duplicates or losses.
  * </p>
  */
 public class TimestampIncrementingTableQuerier extends TableQuerier {
@@ -68,18 +69,16 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
 
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
-          String timestampColumn, String incrementingColumn, Map<String, Object> offsetMap,
-          Long timestampDelay, String schemaPattern, boolean mapNumerics) {
+                                           String timestampColumn, String incrementingColumn,
+                                           Map<String, Object> offsetMap, Long timestampDelay, String schemaPattern, NumericMapping mapNumerics) {
     this(mode, name, topicPrefix, new ColumnName(timestampColumn, null),
-            new ColumnName(incrementingColumn, null), offsetMap, timestampDelay, schemaPattern,
-            mapNumerics, true);
+        new ColumnName(incrementingColumn, null), offsetMap, timestampDelay, schemaPattern,
+        mapNumerics, true);
   }
 
-
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
-          ColumnName timestampColumn, final ColumnName incrementingColumn,
-          Map<String, Object> offsetMap, Long timestampDelay, String schemaPattern,
-          boolean mapNumerics, final boolean requireNonZeroScaleIncrementer) {
+                                           ColumnName timestampColumn, final ColumnName incrementingColumn,
+                                           Map<String, Object> offsetMap, Long timestampDelay, String schemaPattern, NumericMapping mapNumerics, final boolean requireNonZeroScaleIncrementer) {
     super(mode, name, topicPrefix, schemaPattern, mapNumerics);
     this.timestampColumn = timestampColumn == null ? ColumnName.empty() : timestampColumn;
     this.incrementingColumn = incrementingColumn == null ? ColumnName.empty() : incrementingColumn;
@@ -93,7 +92,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     // Default when unspecified uses an autoincrementing column
     if (!incrementingColumn.isEmpty() && incrementingColumn.isEmpty()) {
       incrementingColumn = new ColumnName(JdbcUtils.getAutoincrementColumn(db, schemaPattern, name),
-              null);
+          null);
     }
 
     String quoteString = JdbcUtils.getIdentifierQuoteString(db);
@@ -122,7 +121,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     String queryString = builder.toString();
     log.debug("{} prepared SQL query: {}", this, queryString);
     stmt = db.prepareStatement(queryString, ResultSet.TYPE_FORWARD_ONLY,
-            ResultSet.CONCUR_READ_ONLY);
+        ResultSet.CONCUR_READ_ONLY);
   }
 
   private void timestampIncrementingWhereClause(StringBuilder builder, String quoteString) {
@@ -149,7 +148,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     builder.append(" WHERE ");
 
     String qualifiedIncrementingColumn = this.incrementingColumn.getQuotedQualifiedName(
-            quoteString);
+        quoteString);
 
     String qualifiedTimestampColumn = this.timestampColumn.getQuotedQualifiedName(quoteString);
 
@@ -176,7 +175,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     builder.append(" WHERE ");
 
     String qualifiedIncrementingColumn = this.incrementingColumn.getQuotedQualifiedName(
-            quoteString);
+        quoteString);
 
     builder.append(qualifiedIncrementingColumn);
     builder.append(" > ? AND ");
@@ -185,7 +184,6 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     builder.append(qualifiedIncrementingColumn);
     builder.append(" ASC");
   }
-
 
 
   private void timestampWhereClause(StringBuilder builder, String quoteString) {
@@ -221,7 +219,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       stmt.setTimestamp(5, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
       log.debug(
           "Executing prepared statement with start time > {} and end time <= {} and incrementing"
-          + " value > {} and < {}",
+              + " value > {} and < {}",
           DateTimeUtils.formatUtcTimestamp(tsOffset),
           DateTimeUtils.formatUtcTimestamp(adjustedEndTime),
           incOffset, incEndOffset
@@ -245,8 +243,8 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       final Timestamp adjustedEndTime = min(endTime, tsSpanEndOffset);
       stmt.setTimestamp(2, adjustedEndTime, DateTimeUtils.UTC_CALENDAR.get());
       log.debug("Executing prepared statement with timestamp value > {} end time < {}",
-                DateTimeUtils.formatUtcTimestamp(tsOffset),
-                DateTimeUtils.formatUtcTimestamp(adjustedEndTime));
+          DateTimeUtils.formatUtcTimestamp(tsOffset),
+          DateTimeUtils.formatUtcTimestamp(adjustedEndTime));
     }
     stmt.setFetchSize(fetchSize);
     return stmt.executeQuery();
@@ -266,7 +264,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
         break;
       case QUERY:
         partition = Collections.singletonMap(JdbcSourceConnectorConstants.QUERY_NAME_KEY,
-                                             JdbcSourceConnectorConstants.QUERY_NAME_VALUE);
+            JdbcSourceConnectorConstants.QUERY_NAME_VALUE);
         topic = topicPrefix;
         break;
       default:
@@ -301,7 +299,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       } else if (isIntegralPrimitiveType(incrementingColumnValue)) {
         extractedId = ((Number) incrementingColumnValue).longValue();
       } else if (incrementingColumnSchema.name() != null
-                 && incrementingColumnSchema.name().equals(Decimal.LOGICAL_NAME)) {
+          && incrementingColumnSchema.name().equals(Decimal.LOGICAL_NAME)) {
         extractedId = extractDecimalId(incrementingColumnValue);
       } else {
         throw new ConnectException(
@@ -313,8 +311,8 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       // If we are also using a timestamp, then we may see updates to older rows.
       Long incrementingOffset = offset.getIncrementingOffset();
       assert incrementingOffset == -1L
-             || extractedId > incrementingOffset
-             || !timestampColumn.isEmpty();
+          || extractedId > incrementingOffset
+          || !timestampColumn.isEmpty();
     } else {
       extractedId = null;
     }
@@ -339,19 +337,19 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
 
   private boolean isIntegralPrimitiveType(Object incrementingColumnValue) {
     return incrementingColumnValue instanceof Long
-           || incrementingColumnValue instanceof Integer
-           || incrementingColumnValue instanceof Short
-           || incrementingColumnValue instanceof Byte;
+        || incrementingColumnValue instanceof Integer
+        || incrementingColumnValue instanceof Short
+        || incrementingColumnValue instanceof Byte;
   }
 
   @Override
   public String toString() {
     return "TimestampIncrementingTableQuerier{"
-           + "name='" + name + '\''
-           + ", query='" + query + '\''
-           + ", topicPrefix='" + topicPrefix + '\''
-           + ", timestampColumn=" + timestampColumn
-           + ", incrementingColumn=" + incrementingColumn
-           + '}';
+        + "name='" + name + '\''
+        + ", query='" + query + '\''
+        + ", topicPrefix='" + topicPrefix + '\''
+        + ", timestampColumn=" + timestampColumn
+        + ", incrementingColumn=" + incrementingColumn
+        + '}';
   }
 }

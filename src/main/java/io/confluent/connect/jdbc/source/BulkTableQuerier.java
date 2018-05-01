@@ -16,6 +16,8 @@
 
 package io.confluent.connect.jdbc.source;
 
+import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.NumericMapping;
+
 import io.confluent.connect.jdbc.util.JdbcUtils;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -36,7 +38,7 @@ public class BulkTableQuerier extends TableQuerier {
   private static final Logger log = LoggerFactory.getLogger(BulkTableQuerier.class);
 
   public BulkTableQuerier(QueryMode mode, String name, String schemaPattern,
-                          String topicPrefix, boolean mapNumerics) {
+                          String topicPrefix, NumericMapping mapNumerics) {
     super(mode, name, topicPrefix, schemaPattern, mapNumerics);
   }
 

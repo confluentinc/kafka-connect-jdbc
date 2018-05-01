@@ -16,16 +16,9 @@
 
 package io.confluent.connect.jdbc.source;
 
-import org.apache.kafka.connect.data.Date;
-import org.apache.kafka.connect.data.Decimal;
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.SchemaBuilder;
-import org.apache.kafka.connect.data.Struct;
-import org.apache.kafka.connect.data.Time;
-import org.apache.kafka.connect.data.Timestamp;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.NumericMapping;
 
+import io.confluent.connect.jdbc.util.DateTimeUtils;
 import java.io.IOException;
 import java.net.URL;
 import java.sql.Blob;
@@ -36,7 +29,15 @@ import java.sql.SQLException;
 import java.sql.SQLXML;
 import java.sql.Types;
 
-import io.confluent.connect.jdbc.util.DateTimeUtils;
+import org.apache.kafka.connect.data.Date;
+import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.SchemaBuilder;
+import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.data.Time;
+import org.apache.kafka.connect.data.Timestamp;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * DataConverter handles translating table schemas to Kafka Connect schemas and row data to Kafka
@@ -45,10 +46,14 @@ import io.confluent.connect.jdbc.util.DateTimeUtils;
 public class DataConverter {
   private static final Logger log = LoggerFactory.getLogger(JdbcSourceTask.class);
 
+  private static final int NUMERIC_TYPE_SCALE_LOW = -84;
+  private static final int NUMERIC_TYPE_SCALE_HIGH = 127;
+  private static final int NUMERIC_TYPE_SCALE_UNSET = -127;
+
   public static Schema convertSchema(
       String tableName,
       ResultSetMetaData metadata,
-      boolean mapNumerics
+      NumericMapping mapNumerics
   ) throws SQLException {
     // TODO: Detect changes to metadata, which will require schema updates
     SchemaBuilder builder = SchemaBuilder.struct().name(tableName);
@@ -58,7 +63,7 @@ public class DataConverter {
     return builder.build();
   }
 
-  public static Struct convertRecord(Schema schema, ResultSet resultSet, boolean mapNumerics)
+  public static Struct convertRecord(Schema schema, ResultSet resultSet, NumericMapping mapNumerics)
       throws SQLException {
     ResultSetMetaData metadata = resultSet.getMetaData();
     Struct struct = new Struct(schema);
@@ -77,7 +82,7 @@ public class DataConverter {
 
 
   private static void addFieldSchema(ResultSetMetaData metadata, int col,
-                                     SchemaBuilder builder, boolean mapNumerics)
+                                     SchemaBuilder builder, NumericMapping mapNumerics)
       throws SQLException {
     // Label is what the query requested the column name be using an "AS" clause, name is the
     // original
@@ -203,8 +208,10 @@ public class DataConverter {
       }
 
       case Types.NUMERIC:
-        if (mapNumerics) {
+        if (mapNumerics == NumericMapping.PRECISION_ONLY) {
           int precision = metadata.getPrecision(col);
+          int scale = metadata.getScale(col);
+          log.debug("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
           if (metadata.getScale(col) == 0 && precision < 19) { // integer
             Schema schema;
             if (precision > 9) {
@@ -223,13 +230,43 @@ public class DataConverter {
             builder.field(fieldName, schema);
             break;
           }
+        } else if (mapNumerics == NumericMapping.BEST_FIT) {
+          int precision = metadata.getPrecision(col);
+          int scale = metadata.getScale(col);
+          log.debug("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
+          if (precision < 19) { // fits in primitive data types.
+            if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
+              Schema schema;
+              if (precision > 9) {
+                schema = (optional) ? Schema.OPTIONAL_INT64_SCHEMA :
+                         Schema.INT64_SCHEMA;
+              } else if (precision > 4) {
+                schema = (optional) ? Schema.OPTIONAL_INT32_SCHEMA :
+                         Schema.INT32_SCHEMA;
+              } else if (precision > 2) {
+                schema = (optional) ? Schema.OPTIONAL_INT16_SCHEMA :
+                         Schema.INT16_SCHEMA;
+              } else {
+                schema = (optional) ? Schema.OPTIONAL_INT8_SCHEMA :
+                         Schema.INT8_SCHEMA;
+              }
+              builder.field(fieldName, schema);
+              break;
+            } else if (scale > 0) { // floating point - use double in all cases
+              Schema schema = (optional) ? Schema.OPTIONAL_FLOAT64_SCHEMA : Schema.FLOAT64_SCHEMA;
+              builder.field(fieldName, schema);
+              break;
+            }
+          }
         }
         // fallthrough
 
       case Types.DECIMAL: {
+        int precision = metadata.getPrecision(col);
         int scale = metadata.getScale(col);
-        if (scale == -127) { //NUMBER without precision defined for OracleDB
-          scale = 127;
+        log.debug("DECIMAL with precision: '{}' and scale: '{}'", precision, scale);
+        if (scale == NUMERIC_TYPE_SCALE_UNSET) { //NUMBER without precision defined for OracleDB
+          scale = NUMERIC_TYPE_SCALE_HIGH;
         }
         SchemaBuilder fieldBuilder = Decimal.builder(scale);
         if (optional) {
@@ -318,7 +355,7 @@ public class DataConverter {
   }
 
   private static void convertFieldValue(ResultSet resultSet, int col, int colType,
-                                        Struct struct, String fieldName, boolean mapNumerics)
+                                        Struct struct, String fieldName, NumericMapping mapNumerics)
       throws SQLException, IOException {
     final Object colValue;
     switch (colType) {
@@ -393,10 +430,12 @@ public class DataConverter {
       }
 
       case Types.NUMERIC:
-        if (mapNumerics) {
+        if (mapNumerics == NumericMapping.PRECISION_ONLY) {
           ResultSetMetaData metadata = resultSet.getMetaData();
           int precision = metadata.getPrecision(col);
-          if (metadata.getScale(col) == 0 && precision < 19) { // integer
+          int scale = metadata.getScale(col);
+          log.trace("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
+          if (scale == 0 && precision < 19) { // integer
             if (precision > 9) {
               colValue = resultSet.getLong(col);
             } else if (precision > 4) {
@@ -408,13 +447,38 @@ public class DataConverter {
             }
             break;
           }
+        } else if (mapNumerics == NumericMapping.BEST_FIT) {
+          ResultSetMetaData metadata = resultSet.getMetaData();
+          int precision = metadata.getPrecision(col);
+          int scale = metadata.getScale(col);
+          log.trace("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
+          if (precision < 19) { // fits in primitive data types.
+            if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
+              if (precision > 9) {
+                colValue = resultSet.getLong(col);
+              } else if (precision > 4) {
+                colValue = resultSet.getInt(col);
+              } else if (precision > 2) {
+                colValue = resultSet.getShort(col);
+              } else {
+                colValue = resultSet.getByte(col);
+              }
+              break;
+            } else if (scale > 0) { // floating point - use double in all cases
+              colValue = resultSet.getDouble(col);
+              break;
+            }
+          }
         }
+
         // fallthrough
       case Types.DECIMAL: {
         ResultSetMetaData metadata = resultSet.getMetaData();
+        int precision = metadata.getPrecision(col);
         int scale = metadata.getScale(col);
-        if (scale == -127) {
-          scale = 127;
+        log.trace("DECIMAL with precision: '{}' and scale: '{}'", precision, scale);
+        if (scale == NUMERIC_TYPE_SCALE_UNSET) {
+          scale = NUMERIC_TYPE_SCALE_HIGH;
         }
         colValue = resultSet.getBigDecimal(col, scale);
         break;

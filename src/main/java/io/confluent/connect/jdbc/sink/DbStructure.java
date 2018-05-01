@@ -16,10 +16,12 @@
 
 package io.confluent.connect.jdbc.sink;
 
-import org.apache.kafka.connect.errors.ConnectException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import io.confluent.connect.jdbc.sink.dialect.DbDialect;
+import io.confluent.connect.jdbc.sink.metadata.DbTable;
+import io.confluent.connect.jdbc.sink.metadata.DbTableColumn;
+import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import io.confluent.connect.jdbc.sink.metadata.TableMetadataLoadingCache;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -29,12 +31,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import io.confluent.connect.jdbc.sink.dialect.DbDialect;
-import io.confluent.connect.jdbc.sink.metadata.DbTable;
-import io.confluent.connect.jdbc.sink.metadata.DbTableColumn;
-import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
-import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
-import io.confluent.connect.jdbc.sink.metadata.TableMetadataLoadingCache;
+import org.apache.kafka.connect.errors.ConnectException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class DbStructure {
   private static final Logger log = LoggerFactory.getLogger(DbStructure.class);
@@ -198,6 +197,39 @@ public class DbStructure {
         missingFields.add(field);
       }
     }
-    return missingFields;
+
+    if (missingFields.isEmpty()) {
+      return missingFields;
+    }
+
+    // check if the missing fields can be located by ignoring case
+    Set<String> columnNamesLowerCase = new HashSet<>();
+    for (String columnName: dbColumnNames) {
+      columnNamesLowerCase.add(columnName.toLowerCase());
+    }
+
+    if (columnNamesLowerCase.size() != dbColumnNames.size()) {
+      log.warn(
+          "Table has column names that differ only by case. Original columns={}",
+          dbColumnNames
+      );
+    }
+
+    final Set<SinkRecordField> missingFieldsIgnoreCase = new HashSet<>();
+    for (SinkRecordField missing: missingFields) {
+      if (!columnNamesLowerCase.contains(missing.name().toLowerCase())) {
+        missingFieldsIgnoreCase.add(missing);
+      }
+    }
+
+    if (missingFieldsIgnoreCase.size() > 0) {
+      log.info(
+          "Unable to find fields {} among column names {}",
+          missingFieldsIgnoreCase,
+          dbColumnNames
+      );
+    }
+
+    return missingFieldsIgnoreCase;
   }
 }

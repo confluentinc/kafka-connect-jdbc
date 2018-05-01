@@ -16,6 +16,12 @@
 
 package io.confluent.connect.jdbc.sink.dialect;
 
+import static org.junit.Assert.assertEquals;
+
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import java.math.BigDecimal;
+import java.util.Map;
+
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -24,13 +30,6 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.junit.Test;
-
-import java.math.BigDecimal;
-import java.util.Map;
-
-import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
-
-import static org.junit.Assert.assertEquals;
 
 public class DbDialectTest {
 
@@ -88,7 +87,7 @@ public class DbDialectTest {
 
   @Test(expected = ConnectException.class)
   public void extractProtocolInvalidUrl() {
-    DbDialect.extractProtocolFromUrl("jdbc:protocol:somethingelse;field=value;");
+    DbDialect.extractProtocolFromUrl("jdbc:protocolinvalid;field=value;");
   }
 
   @Test(expected = ConnectException.class)
@@ -99,6 +98,11 @@ public class DbDialectTest {
   @Test
   public void extractProtocol() {
     assertEquals("protocol_test", DbDialect.extractProtocolFromUrl("jdbc:protocol_test://SERVER:21421;field=value"));
+  }
+
+  @Test
+  public void detectDerby() {
+    assertEquals(GenericDialect.class, DbDialect.fromConnectionString("jdbc:derby:sample").getClass());
   }
 
   @Test

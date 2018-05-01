@@ -16,11 +16,10 @@
 
 package io.confluent.connect.jdbc.source;
 
-import static io.confluent.connect.jdbc.util.DateTimeUtils.min;
-
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.NumericMapping;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.JdbcUtils;
+
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -36,6 +35,8 @@ import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static io.confluent.connect.jdbc.util.DateTimeUtils.min;
 
 /**
  * <p>
@@ -69,16 +70,17 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
 
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
-                                           String timestampColumn, String incrementingColumn,
-                                           Map<String, Object> offsetMap, Long timestampDelay, String schemaPattern, NumericMapping mapNumerics) {
+      String timestampColumn, String incrementingColumn, Map<String, Object> offsetMap,
+      Long timestampDelay, String schemaPattern, NumericMapping mapNumerics) {
     this(mode, name, topicPrefix, new ColumnName(timestampColumn, null),
         new ColumnName(incrementingColumn, null), offsetMap, timestampDelay, schemaPattern,
         mapNumerics, true);
   }
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
-                                           ColumnName timestampColumn, final ColumnName incrementingColumn,
-                                           Map<String, Object> offsetMap, Long timestampDelay, String schemaPattern, NumericMapping mapNumerics, final boolean requireNonZeroScaleIncrementer) {
+      ColumnName timestampColumn, final ColumnName incrementingColumn,
+      Map<String, Object> offsetMap, Long timestampDelay, String schemaPattern,
+      NumericMapping mapNumerics, final boolean requireNonZeroScaleIncrementer) {
     super(mode, name, topicPrefix, schemaPattern, mapNumerics);
     this.timestampColumn = timestampColumn == null ? ColumnName.empty() : timestampColumn;
     this.incrementingColumn = incrementingColumn == null ? ColumnName.empty() : incrementingColumn;

@@ -16,19 +16,18 @@
 
 package io.confluent.connect.jdbc.source;
 
-import org.apache.kafka.connect.data.Struct;
-import org.apache.kafka.connect.errors.ConnectException;
-import org.apache.kafka.connect.source.SourceRecord;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import io.confluent.connect.jdbc.util.JdbcUtils;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.Map;
 
-import io.confluent.connect.jdbc.util.JdbcUtils;
+import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.source.SourceRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * BulkTableQuerier always returns the entire table.
@@ -52,7 +51,8 @@ public class BulkTableQuerier extends TableQuerier {
         break;
       case QUERY:
         log.debug("{} prepared SQL query: {}", this, query);
-        stmt = db.prepareStatement(query);
+        stmt = db.prepareStatement(query, ResultSet.TYPE_FORWARD_ONLY,
+            ResultSet.CONCUR_READ_ONLY);
         break;
       default:
         throw new ConnectException("Unknown mode: " + mode);
@@ -60,7 +60,8 @@ public class BulkTableQuerier extends TableQuerier {
   }
 
   @Override
-  protected ResultSet executeQuery() throws SQLException {
+  protected ResultSet executeQuery(int fetchSize) throws SQLException {
+    stmt.setFetchSize(fetchSize);
     return stmt.executeQuery();
   }
 

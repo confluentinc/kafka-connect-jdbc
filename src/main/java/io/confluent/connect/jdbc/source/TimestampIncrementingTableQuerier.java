@@ -65,7 +65,6 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   private long timestampDelay;
   private TimestampIncrementingOffset offset;
   private final boolean requireNonZeroScaleIncrementer;
-  private String timestampColumnQualifier;
 
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
@@ -122,7 +121,8 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
     }
     String queryString = builder.toString();
     log.debug("{} prepared SQL query: {}", this, queryString);
-    stmt = db.prepareStatement(queryString);
+    stmt = db.prepareStatement(queryString, ResultSet.TYPE_FORWARD_ONLY,
+            ResultSet.CONCUR_READ_ONLY);
   }
 
   private void timestampIncrementingWhereClause(StringBuilder builder, String quoteString) {
@@ -202,7 +202,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   }
 
   @Override
-  protected ResultSet executeQuery() throws SQLException {
+  protected ResultSet executeQuery(int fetchSize) throws SQLException {
     if (!(incrementingColumn.isEmpty() || timestampColumn.isEmpty())) {
       Timestamp tsOffset = offset.getTimestampOffset();
       Timestamp tsEndOffset = offset.getTimestampSpanEndOffset();
@@ -248,6 +248,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
                 DateTimeUtils.formatUtcTimestamp(tsOffset),
                 DateTimeUtils.formatUtcTimestamp(adjustedEndTime));
     }
+    stmt.setFetchSize(fetchSize);
     return stmt.executeQuery();
   }
 

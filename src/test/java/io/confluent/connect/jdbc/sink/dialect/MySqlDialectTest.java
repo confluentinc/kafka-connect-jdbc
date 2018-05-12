@@ -28,6 +28,8 @@ import java.util.Collections;
 
 import static org.junit.Assert.assertEquals;
 
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+
 public class MySqlDialectTest extends BaseDialectTest {
 
   public MySqlDialectTest() {
@@ -99,7 +101,12 @@ public class MySqlDialectTest extends BaseDialectTest {
     assertEquals(
         "insert into `actor`(`actor_id`,`first_name`,`last_name`,`score`) " +
         "values(?,?,?,?) on duplicate key update `first_name`=values(`first_name`),`last_name`=values(`last_name`),`score`=values(`score`)",
-        dialect.getUpsertQuery("actor", Arrays.asList("actor_id"), Arrays.asList("first_name", "last_name", "score"))
+        dialect.getUpsertQuery(
+            "actor",
+            Arrays.asList("actor_id"),
+            Arrays.asList("first_name", "last_name", "score"),
+            Collections.<String, SinkRecordField>emptyMap()
+        )
     );
   }
 
@@ -108,7 +115,12 @@ public class MySqlDialectTest extends BaseDialectTest {
     assertEquals(
         "insert into `actor`(`actor_id`) " +
         "values(?) on duplicate key update `actor_id`=values(`actor_id`)",
-        dialect.getUpsertQuery("actor", Arrays.asList("actor_id"), Collections.<String>emptyList())
+        dialect.getUpsertQuery(
+            "actor",
+            Arrays.asList("actor_id"),
+            Collections.<String>emptyList(),
+            Collections.<String, SinkRecordField>emptyMap()
+        )
     );
   }
 

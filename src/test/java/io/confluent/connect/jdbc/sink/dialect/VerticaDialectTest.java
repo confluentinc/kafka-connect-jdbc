@@ -23,6 +23,13 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
+import java.util.Arrays;
+import java.util.HashMap;
+
+import static org.junit.Assert.assertEquals;
+
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+
 public class VerticaDialectTest extends BaseDialectTest {
 
   public VerticaDialectTest() {
@@ -85,6 +92,31 @@ public class VerticaDialectTest extends BaseDialectTest {
     verifyAlterAddTwoCols(
         "ALTER TABLE \"test\" ADD \"newcol1\" INT NULL",
         "ALTER TABLE \"test\" ADD \"newcol2\" INT DEFAULT 42"
+    );
+  }
+
+  @Test
+  public void upsert() {
+    HashMap<String, SinkRecordField> fields = new HashMap<>();
+    fields.put("author", new SinkRecordField(Schema.STRING_SCHEMA, "author", true));
+    fields.put("title", new SinkRecordField(Schema.STRING_SCHEMA, "title", true));
+    fields.put("ISBN", new SinkRecordField(Schema.STRING_SCHEMA, "ISBN", false));
+    fields.put("year", new SinkRecordField(Schema.INT32_SCHEMA, "year", false));
+    fields.put("pages", new SinkRecordField(Schema.INT32_SCHEMA, "pages", false));
+    assertEquals(
+        "MERGE INTO \"Book\" AS target USING ("
+        + "SELECT ?::VARCHAR AS \"author\", ?::VARCHAR AS \"title\", ?::VARCHAR AS \"ISBN\", ?::INT AS \"year\", ?::INT AS \"pages\""
+        + ") AS incoming ON (target.\"author\"=incoming.\"author\" AND target.\"title\"=incoming.\"title\")"
+        + " WHEN MATCHED THEN UPDATE SET \"ISBN\"=incoming.\"ISBN\",\"year\"=incoming.\"year\",\"pages\"=incoming.\"pages\","
+        + "\"author\"=incoming.\"author\",\"title\"=incoming.\"title\""
+        + " WHEN NOT MATCHED THEN INSERT (\"ISBN\", \"year\", \"pages\", \"author\", \"title\") VALUES ("
+        + "incoming.\"ISBN\",incoming.\"year\",incoming.\"pages\",incoming.\"author\",incoming.\"title\");",
+        dialect.getUpsertQuery(
+            "Book",
+            Arrays.asList("author", "title"),
+            Arrays.asList("ISBN", "year", "pages"),
+            fields
+        )
     );
   }
 }

@@ -87,7 +87,12 @@ public class SqlServerDialect extends DbDialect {
   }
 
   @Override
-  public String getUpsertQuery(String table, Collection<String> keyCols, Collection<String> cols) {
+  public String getUpsertQuery(
+      final String table,
+      final Collection<String> keyCols,
+      final Collection<String> cols,
+      final Map<String, SinkRecordField> allFields
+  ) {
     final StringBuilder builder = new StringBuilder();
     builder.append("merge into ");
     String tableName = escaped(table);

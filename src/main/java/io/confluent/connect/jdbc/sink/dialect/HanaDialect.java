@@ -98,8 +98,9 @@ public class HanaDialect extends DbDialect {
   @Override
   public String getUpsertQuery(
       final String table,
-      Collection<String> keyCols,
-      Collection<String> cols
+      final Collection<String> keyCols,
+      final Collection<String> cols,
+      final Map<String, SinkRecordField> allFields
   ) {
     // https://help.sap.com/hana_one/html/sql_replace_upsert.html
     StringBuilder builder = new StringBuilder("UPSERT ");

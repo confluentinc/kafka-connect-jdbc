@@ -28,6 +28,8 @@ import java.util.Collections;
 
 import static org.junit.Assert.assertEquals;
 
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+
 public class HanaDialectTest extends BaseDialectTest {
 
   public HanaDialectTest() {
@@ -98,7 +100,12 @@ public class HanaDialectTest extends BaseDialectTest {
   public void upsert() {
     assertEquals(
         "UPSERT \"tableA\"(\"col1\",\"col2\",\"col3\",\"col4\") VALUES(?,?,?,?) WITH PRIMARY KEY",
-        dialect.getUpsertQuery("tableA", Collections.singletonList("col1"), Arrays.asList("col2", "col3", "col4"))
+        dialect.getUpsertQuery(
+            "tableA",
+            Collections.singletonList("col1"),
+            Arrays.asList("col2", "col3", "col4"),
+            Collections.<String, SinkRecordField>emptyMap()
+        )
     );
   }
 

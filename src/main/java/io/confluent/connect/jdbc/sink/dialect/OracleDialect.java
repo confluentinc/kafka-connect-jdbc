@@ -89,8 +89,9 @@ public class OracleDialect extends DbDialect {
   @Override
   public String getUpsertQuery(
       final String table,
-      Collection<String> keyCols,
-      Collection<String> cols
+      final Collection<String> keyCols,
+      final Collection<String> cols,
+      final Map<String, SinkRecordField> allFields
   ) {
     // https://blogs.oracle.com/cmar/entry/using_merge_to_do_an
 

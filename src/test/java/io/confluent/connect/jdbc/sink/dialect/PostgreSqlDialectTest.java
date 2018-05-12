@@ -28,6 +28,8 @@ import java.util.Collections;
 
 import static org.junit.Assert.assertEquals;
 
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+
 public class PostgreSqlDialectTest extends BaseDialectTest {
 
   public PostgreSqlDialectTest() {
@@ -98,7 +100,12 @@ public class PostgreSqlDialectTest extends BaseDialectTest {
     assertEquals(
         "INSERT INTO \"Customer\" (\"id\",\"name\",\"salary\",\"address\") "
         + "VALUES (?,?,?,?) ON CONFLICT (\"id\") DO UPDATE SET \"name\"=EXCLUDED.\"name\",\"salary\"=EXCLUDED.\"salary\",\"address\"=EXCLUDED.\"address\"",
-        dialect.getUpsertQuery("Customer", Collections.singletonList("id"), Arrays.asList("name", "salary", "address"))
+        dialect.getUpsertQuery(
+            "Customer",
+            Collections.singletonList("id"),
+            Arrays.asList("name", "salary", "address"),
+            Collections.<String, SinkRecordField>emptyMap()
+        )
     );
   }
 

@@ -94,7 +94,8 @@ public abstract class DbDialect {
   public String getUpsertQuery(
       final String table,
       final Collection<String> keyColumns,
-      final Collection<String> columns
+      final Collection<String> columns,
+      final Map<String, SinkRecordField> allFields
   ) {
     throw new UnsupportedOperationException();
   }

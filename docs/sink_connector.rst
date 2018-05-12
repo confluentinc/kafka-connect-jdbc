@@ -147,6 +147,7 @@ Oracle          `MERGE ..`
 PostgreSQL      `INSERT .. ON CONFLICT .. DO UPDATE SET ..`
 SQLite          `INSERT OR REPLACE ..`
 SQL Server      `MERGE ..`
+Vertica         `MERGE ..`
 Other           *not supported*
 ===========     ================================================
 

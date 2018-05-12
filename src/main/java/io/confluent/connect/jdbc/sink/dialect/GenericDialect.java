@@ -18,6 +18,7 @@ package io.confluent.connect.jdbc.sink.dialect;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 
@@ -41,9 +42,10 @@ public class GenericDialect extends DbDialect {
 
   @Override
   public String getUpsertQuery(
-      String table,
-      Collection<String> keyColumns,
-      Collection<String> columns
+      final String table,
+      final Collection<String> keyColumns,
+      final Collection<String> columns,
+      final Map<String, SinkRecordField> allFields
   ) {
     throw new UnsupportedOperationException();
   }

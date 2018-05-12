@@ -25,6 +25,8 @@ import org.apache.kafka.connect.data.Timestamp;
 import java.util.Collection;
 import java.util.Map;
 
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+
 import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.joinToBuilder;
 import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.copiesToBuilder;
 
@@ -79,7 +81,8 @@ public class MySqlDialect extends DbDialect {
   public String getUpsertQuery(
       final String table,
       final Collection<String> keyCols,
-      final Collection<String> cols
+      final Collection<String> cols,
+      final Map<String, SinkRecordField> allFields
   ) {
     //MySql doesn't support SQL 2003:merge so here how the upsert is handled
 

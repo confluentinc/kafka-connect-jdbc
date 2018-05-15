@@ -191,7 +191,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
-                    <argLine>@{argLine} -Djava.awt.headless=true -XX:MaxPermSize=128m</argLine>
+                    <argLine>@{argLine} -Djava.awt.headless=true </argLine>
                     <excludedGroups>io.confluent.common.utils.IntegrationTest</excludedGroups>
                 </configuration>
                 <executions>

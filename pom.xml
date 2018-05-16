@@ -65,6 +65,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.package.home>target/${project.artifactId}-${project.version}-package</project.package.home>
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
+        <maven-surefire-plugin.vmopts>-XX:MaxPermSize=128m</maven-surefire-plugin.vmopts>
     </properties>
 
     <repositories>

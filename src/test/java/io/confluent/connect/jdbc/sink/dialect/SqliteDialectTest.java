@@ -24,8 +24,11 @@ import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.Collections;
 
 import static org.junit.Assert.assertEquals;
+
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 
 public class SqliteDialectTest extends BaseDialectTest {
 
@@ -95,7 +98,12 @@ public class SqliteDialectTest extends BaseDialectTest {
   public void upsert() {
     assertEquals(
         "INSERT OR REPLACE INTO `Book`(`author`,`title`,`ISBN`,`year`,`pages`) VALUES(?,?,?,?,?)",
-        dialect.getUpsertQuery("Book", Arrays.asList("author", "title"), Arrays.asList("ISBN", "year", "pages"))
+        dialect.getUpsertQuery(
+            "Book",
+            Arrays.asList("author", "title"),
+            Arrays.asList("ISBN", "year", "pages"),
+            Collections.<String, SinkRecordField>emptyMap()
+        )
     );
   }
 

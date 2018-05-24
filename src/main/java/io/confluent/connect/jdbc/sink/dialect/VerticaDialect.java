@@ -30,6 +30,8 @@ import java.util.Map;
 
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 
+import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.joinToBuilder;
+
 public class VerticaDialect extends DbDialect {
   public VerticaDialect() {
     super("\"", "\"");
@@ -37,10 +39,19 @@ public class VerticaDialect extends DbDialect {
 
   @Override
   protected String getSqlType(String schemaName, Map<String, String> parameters, Schema.Type type) {
+    return getSqlType(schemaName, parameters, type, true);
+  }
+
+  private String getSqlType(
+      String schemaName,
+      Map<String, String> parameters,
+      Schema.Type type,
+      boolean sized
+  ) {
     if (schemaName != null) {
       switch (schemaName) {
         case Decimal.LOGICAL_NAME:
-          return "DECIMAL(18," + parameters.get(Decimal.SCALE_FIELD) + ")";
+          return "DECIMAL" + (sized ? "(18," + parameters.get(Decimal.SCALE_FIELD) + ")" : "");
         case Date.LOGICAL_NAME:
           return "DATE";
         case Time.LOGICAL_NAME:
@@ -68,9 +79,9 @@ public class VerticaDialect extends DbDialect {
       case BOOLEAN:
         return "BOOLEAN";
       case STRING:
-        return "VARCHAR(1024)";
+        return "VARCHAR" + (sized ? "(1024)" : "");
       case BYTES:
-        return "VARBINARY(1024)";
+        return "VARBINARY" + (sized ? "(1024)" : "");
       default:
         return super.getSqlType(schemaName, parameters, type);
     }
@@ -83,5 +94,53 @@ public class VerticaDialect extends DbDialect {
       queries.addAll(super.getAlterTable(tableName, Collections.singleton(field)));
     }
     return queries;
+  }
+
+  @Override
+  public String getUpsertQuery(
+      final String table,
+      final Collection<String> keyCols,
+      final Collection<String> cols,
+      final Map<String, SinkRecordField> allFields
+  ) {
+    final StringBuilder builder = new StringBuilder();
+    builder.append("MERGE INTO ");
+    String tableName = escaped(table);
+    builder.append(tableName);
+    builder.append(" AS target USING (SELECT ");
+    joinToBuilder(builder, ", ", keyCols, cols, new StringBuilderUtil.Transform<String>() {
+      @Override
+      public void apply(StringBuilder builder, String col) {
+        SinkRecordField field = allFields.get(col);
+        String colType = getSqlType(
+            field.schemaName(),
+            field.schemaParameters(),
+            field.schemaType(),
+            false
+        );
+        builder.append("?::").append(colType).append(" AS ").append(escaped(col));
+      }
+    });
+    builder.append(") AS incoming ON (");
+    joinToBuilder(builder, " AND ", keyCols, new StringBuilderUtil.Transform<String>() {
+      @Override
+      public void apply(StringBuilder builder, String col) {
+        builder.append("target.").append(escaped(col)).append("=incoming.").append(escaped(col));
+      }
+    });
+    builder.append(")");
+    builder.append(" WHEN MATCHED THEN UPDATE SET ");
+    joinToBuilder(builder, ",", cols, keyCols, new StringBuilderUtil.Transform<String>() {
+      @Override
+      public void apply(StringBuilder builder, String col) {
+        builder.append(escaped(col)).append("=incoming.").append(escaped(col));
+      }
+    });
+    builder.append(" WHEN NOT MATCHED THEN INSERT (");
+    joinToBuilder(builder, ", ", cols, keyCols, escaper());
+    builder.append(") VALUES (");
+    joinToBuilder(builder, ",", cols, keyCols, prefixedEscaper("incoming."));
+    builder.append(");");
+    return builder.toString();
   }
 }

@@ -28,6 +28,8 @@ import java.util.Collections;
 
 import static org.junit.Assert.assertEquals;
 
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+
 public class OracleDialectTest extends BaseDialectTest {
 
   public OracleDialectTest() {
@@ -104,7 +106,12 @@ public class OracleDialectTest extends BaseDialectTest {
         "when matched then update set \"ARTICLE\".\"body\"=incoming.\"body\" " +
         "when not matched then insert(\"ARTICLE\".\"body\",\"ARTICLE\".\"title\",\"ARTICLE\".\"author\") " +
         "values(incoming.\"body\",incoming.\"title\",incoming.\"author\")",
-        dialect.getUpsertQuery("ARTICLE", Arrays.asList("title", "author"), Collections.singletonList("body"))
+        dialect.getUpsertQuery(
+            "ARTICLE",
+            Arrays.asList("title", "author"),
+            Collections.singletonList("body"),
+            Collections.<String, SinkRecordField>emptyMap()
+        )
     );
   }
 

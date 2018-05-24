@@ -25,6 +25,8 @@ import org.apache.kafka.connect.data.Timestamp;
 import java.util.Collection;
 import java.util.Map;
 
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+
 import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.copiesToBuilder;
 import static io.confluent.connect.jdbc.sink.dialect.StringBuilderUtil.joinToBuilder;
 
@@ -78,7 +80,8 @@ public class PostgreSqlDialect extends DbDialect {
   public String getUpsertQuery(
       final String table,
       final Collection<String> keyCols,
-      final Collection<String> cols
+      final Collection<String> cols,
+      final Map<String, SinkRecordField> allFields
   ) {
     final StringBuilder builder = new StringBuilder();
     builder.append("INSERT INTO ");

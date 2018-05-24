@@ -77,6 +77,8 @@ public class JdbcSourceConnector extends SourceConnector {
     final Password dbPassword = config.getPassword(
         JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG
     );
+    final String catalog = config.getString(JdbcSourceConnectorConfig.CATALOG_CONFIG);
+    final String schemaPattern = config.getString(JdbcSourceConnectorConfig.SCHEMA_PATTERN_CONFIG);
     final int maxConnectionAttempts = config.getInt(
         JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_CONFIG
     );
@@ -87,6 +89,8 @@ public class JdbcSourceConnector extends SourceConnector {
         dbUrl,
         dbUser,
         dbPassword == null ? null : dbPassword.value(),
+        catalog,
+        schemaPattern,
         maxConnectionAttempts,
         connectionRetryBackoff
     );
@@ -109,7 +113,6 @@ public class JdbcSourceConnector extends SourceConnector {
                                  + "exclusive.");
     }
     String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
-    String schemaPattern = config.getString(JdbcSourceConnectorConfig.SCHEMA_PATTERN_CONFIG);
     if (!query.isEmpty()) {
       if (whitelistSet != null || blacklistSet != null) {
         throw new ConnectException(JdbcSourceConnectorConfig.QUERY_CONFIG + " may not be combined"

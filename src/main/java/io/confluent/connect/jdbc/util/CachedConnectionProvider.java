@@ -34,6 +34,10 @@ public class CachedConnectionProvider {
   private final String url;
   private final String username;
   private final String password;
+
+  private final String catalog;
+  private final String schemaPattern;
+
   private final int maxConnectionAttempts;
   private final long connectionRetryBackoff;
 
@@ -55,9 +59,23 @@ public class CachedConnectionProvider {
       int maxConnectionAttempts,
       long connectionRetryBackoff
   ) {
+    this(url, username, password, null, null, maxConnectionAttempts, connectionRetryBackoff);
+  }
+
+  public CachedConnectionProvider(
+      String url,
+      String username,
+      String password,
+      String catalog,
+      String schemaPattern,
+      int maxConnectionAttempts,
+      long connectionRetryBackoff
+  ) {
     this.url = url;
     this.username = username;
     this.password = password;
+    this.catalog = catalog;
+    this.schemaPattern = schemaPattern;
     this.maxConnectionAttempts = maxConnectionAttempts;
     this.connectionRetryBackoff = connectionRetryBackoff;
   }
@@ -115,6 +133,12 @@ public class CachedConnectionProvider {
   }
 
   protected void onConnect(Connection connection) throws SQLException {
+    if (catalog != null) {
+      connection.setCatalog(catalog);
+    }
+    if (schemaPattern != null) {
+      connection.setSchema(schemaPattern);
+    }
   }
 
 }

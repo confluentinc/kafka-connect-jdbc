@@ -21,9 +21,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class TimestampIncrementingOffset {
-  private static final String INCREMENTING_FIELD = "incrementing";
-  private static final String TIMESTAMP_FIELD = "timestamp";
-  private static final String TIMESTAMP_NANOS_FIELD = "timestamp_nanos";
+  static final String INCREMENTING_FIELD = "incrementing";
+  static final String TIMESTAMP_FIELD = "timestamp";
+  static final String TIMESTAMP_NANOS_FIELD = "timestamp_nanos";
 
   private final Long incrementingOffset;
   private final Timestamp timestampOffset;

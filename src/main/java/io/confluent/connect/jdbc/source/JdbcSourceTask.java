@@ -16,6 +16,12 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.dialect.DatabaseDialects;
+import io.confluent.connect.jdbc.util.CachedConnectionProvider;
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.Version;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.common.utils.Time;
@@ -29,6 +35,8 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -36,13 +44,6 @@ import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import io.confluent.connect.jdbc.dialect.DatabaseDialect;
-import io.confluent.connect.jdbc.dialect.DatabaseDialects;
-import io.confluent.connect.jdbc.util.CachedConnectionProvider;
-import io.confluent.connect.jdbc.util.ColumnDefinition;
-import io.confluent.connect.jdbc.util.ColumnId;
-import io.confluent.connect.jdbc.util.Version;
 
 /**
  * JdbcSourceTask is a Kafka Connect SourceTask implementation that reads from JDBC databases and
@@ -136,6 +137,8 @@ public class JdbcSourceTask extends SourceTask {
         = config.getLong(JdbcSourceTaskConfig.TIMESTAMP_DELAY_INTERVAL_MS_CONFIG);
     boolean validateNonNulls
         = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
+    Long timestampInitial
+        = config.getLong(JdbcSourceConnectorConfig.TIMESTAMP_INITIAL_CONFIG);
 
     for (String tableOrQuery : tablesOrQuery) {
       final Map<String, String> partition;
@@ -163,7 +166,10 @@ public class JdbcSourceTask extends SourceTask {
         default:
           throw new ConnectException("Unexpected query mode: " + queryMode);
       }
+
       Map<String, Object> offset = offsets == null ? null : offsets.get(partition);
+      offset = offset == null ? fetchInitialOffset(timestampInitial) : offset;
+
 
       String topicPrefix = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
 
@@ -214,6 +220,17 @@ public class JdbcSourceTask extends SourceTask {
     }
 
     running.set(true);
+  }
+
+  private Map<String, Object> fetchInitialOffset(Long timestampInitial) {
+    // can specify start point in case initial query
+    Map<String, Object> offset = new HashMap<>();
+    if (timestampInitial == JdbcSourceConnectorConfig.TIMESTAMP_INITIAL_CURRENT) {
+      offset.put(TimestampIncrementingOffset.TIMESTAMP_FIELD, new Date().getTime());
+    } else {
+      offset.put(TimestampIncrementingOffset.TIMESTAMP_FIELD, timestampInitial);
+    }
+    return offset;
   }
 
   @Override

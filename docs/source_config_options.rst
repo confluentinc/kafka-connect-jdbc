@@ -130,6 +130,13 @@ Mode
   * Default: ""
   * Importance: medium
 
+``timestamp.initial``
+  Unix timestamp milliseconds. If specified, initial query will use this parameter as a timestamp start offset. If you set -1, current timestamp will be used.
+
+  * Type: long
+  * Default: 0
+  * Importance: low
+
 ``validate.non.null``
   By default, the JDBC connector will validate that all incrementing and timestamp tables have NOT NULL set for the columns being used as their ID/timestamp. If the tables don't, JDBC connector will fail to start. Setting this to false will disable these checks.
 

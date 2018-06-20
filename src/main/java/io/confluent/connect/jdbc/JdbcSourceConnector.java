@@ -32,6 +32,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
@@ -40,7 +41,6 @@ import io.confluent.connect.jdbc.source.JdbcSourceTask;
 import io.confluent.connect.jdbc.source.JdbcSourceTaskConfig;
 import io.confluent.connect.jdbc.source.TableMonitorThread;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
-import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.Version;
 
@@ -149,9 +149,9 @@ public class JdbcSourceConnector extends SourceConnector {
       List<Map<String, String>> taskConfigs = new ArrayList<>(tablesGrouped.size());
       for (List<TableId> taskTables : tablesGrouped) {
         Map<String, String> taskProps = new HashMap<>(configProperties);
-        ExpressionBuilder builder = dialect.expressionBuilder();
-        builder.appendList().delimitedBy(",").of(taskTables);
-        taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, builder.toString());
+        String tables = taskTables.stream().map(TableId::tableName)
+            .collect(Collectors.joining(","));
+        taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, tables);
         taskConfigs.add(taskProps);
       }
       return taskConfigs;

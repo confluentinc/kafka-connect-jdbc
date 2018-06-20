@@ -201,12 +201,6 @@ public class JdbcSourceConnectorTest {
   }
 
   private String tables(String... names) {
-    List<TableId> tableIds = new ArrayList<>();
-    for (String name : names) {
-      tableIds.add(new TableId(null, "APP", name));
-    }
-    ExpressionBuilder builder = ExpressionBuilder.create();
-    builder.appendList().delimitedBy(",").of(tableIds);
-    return builder.toString();
+    return String.join(",", names);
   }
 }

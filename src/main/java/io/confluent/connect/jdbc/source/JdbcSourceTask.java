@@ -16,6 +16,13 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.dialect.DatabaseDialects;
+import io.confluent.connect.jdbc.util.CachedConnectionProvider;
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.util.Version;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.common.utils.Time;
@@ -29,6 +36,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -36,13 +44,6 @@ import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import io.confluent.connect.jdbc.dialect.DatabaseDialect;
-import io.confluent.connect.jdbc.dialect.DatabaseDialects;
-import io.confluent.connect.jdbc.util.CachedConnectionProvider;
-import io.confluent.connect.jdbc.util.ColumnDefinition;
-import io.confluent.connect.jdbc.util.ColumnId;
-import io.confluent.connect.jdbc.util.Version;
 
 /**
  * JdbcSourceTask is a Kafka Connect SourceTask implementation that reads from JDBC databases and
@@ -138,6 +139,7 @@ public class JdbcSourceTask extends SourceTask {
         = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
 
     for (String tableOrQuery : tablesOrQuery) {
+      final List<Map<String, String>> partitions = new ArrayList<>();
       final Map<String, String> partition;
       switch (queryMode) {
         case TABLE:
@@ -149,21 +151,40 @@ public class JdbcSourceTask extends SourceTask {
                 timestampColumns
             );
           }
+          TableId tableId = dialect.parseTableIdentifier(tableOrQuery);
           partition = Collections.singletonMap(
               JdbcSourceConnectorConstants.TABLE_NAME_KEY,
-              tableOrQuery
+              tableId.tableName()
           );
+          Map<String, String> partitionWithProtocolVer = new HashMap<>();
+          partitionWithProtocolVer.put(JdbcSourceConnectorConstants.TABLE_NAME_KEY, tableOrQuery);
+          partitionWithProtocolVer.put(JdbcSourceConnectorConstants.OFFSET_PROTOCOL_VERSION, "1");
+          partitions.add(partitionWithProtocolVer);
+          partitions.add(partition);
           break;
         case QUERY:
           partition = Collections.singletonMap(
               JdbcSourceConnectorConstants.QUERY_NAME_KEY,
               JdbcSourceConnectorConstants.QUERY_NAME_VALUE
           );
+          partitions.add(partition);
           break;
         default:
           throw new ConnectException("Unexpected query mode: " + queryMode);
       }
-      Map<String, Object> offset = offsets == null ? null : offsets.get(partition);
+
+      Map<String, Object> offset = null;
+      int offsetProtocolVersion = 0;
+      if (offsets != null) {
+        for (Map<String, String> toCheckPartition : partitions) {
+          offset = offsets.get(toCheckPartition);
+          if (offset != null) {
+            offsetProtocolVersion = Integer.valueOf(toCheckPartition.getOrDefault(
+                JdbcSourceConnectorConstants.OFFSET_PROTOCOL_VERSION, "0"));
+            break;
+          }
+        }
+      }
 
       String topicPrefix = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
 
@@ -181,7 +202,8 @@ public class JdbcSourceTask extends SourceTask {
                 null,
                 incrementingColumn,
                 offset,
-                timestampDelayInterval
+                timestampDelayInterval,
+                offsetProtocolVersion
             )
         );
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
@@ -194,7 +216,8 @@ public class JdbcSourceTask extends SourceTask {
                 timestampColumns,
                 null,
                 offset,
-                timestampDelayInterval
+                timestampDelayInterval,
+                offsetProtocolVersion
             )
         );
       } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
@@ -207,7 +230,8 @@ public class JdbcSourceTask extends SourceTask {
                 timestampColumns,
                 incrementingColumn,
                 offset,
-                timestampDelayInterval
+                timestampDelayInterval,
+                offsetProtocolVersion
             )
         );
       }

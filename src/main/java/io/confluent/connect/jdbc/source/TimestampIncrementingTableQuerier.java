@@ -16,6 +16,13 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.source.SchemaMapping.FieldSetter;
+import io.confluent.connect.jdbc.source.TimestampIncrementingCriteria.CriteriaValues;
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.DateTimeUtils;
+import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -29,16 +36,9 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import io.confluent.connect.jdbc.dialect.DatabaseDialect;
-import io.confluent.connect.jdbc.source.SchemaMapping.FieldSetter;
-import io.confluent.connect.jdbc.source.TimestampIncrementingCriteria.CriteriaValues;
-import io.confluent.connect.jdbc.util.ColumnDefinition;
-import io.confluent.connect.jdbc.util.ColumnId;
-import io.confluent.connect.jdbc.util.DateTimeUtils;
-import io.confluent.connect.jdbc.util.ExpressionBuilder;
 
 /**
  * <p>
@@ -68,19 +68,22 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   private long timestampDelay;
   private TimestampIncrementingOffset offset;
   private TimestampIncrementingCriteria criteria;
+  private boolean useFqn;
 
   public TimestampIncrementingTableQuerier(DatabaseDialect dialect, QueryMode mode, String name,
                                            String topicPrefix,
                                            List<String> timestampColumnNames,
                                            String incrementingColumnName,
-                                           Map<String, Object> offsetMap, Long timestampDelay) {
+                                           Map<String, Object> offsetMap, Long timestampDelay,
+                                           int offsetProtocolVersion) {
     super(dialect, mode, name, topicPrefix);
     this.incrementingColumnName = incrementingColumnName;
     this.timestampColumnNames = timestampColumnNames != null
                                 ? timestampColumnNames : Collections.<String>emptyList();
     this.timestampDelay = timestampDelay;
     this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
-
+    //unknown offset means new table and can fqn scheme
+    this.useFqn = offsetProtocolVersion > 0 || offsetMap == null || offsetMap.isEmpty();
     this.timestampColumns = new ArrayList<>();
     for (String timestampColumn : this.timestampColumnNames) {
       if (timestampColumn != null && !timestampColumn.isEmpty()) {
@@ -171,9 +174,17 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     final Map<String, String> partition;
     switch (mode) {
       case TABLE:
-        String name = tableId.tableName(); // backward compatible
-        partition = Collections.singletonMap(JdbcSourceConnectorConstants.TABLE_NAME_KEY, name);
-        topic = topicPrefix + name;
+        if (useFqn) {
+          String fqn = ExpressionBuilder.create().append(tableId, false).toString();
+          partition = new HashMap<>();
+          partition.put(JdbcSourceConnectorConstants.TABLE_NAME_KEY, fqn);
+          partition.put(JdbcSourceConnectorConstants.OFFSET_PROTOCOL_VERSION, "1");
+          topic = topicPrefix + fqn;
+        } else {
+          String name = tableId.tableName(); // backward compatible
+          partition = Collections.singletonMap(JdbcSourceConnectorConstants.TABLE_NAME_KEY, name);
+          topic = topicPrefix + name;
+        }
         break;
       case QUERY:
         partition = Collections.singletonMap(JdbcSourceConnectorConstants.QUERY_NAME_KEY,

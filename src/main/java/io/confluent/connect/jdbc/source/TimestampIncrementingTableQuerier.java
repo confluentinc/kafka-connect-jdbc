@@ -16,13 +16,6 @@
 
 package io.confluent.connect.jdbc.source;
 
-import io.confluent.connect.jdbc.dialect.DatabaseDialect;
-import io.confluent.connect.jdbc.source.SchemaMapping.FieldSetter;
-import io.confluent.connect.jdbc.source.TimestampIncrementingCriteria.CriteriaValues;
-import io.confluent.connect.jdbc.util.ColumnDefinition;
-import io.confluent.connect.jdbc.util.ColumnId;
-import io.confluent.connect.jdbc.util.DateTimeUtils;
-import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -39,6 +32,14 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.source.SchemaMapping.FieldSetter;
+import io.confluent.connect.jdbc.source.TimestampIncrementingCriteria.CriteriaValues;
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.DateTimeUtils;
+import io.confluent.connect.jdbc.util.ExpressionBuilder;
 
 /**
  * <p>
@@ -68,7 +69,6 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   private long timestampDelay;
   private TimestampIncrementingOffset offset;
   private TimestampIncrementingCriteria criteria;
-  private boolean useFqn;
 
   public TimestampIncrementingTableQuerier(DatabaseDialect dialect, QueryMode mode, String name,
                                            String topicPrefix,
@@ -81,6 +81,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
                                 ? timestampColumnNames : Collections.<String>emptyList();
     this.timestampDelay = timestampDelay;
     this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
+
     this.timestampColumns = new ArrayList<>();
     for (String timestampColumn : this.timestampColumnNames) {
       if (timestampColumn != null && !timestampColumn.isEmpty()) {
@@ -177,7 +178,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
         partition = new HashMap<>();
         partition.put(JdbcSourceConnectorConstants.TABLE_NAME_KEY, fqn);
         partition.put(
-            JdbcSourceConnectorConstants.OFFSET_PROTOCOl_VERSION_KEY,
+            JdbcSourceConnectorConstants.OFFSET_PROTOCOL_VERSION_KEY,
             JdbcSourceConnectorConstants.PROTOCOL_VERSION_ONE
         );
         break;

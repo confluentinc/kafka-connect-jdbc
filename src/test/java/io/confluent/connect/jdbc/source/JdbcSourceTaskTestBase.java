@@ -43,7 +43,7 @@ public class JdbcSourceTaskTestBase {
         SINGLE_TABLE_NAME
     );
     SINGLE_TABLE_PARTITION_WITH_VERSION.put(
-        JdbcSourceConnectorConstants.OFFSET_PROTOCOl_VERSION_KEY,
+        JdbcSourceConnectorConstants.OFFSET_PROTOCOL_VERSION_KEY,
         JdbcSourceConnectorConstants.PROTOCOL_VERSION_ONE
     );
   }

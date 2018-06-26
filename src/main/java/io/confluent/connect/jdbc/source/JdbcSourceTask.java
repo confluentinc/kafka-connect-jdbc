@@ -16,14 +16,6 @@
 
 package io.confluent.connect.jdbc.source;
 
-import io.confluent.connect.jdbc.dialect.DatabaseDialect;
-import io.confluent.connect.jdbc.dialect.DatabaseDialects;
-import io.confluent.connect.jdbc.util.CachedConnectionProvider;
-import io.confluent.connect.jdbc.util.ColumnDefinition;
-import io.confluent.connect.jdbc.util.ColumnId;
-import io.confluent.connect.jdbc.util.ExpressionBuilder;
-import io.confluent.connect.jdbc.util.TableId;
-import io.confluent.connect.jdbc.util.Version;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.common.utils.Time;
@@ -46,6 +38,15 @@ import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.dialect.DatabaseDialects;
+import io.confluent.connect.jdbc.util.CachedConnectionProvider;
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.ExpressionBuilder;
+import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.util.Version;
 
 /**
  * JdbcSourceTask is a Kafka Connect SourceTask implementation that reads from JDBC databases and
@@ -241,7 +242,7 @@ public class JdbcSourceTask extends SourceTask {
     Map<String, String> partitionWithFqn = new HashMap<>();
     partitionWithFqn.put(JdbcSourceConnectorConstants.TABLE_NAME_KEY, fqn);
     partitionWithFqn.put(
-        JdbcSourceConnectorConstants.OFFSET_PROTOCOl_VERSION_KEY,
+        JdbcSourceConnectorConstants.OFFSET_PROTOCOL_VERSION_KEY,
         JdbcSourceConnectorConstants.PROTOCOL_VERSION_ONE
     );
 

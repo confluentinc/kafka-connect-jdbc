@@ -356,8 +356,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
 
     PowerMock.replayAll();
 
-    db.createTable(SINGLE_TABLE_NAME,
-        "id", "INT NOT NULL");
+    db.createTable(SINGLE_TABLE_NAME, "id", "INT NOT NULL");
     db.insert(SINGLE_TABLE_NAME, "id", 1);
     db.insert(SINGLE_TABLE_NAME, "id", 2);
     db.insert(SINGLE_TABLE_NAME, "id", 3);

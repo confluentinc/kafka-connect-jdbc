@@ -240,8 +240,8 @@ public class JdbcSourceTask extends SourceTask {
     partitionWithFqn.put(JdbcSourceConnectorConstants.TABLE_NAME_KEY, fqn);
     partitionWithFqn.put(
         JdbcSourceConnectorConstants.OFFSET_PROTOCOl_VERSION_KEY,
-        JdbcSourceConnectorConstants.PROTOCOL_VERSION_ONE)
-    ;
+        JdbcSourceConnectorConstants.PROTOCOL_VERSION_ONE
+    );
 
     Map<String, String> partition = Collections.singletonMap(
         JdbcSourceConnectorConstants.TABLE_NAME_KEY,

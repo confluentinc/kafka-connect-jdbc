@@ -16,6 +16,7 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.util.DateTimeUtils;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -34,8 +35,6 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import io.confluent.connect.jdbc.util.DateTimeUtils;
 
 import static org.junit.Assert.assertEquals;
 
@@ -88,9 +87,11 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
 
   @Test(expected = ConnectException.class)
   public void testIncrementingInvalidColumn() throws Exception {
-        expectInitializeNoOffsets(Arrays.asList(
-        SINGLE_TABLE_PARTITION_WITH_VERSION, 
-        SINGLE_TABLE_PARTITION));
+    expectInitializeNoOffsets(Arrays.asList(
+        SINGLE_TABLE_PARTITION_WITH_VERSION,
+        SINGLE_TABLE_PARTITION)
+    );
+
 
     PowerMock.replayAll();
 
@@ -104,9 +105,10 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
 
   @Test(expected = ConnectException.class)
   public void testTimestampInvalidColumn() throws Exception {
-        expectInitializeNoOffsets(Arrays.asList(
-        SINGLE_TABLE_PARTITION_WITH_VERSION, 
-        SINGLE_TABLE_PARTITION));
+    expectInitializeNoOffsets(Arrays.asList(
+        SINGLE_TABLE_PARTITION_WITH_VERSION,
+        SINGLE_TABLE_PARTITION)
+    );
 
     PowerMock.replayAll();
 
@@ -122,7 +124,8 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   public void testManualIncrementing() throws Exception {
     expectInitializeNoOffsets(Arrays.asList(
         SINGLE_TABLE_PARTITION_WITH_VERSION, 
-        SINGLE_TABLE_PARTITION));
+        SINGLE_TABLE_PARTITION)
+    );
 
     PowerMock.replayAll();
 
@@ -146,7 +149,8 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   public void testAutoincrement() throws Exception {
     expectInitializeNoOffsets(Arrays.asList(
         SINGLE_TABLE_PARTITION_WITH_VERSION,
-        SINGLE_TABLE_PARTITION));
+        SINGLE_TABLE_PARTITION)
+    );
 
     PowerMock.replayAll();
 
@@ -173,7 +177,8 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   public void testTimestamp() throws Exception {
     expectInitializeNoOffsets(Arrays.asList(
         SINGLE_TABLE_PARTITION_WITH_VERSION,
-        SINGLE_TABLE_PARTITION));
+        SINGLE_TABLE_PARTITION)
+    );
 
     PowerMock.replayAll();
 
@@ -201,7 +206,8 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   public void testMultiColumnTimestamp() throws Exception {
     expectInitializeNoOffsets(Arrays.asList(
         SINGLE_TABLE_PARTITION_WITH_VERSION,
-        SINGLE_TABLE_PARTITION));
+        SINGLE_TABLE_PARTITION)
+    );
 
     PowerMock.replayAll();
     // Manage these manually so we can verify the emitted values
@@ -226,7 +232,8 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   public void testTimestampWithDelay() throws Exception {
     expectInitializeNoOffsets(Arrays.asList(
         SINGLE_TABLE_PARTITION_WITH_VERSION,
-        SINGLE_TABLE_PARTITION));
+        SINGLE_TABLE_PARTITION)
+    );
 
     PowerMock.replayAll();
 
@@ -263,7 +270,8 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   public void testTimestampAndIncrementing() throws Exception {
     expectInitializeNoOffsets(Arrays.asList(
         SINGLE_TABLE_PARTITION_WITH_VERSION,
-        SINGLE_TABLE_PARTITION));
+        SINGLE_TABLE_PARTITION)
+    );
 
     PowerMock.replayAll();
 
@@ -288,9 +296,10 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
 
   @Test
   public void testMultiColumnTimestampAndIncrementing() throws Exception {
-        expectInitializeNoOffsets(Arrays.asList(
-        SINGLE_TABLE_PARTITION_WITH_VERSION, 
-        SINGLE_TABLE_PARTITION));
+    expectInitializeNoOffsets(Arrays.asList(
+        SINGLE_TABLE_PARTITION_WITH_VERSION,
+        SINGLE_TABLE_PARTITION)
+    );
 
     PowerMock.replayAll();
 
@@ -315,8 +324,10 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   @Test
   public void testManualIncrementingRestoreOffset() throws Exception {
     TimestampIncrementingOffset offset = new TimestampIncrementingOffset(null, 1L);
-    expectInitialize(Arrays.asList(SINGLE_TABLE_PARTITION_WITH_VERSION, SINGLE_TABLE_PARTITION),
-                     Collections.singletonMap(SINGLE_TABLE_PARTITION, offset.toMap()));
+    expectInitialize(
+        Arrays.asList(SINGLE_TABLE_PARTITION_WITH_VERSION, SINGLE_TABLE_PARTITION),
+        Collections.singletonMap(SINGLE_TABLE_PARTITION, offset.toMap())
+    );
 
     PowerMock.replayAll();
 
@@ -337,8 +348,10 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   @Test
   public void testAutoincrementRestoreOffset() throws Exception {
     TimestampIncrementingOffset offset = new TimestampIncrementingOffset(null, 1L);
-    expectInitialize(Arrays.asList(SINGLE_TABLE_PARTITION_WITH_VERSION, SINGLE_TABLE_PARTITION),
-                     Collections.singletonMap(SINGLE_TABLE_PARTITION, offset.toMap()));
+    expectInitialize(Arrays.asList(
+        SINGLE_TABLE_PARTITION_WITH_VERSION, SINGLE_TABLE_PARTITION),
+        Collections.singletonMap(SINGLE_TABLE_PARTITION, offset.toMap())
+    );
 
     PowerMock.replayAll();
 
@@ -362,8 +375,10 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   @Test
   public void testTimestampRestoreOffset() throws Exception {
     TimestampIncrementingOffset offset = new TimestampIncrementingOffset(new Timestamp(10L), null);
-    expectInitialize(Arrays.asList(SINGLE_TABLE_PARTITION_WITH_VERSION, SINGLE_TABLE_PARTITION),
-                     Collections.singletonMap(SINGLE_TABLE_PARTITION, offset.toMap()));
+    expectInitialize(Arrays.asList(
+        SINGLE_TABLE_PARTITION_WITH_VERSION, SINGLE_TABLE_PARTITION),
+        Collections.singletonMap(SINGLE_TABLE_PARTITION, offset.toMap())
+    );
 
     PowerMock.replayAll();
 
@@ -387,8 +402,10 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   @Test
   public void testTimestampAndIncrementingRestoreOffset() throws Exception {
     TimestampIncrementingOffset offset = new TimestampIncrementingOffset(new Timestamp(10L), 3L);
-    expectInitialize(Arrays.asList(SINGLE_TABLE_PARTITION_WITH_VERSION, SINGLE_TABLE_PARTITION),
-                     Collections.singletonMap(SINGLE_TABLE_PARTITION, offset.toMap()));
+    expectInitialize(Arrays.asList(
+        SINGLE_TABLE_PARTITION_WITH_VERSION, SINGLE_TABLE_PARTITION),
+        Collections.singletonMap(SINGLE_TABLE_PARTITION, offset.toMap())
+    );
 
     PowerMock.replayAll();
 

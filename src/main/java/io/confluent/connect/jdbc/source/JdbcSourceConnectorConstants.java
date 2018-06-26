@@ -21,4 +21,6 @@ public class JdbcSourceConnectorConstants {
   public static final String QUERY_NAME_KEY = "query";
   public static final String QUERY_NAME_VALUE = "query";
   public static final String OFFSET_PROTOCOL_VERSION = "version";
+  public static final String PROTOCOL_VERSION_ZERO = "0";
+  public static final String PROTOCOL_VERSION_ONE = "1";
 }

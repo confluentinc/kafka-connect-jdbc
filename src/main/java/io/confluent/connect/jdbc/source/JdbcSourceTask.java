@@ -107,7 +107,6 @@ public class JdbcSourceTask extends SourceTask {
                                  ? Collections.singletonList(query) : tables;
 
     String mode = config.getString(JdbcSourceTaskConfig.MODE_CONFIG);
-    log.debug("Starting task with mode {} ",mode);
     Map<Map<String, String>, Map<String, Object>> offsets = null;
     if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)
         || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)
@@ -116,9 +115,18 @@ public class JdbcSourceTask extends SourceTask {
       switch (queryMode) {
         case TABLE:
           for (String table : tables) {
-            Map<String, String> partition =
-                Collections.singletonMap(JdbcSourceConnectorConstants.TABLE_NAME_KEY, table);
+            TableId tableId = dialect.parseTableIdentifier(table);
+            Map<String, String> partition = Collections.singletonMap(
+                JdbcSourceConnectorConstants.TABLE_NAME_KEY,
+                tableId.tableName()
+            );
             partitions.add(partition);
+
+            String fqn = ExpressionBuilder.create().append(tableId, false).toString();
+            Map<String, String> partitionWithFqn = new HashMap<>();
+            partitionWithFqn.put(JdbcSourceConnectorConstants.TABLE_NAME_KEY, fqn);
+            partitionWithFqn.put(JdbcSourceConnectorConstants.OFFSET_PROTOCOL_VERSION, "1");
+            partitions.add(partitionWithFqn);
           }
           break;
         case QUERY:
@@ -129,6 +137,7 @@ public class JdbcSourceTask extends SourceTask {
           throw new ConnectException("Unknown query mode: " + queryMode);
       }
       offsets = context.offsetStorageReader().offsets(partitions);
+      log.debug("The partition offsets are {}", offsets);
     }
 
     String incrementingColumn
@@ -182,6 +191,7 @@ public class JdbcSourceTask extends SourceTask {
         for (Map<String, String> toCheckPartition : partitions) {
           offset = offsets.get(toCheckPartition);
           if (offset != null) {
+            log.debug("Found non-null offset {} for partition {}", offsets, toCheckPartition);
             offsetProtocolVersion = Integer.valueOf(toCheckPartition.getOrDefault(
                 JdbcSourceConnectorConstants.OFFSET_PROTOCOL_VERSION, "0"));
             break;

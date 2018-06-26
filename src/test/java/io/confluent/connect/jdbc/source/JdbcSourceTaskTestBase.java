@@ -34,9 +34,16 @@ public class JdbcSourceTaskTestBase {
 
   protected static String SINGLE_TABLE_NAME = "test";
   protected static Map<String, Object> SINGLE_TABLE_PARTITION = new HashMap<>();
+  protected static Map<String, Object> SINGLE_TABLE_PARTITION_WITH_VERSION = new HashMap<>();
 
   static {
     SINGLE_TABLE_PARTITION.put(JdbcSourceConnectorConstants.TABLE_NAME_KEY, SINGLE_TABLE_NAME);
+    SINGLE_TABLE_PARTITION_WITH_VERSION.put(
+        JdbcSourceConnectorConstants.TABLE_NAME_KEY,
+        SINGLE_TABLE_NAME);
+    SINGLE_TABLE_PARTITION_WITH_VERSION.put(
+        JdbcSourceConnectorConstants.OFFSET_PROTOCOL_VERSION,
+        "1");
   }
 
   protected static EmbeddedDerby.TableName SINGLE_TABLE

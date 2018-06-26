@@ -21,6 +21,7 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.Version;
 import org.apache.kafka.common.config.ConfigException;
@@ -156,10 +157,11 @@ public class JdbcSourceTask extends SourceTask {
               JdbcSourceConnectorConstants.TABLE_NAME_KEY,
               tableId.tableName()
           );
-          Map<String, String> partitionWithProtocolVer = new HashMap<>();
-          partitionWithProtocolVer.put(JdbcSourceConnectorConstants.TABLE_NAME_KEY, tableOrQuery);
-          partitionWithProtocolVer.put(JdbcSourceConnectorConstants.OFFSET_PROTOCOL_VERSION, "1");
-          partitions.add(partitionWithProtocolVer);
+          String fqn = ExpressionBuilder.create().append(tableId, false).toString();
+          Map<String, String> partitionWithFqn = new HashMap<>();
+          partitionWithFqn.put(JdbcSourceConnectorConstants.TABLE_NAME_KEY, fqn);
+          partitionWithFqn.put(JdbcSourceConnectorConstants.OFFSET_PROTOCOL_VERSION, "1");
+          partitions.add(partitionWithFqn);
           partitions.add(partition);
           break;
         case QUERY:

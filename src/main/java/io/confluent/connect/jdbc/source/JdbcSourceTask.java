@@ -36,6 +36,7 @@ import org.slf4j.LoggerFactory;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -107,6 +108,8 @@ public class JdbcSourceTask extends SourceTask {
                                  ? Collections.singletonList(query) : tables;
 
     String mode = config.getString(JdbcSourceTaskConfig.MODE_CONFIG);
+    //used only in table mode
+    Map<String, List<Map<String, String>>> tableToPartitions = new HashMap<>();
     Map<Map<String, String>, Map<String, Object>> offsets = null;
     if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)
         || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)
@@ -115,7 +118,9 @@ public class JdbcSourceTask extends SourceTask {
       switch (queryMode) {
         case TABLE:
           for (String table : tables) {
-            partitionsForTable(partitions, table);
+            List<Map<String, String>> tablePartitions = possibleTablePartitions(table);
+            partitions.addAll(tablePartitions);
+            tableToPartitions.put(table, tablePartitions);
           }
           break;
         case QUERY:
@@ -139,7 +144,7 @@ public class JdbcSourceTask extends SourceTask {
         = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
 
     for (String tableOrQuery : tablesOrQuery) {
-      final List<Map<String, String>> partitions = new ArrayList<>();
+      final List<Map<String, String>> tablePartitionsToCheck;
       final Map<String, String> partition;
       switch (queryMode) {
         case TABLE:
@@ -151,31 +156,26 @@ public class JdbcSourceTask extends SourceTask {
                 timestampColumns
             );
           }
-          partitionsForTable(partitions, tableOrQuery);
+          tablePartitionsToCheck = tableToPartitions.get(tableOrQuery);
           break;
         case QUERY:
           partition = Collections.singletonMap(
               JdbcSourceConnectorConstants.QUERY_NAME_KEY,
               JdbcSourceConnectorConstants.QUERY_NAME_VALUE
           );
-          partitions.add(partition);
+          tablePartitionsToCheck = new ArrayList<>();
+          tablePartitionsToCheck.add(partition);
           break;
         default:
           throw new ConnectException("Unexpected query mode: " + queryMode);
       }
 
       Map<String, Object> offset = null;
-      int offsetProtocolVersion = 0;
       if (offsets != null) {
-        for (Map<String, String> toCheckPartition : partitions) {
+        for (Map<String, String> toCheckPartition : tablePartitionsToCheck) {
           offset = offsets.get(toCheckPartition);
           if (offset != null) {
-            log.trace("Found non-null offset {} for partition {}", offsets, toCheckPartition);
-            offsetProtocolVersion = Integer.parseInt(
-                toCheckPartition.getOrDefault(
-                    JdbcSourceConnectorConstants.OFFSET_PROTOCOL_VERSION,
-                    JdbcSourceConnectorConstants.PROTOCOL_VERSION_ZERO
-                ));
+            log.debug("Found non-null offset {} for partition {}", offsets, toCheckPartition);
             break;
           }
         }
@@ -197,8 +197,7 @@ public class JdbcSourceTask extends SourceTask {
                 null,
                 incrementingColumn,
                 offset,
-                timestampDelayInterval,
-                offsetProtocolVersion
+                timestampDelayInterval
             )
         );
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
@@ -211,8 +210,7 @@ public class JdbcSourceTask extends SourceTask {
                 timestampColumns,
                 null,
                 offset,
-                timestampDelayInterval,
-                offsetProtocolVersion
+                timestampDelayInterval
             )
         );
       } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
@@ -225,8 +223,7 @@ public class JdbcSourceTask extends SourceTask {
                 timestampColumns,
                 incrementingColumn,
                 offset,
-                timestampDelayInterval,
-                offsetProtocolVersion
+                timestampDelayInterval
             )
         );
       }
@@ -235,22 +232,22 @@ public class JdbcSourceTask extends SourceTask {
     running.set(true);
   }
 
-  private void partitionsForTable(List<Map<String, String>> partitions, String table) {
+  private List<Map<String, String>> possibleTablePartitions(String table) {
     TableId tableId = dialect.parseTableIdentifier(table);
-    Map<String, String> partition = Collections.singletonMap(
-        JdbcSourceConnectorConstants.TABLE_NAME_KEY,
-        tableId.tableName()
-    );
-    partitions.add(partition);
 
     String fqn = ExpressionBuilder.create().append(tableId, false).toString();
     Map<String, String> partitionWithFqn = new HashMap<>();
     partitionWithFqn.put(JdbcSourceConnectorConstants.TABLE_NAME_KEY, fqn);
     partitionWithFqn.put(
-        JdbcSourceConnectorConstants.OFFSET_PROTOCOL_VERSION,
+        JdbcSourceConnectorConstants.OFFSET_PROTOCOl_VERSION_KEY,
         JdbcSourceConnectorConstants.PROTOCOL_VERSION_ONE)
     ;
-    partitions.add(partitionWithFqn);
+
+    Map<String, String> partition = Collections.singletonMap(
+        JdbcSourceConnectorConstants.TABLE_NAME_KEY,
+        tableId.tableName()
+    );
+    return Arrays.asList(partitionWithFqn, partition);
   }
 
   @Override

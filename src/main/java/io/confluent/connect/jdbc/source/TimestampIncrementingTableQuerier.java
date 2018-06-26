@@ -74,16 +74,13 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
                                            String topicPrefix,
                                            List<String> timestampColumnNames,
                                            String incrementingColumnName,
-                                           Map<String, Object> offsetMap, Long timestampDelay,
-                                           int offsetProtocolVersion) {
+                                           Map<String, Object> offsetMap, Long timestampDelay) {
     super(dialect, mode, name, topicPrefix);
     this.incrementingColumnName = incrementingColumnName;
     this.timestampColumnNames = timestampColumnNames != null
                                 ? timestampColumnNames : Collections.<String>emptyList();
     this.timestampDelay = timestampDelay;
     this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
-    //unknown offset means new table and can fqn scheme
-    this.useFqn = offsetProtocolVersion > 0 || offsetMap == null || offsetMap.isEmpty();
     this.timestampColumns = new ArrayList<>();
     for (String timestampColumn : this.timestampColumnNames) {
       if (timestampColumn != null && !timestampColumn.isEmpty()) {
@@ -174,17 +171,15 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     final Map<String, String> partition;
     switch (mode) {
       case TABLE:
-        if (useFqn) {
-          String fqn = ExpressionBuilder.create().append(tableId, false).toString();
-          partition = new HashMap<>();
-          partition.put(JdbcSourceConnectorConstants.TABLE_NAME_KEY, fqn);
-          partition.put(JdbcSourceConnectorConstants.OFFSET_PROTOCOL_VERSION, "1");
-          topic = topicPrefix + fqn;
-        } else {
-          String name = tableId.tableName(); // backward compatible
-          partition = Collections.singletonMap(JdbcSourceConnectorConstants.TABLE_NAME_KEY, name);
-          topic = topicPrefix + name;
-        }
+        String name = tableId.tableName();
+        topic = topicPrefix + name;// backward compatible
+        String fqn = ExpressionBuilder.create().append(tableId, false).toString();
+        partition = new HashMap<>();
+        partition.put(JdbcSourceConnectorConstants.TABLE_NAME_KEY, fqn);
+        partition.put(
+            JdbcSourceConnectorConstants.OFFSET_PROTOCOl_VERSION_KEY,
+            JdbcSourceConnectorConstants.PROTOCOL_VERSION_ONE
+        );
         break;
       case QUERY:
         partition = Collections.singletonMap(JdbcSourceConnectorConstants.QUERY_NAME_KEY,

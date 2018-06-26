@@ -170,12 +170,14 @@ public class JdbcSourceTask extends SourceTask {
           throw new ConnectException("Unexpected query mode: " + queryMode);
       }
 
+      //select the first matching offset
+      // This helps in handling any backward compatible offset changes
       Map<String, Object> offset = null;
       if (offsets != null) {
         for (Map<String, String> toCheckPartition : tablePartitionsToCheck) {
           offset = offsets.get(toCheckPartition);
           if (offset != null) {
-            log.debug("Found non-null offset {} for partition {}", offsets, toCheckPartition);
+            log.debug("Found offset {} for partition {}", offsets, toCheckPartition);
             break;
           }
         }

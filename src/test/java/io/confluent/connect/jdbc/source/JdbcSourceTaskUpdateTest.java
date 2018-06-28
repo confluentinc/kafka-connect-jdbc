@@ -338,12 +338,13 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   }
 
   @Test
-  public void testManualIncrementingRestoreOffset() throws Exception {
+  public void testManualIncrementingRestoreOffsetsWithMultipleProtocol() throws Exception {
     TimestampIncrementingOffset oldOffset = new TimestampIncrementingOffset(null, 0L);
     TimestampIncrementingOffset offset = new TimestampIncrementingOffset(null, 1L);
     Map<Map<String, String>, Map<String, Object>> offsets = new HashMap<>();
     offsets.put(SINGLE_TABLE_PARTITION_WITH_VERSION, offset.toMap());
     offsets.put(SINGLE_TABLE_PARTITION, oldOffset.toMap());
+    //we want to always use the offset with the latest protocol found
     testManualIncrementingRestoreOffset(offsets);
   }
 
@@ -386,12 +387,13 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   }
 
   @Test
-  public void testAutoincrementRestoreOffset() throws Exception {
+  public void testAutoincrementRestoreOffsetsWithMultipleProtocol() throws Exception {
     TimestampIncrementingOffset oldOffset = new TimestampIncrementingOffset(null, 0L);
     TimestampIncrementingOffset offset = new TimestampIncrementingOffset(null, 1L);
     Map<Map<String, String>, Map<String, Object>> offsets = new HashMap<>();
     offsets.put(SINGLE_TABLE_PARTITION_WITH_VERSION, offset.toMap());
     offsets.put(SINGLE_TABLE_PARTITION, oldOffset.toMap());
+    //we want to always use the offset with the latest protocol found
     testAutoincrementRestoreOffset(offsets);
   }
 
@@ -437,7 +439,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   }
 
   @Test
-  public void testTimestampRestore() throws Exception {
+  public void testTimestampRestoreOffsetsWithMultipleProtocol() throws Exception {
     TimestampIncrementingOffset oldOffset = new TimestampIncrementingOffset(
         new Timestamp(8L),
         null
@@ -446,6 +448,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     Map<Map<String, String>, Map<String, Object>> offsets = new HashMap<>();
     offsets.put(SINGLE_TABLE_PARTITION_WITH_VERSION, offset.toMap());
     offsets.put(SINGLE_TABLE_PARTITION, oldOffset.toMap());
+    //we want to always use the offset with the latest protocol found
     testTimestampRestoreOffset(offsets);
   }
 
@@ -492,12 +495,13 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   }
 
   @Test
-  public void testTimestampAndIncrementingRestoreOffset() throws Exception {
+  public void testTimestampAndIncrementingRestoreOffsetsWithMultipleProtocol() throws Exception {
     TimestampIncrementingOffset oldOffset = new TimestampIncrementingOffset(new Timestamp(10L), 2L);
     TimestampIncrementingOffset offset = new TimestampIncrementingOffset(new Timestamp(10L), 3L);
     Map<Map<String, String>, Map<String, Object>> offsets = new HashMap<>();
     offsets.put(SINGLE_TABLE_PARTITION_WITH_VERSION, offset.toMap());
     offsets.put(SINGLE_TABLE_PARTITION, oldOffset.toMap());
+    //we want to always use the offset with the latest protocol found
     testTimestampAndIncrementingRestoreOffset(offsets);
   }
 

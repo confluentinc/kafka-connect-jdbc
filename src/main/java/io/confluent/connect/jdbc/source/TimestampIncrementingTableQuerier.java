@@ -29,7 +29,6 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -174,13 +173,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
       case TABLE:
         String name = tableId.tableName();
         topic = topicPrefix + name;// backward compatible
-        String fqn = ExpressionBuilder.create().append(tableId, false).toString();
-        partition = new HashMap<>();
-        partition.put(JdbcSourceConnectorConstants.TABLE_NAME_KEY, fqn);
-        partition.put(
-            JdbcSourceConnectorConstants.OFFSET_PROTOCOL_VERSION_KEY,
-            JdbcSourceConnectorConstants.PROTOCOL_VERSION_ONE
-        );
+        partition = OffsetProtocols.sourcePartitionForProtocolV1(tableId);
         break;
       case QUERY:
         partition = Collections.singletonMap(JdbcSourceConnectorConstants.QUERY_NAME_KEY,

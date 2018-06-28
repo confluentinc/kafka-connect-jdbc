@@ -341,14 +341,14 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   public void testManualIncrementingRestoreOffset() throws Exception {
     TimestampIncrementingOffset oldOffset = new TimestampIncrementingOffset(null, 0L);
     TimestampIncrementingOffset offset = new TimestampIncrementingOffset(null, 1L);
-    Map<Map<String, Object>, Map<String, Object>> offsets = new HashMap<>();
+    Map<Map<String, String>, Map<String, Object>> offsets = new HashMap<>();
     offsets.put(SINGLE_TABLE_PARTITION_WITH_VERSION, offset.toMap());
     offsets.put(SINGLE_TABLE_PARTITION, oldOffset.toMap());
     testManualIncrementingRestoreOffset(offsets);
   }
 
   private void testManualIncrementingRestoreOffset(
-      Map<Map<String, Object>, Map<String, Object>> offsets) throws Exception {
+      Map<Map<String, String>, Map<String, Object>> offsets) throws Exception {
     expectInitialize(
         Arrays.asList(SINGLE_TABLE_PARTITION_WITH_VERSION, SINGLE_TABLE_PARTITION),
         offsets
@@ -389,14 +389,14 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   public void testAutoincrementRestoreOffset() throws Exception {
     TimestampIncrementingOffset oldOffset = new TimestampIncrementingOffset(null, 0L);
     TimestampIncrementingOffset offset = new TimestampIncrementingOffset(null, 1L);
-    Map<Map<String, Object>, Map<String, Object>> offsets = new HashMap<>();
+    Map<Map<String, String>, Map<String, Object>> offsets = new HashMap<>();
     offsets.put(SINGLE_TABLE_PARTITION_WITH_VERSION, offset.toMap());
     offsets.put(SINGLE_TABLE_PARTITION, oldOffset.toMap());
     testAutoincrementRestoreOffset(offsets);
   }
 
   private void testAutoincrementRestoreOffset(
-      Map<Map<String, Object>, Map<String, Object>> offsets) throws Exception {
+      Map<Map<String, String>, Map<String, Object>> offsets) throws Exception {
 
     expectInitialize(Arrays.asList(
         SINGLE_TABLE_PARTITION_WITH_VERSION, SINGLE_TABLE_PARTITION),
@@ -443,14 +443,14 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
         null
     );
     TimestampIncrementingOffset offset = new TimestampIncrementingOffset(new Timestamp(10L), null);
-    Map<Map<String, Object>, Map<String, Object>> offsets = new HashMap<>();
+    Map<Map<String, String>, Map<String, Object>> offsets = new HashMap<>();
     offsets.put(SINGLE_TABLE_PARTITION_WITH_VERSION, offset.toMap());
     offsets.put(SINGLE_TABLE_PARTITION, oldOffset.toMap());
     testTimestampRestoreOffset(offsets);
   }
 
   private void testTimestampRestoreOffset(
-      Map<Map<String, Object>, Map<String, Object>> offsets) throws Exception {
+      Map<Map<String, String>, Map<String, Object>> offsets) throws Exception {
     expectInitialize(Arrays.asList(
         SINGLE_TABLE_PARTITION_WITH_VERSION, SINGLE_TABLE_PARTITION),
         offsets
@@ -495,14 +495,14 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   public void testTimestampAndIncrementingRestoreOffset() throws Exception {
     TimestampIncrementingOffset oldOffset = new TimestampIncrementingOffset(new Timestamp(10L), 2L);
     TimestampIncrementingOffset offset = new TimestampIncrementingOffset(new Timestamp(10L), 3L);
-    Map<Map<String, Object>, Map<String, Object>> offsets = new HashMap<>();
+    Map<Map<String, String>, Map<String, Object>> offsets = new HashMap<>();
     offsets.put(SINGLE_TABLE_PARTITION_WITH_VERSION, offset.toMap());
     offsets.put(SINGLE_TABLE_PARTITION, oldOffset.toMap());
     testTimestampAndIncrementingRestoreOffset(offsets);
   }
 
   private void testTimestampAndIncrementingRestoreOffset(
-      Map<Map<String, Object>, Map<String, Object>> offsets) throws Exception {
+      Map<Map<String, String>, Map<String, Object>> offsets) throws Exception {
     expectInitialize(Arrays.asList(
         SINGLE_TABLE_PARTITION_WITH_VERSION, SINGLE_TABLE_PARTITION),
         offsets

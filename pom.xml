@@ -66,6 +66,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.package.home>target/${project.artifactId}-${project.version}-package</project.package.home>
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
+        <crate-jdbc.version>2.3.1</crate-jdbc.version>
     </properties>
 
     <repositories>
@@ -73,6 +74,23 @@
             <id>confluent</id>
             <name>Confluent</name>
             <url>${confluent.maven.repo}</url>
+        </repository>
+        <repository>
+            <id>maven-central</id>
+            <name>Maven Central</name>
+            <layout>default</layout>
+            <url>http://repo1.maven.org/maven2</url>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
+        <repository>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+            <id>central</id>
+            <name>bintray</name>
+            <url>http://dl.bintray.com/crate/crate</url>
         </repository>
     </repositories>
 
@@ -144,6 +162,11 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-log4j12</artifactId>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.crate</groupId>
+            <artifactId>crate-jdbc</artifactId>
+            <version>${crate-jdbc.version}</version>
         </dependency>
     </dependencies>
 
@@ -217,6 +240,7 @@
                                 <tag>sap hana</tag>
                                 <tag>derby</tag>
                                 <tag>sqlite</tag>
+                                <tag>crate</tag>
                             </tags>
 
                             <confluentControlCenterIntegration>true</confluentControlCenterIntegration>

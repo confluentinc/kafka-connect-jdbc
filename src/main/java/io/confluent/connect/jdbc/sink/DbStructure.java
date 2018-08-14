@@ -90,6 +90,7 @@ public class DbStructure {
       );
     }
     String sql = dbDialect.buildCreateTableStatement(tableId, fieldsMetadata.allFields.values());
+    log.trace("Create Table SQL: {}", sql);
     dbDialect.applyDdlStatements(connection, Collections.singletonList(sql));
   }
 

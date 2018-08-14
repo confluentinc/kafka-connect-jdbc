@@ -16,6 +16,7 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.source.JdbcSourceTaskConfig;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -72,6 +73,13 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     super(config, new IdentifierRules(".", "\"", "\""));
   }
 
+  @Override
+  public Connection getConnection() throws SQLException {
+    Connection connection = super.getConnection();
+    connection.setAutoCommit(false);
+    return connection;
+  }
+
   /**
    * Perform any operations on a {@link PreparedStatement} before it is used. This is called from
    * the {@link #createPreparedStatement(Connection, String)} method after the statement is
@@ -86,8 +94,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    */
   @Override
   protected void initializePreparedStatement(PreparedStatement stmt) throws SQLException {
+    int batchMaxRows = config.getInt(JdbcSourceTaskConfig.BATCH_MAX_ROWS_CONFIG);
     log.trace("Initializing PreparedStatement fetch direction to FETCH_FORWARD for '{}'", stmt);
     stmt.setFetchDirection(ResultSet.FETCH_FORWARD);
+    stmt.setFetchSize(batchMaxRows);
   }
 
 

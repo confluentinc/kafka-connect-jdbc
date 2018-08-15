@@ -76,15 +76,6 @@
             <url>${confluent.maven.repo}</url>
         </repository>
         <repository>
-            <id>maven-central</id>
-            <name>Maven Central</name>
-            <layout>default</layout>
-            <url>http://repo1.maven.org/maven2</url>
-            <snapshots>
-                <enabled>false</enabled>
-            </snapshots>
-        </repository>
-        <repository>
             <snapshots>
                 <enabled>false</enabled>
             </snapshots>

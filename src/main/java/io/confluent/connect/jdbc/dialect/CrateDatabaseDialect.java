@@ -101,21 +101,21 @@ public class CrateDatabaseDialect extends GenericDatabaseDialect {
     }
     switch (field.schemaType()) {
       case INT8:
-        return "INTEGER";
+        return "BYTE";
       case INT16:
-        return "INTEGER";
+        return "SHORT";
       case INT32:
         return "INTEGER";
       case INT64:
-        return "INTEGER";
+        return "LONG";
       case FLOAT32:
         return "FLOAT";
       case FLOAT64:
-        return "FLOAT";
+        return "DOUBLE";
       case BOOLEAN:
         return "BOOLEAN";
       case STRING:
-        return "VARCHAR";
+        return "STRING";
       case BYTES:
         return "BYTE";
       default:
@@ -132,7 +132,7 @@ public class CrateDatabaseDialect extends GenericDatabaseDialect {
   ) {
     final Transform<ColumnId> transform = (builder, col) -> {
       builder.appendIdentifierQuoted(col.name())
-             .append("=EXCLUDED.")
+             .append("=")
              .appendIdentifierQuoted(col.name());
     };
 

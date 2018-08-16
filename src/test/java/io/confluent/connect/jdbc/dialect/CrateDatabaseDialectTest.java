@@ -32,12 +32,12 @@ public class CrateDatabaseDialectTest extends BaseDialectTest<CrateDatabaseDiale
 
   @Test
   public void shouldMapPrimitiveSchemaTypeToSqlTypes() {
-    assertPrimitiveMapping(Type.INT8, "INTEGER");
-    assertPrimitiveMapping(Type.INT16, "INTEGER");
+    assertPrimitiveMapping(Type.INT8, "BYTE");
+    assertPrimitiveMapping(Type.INT16, "SHORT");
     assertPrimitiveMapping(Type.INT32, "INTEGER");
-    assertPrimitiveMapping(Type.INT64, "INTEGER");
+    assertPrimitiveMapping(Type.INT64, "LONG");
     assertPrimitiveMapping(Type.FLOAT32, "FLOAT");
-    assertPrimitiveMapping(Type.FLOAT64, "FLOAT");
+    assertPrimitiveMapping(Type.FLOAT64, "DOUBLE");
     assertPrimitiveMapping(Type.BOOLEAN, "BOOLEAN");
     assertPrimitiveMapping(Type.BYTES, "BYTE");
     assertPrimitiveMapping(Type.STRING, "STRING");
@@ -53,12 +53,12 @@ public class CrateDatabaseDialectTest extends BaseDialectTest<CrateDatabaseDiale
 
   @Test
   public void shouldMapDataTypes() {
-    verifyDataTypeMapping("INTEGER", Schema.INT8_SCHEMA);
-    verifyDataTypeMapping("INTEGER", Schema.INT16_SCHEMA);
+    verifyDataTypeMapping("BYTE", Schema.INT8_SCHEMA);
+    verifyDataTypeMapping("SHORT", Schema.INT16_SCHEMA);
     verifyDataTypeMapping("INTEGER", Schema.INT32_SCHEMA);
-    verifyDataTypeMapping("INTEGER", Schema.INT64_SCHEMA);
+    verifyDataTypeMapping("LONG", Schema.INT64_SCHEMA);
     verifyDataTypeMapping("FLOAT", Schema.FLOAT32_SCHEMA);
-    verifyDataTypeMapping("FLOAT", Schema.FLOAT64_SCHEMA);
+    verifyDataTypeMapping("DOUBLE", Schema.FLOAT64_SCHEMA);
     verifyDataTypeMapping("BOOLEAN", Schema.BOOLEAN_SCHEMA);
     verifyDataTypeMapping("STRING", Schema.STRING_SCHEMA);
     verifyDataTypeMapping("BYTE", Schema.BYTES_SCHEMA);
@@ -86,7 +86,7 @@ public class CrateDatabaseDialectTest extends BaseDialectTest<CrateDatabaseDiale
   @Test
   public void shouldBuildCreateQueryStatement() {
     String expected =
-        "CREATE TABLE \"myTable\" (\n" + "\"c1\" INTEGER NOT NULL,\n" + "\"c2\" INTEGER NOT NULL,\n" +
+        "CREATE TABLE \"myTable\" (\n" + "\"c1\" INTEGER NOT NULL,\n" + "\"c2\" LONG NOT NULL,\n" +
         "\"c3\" STRING NOT NULL,\n" + "\"c4\" STRING,\n" + "\"c5\" TIMESTAMP DEFAULT '2001-03-15',\n" +
         "\"c6\" TIMESTAMP DEFAULT '00:00:00.000',\n" +
         "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" + "\"c8\" DOUBLE,\n" +
@@ -100,7 +100,7 @@ public class CrateDatabaseDialectTest extends BaseDialectTest<CrateDatabaseDiale
   public void shouldBuildAlterTableStatement() {
     List<String> statements = dialect.buildAlterTable(tableId, sinkRecordFields);
     String[] sql = {"ALTER TABLE \"myTable\" \n" + "ADD \"c1\" INTEGER NOT NULL,\n" +
-                    "ADD \"c2\" INTEGER NOT NULL,\n" + "ADD \"c3\" STRING NOT NULL,\n" +
+                    "ADD \"c2\" LONG NOT NULL,\n" + "ADD \"c3\" STRING NOT NULL,\n" +
                     "ADD \"c4\" STRING,\n" + "ADD \"c5\" TIMESTAMP DEFAULT '2001-03-15',\n" +
                     "ADD \"c6\" TIMESTAMP DEFAULT '00:00:00.000',\n" +
                     "ADD \"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" +
@@ -112,9 +112,8 @@ public class CrateDatabaseDialectTest extends BaseDialectTest<CrateDatabaseDiale
   public void shouldBuildUpsertStatement() {
     String expected = "INSERT INTO \"myTable\" (\"id1\",\"id2\",\"columnA\",\"columnB\"," +
                       "\"columnC\",\"columnD\") VALUES (?,?,?,?,?,?) ON CONFLICT (\"id1\"," +
-                      "\"id2\") DO UPDATE SET \"columnA\"=EXCLUDED" +
-                      ".\"columnA\",\"columnB\"=EXCLUDED.\"columnB\",\"columnC\"=EXCLUDED" +
-                      ".\"columnC\",\"columnD\"=EXCLUDED.\"columnD\"";
+                      "\"id2\") DO UPDATE SET \"columnA\"=\"columnA\",\"columnB\"=\"columnB\"," +
+                      "\"columnC\"=\"columnC\",\"columnD\"=\"columnD\"";
     String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD);
     assertEquals(expected, sql);
   }
@@ -156,8 +155,8 @@ public class CrateDatabaseDialectTest extends BaseDialectTest<CrateDatabaseDiale
   public void upsert() {
     TableId customer = tableId("Customer");
     assertEquals("INSERT INTO \"Customer\" (\"id\",\"name\",\"salary\",\"address\") " +
-                 "VALUES (?,?,?,?) ON CONFLICT (\"id\") DO UPDATE SET \"name\"=EXCLUDED.\"name\"," +
-                 "\"salary\"=EXCLUDED.\"salary\",\"address\"=EXCLUDED.\"address\"", dialect
+                 "VALUES (?,?,?,?) ON CONFLICT (\"id\") DO UPDATE SET \"name\"=\"name\"," +
+                 "\"salary\"=\"salary\",\"address\"=\"address\"", dialect
                      .buildUpsertQueryStatement(customer, columns(customer, "id"),
                                                 columns(customer, "name", "salary", "address")));
   }

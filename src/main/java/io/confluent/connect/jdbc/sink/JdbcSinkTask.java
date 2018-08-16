@@ -71,7 +71,6 @@ public class JdbcSinkTask extends SinkTask {
         + "database...",
         recordsCount, first.topic(), first.kafkaPartition(), first.kafkaOffset()
     );
-    log.trace("{}", records);
     try {
       writer.write(records);
     } catch (SQLException sqle) {

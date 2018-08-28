@@ -93,6 +93,7 @@
       <groupId>net.sourceforge.jtds</groupId>
       <artifactId>jtds</artifactId>
       <version>${jtds.driver.version}</version>
+      <scope>provided</scope>
     </dependency>
 
     <dependency>

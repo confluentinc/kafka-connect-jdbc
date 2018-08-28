@@ -1,0 +1,5 @@
+docs/build/html/_static/jquery.js
+src/test/java/com/datamountaineer/streamreactor/connect/jdbc/sink/PreparedStatementBuilderHelperTest.java
+src/test/java/com/datamountaineer/streamreactor/connect/jdbc/sink/writer/BatchedPreparedStatementBuilderTest.java
+docs/build/html/.buildinfo
+docs/build/html/_static/jquery-1.11.1.js

@@ -60,6 +60,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Queue;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -1141,21 +1142,41 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         builder.field(fieldName, tsSchemaBuilder.build());
         break;
       }
-
+      case Types.OTHER: {
+        if (UUID.class.getName().equals(columnDefn.classNameForType())) {
+          builder.field(
+                  fieldName,
+                  columnDefn.isOptional()
+                          ?
+                          Schema.OPTIONAL_STRING_SCHEMA :
+                          Schema.STRING_SCHEMA
+          );
+          return fieldName;
+        } else {
+          logJdbcTypeNotSupported(columnDefn, sqlType);
+          return null;
+        }
+      }
       case Types.ARRAY:
       case Types.JAVA_OBJECT:
-      case Types.OTHER:
       case Types.DISTINCT:
       case Types.STRUCT:
       case Types.REF:
       case Types.ROWID:
       default: {
-        log.warn("JDBC type {} ({}) not currently supported", sqlType, columnDefn.typeName());
+        logJdbcTypeNotSupported(columnDefn, sqlType);
         return null;
       }
     }
     return fieldName;
   }
+
+  private void logJdbcTypeNotSupported(ColumnDefinition columnDefn, int sqlType) {
+    if (log.isWarnEnabled()) {
+      log.warn("JDBC type {} ({}) not currently supported", sqlType, columnDefn.typeName());
+    }
+  }
+
 
   @Override
   public void applyDdlStatements(
@@ -1397,10 +1418,16 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         };
       }
 
+      case Types.OTHER: {
+        if (UUID.class.getName().equals(defn.classNameForType())) {
+          return rs -> rs.getString(col);
+        }
+        break;
+      }
+
       case Types.NULL:
       case Types.ARRAY:
       case Types.JAVA_OBJECT:
-      case Types.OTHER:
       case Types.DISTINCT:
       case Types.STRUCT:
       case Types.REF:

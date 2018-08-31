@@ -67,8 +67,8 @@
     <powermock-module-junit4.version>${powermock-api-easymock.version}</powermock-module-junit4.version>
     <powermock-api-easymock.version>2.0.0-beta.5</powermock-api-easymock.version>
     <mockito-all.version>1.10.19</mockito-all.version>
-    <slf4j-log4j12.version>1.7.25</slf4j-log4j12.version>
     <easymock.version>3.6</easymock.version>
+    <slf4j-log4j12.version>1.7.25</slf4j-log4j12.version>
   </properties>
 
   <dependencies>

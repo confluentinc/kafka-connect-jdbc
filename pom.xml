@@ -27,7 +27,7 @@
   </parent>
 
   <groupId>io.confluent</groupId>
-  <artifactId>kafka-connect-jdbc</artifactId>
+  <artifactId>kafka-connect-jdbc-au</artifactId>
 
   <version>LOCAL-SNAPSHOT</version>
   <packaging>jar</packaging>

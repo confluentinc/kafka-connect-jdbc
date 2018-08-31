@@ -32,7 +32,7 @@
   <version>LOCAL-SNAPSHOT</version>
   <packaging>jar</packaging>
   <name>kafka-connect-jdbc</name>
-  <description>A Kafka Connect JDBC connector for copying data between databases and Kafka.</description>
+  <description>A Kafka Connect JDBC connector for copying data between databases and Kafka. Modified with some Au patches</description>
   <url>http://confluent.io</url>
   <inceptionYear>2018</inceptionYear>
   <organization>

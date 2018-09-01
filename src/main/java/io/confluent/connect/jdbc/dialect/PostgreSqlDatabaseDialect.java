@@ -15,6 +15,7 @@
 package io.confluent.connect.jdbc.dialect;
 
 import io.confluent.connect.jdbc.source.JdbcSourceTaskConfig;
+import io.confluent.connect.jdbc.util.PreparedStatementProxy;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -78,24 +79,18 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return connection;
   }
 
-  /**
-   * Perform any operations on a {@link PreparedStatement} before it is used. This is called from
-   * the {@link #createPreparedStatement(Connection, String)} method after the statement is
-   * created but before it is returned/used.
-   *
-   * <p>This method sets the {@link PreparedStatement#setFetchDirection(int) fetch direction}
-   * to {@link ResultSet#FETCH_FORWARD forward} as an optimization for the driver to allow it to
-   * scroll more efficiently through the result set and prevent out of memory errors.
-   *
-   * @param stmt the prepared statement; never null
-   * @throws SQLException the error that might result from initialization
-   */
   @Override
-  protected void initializePreparedStatement(PreparedStatement stmt) throws SQLException {
+  public PreparedStatement createPreparedStatement(Connection db, String query)
+          throws SQLException {
+    log.trace("Creating a PreparedStatement '{}'", query);
+
+    PreparedStatement stmt = db.prepareStatement(query);
     int batchMaxRows = config.getInt(JdbcSourceTaskConfig.BATCH_MAX_ROWS_CONFIG);
     log.trace("Initializing PreparedStatement fetch direction to FETCH_FORWARD for '{}'", stmt);
     stmt.setFetchDirection(ResultSet.FETCH_FORWARD);
     stmt.setFetchSize(batchMaxRows);
+
+    return PreparedStatementProxy.newInstance(stmt);
   }
 
 

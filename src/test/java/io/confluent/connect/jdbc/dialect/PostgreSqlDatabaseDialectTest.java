@@ -14,6 +14,10 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import java.lang.reflect.Proxy;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -28,12 +32,38 @@ import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.Matchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDatabaseDialect> {
 
   @Override
   protected PostgreSqlDatabaseDialect createDialect() {
     return new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something"));
+  }
+
+  @Test
+  public void commitOnPreparedStatementClose() throws SQLException {
+    Connection mockConnection = mock(Connection.class);
+    PreparedStatement mockPreparedStatement = mock(PreparedStatement.class);
+    final String query = "SELECT * FROM test";
+    when(mockConnection.prepareStatement(eq(query)))
+            .thenReturn(mockPreparedStatement);
+    when(mockPreparedStatement.getConnection())
+            .thenReturn(mockConnection);
+
+    PreparedStatement stmtProxy =
+            dialect.createPreparedStatement(mockConnection, query);
+
+    assertTrue(stmtProxy instanceof Proxy);
+
+    stmtProxy.close();
+
+    verify(mockConnection, times(1)).commit();
   }
 
   @Test

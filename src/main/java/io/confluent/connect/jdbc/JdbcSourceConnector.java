@@ -14,6 +14,7 @@
 
 package io.confluent.connect.jdbc;
 
+import io.confluent.connect.jdbc.source.NoOpTableMonitorThread;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.connector.Task;
@@ -116,14 +117,25 @@ public class JdbcSourceConnector extends SourceConnector {
       whitelistSet = Collections.emptySet();
 
     }
-    tableMonitorThread = new TableMonitorThread(
-        dialect,
-        cachedConnectionProvider,
-        context,
-        tablePollMs,
-        whitelistSet,
-        blacklistSet
-    );
+    if (config.getBoolean(JdbcSourceConnectorConfig.ENABLE_TABLE_MONITOR)) {
+      tableMonitorThread = new TableMonitorThread(
+              dialect,
+              cachedConnectionProvider,
+              context,
+              tablePollMs,
+              whitelistSet,
+              blacklistSet
+      );
+    } else {
+      tableMonitorThread = new NoOpTableMonitorThread(
+              dialect,
+              cachedConnectionProvider,
+              context,
+              tablePollMs,
+              whitelistSet,
+              blacklistSet
+      );
+    }
     tableMonitorThread.start();
   }
 

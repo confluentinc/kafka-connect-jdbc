@@ -127,6 +127,13 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "specific dialect. All properly-packaged dialects in the JDBC connector plugin "
       + "can be used.";
 
+  public static final String ENABLE_TABLE_MONITOR = "table-monitor.enable";
+  public static final boolean ENABLE_TABLE_MONITOR_DEFAULT = false;
+  private static final String ENABLE_TABLE_MONITOR_DOC =
+          "The table monitor thread occasionally examines the schema of the underlying database" +
+          " to determine if kafka-connect should create connectors for additional tables. Enable " +
+          " if you wish to use dynamic table discovery.";
+
   public static final String MODE_CONFIG = "mode";
   private static final String MODE_DOC =
       "The mode for updating a table each time it is polled. Options include:\n"
@@ -422,7 +429,13 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.LONG,
         DIALECT_NAME_DISPLAY,
-        DatabaseDialectRecommender.INSTANCE);
+        DatabaseDialectRecommender.INSTANCE
+    ).define(
+        ENABLE_TABLE_MONITOR,
+        Type.BOOLEAN,
+        ENABLE_TABLE_MONITOR_DEFAULT,
+        Importance.MEDIUM,
+        ENABLE_TABLE_MONITOR_DOC);
   }
 
   private static final void addModeOptions(ConfigDef config) {

@@ -66,6 +66,7 @@ public class JdbcSourceConnectorTest {
     connProps.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, db.getUrl());
     connProps.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
     connProps.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, "test-");
+    connProps.put(JdbcSourceConnectorConfig.ENABLE_TABLE_MONITOR, "true");
   }
 
   @After

@@ -53,6 +53,8 @@ public class BufferedRecords {
   private Schema keySchema;
   private Schema valueSchema;
   private boolean deletesInBatch = false;
+  private PreparedStatement deletePreparedStatement;
+  private PreparedStatement updatePreparedStatement;
 
   private List<SinkRecord> records = new ArrayList<>();
   private SchemaPair currentSchemaPair;
@@ -123,33 +125,35 @@ public class BufferedRecords {
               fieldsMetadata
       );
       final String insertSql = getInsertSql();
-      //final String deleteSql = getDeleteSql();
+      final String deleteSql = getDeleteSql();
       log.info(
         "{} sql: {} deleteSql: {} meta: {}",
         config.insertMode,
-        insertSql,
+        deleteSql,
         fieldsMetadata);
       close();
-      preparedStatement = connection.prepareStatement(insertSql);
+      updatePreparedStatement = connection.prepareStatement(insertSql);
       preparedStatementBinder = dbDialect.statementBinder(
-              preparedStatement,
+              null,
+              updatePreparedStatement,
               config.pkMode,
               schemaPair,
               fieldsMetadata,
-              config.insertMode
+              config.insertMode,
+              config
       );
-        /*
-        if (config.deleteEnabled && deleteSql != null) {
-          deletePreparedStatement = connection.prepareStatement(deleteSql);
-          preparedStatementBinder = dbDialect.statementBinder(
-                  deletePreparedStatement,
-                  config.pkMode,
-                  schemaPair,
-                  fieldsMetadata,
-                  config.insertMode
-          );
-        */
-
+      if (config.deleteEnabled && deleteSql != null) {
+        deletePreparedStatement = connection.prepareStatement(deleteSql);
+        preparedStatementBinder = dbDialect.statementBinder(
+              updatePreparedStatement,
+              deletePreparedStatement,
+              config.pkMode,
+              schemaPair,
+              fieldsMetadata,
+              config.insertMode,
+              config
+        );
+      }
     }
     records.add(record);
     if (records.size() >= config.batchSize) {
@@ -168,12 +172,20 @@ public class BufferedRecords {
     }
     int totalUpdateCount = 0;
     boolean successNoInfo = false;
-    for (int updateCount : preparedStatement.executeBatch()) {
+    for (int updateCount : updatePreparedStatement.executeBatch()) {
       if (updateCount == Statement.SUCCESS_NO_INFO) {
         successNoInfo = true;
         continue;
       }
       totalUpdateCount += updateCount;
+    }
+    int totalDeleteCount = 0;
+    if (deletePreparedStatement != null) {
+      for (int updateCount : deletePreparedStatement.executeBatch()) {
+        if (updateCount != Statement.SUCCESS_NO_INFO) {
+          totalDeleteCount += updateCount;
+        }
+      }
     }
     if (totalUpdateCount != records.size() && !successNoInfo) {
       switch (config.insertMode) {
@@ -206,13 +218,18 @@ public class BufferedRecords {
 
     final List<SinkRecord> flushedRecords = records;
     records = new ArrayList<>();
+    deletesInBatch = false;
     return flushedRecords;
   }
 
   public void close() throws SQLException {
-    if (preparedStatement != null) {
-      preparedStatement.close();
-      preparedStatement = null;
+    if (updatePreparedStatement != null) {
+      updatePreparedStatement.close();
+      updatePreparedStatement = null;
+    }
+    if (deletePreparedStatement != null) {
+      deletePreparedStatement.close();
+      deletePreparedStatement = null;
     }
   }
 
@@ -254,6 +271,29 @@ public class BufferedRecords {
       default:
         throw new ConnectException("Invalid insert mode");
     }
+  }
+
+  private String getDeleteSql() {
+    String sql = null;
+    if (config.deleteEnabled) {
+      switch (config.pkMode) {
+        case NONE:
+        case KAFKA:
+        case RECORD_VALUE:
+          throw new ConnectException("Deletes are only supported for pk.mode record_key");
+        case RECORD_KEY:
+          if (fieldsMetadata.keyFieldNames.isEmpty()) {
+            throw new ConnectException("Require primary keys to support delete");
+          }
+          sql = dbDialect.buildDeleteStatement(
+              tableId,
+              asColumns(fieldsMetadata.keyFieldNames),
+              asColumns(fieldsMetadata.nonKeyFieldNames)
+          );
+          break;
+      }
+    }
+    return sql;
   }
 
   private Collection<ColumnId> asColumns(Collection<String> names) {

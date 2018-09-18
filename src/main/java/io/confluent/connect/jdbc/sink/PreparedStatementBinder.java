@@ -37,15 +37,18 @@ public class PreparedStatementBinder implements StatementBinder {
   private final SchemaPair schemaPair;
   private final FieldsMetadata fieldsMetadata;
   private final JdbcSinkConfig.InsertMode insertMode;
+  private final JdbcSinkConfig config;
   private final DatabaseDialect dialect;
 
   public PreparedStatementBinder(
       DatabaseDialect dialect,
       PreparedStatement statement,
+      PreparedStatement deleteStatement,
       JdbcSinkConfig.PrimaryKeyMode pkMode,
       SchemaPair schemaPair,
       FieldsMetadata fieldsMetadata,
-      JdbcSinkConfig.InsertMode insertMode
+      JdbcSinkConfig.InsertMode insertMode,
+      JdbcSinkConfig config
   ) {
     this.dialect = dialect;
     this.pkMode = pkMode;
@@ -53,6 +56,7 @@ public class PreparedStatementBinder implements StatementBinder {
     this.schemaPair = schemaPair;
     this.fieldsMetadata = fieldsMetadata;
     this.insertMode = insertMode;
+    this.config = config;
   }
 
   @Override
@@ -65,22 +69,27 @@ public class PreparedStatementBinder implements StatementBinder {
     //             keyFieldNames, in iteration order for all UPDATE queries
 
     int index = 1;
-    switch (insertMode) {
-      case INSERT:
-      case UPSERT:
-        index = bindKeyFields(record, index);
-        bindNonKeyFields(record, valueStruct, index);
-        break;
+    if (valueStruct == null && config.deleteEnabled) {
+      //bindKeyFields(config.pkMode, deleteStatement, fieldsMetadata, record, index);
+      //deleteStatement.addBatch();
+    } else {
+      switch (insertMode) {
+        case INSERT:
+        case UPSERT:
+          index = bindKeyFields(record, index);
+          bindNonKeyFields(record, valueStruct, index);
+          break;
 
-      case UPDATE:
-        index = bindNonKeyFields(record, valueStruct, index);
-        bindKeyFields(record, index);
-        break;
-      default:
-        throw new AssertionError();
+        case UPDATE:
+          index = bindNonKeyFields(record, valueStruct, index);
+          bindKeyFields(record, index);
+          break;
+        default:
+          throw new AssertionError();
 
+      }
+      statement.addBatch();
     }
-    statement.addBatch();
   }
 
   protected int bindKeyFields(SinkRecord record, int index) throws SQLException {

@@ -342,6 +342,12 @@ public interface DatabaseDialect extends ConnectionProvider {
       Collection<ColumnId> nonKeyColumns
   );
 
+  String buildDeleteStatement(
+          TableId table,
+          Collection<ColumnId> keyColumns,
+          Collection<ColumnId> nonKeyColumns
+  );
+
   /**
    * Build the UPSERT or MERGE prepared statement expression to either insert a new record into the
    * given table or update an existing record in that table Variables for each key column should
@@ -401,10 +407,12 @@ public interface DatabaseDialect extends ConnectionProvider {
    */
   StatementBinder statementBinder(
       PreparedStatement statement,
+      PreparedStatement deleteStatement,
       JdbcSinkConfig.PrimaryKeyMode pkMode,
       SchemaPair schemaPair,
       FieldsMetadata fieldsMetadata,
-      JdbcSinkConfig.InsertMode insertMode
+      JdbcSinkConfig.InsertMode insertMode,
+      JdbcSinkConfig config
   );
 
   /**

@@ -16,6 +16,7 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.slf4j.Logger;
@@ -29,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
@@ -38,6 +40,8 @@ import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.TableId;
 
+
+
 public class BufferedRecords {
   private static final Logger log = LoggerFactory.getLogger(BufferedRecords.class);
 
@@ -46,6 +50,9 @@ public class BufferedRecords {
   private final DatabaseDialect dbDialect;
   private final DbStructure dbStructure;
   private final Connection connection;
+  private Schema keySchema;
+  private Schema valueSchema;
+  private boolean deletesInBatch = false;
 
   private List<SinkRecord> records = new ArrayList<>();
   private SchemaPair currentSchemaPair;
@@ -69,60 +76,86 @@ public class BufferedRecords {
 
   public List<SinkRecord> add(SinkRecord record) throws SQLException {
     final SchemaPair schemaPair = new SchemaPair(
-        record.keySchema(),
-        record.valueSchema()
+            record.keySchema(),
+            record.valueSchema()
     );
+    final List<SinkRecord> flushed = new ArrayList<>();
+    boolean schemaChanged = false;
 
-    if (currentSchemaPair == null) {
-      currentSchemaPair = schemaPair;
-      // re-initialize everything that depends on the record schema
-      fieldsMetadata = FieldsMetadata.extract(
-          tableId.tableName(),
-          config.pkMode,
-          config.pkFields,
-          config.fieldsWhitelist,
-          currentSchemaPair
-      );
-      dbStructure.createOrAmendIfNecessary(
-          config,
-          connection,
-          tableId,
-          fieldsMetadata
-      );
-
-      final String sql = getInsertSql();
-      log.debug(
-          "{} sql: {}",
-          config.insertMode,
-          sql
-      );
-      close();
-      preparedStatement = connection.prepareStatement(sql);
-      preparedStatementBinder = dbDialect.statementBinder(
-          preparedStatement,
-          config.pkMode,
-          schemaPair,
-          fieldsMetadata,
-          config.insertMode
-      );
+    if (!Objects.equals(keySchema, record.keySchema())) {
+      keySchema = record.keySchema();
+      schemaChanged = true;
     }
 
-    final List<SinkRecord> flushed;
-    if (currentSchemaPair.equals(schemaPair)) {
-      // Continue with current batch state
-      records.add(record);
-      if (records.size() >= config.batchSize) {
-        flushed = flush();
-      } else {
-        flushed = Collections.emptyList();
+    if (schemaPair.valueSchema == null) {
+      // For deletes, both the value and value schema come in as null.
+      // We don't want to treat this as a schema change if key schemas is the same
+      // otherwise we flush unnecessarily.
+      if (config.deleteEnabled) {
+        deletesInBatch = true;
+      }
+    } else if (Objects.equals(valueSchema, record.valueSchema())) {
+      if (config.deleteEnabled && deletesInBatch) {
+        // flush so an insert after a delete of same record isn't lost
+        flushed.addAll(flush());
       }
     } else {
-      // Each batch needs to have the same SchemaPair, so get the buffered records out, reset
-      // state and re-attempt the add
-      flushed = flush();
-      currentSchemaPair = null;
-      flushed.addAll(add(record));
+      valueSchema = record.valueSchema();
+      schemaChanged = true;
     }
+
+    if (schemaChanged) {
+      // Each batch needs to have the same schemas, so get the buffered records out
+      flushed.addAll(flush());
+
+      // re-initialize everything that depends on the record schema
+      fieldsMetadata = FieldsMetadata.extract(
+              tableId.tableName(),
+              config.pkMode,
+              config.pkFields,
+              config.fieldsWhitelist,
+              schemaPair
+      );
+      dbStructure.createOrAmendIfNecessary(
+              config,
+              connection,
+              tableId,
+              fieldsMetadata
+      );
+      final String insertSql = getInsertSql();
+      //final String deleteSql = getDeleteSql();
+      log.info(
+        "{} sql: {} deleteSql: {} meta: {}",
+        config.insertMode,
+        insertSql,
+        fieldsMetadata);
+      close();
+      preparedStatement = connection.prepareStatement(insertSql);
+      preparedStatementBinder = dbDialect.statementBinder(
+              preparedStatement,
+              config.pkMode,
+              schemaPair,
+              fieldsMetadata,
+              config.insertMode
+      );
+        /*
+        if (config.deleteEnabled && deleteSql != null) {
+          deletePreparedStatement = connection.prepareStatement(deleteSql);
+          preparedStatementBinder = dbDialect.statementBinder(
+                  deletePreparedStatement,
+                  config.pkMode,
+                  schemaPair,
+                  fieldsMetadata,
+                  config.insertMode
+          );
+        */
+
+    }
+    records.add(record);
+    if (records.size() >= config.batchSize) {
+      flushed.addAll(flush());
+    }
+
     return flushed;
   }
 

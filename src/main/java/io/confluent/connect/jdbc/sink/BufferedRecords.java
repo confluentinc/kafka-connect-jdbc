@@ -133,8 +133,8 @@ public class BufferedRecords {
       close();
       updatePreparedStatement = connection.prepareStatement(insertSql);
       preparedStatementBinder = dbDialect.statementBinder(
-              null,
               updatePreparedStatement,
+              null,
               config.pkMode,
               schemaPair,
               fieldsMetadata,

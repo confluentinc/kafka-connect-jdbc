@@ -28,7 +28,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -127,10 +126,10 @@ public class BufferedRecords {
       final String insertSql = getInsertSql();
       final String deleteSql = getDeleteSql();
       log.info(
-        "{} sql: {} deleteSql: {} meta: {}",
-        config.insertMode,
-        deleteSql,
-        fieldsMetadata);
+              "{} sql: {} deleteSql: {} meta: {}",
+              config.insertMode,
+              deleteSql,
+              fieldsMetadata);
       close();
       updatePreparedStatement = connection.prepareStatement(insertSql);
       preparedStatementBinder = dbDialect.statementBinder(
@@ -167,9 +166,11 @@ public class BufferedRecords {
     if (records.isEmpty()) {
       return new ArrayList<>();
     }
+
     for (SinkRecord record : records) {
       preparedStatementBinder.bindRecord(record);
     }
+
     int totalUpdateCount = 0;
     boolean successNoInfo = false;
     for (int updateCount : updatePreparedStatement.executeBatch()) {
@@ -290,6 +291,8 @@ public class BufferedRecords {
               asColumns(fieldsMetadata.keyFieldNames),
               asColumns(fieldsMetadata.nonKeyFieldNames)
           );
+          break;
+        default:
           break;
       }
     }

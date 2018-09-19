@@ -94,7 +94,10 @@ public class PreparedStatementBinder implements StatementBinder {
     }
   }
 
-  protected int bindKeyFields(SinkRecord record, int index, PreparedStatement statement) throws SQLException {
+  protected int bindKeyFields(
+          SinkRecord record,
+          int index,
+          PreparedStatement statement) throws SQLException {
     switch (pkMode) {
       case NONE:
         if (!fieldsMetadata.keyFieldNames.isEmpty()) {
@@ -150,7 +153,11 @@ public class PreparedStatementBinder implements StatementBinder {
     return index;
   }
 
-  protected void bindField(PreparedStatement statement, int index, Schema schema, Object value) throws SQLException {
+  protected void bindField(
+          PreparedStatement statement,
+          int index,
+          Schema schema,
+          Object value) throws SQLException {
     dialect.bindField(statement, index, schema, value);
   }
 }

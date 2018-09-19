@@ -101,7 +101,8 @@ public class JdbcSinkConfig extends AbstractConfig {
   public static final String DELETE_ENABLED = "delete.enabled";
   private static final String DELETE_ENABLED_DEFAULT = "false";
   private static final String DELETE_ENABLED_DOC =
-          "Whether to treat ``null`` record values as deletes. Requires ``pk.mode`` to be ``record_key``.";
+          "Whether to treat ``null`` record values as deletes. Requires ``pk.mode`` to be"
+          + " ``record_key``.";
   private static final String DELETE_ENABLED_DISPLAY = "Enable deletes";
 
   public static final String AUTO_CREATE = "auto.create";

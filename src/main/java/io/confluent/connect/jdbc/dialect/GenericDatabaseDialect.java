@@ -1361,7 +1361,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       builder.append(" WHERE ");
     }
 
-    builder.append("id = 1 AND author = \"Tom Robbins\" AND title = \"Villa Incognito\"");
+    builder.append("id = ?");
     /*
     builder.append("(");
     builder.appendList()

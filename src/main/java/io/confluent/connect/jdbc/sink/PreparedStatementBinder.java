@@ -34,6 +34,7 @@ public class PreparedStatementBinder implements StatementBinder {
 
   private final JdbcSinkConfig.PrimaryKeyMode pkMode;
   private final PreparedStatement statement;
+  private final PreparedStatement deleteStatement;
   private final SchemaPair schemaPair;
   private final FieldsMetadata fieldsMetadata;
   private final JdbcSinkConfig.InsertMode insertMode;
@@ -53,6 +54,7 @@ public class PreparedStatementBinder implements StatementBinder {
     this.dialect = dialect;
     this.pkMode = pkMode;
     this.statement = statement;
+    this.deleteStatement = deleteStatement;
     this.schemaPair = schemaPair;
     this.fieldsMetadata = fieldsMetadata;
     this.insertMode = insertMode;
@@ -70,19 +72,19 @@ public class PreparedStatementBinder implements StatementBinder {
 
     int index = 1;
     if (valueStruct == null && config.deleteEnabled) {
-      //bindKeyFields(config.pkMode, deleteStatement, fieldsMetadata, record, index);
-      //deleteStatement.addBatch();
+      bindKeyFields(record, index, this.deleteStatement);
+      deleteStatement.addBatch();
     } else {
       switch (insertMode) {
         case INSERT:
         case UPSERT:
-          index = bindKeyFields(record, index);
-          bindNonKeyFields(record, valueStruct, index);
+          index = bindKeyFields(record, index, this.statement);
+          bindNonKeyFields(this.statement, record, valueStruct, index);
           break;
 
         case UPDATE:
-          index = bindNonKeyFields(record, valueStruct, index);
-          bindKeyFields(record, index);
+          index = bindNonKeyFields(this.statement, record, valueStruct, index);
+          bindKeyFields(record, index, this.statement);
           break;
         default:
           throw new AssertionError();
@@ -92,7 +94,7 @@ public class PreparedStatementBinder implements StatementBinder {
     }
   }
 
-  protected int bindKeyFields(SinkRecord record, int index) throws SQLException {
+  protected int bindKeyFields(SinkRecord record, int index, PreparedStatement statement) throws SQLException {
     switch (pkMode) {
       case NONE:
         if (!fieldsMetadata.keyFieldNames.isEmpty()) {
@@ -102,20 +104,20 @@ public class PreparedStatementBinder implements StatementBinder {
 
       case KAFKA: {
         assert fieldsMetadata.keyFieldNames.size() == 3;
-        bindField(index++, Schema.STRING_SCHEMA, record.topic());
-        bindField(index++, Schema.INT32_SCHEMA, record.kafkaPartition());
-        bindField(index++, Schema.INT64_SCHEMA, record.kafkaOffset());
+        bindField(statement, index++, Schema.STRING_SCHEMA, record.topic());
+        bindField(statement, index++, Schema.INT32_SCHEMA, record.kafkaPartition());
+        bindField(statement, index++, Schema.INT64_SCHEMA, record.kafkaOffset());
       }
       break;
 
       case RECORD_KEY: {
         if (schemaPair.keySchema.type().isPrimitive()) {
           assert fieldsMetadata.keyFieldNames.size() == 1;
-          bindField(index++, schemaPair.keySchema, record.key());
+          bindField(statement, index++, schemaPair.keySchema, record.key());
         } else {
           for (String fieldName : fieldsMetadata.keyFieldNames) {
             final Field field = schemaPair.keySchema.field(fieldName);
-            bindField(index++, field.schema(), ((Struct) record.key()).get(field));
+            bindField(statement, index++, field.schema(), ((Struct) record.key()).get(field));
           }
         }
       }
@@ -124,7 +126,7 @@ public class PreparedStatementBinder implements StatementBinder {
       case RECORD_VALUE: {
         for (String fieldName : fieldsMetadata.keyFieldNames) {
           final Field field = schemaPair.valueSchema.field(fieldName);
-          bindField(index++, field.schema(), ((Struct) record.value()).get(field));
+          bindField(statement, index++, field.schema(), ((Struct) record.value()).get(field));
         }
       }
       break;
@@ -136,18 +138,19 @@ public class PreparedStatementBinder implements StatementBinder {
   }
 
   protected int bindNonKeyFields(
+      PreparedStatement statement,
       SinkRecord record,
       Struct valueStruct,
       int index
   ) throws SQLException {
     for (final String fieldName : fieldsMetadata.nonKeyFieldNames) {
       final Field field = record.valueSchema().field(fieldName);
-      bindField(index++, field.schema(), valueStruct.get(field));
+      bindField(statement, index++, field.schema(), valueStruct.get(field));
     }
     return index;
   }
 
-  protected void bindField(int index, Schema schema, Object value) throws SQLException {
+  protected void bindField(PreparedStatement statement, int index, Schema schema, Object value) throws SQLException {
     dialect.bindField(statement, index, schema, value);
   }
 }

@@ -70,6 +70,12 @@ Writes
   * Valid Values: [0,...]
   * Importance: medium
 
+``delete.enabled``
+  Whether to treat ``null`` record values as deletes. If ``true``, requires ``pk.mode`` to be ``record_key``.
+  * Type: boolean
+  * Default: false
+  * Importance: medium
+
 .. _sink-pk-config-options:
 
 Data Mapping

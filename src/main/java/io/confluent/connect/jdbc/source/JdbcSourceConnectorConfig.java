@@ -50,6 +50,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   private static final Logger LOG = LoggerFactory.getLogger(JdbcSourceConnectorConfig.class);
 
+  public static final String QUERY_SUFFIX_CONFIG = "suffix.query";
+  private static final String QUERY_SUFFIX_DOC = "JDBC suffix query";
+  private static final String QUERY_SUFFIX_DISPLAY = "JDBC suffix query";
+  private static final String QUERY_SUFFIX_DEFAULT = "";
+  
   public static final String CONNECTION_URL_CONFIG = "connection.url";
   private static final String CONNECTION_URL_DOC = "JDBC connection URL.";
   private static final String CONNECTION_URL_DISPLAY = "JDBC URL";
@@ -239,7 +244,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + " from the last time we fetched until current time minus the delay.";
   public static final long TIMESTAMP_DELAY_INTERVAL_MS_DEFAULT = 0;
   private static final String TIMESTAMP_DELAY_INTERVAL_MS_DISPLAY = "Delay Interval (ms)";
-
+  
   public static final String DATABASE_GROUP = "Database";
   public static final String MODE_GROUP = "Mode";
   public static final String CONNECTOR_GROUP = "Connector";
@@ -290,6 +295,16 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Width.LONG,
         CONNECTION_URL_DISPLAY,
         Arrays.asList(TABLE_WHITELIST_CONFIG, TABLE_BLACKLIST_CONFIG)
+    ).define(
+    	QUERY_SUFFIX_CONFIG, 
+    	Type.STRING, 
+    	QUERY_SUFFIX_DEFAULT,
+    	Importance.LOW, 
+    	QUERY_SUFFIX_DOC, 
+    	DATABASE_GROUP, 
+    	++orderInGroup, 
+    	Width.LONG, 
+    	QUERY_SUFFIX_DISPLAY
     ).define(
         CONNECTION_USER_CONFIG,
         Type.STRING,

@@ -69,8 +69,20 @@ public class TimestampIncrementingCriteria {
   protected final Logger log = LoggerFactory.getLogger(getClass());
   protected final List<ColumnId> timestampColumns;
   protected final ColumnId incrementingColumn;
+  private String query;
+  private String suffix;
 
-
+  public TimestampIncrementingCriteria(
+	      ColumnId incrementingColumn,
+	      List<ColumnId> timestampColumns,
+	      String query,
+	      String suffix
+	  ) {
+	  	this(incrementingColumn,timestampColumns);
+	  	this.query = query;
+	  	this.suffix = suffix;
+	  }
+  
   public TimestampIncrementingCriteria(
       ColumnId incrementingColumn,
       List<ColumnId> timestampColumns
@@ -304,12 +316,18 @@ public class TimestampIncrementingCriteria {
   }
 
   protected void incrementingWhereClause(ExpressionBuilder builder) {
-    builder.append(" WHERE ");
+	if (query.toLowerCase().contains(" where ")) {
+		builder.append(" AND ");
+	} else {
+		builder.append(" WHERE ");
+	}
+    
     builder.append(incrementingColumn);
     builder.append(" > ?");
     builder.append(" ORDER BY ");
     builder.append(incrementingColumn);
-    builder.append(" ASC");
+    builder.append(" ASC ");
+    builder.append(this.suffix);
   }
 
   protected void timestampWhereClause(ExpressionBuilder builder) {

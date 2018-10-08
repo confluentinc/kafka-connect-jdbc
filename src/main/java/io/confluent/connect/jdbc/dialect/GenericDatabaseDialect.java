@@ -811,9 +811,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   @Override
   public TimestampIncrementingCriteria criteriaFor(
       ColumnId incrementingColumn,
-      List<ColumnId> timestampColumns
+      List<ColumnId> timestampColumns,
+      String query,
+      String suffix
   ) {
-    return new TimestampIncrementingCriteria(incrementingColumn, timestampColumns);
+    return new TimestampIncrementingCriteria(incrementingColumn, timestampColumns,query,suffix);
   }
 
   /**

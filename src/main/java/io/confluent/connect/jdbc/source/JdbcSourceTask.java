@@ -201,7 +201,9 @@ public class JdbcSourceTask extends SourceTask {
                 null,
                 incrementingColumn,
                 offset,
-                timestampDelayInterval
+                timestampDelayInterval,
+                config.getString(JdbcSourceTaskConfig.QUERY_CONFIG),
+                config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG)
             )
         );
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
@@ -214,7 +216,9 @@ public class JdbcSourceTask extends SourceTask {
                 timestampColumns,
                 null,
                 offset,
-                timestampDelayInterval
+                timestampDelayInterval,
+                config.getString(JdbcSourceTaskConfig.QUERY_CONFIG),
+                config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG)
             )
         );
       } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
@@ -227,7 +231,9 @@ public class JdbcSourceTask extends SourceTask {
                 timestampColumns,
                 incrementingColumn,
                 offset,
-                timestampDelayInterval
+                timestampDelayInterval,
+                config.getString(JdbcSourceTaskConfig.QUERY_CONFIG),
+                config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG)
             )
         );
       }

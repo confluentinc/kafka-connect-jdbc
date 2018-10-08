@@ -70,13 +70,18 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   private TimestampIncrementingCriteria criteria;
   private final Map<String, String> partition;
   private final String topic;
+  private String query;
+  private String suffix;
 
   public TimestampIncrementingTableQuerier(DatabaseDialect dialect, QueryMode mode, String name,
                                            String topicPrefix,
                                            List<String> timestampColumnNames,
                                            String incrementingColumnName,
-                                           Map<String, Object> offsetMap, Long timestampDelay) {
+                                           Map<String, Object> offsetMap, Long timestampDelay,
+                                           String query, String suffix) {
     super(dialect, mode, name, topicPrefix);
+    this.query = query;
+    this.suffix = suffix;
     this.incrementingColumnName = incrementingColumnName;
     this.timestampColumnNames = timestampColumnNames != null
                                 ? timestampColumnNames : Collections.<String>emptyList();
@@ -154,7 +159,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     }
 
     // Append the criteria using the columns ...
-    criteria = dialect.criteriaFor(incrementingColumn, timestampColumns);
+    criteria = dialect.criteriaFor(incrementingColumn, timestampColumns,query,suffix);
     criteria.whereClause(builder);
 
     String queryString = builder.toString();

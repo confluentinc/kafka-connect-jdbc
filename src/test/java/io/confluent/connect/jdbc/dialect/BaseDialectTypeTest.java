@@ -17,32 +17,24 @@ package io.confluent.connect.jdbc.dialect;
 
 import java.math.BigDecimal;
 import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.Types;
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
-import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
-import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.TableId;
 
-import org.apache.kafka.connect.data.Date;
-import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
-import org.apache.kafka.connect.data.Struct;
-import org.apache.kafka.connect.data.Time;
-import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runners.Parameterized;
 import org.mockito.Mock;
 
-import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -61,7 +53,6 @@ public abstract class BaseDialectTypeTest<T extends GenericDatabaseDialect> {
   public static final short SHORT = Short.MAX_VALUE;
   public static final byte BYTE = Byte.MAX_VALUE;
   public static final double DOUBLE = Double.MAX_VALUE;
-  public static final String UUID_VALUE = "8A52DFE1-CFB9-4C55-B74F-E3D56BBED827";
 
   @Parameterized.Parameter(0)
   public Schema.Type expectedType;
@@ -83,9 +74,6 @@ public abstract class BaseDialectTypeTest<T extends GenericDatabaseDialect> {
 
   @Parameterized.Parameter(6)
   public int scale;
-
-  @Parameterized.Parameter(7)
-  public String classNameForType;
 
   @Mock
   ResultSet resultSet = mock(ResultSet.class);
@@ -113,7 +101,6 @@ public abstract class BaseDialectTypeTest<T extends GenericDatabaseDialect> {
     when(columnDefn.id()).thenReturn(COLUMN_ID);
     when(columnDefn.isSignedNumber()).thenReturn(signed);
     when(columnDefn.typeName()).thenReturn("parameterizedType");
-    when(columnDefn.classNameForType()).thenReturn(classNameForType);
 
     dialect = createDialect();
     schemaBuilder = SchemaBuilder.struct();

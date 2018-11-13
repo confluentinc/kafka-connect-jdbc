@@ -22,6 +22,7 @@ import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.Version;
+import java.util.TimeZone;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.common.utils.Time;
@@ -34,6 +35,7 @@ import org.slf4j.LoggerFactory;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -44,6 +46,14 @@ import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.dialect.DatabaseDialects;
+import io.confluent.connect.jdbc.util.CachedConnectionProvider;
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.util.Version;
 
 /**
  * JdbcSourceTask is a Kafka Connect SourceTask implementation that reads from JDBC databases and
@@ -75,6 +85,7 @@ public class JdbcSourceTask extends SourceTask {
 
   @Override
   public void start(Map<String, String> properties) {
+    log.info("Starting JDBC source task");
     try {
       config = new JdbcSourceTaskConfig(properties);
     } catch (ConfigException e) {
@@ -91,6 +102,7 @@ public class JdbcSourceTask extends SourceTask {
     } else {
       dialect = DatabaseDialects.findBestFor(url, config);
     }
+    log.info("Using JDBC dialect {}", dialect.name());
 
     cachedConnectionProvider = new CachedConnectionProvider(dialect, maxConnAttempts, retryBackoff);
 
@@ -106,6 +118,8 @@ public class JdbcSourceTask extends SourceTask {
                                  ? Collections.singletonList(query) : tables;
 
     String mode = config.getString(JdbcSourceTaskConfig.MODE_CONFIG);
+    //used only in table mode
+    Map<String, List<Map<String, String>>> partitionsByTableFqn = new HashMap<>();
     Map<Map<String, String>, Map<String, Object>> offsets = null;
     if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)
         || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)
@@ -113,13 +127,17 @@ public class JdbcSourceTask extends SourceTask {
       List<Map<String, String>> partitions = new ArrayList<>(tables.size());
       switch (queryMode) {
         case TABLE:
+          log.trace("Starting in TABLE mode");
           for (String table : tables) {
-            Map<String, String> partition =
-                Collections.singletonMap(JdbcSourceConnectorConstants.TABLE_NAME_KEY, table);
-            partitions.add(partition);
+            // Find possible partition maps for different offset protocols
+            // We need to search by all offset protocol partition keys to support compatibility
+            List<Map<String, String>> tablePartitions = possibleTablePartitions(table);
+            partitions.addAll(tablePartitions);
+            partitionsByTableFqn.put(table, tablePartitions);
           }
           break;
         case QUERY:
+          log.trace("Starting in QUERY mode");
           partitions.add(Collections.singletonMap(JdbcSourceConnectorConstants.QUERY_NAME_KEY,
                                                   JdbcSourceConnectorConstants.QUERY_NAME_VALUE));
           break;
@@ -127,6 +145,7 @@ public class JdbcSourceTask extends SourceTask {
           throw new ConnectException("Unknown query mode: " + queryMode);
       }
       offsets = context.offsetStorageReader().offsets(partitions);
+      log.trace("The partition offsets are {}", offsets);
     }
 
     String incrementingColumn
@@ -139,8 +158,10 @@ public class JdbcSourceTask extends SourceTask {
         = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
     Long timestampInitial
         = config.getLong(JdbcSourceConnectorConfig.TIMESTAMP_INITIAL_CONFIG);
+    TimeZone timeZone = config.timeZone();
 
     for (String tableOrQuery : tablesOrQuery) {
+      final List<Map<String, String>> tablePartitionsToCheck;
       final Map<String, String> partition;
       switch (queryMode) {
         case TABLE:
@@ -152,24 +173,33 @@ public class JdbcSourceTask extends SourceTask {
                 timestampColumns
             );
           }
-          partition = Collections.singletonMap(
-              JdbcSourceConnectorConstants.TABLE_NAME_KEY,
-              tableOrQuery
-          );
+          tablePartitionsToCheck = partitionsByTableFqn.get(tableOrQuery);
           break;
         case QUERY:
           partition = Collections.singletonMap(
               JdbcSourceConnectorConstants.QUERY_NAME_KEY,
               JdbcSourceConnectorConstants.QUERY_NAME_VALUE
           );
+          tablePartitionsToCheck = Collections.singletonList(partition);
           break;
         default:
           throw new ConnectException("Unexpected query mode: " + queryMode);
       }
 
-      Map<String, Object> offset = offsets == null ? null : offsets.get(partition);
+      // The partition map varies by offset protocol. Since we don't know which protocol each
+      // table's offsets are keyed by, we need to use the different possible partitions
+      // (newest protocol version first) to find the actual offsets for each table.
+      Map<String, Object> offset = null;
+      if (offsets != null) {
+        for (Map<String, String> toCheckPartition : tablePartitionsToCheck) {
+          offset = offsets.get(toCheckPartition);
+          if (offset != null) {
+            log.info("Found offset {} for partition {}", offsets, toCheckPartition);
+            break;
+          }
+        }
+      }
       offset = offset == null ? fetchInitialOffset(timestampInitial) : offset;
-
 
       String topicPrefix = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
 
@@ -187,7 +217,8 @@ public class JdbcSourceTask extends SourceTask {
                 null,
                 incrementingColumn,
                 offset,
-                timestampDelayInterval
+                timestampDelayInterval,
+                timeZone
             )
         );
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
@@ -200,7 +231,8 @@ public class JdbcSourceTask extends SourceTask {
                 timestampColumns,
                 null,
                 offset,
-                timestampDelayInterval
+                timestampDelayInterval,
+                timeZone
             )
         );
       } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
@@ -213,13 +245,25 @@ public class JdbcSourceTask extends SourceTask {
                 timestampColumns,
                 incrementingColumn,
                 offset,
-                timestampDelayInterval
+                timestampDelayInterval,
+                timeZone
             )
         );
       }
     }
 
     running.set(true);
+    log.info("Started JDBC source task");
+  }
+
+  //This method returns a list of possible partition maps for different offset protocols
+  //This helps with the upgrades
+  private List<Map<String, String>> possibleTablePartitions(String table) {
+    TableId tableId = dialect.parseTableIdentifier(table);
+    return Arrays.asList(
+        OffsetProtocols.sourcePartitionForProtocolV1(tableId),
+        OffsetProtocols.sourcePartitionForProtocolV0(tableId)
+    );
   }
 
   private Map<String, Object> fetchInitialOffset(Long timestampInitial) {
@@ -235,11 +279,20 @@ public class JdbcSourceTask extends SourceTask {
 
   @Override
   public void stop() throws ConnectException {
+    log.info("Stopping JDBC source task");
+    running.set(false);
+    // All resources are closed at the end of 'poll()' when no longer running or
+    // if there is an error
+  }
+
+  protected void closeResources() {
+    log.info("Closing resources for JDBC source task");
     try {
-      running.set(false);
       if (cachedConnectionProvider != null) {
         cachedConnectionProvider.close();
       }
+    } catch (Throwable t) {
+      log.warn("Error while closing the connections", t);
     } finally {
       cachedConnectionProvider = null;
       try {
@@ -247,7 +300,7 @@ public class JdbcSourceTask extends SourceTask {
           dialect.close();
         }
       } catch (Throwable t) {
-        log.warn("Error while closing the {} dialect: ", dialect, t);
+        log.warn("Error while closing the {} dialect: ", dialect.name(), t);
       } finally {
         dialect = null;
       }
@@ -303,6 +356,8 @@ public class JdbcSourceTask extends SourceTask {
         return null;
       } catch (Throwable t) {
         resetAndRequeueHead(querier);
+        // This task has failed, so close any resources (may be reopened if needed) before throwing
+        closeResources();
         throw t;
       }
     }
@@ -312,6 +367,7 @@ public class JdbcSourceTask extends SourceTask {
     if (querier != null) {
       resetAndRequeueHead(querier);
     }
+    closeResources();
     return null;
   }
 

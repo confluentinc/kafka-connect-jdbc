@@ -62,7 +62,7 @@ public class Db2DatabaseDialect extends GenericDatabaseDialect {
 
   @Override
   protected String currentTimestampDatabaseQuery() {
-    return "values(CURRENT_TIMESTAMP)";
+    return "SELECT CURRENT_TIMESTAMP(12) FROM SYSIBM.SYSDUMMY1;";
   }
 
   @Override
@@ -160,5 +160,12 @@ public class Db2DatabaseDialect extends GenericDatabaseDialect {
            .of(nonKeyColumns, keyColumns);
     builder.append(")");
     return builder.toString();
+  }
+
+  @Override
+  protected String sanitizedUrl(String url) {
+    // DB2 has semicolon delimited property name-value pairs
+    return super.sanitizedUrl(url)
+                .replaceAll("(?i)([:;]password=)[^;]*", "$1****");
   }
 }

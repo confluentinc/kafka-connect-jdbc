@@ -112,6 +112,7 @@ public class BufferedRecords {
       // Continue with current batch state
       records.add(record);
       if (records.size() >= config.batchSize) {
+        log.debug("Flushing buffered records after exceeding configured batch size.");
         flushed = flush();
       } else {
         flushed = Collections.emptyList();
@@ -119,6 +120,8 @@ public class BufferedRecords {
     } else {
       // Each batch needs to have the same SchemaPair, so get the buffered records out, reset
       // state and re-attempt the add
+      log.debug("Flushing buffered records after due to unequal schema pairs: "
+          + "Current Schemas: {}, Next Schemas: {}", currentSchemaPair, schemaPair);
       flushed = flush();
       currentSchemaPair = null;
       flushed.addAll(add(record));
@@ -131,6 +134,7 @@ public class BufferedRecords {
       log.debug("Records is empty");
       return new ArrayList<>();
     }
+    log.debug("Flushing {} Buffered Records", records.size());
     for (SinkRecord record : records) {
       preparedStatementBinder.bindRecord(record);
     }

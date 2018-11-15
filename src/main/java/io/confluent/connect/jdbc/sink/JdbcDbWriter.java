@@ -66,7 +66,9 @@ public class JdbcDbWriter {
       }
       buffer.add(record);
     }
-    for (BufferedRecords buffer : bufferByTable.values()) {
+    for (TableId tableId : bufferByTable.keySet()) {
+      BufferedRecords buffer = bufferByTable.get(tableId);
+      log.debug("Flushing records in JDBC Writer for table ID: {}", tableId);
       buffer.flush();
       buffer.close();
     }

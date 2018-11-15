@@ -121,7 +121,7 @@ public class BufferedRecords {
       // Each batch needs to have the same SchemaPair, so get the buffered records out, reset
       // state and re-attempt the add
       log.debug("Flushing buffered records after due to unequal schema pairs: "
-          + "Current Schemas: {}, Next Schemas: {}", currentSchemaPair, schemaPair);
+          + "current schemas: {}, next schemas: {}", currentSchemaPair, schemaPair);
       flushed = flush();
       currentSchemaPair = null;
       flushed.addAll(add(record));

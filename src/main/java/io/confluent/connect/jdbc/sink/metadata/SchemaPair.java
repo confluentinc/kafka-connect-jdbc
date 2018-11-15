@@ -48,6 +48,6 @@ public class SchemaPair {
   }
 
   public String toString() {
-    return String.format("<SchemaPair: %s, %s>", keySchema.toString(), valueSchema.toString());
+    return String.format("<SchemaPair: %s, %s>", keySchema, valueSchema);
   }
 }

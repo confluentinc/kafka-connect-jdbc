@@ -112,7 +112,8 @@ public class BufferedRecords {
       // Continue with current batch state
       records.add(record);
       if (records.size() >= config.batchSize) {
-        log.debug("Flushing buffered records after exceeding configured batch size.");
+        log.debug("Flushing buffered records after exceeding configured batch size {}.",
+            config.batchSize);
         flushed = flush();
       } else {
         flushed = Collections.emptyList();

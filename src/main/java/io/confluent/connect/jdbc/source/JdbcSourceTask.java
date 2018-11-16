@@ -22,7 +22,9 @@ import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.Version;
-import java.util.TimeZone;
+
+import java.util.*;
+
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.common.utils.Time;
@@ -34,17 +36,6 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.PriorityQueue;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
@@ -199,7 +190,7 @@ public class JdbcSourceTask extends SourceTask {
           }
         }
       }
-      offset = offset == null ? fetchInitialOffset(timestampInitial) : offset;
+      offset = computeInitialOffset(tableOrQuery, offset, timeZone);
 
       String topicPrefix = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
 
@@ -266,15 +257,33 @@ public class JdbcSourceTask extends SourceTask {
     );
   }
 
-  private Map<String, Object> fetchInitialOffset(Long timestampInitial) {
-    // can specify start point in case initial query
-    Map<String, Object> offset = new HashMap<>();
-    if (timestampInitial == JdbcSourceConnectorConfig.TIMESTAMP_INITIAL_CURRENT) {
-      offset.put(TimestampIncrementingOffset.TIMESTAMP_FIELD, new Date().getTime());
+  protected Map<String, Object> computeInitialOffset(
+          String tableOrQuery,
+          Map<String, Object> partitionOffset,
+          TimeZone timezone) {
+    if (!(partitionOffset == null)) {
+      return partitionOffset;
     } else {
-      offset.put(TimestampIncrementingOffset.TIMESTAMP_FIELD, timestampInitial);
+      Map initialPartitionOffset = null;
+      // no offsets found
+      Long timestampInitial = config.getLong(JdbcSourceConnectorConfig.TIMESTAMP_INITIAL_CONFIG);
+      if (timestampInitial != null) {
+        // start at the specified timestamp
+        if (timestampInitial == JdbcSourceConnectorConfig.TIMESTAMP_INITIAL_CURRENT) {
+          // use the current time
+          try (Connection con = cachedConnectionProvider.getConnection()) {
+            Calendar cal = Calendar.getInstance(timezone);
+            timestampInitial = dialect.currentTimeOnDB(con, cal).getTime();
+          } catch (SQLException e) {
+            throw new ConnectException("Error while getting initial timestamp from database", e);
+          }
+        }
+        initialPartitionOffset = new HashMap<>();
+        initialPartitionOffset.put(TimestampIncrementingOffset.TIMESTAMP_FIELD, timestampInitial);
+        log.info("No offsets found for '{}', so using configured timestamp {}", tableOrQuery, timestampInitial);
+      }
+      return initialPartitionOffset;
     }
-    return offset;
   }
 
   @Override

@@ -294,6 +294,66 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     PowerMock.verifyAll();
   }
 
+
+  @Test
+  public void testComputeInitialOffsetWithTime() throws Exception{
+    expectInitializeNoOffsets(Arrays.asList(
+            SINGLE_TABLE_PARTITION_WITH_VERSION,
+            SINGLE_TABLE_PARTITION)
+    );
+    PowerMock.replayAll();
+    db.createTable(SINGLE_TABLE_NAME,
+            "modified", "TIMESTAMP NOT NULL",
+            "id", "INT");
+    startTask("modified", null, null, 4L, TimeZone.getDefault().getID(), 100L);
+
+    Map<String, Object> result = task.computeInitialOffset("table", null, TimeZone.getDefault());
+    Map expect = new HashMap<String, Object>();
+    expect.put(TimestampIncrementingOffset.TIMESTAMP_FIELD, 100L);
+    assertEquals(expect , result);
+    PowerMock.verifyAll();
+  }
+
+  @Test
+  public void testComputeInitialOffsetWithNull() throws Exception{
+    expectInitializeNoOffsets(Arrays.asList(
+            SINGLE_TABLE_PARTITION_WITH_VERSION,
+            SINGLE_TABLE_PARTITION)
+    );
+    PowerMock.replayAll();
+    db.createTable(SINGLE_TABLE_NAME,
+            "modified", "TIMESTAMP NOT NULL",
+            "id", "INT");
+    startTask("modified", null, null, 4L, TimeZone.getDefault().getID(), null);
+
+    Map<String, Object> result = task.computeInitialOffset("table", null, TimeZone.getDefault());
+    Map expect = null;
+    assertEquals(expect , result);
+    PowerMock.verifyAll();
+  }
+
+  @Test
+  public void testComputeInitialOffsetWithCurrent() throws Exception{
+    expectInitializeNoOffsets(Arrays.asList(
+            SINGLE_TABLE_PARTITION_WITH_VERSION,
+            SINGLE_TABLE_PARTITION)
+    );
+    PowerMock.replayAll();
+    db.createTable(SINGLE_TABLE_NAME,
+            "modified", "TIMESTAMP NOT NULL",
+            "id", "INT");
+    startTask("modified", null, null, 4L, TimeZone.getDefault().getID(), -1L);
+
+    Map<String, Object> result = task.computeInitialOffset("table", null, TimeZone.getDefault());
+    Map expect = new HashMap<String, Object>();
+    assertTrue(result.containsKey(TimestampIncrementingOffset.TIMESTAMP_FIELD));
+    long gapWithIn = 1000L;
+    long gap =new Date().getTime() - Long.valueOf(result.get(TimestampIncrementingOffset.TIMESTAMP_FIELD).toString());
+    assertTrue(gapWithIn > gap);
+    PowerMock.verifyAll();
+  }
+
+
   @Test
   public void testTimestampWithTimestampInitialCurrent() throws Exception {
     expectInitializeNoOffsets(Arrays.asList(
@@ -309,12 +369,14 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
             "id", "INT");
 
     Long currentTime = new Date().getTime();
+    // Derby DB start with default Timezone
+    TimeZone tz = TimeZone.getDefault();
 
-    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_TIME_ZONE), "id", 1);
-    db.insert(SINGLE_TABLE_NAME, "modified", new Timestamp(currentTime+10L).toString(), "id", 2);
-    db.insert(SINGLE_TABLE_NAME, "modified", new Timestamp(currentTime+20L).toString(), "id", 3);
+    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), tz), "id", 1);
+    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(currentTime+1000L), tz), "id", 2);
+    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(currentTime+1000L), tz), "id", 3);
 
-    startTask("modified", null, null, 4L, "UTC", -1L);
+    startTask("modified", null, null, 4L, tz.getID(), -1L);
 
     // expect records those timestamp is newer than current time.
     verifyPoll(2, "id", Arrays.asList(2, 3), true,false, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
@@ -812,10 +874,6 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   }
 
   private void startTask(String timestampColumn, String incrementingColumn, String query, Long delay, String timeZone, Long timestampInitial) {
-    startTask(timestampColumn, incrementingColumn, query, delay, timeZone, timestampInitial, null);
-  }
-
-  private void startTask(String timestampColumn, String incrementingColumn, String query, Long delay, String timeZone, Long timestampInitial, Long incrementInitial) {
     String mode = null;
     if (timestampColumn != null && incrementingColumn != null) {
       mode = JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING;

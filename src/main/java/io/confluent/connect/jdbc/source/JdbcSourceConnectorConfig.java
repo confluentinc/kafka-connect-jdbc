@@ -169,11 +169,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final String TIMESTAMP_COLUMN_NAME_DISPLAY = "Timestamp Column Name";
 
   public static final String TIMESTAMP_INITIAL_CONFIG = "timestamp.initial";
-  public static final long TIMESTAMP_INITIAL_DEFAULT = 0;
-  public static final long TIMESTAMP_INITIAL_CURRENT = -1;
+  public static final Long TIMESTAMP_INITIAL_DEFAULT = null;
+  public static final Long TIMESTAMP_INITIAL_CURRENT = Long.valueOf(-1);
   public static final String TIMESTAMP_INITIAL_DOC =
-      "Long value to specify when the query offset starts."
-      + "offset starts from current time if the value is -1.";
+      "The epoch timestamp used for initial queries that use timestamp criteria. "
+      + "Use -1 to use the current time. If not specified, all data will be retrieved.";
   public static final String TIMESTAMP_INITIAL_DISPLAY = "Unix time value of initial timestamp";
 
   public static final String TABLE_POLL_INTERVAL_MS_CONFIG = "table.poll.interval.ms";

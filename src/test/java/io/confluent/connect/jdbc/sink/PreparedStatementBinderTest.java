@@ -58,6 +58,7 @@ import static org.mockito.Mockito.verify;
 public class PreparedStatementBinderTest {
 
   private DatabaseDialect dialect;
+  private JdbcSinkConfig config;
 
   @Before
   public void beforeEach() {
@@ -67,6 +68,7 @@ public class PreparedStatementBinderTest {
     props.put(JdbcSinkConfig.CONNECTION_PASSWORD, "password");
     JdbcSinkConfig config = new JdbcSinkConfig(props);
     dialect = new GenericDatabaseDialect(config);
+    this.config = config;
   }
 
   @Test
@@ -118,10 +120,12 @@ public class PreparedStatementBinderTest {
     PreparedStatementBinder binder = new PreparedStatementBinder(
         dialect,
         statement,
+        null,
         pkMode,
         schemaPair,
         fieldsMetadata,
-        JdbcSinkConfig.InsertMode.INSERT
+        JdbcSinkConfig.InsertMode.INSERT,
+        config
     );
 
     binder.bindRecord(new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));
@@ -181,9 +185,11 @@ public class PreparedStatementBinderTest {
         PreparedStatementBinder binder = new PreparedStatementBinder(
                 dialect,
                 statement,
+                null,
                 pkMode,
                 schemaPair,
-                fieldsMetadata, JdbcSinkConfig.InsertMode.UPSERT
+                fieldsMetadata, JdbcSinkConfig.InsertMode.UPSERT,
+                config
         );
 
         binder.bindRecord(new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));
@@ -220,9 +226,11 @@ public class PreparedStatementBinderTest {
         PreparedStatementBinder binder = new PreparedStatementBinder(
                 dialect,
                 statement,
+                null,
                 pkMode,
                 schemaPair,
-                fieldsMetadata, JdbcSinkConfig.InsertMode.UPDATE
+                fieldsMetadata, JdbcSinkConfig.InsertMode.UPDATE,
+                config
         );
 
         binder.bindRecord(new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));

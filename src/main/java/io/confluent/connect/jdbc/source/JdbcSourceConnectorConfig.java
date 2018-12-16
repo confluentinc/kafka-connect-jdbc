@@ -149,6 +149,14 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String MODE_INCREMENTING = "incrementing";
   public static final String MODE_TIMESTAMP_INCREMENTING = "timestamp+incrementing";
 
+  public static final String INCREMENTING_OFFSET = "incrementing.offset";
+  public static final String INCREMENTING_OFFSET_DOC =
+          "set the offset manually for incrementing mode";
+
+  public static final String TIMESTAMP_OFFSET = "timestamp.offset";
+  public static final String TIMESTAMP_OFFSET_DOC =
+          "set the offset manually for timestamp mode";
+
   public static final String INCREMENTING_COLUMN_NAME_CONFIG = "incrementing.column.name";
   private static final String INCREMENTING_COLUMN_NAME_DOC =
       "The name of the strictly incrementing column to use to detect new rows. Any empty value "
@@ -483,7 +491,27 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         MODE_GROUP,
         ++orderInGroup,
         Width.SHORT,
-        QUERY_DISPLAY);
+        QUERY_DISPLAY
+    ).define(
+            INCREMENTING_OFFSET,
+            Type.LONG,
+            0,
+            Importance.LOW,
+            INCREMENTING_OFFSET_DOC,
+            MODE_GROUP,
+            ++orderInGroup,
+            Width.LONG,
+            INCREMENTING_OFFSET
+    ).define(
+            TIMESTAMP_OFFSET,
+            Type.LONG,
+            0,
+            Importance.LOW,
+            TIMESTAMP_OFFSET_DOC,
+            MODE_GROUP,
+            ++orderInGroup,
+            Width.LONG,
+            TIMESTAMP_OFFSET);
   }
 
   private static final void addConnectorOptions(ConfigDef config) {

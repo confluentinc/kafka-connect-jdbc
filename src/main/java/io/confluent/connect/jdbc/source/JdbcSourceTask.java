@@ -189,6 +189,24 @@ public class JdbcSourceTask extends SourceTask {
         }
       }
 
+      Long incrementingOffset = config.getLong(JdbcSourceConnectorConfig.INCREMENTING_OFFSET);
+      Long timestampOffset = config.getLong(JdbcSourceConnectorConfig.TIMESTAMP_OFFSET);
+
+
+      if (incrementingOffset != null) {
+        if (offset == null) {
+          offset = new HashMap<>();
+        }
+        offset.put("incrementing", incrementingOffset);
+      }
+
+      if (timestampOffset != null) {
+        if (offset == null) {
+          offset = new HashMap<>();
+        }
+        offset.put("timestamp", timestampOffset);
+      }
+
       String topicPrefix = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
 
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {

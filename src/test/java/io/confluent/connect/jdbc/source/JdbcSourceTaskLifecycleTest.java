@@ -42,9 +42,6 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
   @Mock
   private CachedConnectionProvider mockCachedConnectionProvider;
 
-  @Mock
-  private Connection conn;
-
   @Test(expected = ConnectException.class)
   public void testMissingParentConfig() {
     Map<String, String> props = singleTableConfig();
@@ -104,10 +101,7 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
     task.poll();
     assertEquals(startTime + 2 * JdbcSourceConnectorConfig.POLL_INTERVAL_MS_DEFAULT,
                  time.milliseconds());
-
-    task.stop();
   }
-
 
   @Test
   public void testSingleUpdateMultiplePoll() throws Exception {
@@ -135,7 +129,6 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
     task.poll();
     assertEquals(startTime + JdbcSourceConnectorConfig.POLL_INTERVAL_MS_DEFAULT,
                  time.milliseconds());
-
   }
 
   @Test

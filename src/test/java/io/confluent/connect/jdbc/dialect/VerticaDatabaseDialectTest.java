@@ -91,15 +91,15 @@ public class VerticaDatabaseDialectTest extends BaseDialectTest<VerticaDatabaseD
   @Test
   public void shouldBuildCreateQueryStatement() {
     assertEquals(
-        "CREATE TABLE \"myTable\" (\n"
-        + "\"c1\" INT NOT NULL,\n"
-        + "\"c2\" INT NOT NULL,\n"
-        + "\"c3\" VARCHAR(1024) NOT NULL,\n"
-        + "\"c4\" VARCHAR(1024) NULL,\n"
-        + "\"c5\" DATE DEFAULT '2001-03-15',\n"
-        + "\"c6\" TIME DEFAULT '00:00:00.000',\n"
-        + "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "\"c8\" DECIMAL(18,4) NULL,\n"
+        "CREATE TABLE \"myTable\" (" + System.lineSeparator()
+        + "\"c1\" INT NOT NULL," + System.lineSeparator()
+        + "\"c2\" INT NOT NULL," + System.lineSeparator()
+        + "\"c3\" VARCHAR(1024) NOT NULL," + System.lineSeparator()
+        + "\"c4\" VARCHAR(1024) NULL," + System.lineSeparator()
+        + "\"c5\" DATE DEFAULT '2001-03-15'," + System.lineSeparator()
+        + "\"c6\" TIME DEFAULT '00:00:00.000'," + System.lineSeparator()
+        + "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator()
+        + "\"c8\" DECIMAL(18,4) NULL," + System.lineSeparator()
         + "PRIMARY KEY(\"c1\"))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
@@ -107,15 +107,15 @@ public class VerticaDatabaseDialectTest extends BaseDialectTest<VerticaDatabaseD
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
     assertEquals(
-        "CREATE TABLE myTable (\n"
-        + "c1 INT NOT NULL,\n"
-        + "c2 INT NOT NULL,\n"
-        + "c3 VARCHAR(1024) NOT NULL,\n"
-        + "c4 VARCHAR(1024) NULL,\n"
-        + "c5 DATE DEFAULT '2001-03-15',\n"
-        + "c6 TIME DEFAULT '00:00:00.000',\n"
-        + "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "c8 DECIMAL(18,4) NULL,\n"
+        "CREATE TABLE myTable (" + System.lineSeparator()
+        + "c1 INT NOT NULL," + System.lineSeparator()
+        + "c2 INT NOT NULL," + System.lineSeparator()
+        + "c3 VARCHAR(1024) NOT NULL," + System.lineSeparator()
+        + "c4 VARCHAR(1024) NULL," + System.lineSeparator()
+        + "c5 DATE DEFAULT '2001-03-15'," + System.lineSeparator()
+        + "c6 TIME DEFAULT '00:00:00.000'," + System.lineSeparator()
+        + "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator()
+        + "c8 DECIMAL(18,4) NULL," + System.lineSeparator()
         + "PRIMARY KEY(c1))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );

@@ -102,15 +102,15 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
   @Test
   public void shouldBuildCreateTableStatement() {
     assertEquals(
-        "CREATE TABLE \"myTable\" (\n"
-        + "\"c1\" int NOT NULL,\n"
-        + "\"c2\" bigint NOT NULL,\n"
-        +"\"c3\" text NOT NULL,\n"
-        + "\"c4\" text NULL,\n"
-        + "\"c5\" date DEFAULT '2001-03-15',\n"
-        + "\"c6\" time DEFAULT '00:00:00.000',\n"
-        + "\"c7\" datetime DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "\"c8\" decimal(38,4) NULL,\n" +
+        "CREATE TABLE \"myTable\" (" + System.lineSeparator()
+        + "\"c1\" int NOT NULL," + System.lineSeparator()
+        + "\"c2\" bigint NOT NULL," + System.lineSeparator()
+        +"\"c3\" text NOT NULL," + System.lineSeparator()
+        + "\"c4\" text NULL," + System.lineSeparator()
+        + "\"c5\" date DEFAULT '2001-03-15'," + System.lineSeparator()
+        + "\"c6\" time DEFAULT '00:00:00.000'," + System.lineSeparator()
+        + "\"c7\" datetime DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator()
+        + "\"c8\" decimal(38,4) NULL," + System.lineSeparator()  +
         "PRIMARY KEY(\"c1\"))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
@@ -118,15 +118,15 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
     assertEquals(
-        "CREATE TABLE myTable (\n"
-        + "c1 int NOT NULL,\n"
-        + "c2 bigint NOT NULL,\n"
-        + "c3 text NOT NULL,\n"
-        + "c4 text NULL,\n"
-        + "c5 date DEFAULT '2001-03-15',\n"
-        + "c6 time DEFAULT '00:00:00.000',\n"
-        + "c7 datetime DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "c8 decimal(38,4) NULL,\n" +
+        "CREATE TABLE myTable (" + System.lineSeparator()
+        + "c1 int NOT NULL," + System.lineSeparator()
+        + "c2 bigint NOT NULL," + System.lineSeparator()
+        + "c3 text NOT NULL," + System.lineSeparator()
+        + "c4 text NULL," + System.lineSeparator()
+        + "c5 date DEFAULT '2001-03-15'," + System.lineSeparator()
+        + "c6 time DEFAULT '00:00:00.000'," + System.lineSeparator()
+        + "c7 datetime DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator()
+        + "c8 decimal(38,4) NULL," + System.lineSeparator()  +
         "PRIMARY KEY(c1))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
@@ -171,10 +171,15 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
   public void shouldBuildAlterTableStatement() {
     List<String> statements = dialect.buildAlterTable(tableId, sinkRecordFields);
     String[] sql = {
-        "ALTER TABLE \"myTable\" ADD\n" + "\"c1\" int NOT NULL,\n" + "\"c2\" bigint NOT NULL,\n" +
-        "\"c3\" text NOT NULL,\n" + "\"c4\" text NULL,\n" +
-        "\"c5\" date DEFAULT '2001-03-15',\n" + "\"c6\" time DEFAULT '00:00:00.000',\n" +
-        "\"c7\" datetime DEFAULT '2001-03-15 00:00:00.000',\n" + "\"c8\" decimal(38,4) NULL"};
+        "ALTER TABLE \"myTable\" ADD" + System.lineSeparator() +
+        "\"c1\" int NOT NULL," + System.lineSeparator() +
+        "\"c2\" bigint NOT NULL," + System.lineSeparator() +
+        "\"c3\" text NOT NULL," + System.lineSeparator() +
+        "\"c4\" text NULL," + System.lineSeparator() +
+        "\"c5\" date DEFAULT '2001-03-15'," + System.lineSeparator() +
+        "\"c6\" time DEFAULT '00:00:00.000'," + System.lineSeparator() +
+        "\"c7\" datetime DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
+        "\"c8\" decimal(38,4) NULL"};
     assertStatements(sql, statements);
   }
 

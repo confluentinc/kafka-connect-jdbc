@@ -104,6 +104,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     task.put(Collections.singleton(
         new SinkRecord(topic, 1, null, null, SCHEMA, struct, 42)
     ));
+    task.stop();
 
     assertEquals(
         1,
@@ -176,6 +177,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
         .put("modified", new Date(1474661402123L));
 
     task.put(Collections.singleton(new SinkRecord(topic, 1, null, null, SCHEMA, struct, 43)));
+    task.stop();
 
     assertEquals(
         1,

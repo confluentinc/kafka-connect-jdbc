@@ -80,6 +80,9 @@ public class JdbcSourceTaskTestBase {
 
   @After
   public void tearDown() throws Exception {
+    task.stop();
+    // call poll in order to close task resources
+    task.poll();
     db.close();
     db.dropDatabase();
   }

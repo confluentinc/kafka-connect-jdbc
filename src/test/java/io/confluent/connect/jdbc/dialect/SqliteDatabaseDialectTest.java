@@ -111,15 +111,15 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
   @Test
   public void shouldBuildCreateQueryStatement() {
     assertEquals(
-        "CREATE TABLE `myTable` (\n"
-        + "`c1` INTEGER NOT NULL,\n"
-        + "`c2` INTEGER NOT NULL,\n"
-        + "`c3` TEXT NOT NULL,\n"
-        + "`c4` TEXT NULL,\n"
-        + "`c5` NUMERIC DEFAULT '2001-03-15',\n"
-        + "`c6` NUMERIC DEFAULT '00:00:00.000',\n"
-        + "`c7` NUMERIC DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "`c8` NUMERIC NULL,\n"
+        "CREATE TABLE `myTable` (" + System.lineSeparator()
+        + "`c1` INTEGER NOT NULL," + System.lineSeparator()
+        + "`c2` INTEGER NOT NULL," + System.lineSeparator()
+        + "`c3` TEXT NOT NULL," + System.lineSeparator()
+        + "`c4` TEXT NULL," + System.lineSeparator()
+        + "`c5` NUMERIC DEFAULT '2001-03-15'," + System.lineSeparator()
+        + "`c6` NUMERIC DEFAULT '00:00:00.000'," + System.lineSeparator()
+        + "`c7` NUMERIC DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator()
+        + "`c8` NUMERIC NULL," + System.lineSeparator()
         + "PRIMARY KEY(`c1`))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
@@ -127,15 +127,15 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
     assertEquals(
-        "CREATE TABLE myTable (\n"
-        + "c1 INTEGER NOT NULL,\n"
-        + "c2 INTEGER NOT NULL,\n"
-        + "c3 TEXT NOT NULL,\n"
-        + "c4 TEXT NULL,\n"
-        + "c5 NUMERIC DEFAULT '2001-03-15',\n"
-        + "c6 NUMERIC DEFAULT '00:00:00.000',\n"
-        + "c7 NUMERIC DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "c8 NUMERIC NULL,\n"
+        "CREATE TABLE myTable (" + System.lineSeparator()
+        + "c1 INTEGER NOT NULL," + System.lineSeparator()
+        + "c2 INTEGER NOT NULL," + System.lineSeparator()
+        + "c3 TEXT NOT NULL," + System.lineSeparator()
+        + "c4 TEXT NULL," + System.lineSeparator()
+        + "c5 NUMERIC DEFAULT '2001-03-15'," + System.lineSeparator()
+        + "c6 NUMERIC DEFAULT '00:00:00.000'," + System.lineSeparator()
+        + "c7 NUMERIC DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator()
+        + "c8 NUMERIC NULL," + System.lineSeparator()
         + "PRIMARY KEY(c1))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );

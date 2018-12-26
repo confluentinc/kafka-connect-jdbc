@@ -91,10 +91,15 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
   @Test
   public void shouldBuildCreateQueryStatement() {
     String expected =
-        "CREATE TABLE \"myTable\" (\n" + "\"c1\" INTEGER NOT NULL,\n" + "\"c2\" BIGINT NOT NULL,\n"
-        + "\"c3\" VARCHAR(32672) NOT NULL,\n" + "\"c4\" VARCHAR(32672) NULL,\n"
-        + "\"c5\" DATE DEFAULT '2001-03-15',\n" + "\"c6\" TIME DEFAULT '00:00:00.000',\n"
-        + "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" + "\"c8\" DECIMAL(31,4) NULL,\n"
+        "CREATE TABLE \"myTable\" (" + System.lineSeparator()
+        + "\"c1\" INTEGER NOT NULL," + System.lineSeparator()
+        + "\"c2\" BIGINT NOT NULL," + System.lineSeparator()
+        + "\"c3\" VARCHAR(32672) NOT NULL," + System.lineSeparator()
+        + "\"c4\" VARCHAR(32672) NULL," + System.lineSeparator()
+        + "\"c5\" DATE DEFAULT '2001-03-15'," + System.lineSeparator()
+        + "\"c6\" TIME DEFAULT '00:00:00.000'," + System.lineSeparator()
+        + "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator()
+        + "\"c8\" DECIMAL(31,4) NULL," + System.lineSeparator()
         + "PRIMARY KEY(\"c1\"))";
     String sql = dialect.buildCreateTableStatement(tableId, sinkRecordFields);
     assertEquals(expected, sql);
@@ -106,15 +111,15 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
     dialect = createDialect();
 
     String expected =
-        "CREATE TABLE myTable (\n"
-        + "c1 INTEGER NOT NULL,\n"
-        + "c2 BIGINT NOT NULL,\n"
-        + "c3 VARCHAR(32672) NOT NULL,\n"
-        + "c4 VARCHAR(32672) NULL,\n"
-        + "c5 DATE DEFAULT '2001-03-15',\n"
-        + "c6 TIME DEFAULT '00:00:00.000',\n"
-        + "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "c8 DECIMAL(31,4) NULL,\n"
+        "CREATE TABLE myTable (" + System.lineSeparator()
+        + "c1 INTEGER NOT NULL," + System.lineSeparator()
+        + "c2 BIGINT NOT NULL," + System.lineSeparator()
+        + "c3 VARCHAR(32672) NOT NULL," + System.lineSeparator()
+        + "c4 VARCHAR(32672) NULL," + System.lineSeparator()
+        + "c5 DATE DEFAULT '2001-03-15'," + System.lineSeparator()
+        + "c6 TIME DEFAULT '00:00:00.000'," + System.lineSeparator()
+        + "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator()
+        + "c8 DECIMAL(31,4) NULL," + System.lineSeparator()
         + "PRIMARY KEY(c1))";
     String sql = dialect.buildCreateTableStatement(tableId, sinkRecordFields);
     assertEquals(expected, sql);
@@ -123,14 +128,14 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
   @Test
   public void shouldBuildAlterTableStatement() {
     List<String> statements = dialect.buildAlterTable(tableId, sinkRecordFields);
-    String[] sql = {"ALTER TABLE \"myTable\" \n"
-                    + "ADD \"c1\" INTEGER NOT NULL,\n"
-                    + "ADD \"c2\" BIGINT NOT NULL,\n"
-                    + "ADD \"c3\" VARCHAR(32672) NOT NULL,\n"
-                    + "ADD \"c4\" VARCHAR(32672) NULL,\n"
-                    + "ADD \"c5\" DATE DEFAULT '2001-03-15',\n"
-                    + "ADD \"c6\" TIME DEFAULT '00:00:00.000',\n"
-                    + "ADD \"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
+    String[] sql = {"ALTER TABLE \"myTable\" " + System.lineSeparator()
+                    + "ADD \"c1\" INTEGER NOT NULL," + System.lineSeparator()
+                    + "ADD \"c2\" BIGINT NOT NULL," + System.lineSeparator()
+                    + "ADD \"c3\" VARCHAR(32672) NOT NULL," + System.lineSeparator()
+                    + "ADD \"c4\" VARCHAR(32672) NULL," + System.lineSeparator()
+                    + "ADD \"c5\" DATE DEFAULT '2001-03-15'," + System.lineSeparator()
+                    + "ADD \"c6\" TIME DEFAULT '00:00:00.000'," + System.lineSeparator()
+                    + "ADD \"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator()
                     + "ADD \"c8\" DECIMAL(31,4) NULL"};
     assertStatements(sql, statements);
   }
@@ -141,14 +146,14 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
     dialect = createDialect();
 
     List<String> statements = dialect.buildAlterTable(tableId, sinkRecordFields);
-    String[] sql = {"ALTER TABLE myTable \n"
-                    + "ADD c1 INTEGER NOT NULL,\n"
-                    + "ADD c2 BIGINT NOT NULL,\n"
-                    + "ADD c3 VARCHAR(32672) NOT NULL,\n"
-                    + "ADD c4 VARCHAR(32672) NULL,\n"
-                    + "ADD c5 DATE DEFAULT '2001-03-15',\n"
-                    + "ADD c6 TIME DEFAULT '00:00:00.000',\n"
-                    + "ADD c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
+    String[] sql = {"ALTER TABLE myTable " + System.lineSeparator()
+                    + "ADD c1 INTEGER NOT NULL," + System.lineSeparator()
+                    + "ADD c2 BIGINT NOT NULL," + System.lineSeparator()
+                    + "ADD c3 VARCHAR(32672) NOT NULL," + System.lineSeparator()
+                    + "ADD c4 VARCHAR(32672) NULL," + System.lineSeparator()
+                    + "ADD c5 DATE DEFAULT '2001-03-15'," + System.lineSeparator()
+                    + "ADD c6 TIME DEFAULT '00:00:00.000'," + System.lineSeparator()
+                    + "ADD c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator()
                     + "ADD c8 DECIMAL(31,4) NULL"};
     assertStatements(sql, statements);
   }

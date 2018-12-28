@@ -267,7 +267,7 @@ public class JdbcSourceTask extends SourceTask {
     if (!(partitionOffset == null)) {
       return partitionOffset;
     } else {
-      Map initialPartitionOffset = null;
+      Map<String, Object> initialPartitionOffset = null;
       // no offsets found
       Long timestampInitial = config.getLong(JdbcSourceConnectorConfig.TIMESTAMP_INITIAL_CONFIG);
       if (timestampInitial != null) {
@@ -281,7 +281,7 @@ public class JdbcSourceTask extends SourceTask {
             throw new ConnectException("Error while getting initial timestamp from database", e);
           }
         }
-        initialPartitionOffset = new HashMap<>();
+        initialPartitionOffset = new HashMap<String, Object>();
         initialPartitionOffset.put(TimestampIncrementingOffset.TIMESTAMP_FIELD, timestampInitial);
         log.info("No offsets found for '{}', so using configured timestamp {}",
                 tableOrQuery, timestampInitial);

@@ -308,7 +308,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     startTask("modified", null, null, 4L, TimeZone.getDefault().getID(), 100L);
 
     Map<String, Object> result = task.computeInitialOffset("table", null, TimeZone.getDefault());
-    Map expect = new HashMap<String, Object>();
+    Map<String, Object> expect = new HashMap<String, Object>();
     expect.put(TimestampIncrementingOffset.TIMESTAMP_FIELD, 100L);
     assertEquals(expect , result);
     PowerMock.verifyAll();
@@ -327,7 +327,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     startTask("modified", null, null, 4L, TimeZone.getDefault().getID(), null);
 
     Map<String, Object> result = task.computeInitialOffset("table", null, TimeZone.getDefault());
-    Map expect = null;
+    Map<String, Object> expect = null;
     assertEquals(expect , result);
     PowerMock.verifyAll();
   }
@@ -345,7 +345,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     startTask("modified", null, null, 4L, TimeZone.getDefault().getID(), -1L);
 
     Map<String, Object> result = task.computeInitialOffset("table", null, TimeZone.getDefault());
-    Map expect = new HashMap<String, Object>();
+    Map<String, Object> expect = new HashMap<String, Object>();
     assertTrue(result.containsKey(TimestampIncrementingOffset.TIMESTAMP_FIELD));
     long gapWithIn = 1000L;
     long gap =new Date().getTime() - Long.valueOf(result.get(TimestampIncrementingOffset.TIMESTAMP_FIELD).toString());

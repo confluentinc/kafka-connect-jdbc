@@ -1,22 +1,19 @@
 /*
- * Copyright 2016 Confluent Inc.
+ * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Confluent Community License; you may not use this file
+ * except in compliance with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
  */
 
 package io.confluent.connect.jdbc.sink;
 
-import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -24,6 +21,8 @@ import org.apache.kafka.connect.sink.SinkRecord;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.Matchers;
+import org.mockito.Mockito;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -34,9 +33,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 
-import io.confluent.connect.jdbc.sink.dialect.DbDialect;
-import org.mockito.Matchers;
-import org.mockito.Mockito;
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.dialect.DatabaseDialects;
+import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
+import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
@@ -58,9 +58,6 @@ public class BufferedRecordsTest {
 
   @Test
   public void correctBatching() throws SQLException {
-    final DbDialect dbDialect = DbDialect.fromConnectionString(sqliteHelper.sqliteUri());
-    final DbStructure dbStructure = new DbStructure(dbDialect);
-
     final HashMap<Object, Object> props = new HashMap<>();
     props.put("connection.url", sqliteHelper.sqliteUri());
     props.put("auto.create", true);
@@ -68,7 +65,12 @@ public class BufferedRecordsTest {
     props.put("batch.size", 1000); // sufficiently high to not cause flushes due to buffer being full
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
-    final BufferedRecords buffer = new BufferedRecords(config, "dummy", dbDialect, dbStructure, sqliteHelper.connection);
+    final String url = sqliteHelper.sqliteUri();
+    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+    final DbStructure dbStructure = new DbStructure(dbDialect);
+
+    final TableId tableId = new TableId(null, null, "dummy");
+    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
 
     final Schema schemaA = SchemaBuilder.struct()
         .field("name", Schema.STRING_SCHEMA)
@@ -102,7 +104,6 @@ public class BufferedRecordsTest {
 
   @Test
   public void testFlushSuccessNoInfo() throws SQLException {
-    final DbDialect dbDialect = DbDialect.fromConnectionString(sqliteHelper.sqliteUri());
     final HashMap<Object, Object> props = new HashMap<>();
     props.put("connection.url", "");
     props.put("auto.create", true);
@@ -110,14 +111,19 @@ public class BufferedRecordsTest {
     props.put("batch.size", 1000);
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
+    final String url = sqliteHelper.sqliteUri();
+    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+
     int[] batchResponse = new int[2];
     batchResponse[0] = Statement.SUCCESS_NO_INFO;
     batchResponse[1] = Statement.SUCCESS_NO_INFO;
 
     final DbStructure dbStructureMock = mock(DbStructure.class);
     when(dbStructureMock.createOrAmendIfNecessary(Matchers.any(JdbcSinkConfig.class),
-            Matchers.any(Connection.class), Matchers.anyString(), Matchers.any(FieldsMetadata.class))).thenReturn(
-            true);
+                                                  Matchers.any(Connection.class),
+                                                  Matchers.any(TableId.class),
+                                                  Matchers.any(FieldsMetadata.class)))
+        .thenReturn(true);
 
     PreparedStatement preparedStatementMock = mock(PreparedStatement.class);
     when(preparedStatementMock.executeBatch()).thenReturn(batchResponse);
@@ -125,8 +131,9 @@ public class BufferedRecordsTest {
     Connection connectionMock = mock(Connection.class);
     when(connectionMock.prepareStatement(Matchers.anyString())).thenReturn(preparedStatementMock);
 
-    final BufferedRecords buffer = new BufferedRecords(config, "dummy", dbDialect, dbStructureMock,
-            connectionMock);
+    final TableId tableId = new TableId(null, null, "dummy");
+    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect,
+                                                       dbStructureMock, connectionMock);
 
     final Schema schemaA = SchemaBuilder.struct().field("name", Schema.STRING_SCHEMA).build();
     final Struct valueA = new Struct(schemaA).put("name", "cuba");
@@ -144,7 +151,6 @@ public class BufferedRecordsTest {
 
   @Test
   public void testInsertModeUpdate() throws SQLException {
-    final DbDialect dbDialect = DbDialect.fromConnectionString(sqliteHelper.sqliteUri());
     final HashMap<Object, Object> props = new HashMap<>();
     props.put("connection.url", "");
     props.put("auto.create", true);
@@ -153,13 +159,18 @@ public class BufferedRecordsTest {
     props.put("insert.mode", "update");
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
+    final String url = sqliteHelper.sqliteUri();
+    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
     final DbStructure dbStructureMock = mock(DbStructure.class);
     when(dbStructureMock.createOrAmendIfNecessary(Matchers.any(JdbcSinkConfig.class),
-            Matchers.any(Connection.class), Matchers.anyString(), Matchers.any(FieldsMetadata.class))).thenReturn(
-            true);
+                                                  Matchers.any(Connection.class),
+                                                  Matchers.any(TableId.class),
+                                                  Matchers.any(FieldsMetadata.class)))
+        .thenReturn(true);
 
     final Connection connectionMock = mock(Connection.class);
-    final BufferedRecords buffer = new BufferedRecords(config, "dummy", dbDialect, dbStructureMock,
+    final TableId tableId = new TableId(null, null, "dummy");
+    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructureMock,
             connectionMock);
 
     final Schema schemaA = SchemaBuilder.struct().field("name", Schema.STRING_SCHEMA).build();

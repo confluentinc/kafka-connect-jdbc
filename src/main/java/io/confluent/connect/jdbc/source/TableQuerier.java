@@ -1,28 +1,28 @@
-/**
- * Copyright 2015 Confluent Inc.
+/*
+ * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Confluent Community License; you may not use this file
+ * except in compliance with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- **/
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
 
 package io.confluent.connect.jdbc.source;
 
-import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.source.SourceRecord;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.util.TableId;
 
 /**
  * TableQuerier executes queries against a specific table. Implementations handle different types
@@ -35,28 +35,30 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     QUERY // User-specified query
   }
 
+  protected final DatabaseDialect dialect;
   protected final QueryMode mode;
-  protected final String schemaPattern;
-  protected final String name;
   protected final String query;
   protected final String topicPrefix;
+  protected final TableId tableId;
 
   // Mutable state
 
-  protected final boolean mapNumerics;
   protected long lastUpdate;
   protected PreparedStatement stmt;
   protected ResultSet resultSet;
-  protected Schema schema;
+  protected SchemaMapping schemaMapping;
 
-  public TableQuerier(QueryMode mode, String nameOrQuery, String topicPrefix,
-                      String schemaPattern, boolean mapNumerics) {
+  public TableQuerier(
+      DatabaseDialect dialect,
+      QueryMode mode,
+      String nameOrQuery,
+      String topicPrefix
+  ) {
+    this.dialect = dialect;
     this.mode = mode;
-    this.schemaPattern = schemaPattern;
-    this.name = mode.equals(QueryMode.TABLE) ? nameOrQuery : null;
+    this.tableId = mode.equals(QueryMode.TABLE) ? dialect.parseTableIdentifier(nameOrQuery) : null;
     this.query = mode.equals(QueryMode.QUERY) ? nameOrQuery : null;
     this.topicPrefix = topicPrefix;
-    this.mapNumerics = mapNumerics;
     this.lastUpdate = 0;
   }
 
@@ -82,7 +84,8 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     if (resultSet == null) {
       stmt = getOrCreatePreparedStatement(db);
       resultSet = executeQuery();
-      schema = DataConverter.convertSchema(name, resultSet.getMetaData(), mapNumerics);
+      String schemaName = tableId != null ? tableId.tableName() : null; // backwards compatible
+      schemaMapping = SchemaMapping.create(schemaName, resultSet.getMetaData(), dialect);
     }
   }
 
@@ -99,7 +102,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     closeStatementQuietly();
     // TODO: Can we cache this and quickly check that it's identical for the next query
     // instead of constructing from scratch since it's almost always the same
-    schema = null;
+    schemaMapping = null;
     lastUpdate = now;
   }
 
@@ -132,7 +135,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     } else if (this.lastUpdate > other.lastUpdate) {
       return 1;
     } else {
-      return this.name.compareTo(other.name);
+      return this.tableId.compareTo(other.tableId);
     }
   }
 }

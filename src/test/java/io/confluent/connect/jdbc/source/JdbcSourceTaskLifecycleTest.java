@@ -1,25 +1,22 @@
-/**
- * Copyright 2015 Confluent Inc.
+/*
+ * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Confluent Community License; you may not use this file
+ * except in compliance with the License.  You may obtain a copy of the License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- **/
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
 
 package io.confluent.connect.jdbc.source;
 
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.easymock.EasyMock;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.powermock.api.easymock.PowerMock;
@@ -29,11 +26,10 @@ import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 
 import static org.junit.Assert.assertEquals;
@@ -66,17 +62,16 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
   @Test
   public void testStartStop() throws Exception {
     // Minimal start/stop functionality
-    PowerMock.expectNew(CachedConnectionProvider.class, db.getUrl(), null, null,
-      JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_DEFAULT, JdbcSourceConnectorConfig.CONNECTION_BACKOFF_DEFAULT).andReturn(mockCachedConnectionProvider);
+    PowerMock.expectNew(
+        CachedConnectionProvider.class,
+        EasyMock.anyObject(DatabaseDialect.class),
+        EasyMock.eq(JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_DEFAULT),
+        EasyMock.eq(JdbcSourceConnectorConfig.CONNECTION_BACKOFF_DEFAULT))
+             .andReturn(mockCachedConnectionProvider);
 
     // Should request a connection, then should close it on stop()
-    EasyMock.expect(mockCachedConnectionProvider.getValidConnection()).andReturn(conn);
+    EasyMock.expect(mockCachedConnectionProvider.getConnection()).andReturn(db.getConnection());
 
-    // Since we're just testing start/stop, we don't worry about the value here but need to stub
-    // something since the background thread will be started and try to lookup metadata.
-    EasyMock.expect(conn.getMetaData()).andStubThrow(new SQLException());
-
-    mockCachedConnectionProvider.closeQuietly();
     PowerMock.expectLastCall();
 
     PowerMock.replayAll();

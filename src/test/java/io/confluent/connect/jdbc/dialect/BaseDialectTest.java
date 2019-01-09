@@ -85,6 +85,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
   protected ColumnId columnC;
   protected ColumnId columnD;
   protected List<ColumnId> pkColumns;
+  protected List<ColumnId> emptyPKColumns;
   protected List<ColumnId> columnsAtoD;
   protected List<SinkRecordField> sinkRecordFields;
   protected T dialect;
@@ -115,6 +116,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     columnC = new ColumnId(tableId, "columnC");
     columnD = new ColumnId(tableId, "columnD");
     pkColumns = Arrays.asList(columnPK1, columnPK2);
+    emptyPKColumns = Arrays.asList();
     columnsAtoD = Arrays.asList(columnA, columnB, columnC, columnD);
 
     SinkRecordField f1 = new SinkRecordField(Schema.INT32_SCHEMA, "c1", true);

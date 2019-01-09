@@ -124,6 +124,14 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
+  public void shouldBuildUpsertStatementEvenWithEmpyPKColumns() {
+    String expected = "INSERT INTO \"myTable\" (\"columnA\",\"columnB\"," +
+                      "\"columnC\",\"columnD\") VALUES (?,?,?,?) ON CONFLICT () DO NOTHING";
+    String sql = dialect.buildUpsertQueryStatement(tableId, emptyPKColumns, columnsAtoD);
+    assertEquals(expected, sql);
+  }
+
+  @Test
   public void createOneColNoPk() {
     verifyCreateOneColNoPk(
         "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "\"col1\" INT NOT NULL)");

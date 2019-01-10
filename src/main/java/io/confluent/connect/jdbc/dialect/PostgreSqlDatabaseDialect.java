@@ -237,8 +237,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
            .of(keyColumns, nonKeyColumns);
     builder.append(") VALUES (");
     builder.appendMultiple(",", "?", keyColumns.size() + nonKeyColumns.size());
-    builder.append(") ON CONFLICT (");
-    if (keyColumns.size() > 0) {
+    builder.append(") ON CONFLICT ");
+    if (!keyColumns.isEmpty() && nonKeyColumns.isEmpty()) {
+      builder.append("DO NOTHING");
+    } else {
+      builder.append("(");
       builder.appendList()
             .delimitedBy(",")
             .transformedBy(ExpressionBuilder.columnNames())
@@ -248,8 +251,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
             .delimitedBy(",")
             .transformedBy(transform)
             .of(nonKeyColumns);
-    } else {
-      builder.append(") DO NOTHING");
     }
     return builder.toString();
   }

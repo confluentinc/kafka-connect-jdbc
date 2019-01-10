@@ -124,10 +124,10 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
-  public void shouldBuildUpsertStatementEvenWithEmpyPKColumns() {
-    String expected = "INSERT INTO \"myTable\" (\"columnA\",\"columnB\"," +
-                      "\"columnC\",\"columnD\") VALUES (?,?,?,?) ON CONFLICT () DO NOTHING";
-    String sql = dialect.buildUpsertQueryStatement(tableId, emptyPKColumns, columnsAtoD);
+  public void shouldBuildWellFormedUpsertStatementWithAllKeyColumnsAndNoNonKeyColumns() {
+    String expected = "INSERT INTO \"myTable\" (\"id1\",\"id2\"" +
+                      ") VALUES (?,?) ON CONFLICT DO NOTHING";
+    String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, emptyColumns);
     assertEquals(expected, sql);
   }
 

@@ -1,4 +1,4 @@
-FROM maven:3.6.0-jdk-8-slim
+FROM maven:3.6.0-jdk-8-slim AS dependencies
 
 RUN apt-get update && apt-get install -y git
 
@@ -23,9 +23,13 @@ RUN git clone https://github.com/confluentinc/kafka.git --branch ${CONLFUENT_KAF
 RUN git clone https://github.com/confluentinc/common.git --branch ${CONLFUENT_COMMON_VERSION} --single-branch && \
     cd common && mvn install -DskipTests && cd ..
 
-WORKDIR /build
-
-COPY . .
+FROM dependencies as build
 
 ENV JFROG_USERNAME=this-need-to-be-passed-as-env-when-running-the-image
 ENV JFROG_PASSWORD=this-need-to-be-passed-as-env-when-running-the-image
+
+COPY --from=dependencies /root/.m2 /root/.m2
+
+WORKDIR /build
+
+COPY . .

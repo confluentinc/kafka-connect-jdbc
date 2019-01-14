@@ -7,7 +7,7 @@ steps:
   build_test_and_publish_kafka_custom_smts:
     image: ${{prepare_kafka_connect_jdbc_build_and_publish_image}}
     commands:
-      - mvn clean install deploy
+      - mvn install -DskipTests deploy
     working_directory: IMAGE_WORK_DIR
     environment:
       - JFROG_USERNAME=${{JFROG_USERNAME}}

@@ -4,7 +4,6 @@ steps:
   prepare_kafka_connect_jdbc_build_and_publish_image:
     type: build
     image_name: credimi/kafka-connect-jdbc
-    working_directory: kafka-connect-jdbc
   build_test_and_publish_kafka_custom_smts:
     image: ${{prepare_kafka_connect_jdbc_build_and_publish_image}}
     commands:

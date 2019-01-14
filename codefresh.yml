@@ -1,0 +1,15 @@
+version: '1.0'
+
+steps:
+  prepare_kafka_connect_jdbc_build_and_publish_image:
+    type: build
+    image_name: credimi/kafka-connect-jdbc
+    working_directory: kafka-connect-jdbc
+  build_test_and_publish_kafka_custom_smts:
+    image: ${{prepare_kafka_connect_jdbc_build_and_publish_image}}
+    commands:
+      - mvn clean install deploy
+    working_directory: IMAGE_WORK_DIR
+    environment:
+      - JFROG_USERNAME=${{JFROG_USERNAME}}
+      - JFROG_PASSWORD=${{JFROG_PASSWORD}}

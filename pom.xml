@@ -457,4 +457,16 @@
             </build>
         </profile>
     </profiles>
+    <distributionManagement>
+        <repository>
+            <id>central</id>
+            <name>instapartners-releases</name>
+            <url>https://instapartners.jfrog.io/instapartners/Credimi-releases</url>
+        </repository>
+        <snapshotRepository>
+            <id>snapshots</id>
+            <name>instapartners-snapshots</name>
+            <url>https://instapartners.jfrog.io/instapartners/Credimi-snapshots</url>
+        </snapshotRepository>
+    </distributionManagement>
 </project>

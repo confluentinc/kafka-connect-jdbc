@@ -26,10 +26,12 @@ import org.junit.Test;
 
 import java.sql.SQLException;
 import java.sql.Types;
+import java.util.Arrays;
 import java.util.List;
 
 import io.confluent.connect.jdbc.sink.SqliteHelper;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 
@@ -110,28 +112,104 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
 
   @Test
   public void shouldBuildCreateQueryStatement() {
-    String expected =
-        "CREATE TABLE `myTable` (\n" + "`c1` INTEGER NOT NULL,\n" + "`c2` INTEGER NOT NULL,\n" +
-        "`c3` TEXT NOT NULL,\n" + "`c4` TEXT NULL,\n" + "`c5` NUMERIC DEFAULT '2001-03-15',\n" +
-        "`c6` NUMERIC DEFAULT '00:00:00.000',\n" +
-        "`c7` NUMERIC DEFAULT '2001-03-15 00:00:00.000',\n" + "`c8` NUMERIC NULL,\n" +
-        "PRIMARY KEY(`c1`))";
-    String sql = dialect.buildCreateTableStatement(tableId, sinkRecordFields);
-    assertEquals(expected, sql);
+    assertEquals(
+        "CREATE TABLE `myTable` (\n"
+        + "`c1` INTEGER NOT NULL,\n"
+        + "`c2` INTEGER NOT NULL,\n"
+        + "`c3` TEXT NOT NULL,\n"
+        + "`c4` TEXT NULL,\n"
+        + "`c5` NUMERIC DEFAULT '2001-03-15',\n"
+        + "`c6` NUMERIC DEFAULT '00:00:00.000',\n"
+        + "`c7` NUMERIC DEFAULT '2001-03-15 00:00:00.000',\n"
+        + "`c8` NUMERIC NULL,\n"
+        + "PRIMARY KEY(`c1`))",
+        dialect.buildCreateTableStatement(tableId, sinkRecordFields)
+    );
+
+    quoteTableNames = QuoteMethod.ALWAYS;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertEquals(
+        "CREATE TABLE `myTable` (\n"
+        + "c1 INTEGER NOT NULL,\n"
+        + "c2 INTEGER NOT NULL,\n"
+        + "c3 TEXT NOT NULL,\n"
+        + "c4 TEXT NULL,\n"
+        + "c5 NUMERIC DEFAULT '2001-03-15',\n"
+        + "c6 NUMERIC DEFAULT '00:00:00.000',\n"
+        + "c7 NUMERIC DEFAULT '2001-03-15 00:00:00.000',\n"
+        + "c8 NUMERIC NULL,\n"
+        + "PRIMARY KEY(c1))",
+        dialect.buildCreateTableStatement(tableId, sinkRecordFields)
+    );
+
+    quoteTableNames = QuoteMethod.NEVER;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertEquals(
+        "CREATE TABLE myTable (\n"
+        + "c1 INTEGER NOT NULL,\n"
+        + "c2 INTEGER NOT NULL,\n"
+        + "c3 TEXT NOT NULL,\n"
+        + "c4 TEXT NULL,\n"
+        + "c5 NUMERIC DEFAULT '2001-03-15',\n"
+        + "c6 NUMERIC DEFAULT '00:00:00.000',\n"
+        + "c7 NUMERIC DEFAULT '2001-03-15 00:00:00.000',\n"
+        + "c8 NUMERIC NULL,\n"
+        + "PRIMARY KEY(c1))",
+        dialect.buildCreateTableStatement(tableId, sinkRecordFields)
+    );
   }
 
   @Test
   public void shouldBuildAlterTableStatement() {
-    List<String> statements = dialect.buildAlterTable(tableId, sinkRecordFields);
-    String[] sql = {"ALTER TABLE `myTable` ADD `c1` INTEGER NOT NULL",
-                    "ALTER TABLE `myTable` ADD `c2` INTEGER NOT NULL",
-                    "ALTER TABLE `myTable` ADD `c3` TEXT NOT NULL",
-                    "ALTER TABLE `myTable` ADD `c4` TEXT NULL",
-                    "ALTER TABLE `myTable` ADD `c5` NUMERIC DEFAULT '2001-03-15'",
-                    "ALTER TABLE `myTable` ADD `c6` NUMERIC DEFAULT '00:00:00.000'",
-                    "ALTER TABLE `myTable` ADD `c7` NUMERIC DEFAULT '2001-03-15 00:00:00.000'",
-                    "ALTER TABLE `myTable` ADD `c8` NUMERIC NULL"};
-    assertStatements(sql, statements);
+    assertStatements(
+        new String[]{
+            "ALTER TABLE `myTable` ADD `c1` INTEGER NOT NULL",
+            "ALTER TABLE `myTable` ADD `c2` INTEGER NOT NULL",
+            "ALTER TABLE `myTable` ADD `c3` TEXT NOT NULL",
+            "ALTER TABLE `myTable` ADD `c4` TEXT NULL",
+            "ALTER TABLE `myTable` ADD `c5` NUMERIC DEFAULT '2001-03-15'",
+            "ALTER TABLE `myTable` ADD `c6` NUMERIC DEFAULT '00:00:00.000'",
+            "ALTER TABLE `myTable` ADD `c7` NUMERIC DEFAULT '2001-03-15 00:00:00.000'",
+            "ALTER TABLE `myTable` ADD `c8` NUMERIC NULL"
+        },
+        dialect.buildAlterTable(tableId, sinkRecordFields)
+    );
+
+    quoteTableNames = QuoteMethod.ALWAYS;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertStatements(
+        new String[]{
+            "ALTER TABLE `myTable` ADD c1 INTEGER NOT NULL",
+            "ALTER TABLE `myTable` ADD c2 INTEGER NOT NULL",
+            "ALTER TABLE `myTable` ADD c3 TEXT NOT NULL",
+            "ALTER TABLE `myTable` ADD c4 TEXT NULL",
+            "ALTER TABLE `myTable` ADD c5 NUMERIC DEFAULT '2001-03-15'",
+            "ALTER TABLE `myTable` ADD c6 NUMERIC DEFAULT '00:00:00.000'",
+            "ALTER TABLE `myTable` ADD c7 NUMERIC DEFAULT '2001-03-15 00:00:00.000'",
+            "ALTER TABLE `myTable` ADD c8 NUMERIC NULL"
+        },
+        dialect.buildAlterTable(tableId, sinkRecordFields)
+    );
+
+    quoteTableNames = QuoteMethod.NEVER;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertStatements(
+        new String[]{
+            "ALTER TABLE myTable ADD c1 INTEGER NOT NULL",
+            "ALTER TABLE myTable ADD c2 INTEGER NOT NULL",
+            "ALTER TABLE myTable ADD c3 TEXT NOT NULL",
+            "ALTER TABLE myTable ADD c4 TEXT NULL",
+            "ALTER TABLE myTable ADD c5 NUMERIC DEFAULT '2001-03-15'",
+            "ALTER TABLE myTable ADD c6 NUMERIC DEFAULT '00:00:00.000'",
+            "ALTER TABLE myTable ADD c7 NUMERIC DEFAULT '2001-03-15 00:00:00.000'",
+            "ALTER TABLE myTable ADD c8 NUMERIC NULL"
+        },
+        dialect.buildAlterTable(tableId, sinkRecordFields)
+    );
   }
 
   @Test
@@ -161,6 +239,22 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
         "CREATE TABLE `myTable` (" + System.lineSeparator() + "`pk1` INTEGER NOT NULL," +
         System.lineSeparator() + "`pk2` INTEGER NOT NULL," + System.lineSeparator() +
         "`col1` INTEGER NOT NULL," + System.lineSeparator() + "PRIMARY KEY(`pk1`,`pk2`))");
+
+    quoteTableNames = QuoteMethod.ALWAYS;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+    verifyCreateThreeColTwoPk(
+        "CREATE TABLE `myTable` (" + System.lineSeparator() + "pk1 INTEGER NOT NULL," +
+        System.lineSeparator() + "pk2 INTEGER NOT NULL," + System.lineSeparator() +
+        "col1 INTEGER NOT NULL," + System.lineSeparator() + "PRIMARY KEY(pk1,pk2))");
+
+    quoteTableNames = QuoteMethod.NEVER;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+    verifyCreateThreeColTwoPk(
+        "CREATE TABLE myTable (" + System.lineSeparator() + "pk1 INTEGER NOT NULL," +
+        System.lineSeparator() + "pk2 INTEGER NOT NULL," + System.lineSeparator() +
+        "col1 INTEGER NOT NULL," + System.lineSeparator() + "PRIMARY KEY(pk1,pk2))");
   }
 
   @Test
@@ -179,8 +273,36 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
     TableId book = new TableId(null, null, "Book");
     assertEquals(
         "INSERT OR REPLACE INTO `Book`(`author`,`title`,`ISBN`,`year`,`pages`) VALUES(?,?,?,?,?)",
-        dialect.buildUpsertQueryStatement(book, columns(book, "author", "title"),
-                                          columns(book, "ISBN", "year", "pages")));
+        dialect.buildUpsertQueryStatement(
+            book,
+            columns(book, "author", "title"),
+            columns(book, "ISBN", "year", "pages")
+        )
+    );
+
+    quoteTableNames = QuoteMethod.ALWAYS;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertEquals(
+        "INSERT OR REPLACE INTO `Book`(author,title,ISBN,year,pages) VALUES(?,?,?,?,?)",
+        dialect.buildUpsertQueryStatement(
+            book,
+            columns(book, "author", "title"),
+            columns(book, "ISBN", "year", "pages")
+        )
+    );
+
+    quoteTableNames = QuoteMethod.NEVER;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertEquals(
+        "INSERT OR REPLACE INTO Book(author,title,ISBN,year,pages) VALUES(?,?,?,?,?)",
+        dialect.buildUpsertQueryStatement(
+            book,
+            columns(book, "author", "title"),
+            columns(book, "ISBN", "year", "pages")
+        )
+    );
   }
 
   @Test(expected = SQLException.class)

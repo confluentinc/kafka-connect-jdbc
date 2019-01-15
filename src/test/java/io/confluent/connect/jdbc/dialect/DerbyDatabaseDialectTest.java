@@ -25,6 +25,7 @@ import org.junit.Test;
 
 import java.util.List;
 
+import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
@@ -101,6 +102,37 @@ public class DerbyDatabaseDialectTest extends BaseDialectTest<DerbyDatabaseDiale
   }
 
   @Test
+  public void shouldBuildCreateQueryStatementWithNoTableQuoting() {
+    quoteTableNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+
+    String expected =
+        "CREATE TABLE myTable (\n" + "\"c1\" INTEGER NOT NULL,\n" + "\"c2\" BIGINT NOT NULL,\n"
+        + "\"c3\" VARCHAR(32672) NOT NULL,\n" + "\"c4\" VARCHAR(32672) NULL,\n"
+        + "\"c5\" DATE DEFAULT '2001-03-15',\n" + "\"c6\" TIME DEFAULT '00:00:00.000',\n"
+        + "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" + "\"c8\" DECIMAL(31,4) NULL,\n"
+        + "PRIMARY KEY(\"c1\"))";
+    String sql = dialect.buildCreateTableStatement(tableId, sinkRecordFields);
+    assertEquals(expected, sql);
+  }
+
+  @Test
+  public void shouldBuildCreateQueryStatementWithNoTableQuotingAndNoColumnQuoting() {
+    quoteTableNames = QuoteMethod.NEVER;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+
+    String expected =
+        "CREATE TABLE myTable (\nc1 INTEGER NOT NULL,\nc2 BIGINT NOT NULL,\n"
+        + "c3 VARCHAR(32672) NOT NULL,\nc4 VARCHAR(32672) NULL,\n"
+        + "c5 DATE DEFAULT '2001-03-15',\nc6 TIME DEFAULT '00:00:00.000',\n"
+        + "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\nc8 DECIMAL(31,4) NULL,\n"
+        + "PRIMARY KEY(c1))";
+    String sql = dialect.buildCreateTableStatement(tableId, sinkRecordFields);
+    assertEquals(expected, sql);
+  }
+
+  @Test
   public void shouldBuildAlterTableStatement() {
     List<String> statements = dialect.buildAlterTable(tableId, sinkRecordFields);
     String[] sql = {"ALTER TABLE \"myTable\" \n" + "ADD \"c1\" INTEGER NOT NULL,\n"
@@ -110,6 +142,44 @@ public class DerbyDatabaseDialectTest extends BaseDialectTest<DerbyDatabaseDiale
                     + "ADD \"c6\" TIME DEFAULT '00:00:00.000',\n"
                     + "ADD \"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
                     + "ADD \"c8\" DECIMAL(31,4) NULL"};
+    assertStatements(sql, statements);
+  }
+
+  @Test
+  public void shouldBuildAlterTableStatementWithoutColumnQuotes() {
+    quoteTableNames = QuoteMethod.ALWAYS;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+
+    List<String> statements = dialect.buildAlterTable(tableId, sinkRecordFields);
+    String[] sql = {"ALTER TABLE \"myTable\" \n"
+                    + "ADD c1 INTEGER NOT NULL,\n"
+                    + "ADD c2 BIGINT NOT NULL,\n"
+                    + "ADD c3 VARCHAR(32672) NOT NULL,\n"
+                    + "ADD c4 VARCHAR(32672) NULL,\n"
+                    + "ADD c5 DATE DEFAULT '2001-03-15',\n"
+                    + "ADD c6 TIME DEFAULT '00:00:00.000',\n"
+                    + "ADD c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
+                    + "ADD c8 DECIMAL(31,4) NULL"};
+    assertStatements(sql, statements);
+  }
+
+  @Test
+  public void shouldBuildAlterTableStatementWithoutColumnOrTableQuotes() {
+    quoteTableNames = QuoteMethod.NEVER;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+
+    List<String> statements = dialect.buildAlterTable(tableId, sinkRecordFields);
+    String[] sql = {"ALTER TABLE myTable \n"
+                    + "ADD c1 INTEGER NOT NULL,\n"
+                    + "ADD c2 BIGINT NOT NULL,\n"
+                    + "ADD c3 VARCHAR(32672) NOT NULL,\n"
+                    + "ADD c4 VARCHAR(32672) NULL,\n"
+                    + "ADD c5 DATE DEFAULT '2001-03-15',\n"
+                    + "ADD c6 TIME DEFAULT '00:00:00.000',\n"
+                    + "ADD c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
+                    + "ADD c8 DECIMAL(31,4) NULL"};
     assertStatements(sql, statements);
   }
 
@@ -216,6 +286,36 @@ public class DerbyDatabaseDialectTest extends BaseDialectTest<DerbyDatabaseDiale
     String expected = "merge into \"actor\" using (values(?)) as DAT(\"actor_id\") on \"actor\""
                       + ".\"actor_id\"=DAT.\"actor_id\" when not matched then insert(\"actor\""
                       + ".\"actor_id\") values(DAT.\"actor_id\")";
+    String sql = dialect.buildUpsertQueryStatement(
+        actor, columns(actor, "actor_id"), columns(actor));
+    assertEquals(expected, sql);
+  }
+
+  @Test
+  public void upsertOnlyKeyColsWithoutTableOrColumnQuoting() {
+    quoteTableNames = QuoteMethod.NEVER;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+
+    TableId actor = tableId("actor");
+    String expected = "merge into actor using (values(?)) as DAT(actor_id) on actor"
+                      + ".actor_id=DAT.actor_id when not matched then insert(actor"
+                      + ".actor_id) values(DAT.actor_id)";
+    String sql = dialect.buildUpsertQueryStatement(
+        actor, columns(actor, "actor_id"), columns(actor));
+    assertEquals(expected, sql);
+  }
+
+  @Test
+  public void upsertOnlyKeyColsWithoutColumnQuoting() {
+    quoteTableNames = QuoteMethod.ALWAYS;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+
+    TableId actor = tableId("actor");
+    String expected = "merge into \"actor\" using (values(?)) as DAT(actor_id) on \"actor\""
+                      + ".actor_id=DAT.actor_id when not matched then insert(\"actor\""
+                      + ".actor_id) values(DAT.actor_id)";
     String sql = dialect.buildUpsertQueryStatement(
         actor, columns(actor, "actor_id"), columns(actor));
     assertEquals(expected, sql);

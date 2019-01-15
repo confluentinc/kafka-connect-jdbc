@@ -24,6 +24,7 @@ import org.junit.Test;
 
 import java.util.List;
 
+import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
@@ -127,6 +128,20 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
   public void createOneColNoPk() {
     verifyCreateOneColNoPk(
         "CREATE TABLE `myTable` (" + System.lineSeparator() + "`col1` INT NOT NULL)");
+
+    quoteTableNames = QuoteMethod.ALWAYS;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+
+    verifyCreateOneColNoPk(
+        "CREATE TABLE `myTable` (" + System.lineSeparator() + "col1 INT NOT NULL)");
+
+    quoteTableNames = QuoteMethod.NEVER;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+
+    verifyCreateOneColNoPk(
+        "CREATE TABLE myTable (" + System.lineSeparator() + "col1 INT NOT NULL)");
   }
 
   @Test
@@ -142,6 +157,24 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
         "CREATE TABLE `myTable` (" + System.lineSeparator() + "`pk1` INT NOT NULL," +
         System.lineSeparator() + "`pk2` INT NOT NULL," + System.lineSeparator() +
         "`col1` INT NOT NULL," + System.lineSeparator() + "PRIMARY KEY(`pk1`,`pk2`))");
+
+    quoteTableNames = QuoteMethod.ALWAYS;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+
+    verifyCreateThreeColTwoPk(
+        "CREATE TABLE `myTable` (" + System.lineSeparator() + "pk1 INT NOT NULL," +
+        System.lineSeparator() + "pk2 INT NOT NULL," + System.lineSeparator() +
+        "col1 INT NOT NULL," + System.lineSeparator() + "PRIMARY KEY(pk1,pk2))");
+
+    quoteTableNames = QuoteMethod.NEVER;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+
+    verifyCreateThreeColTwoPk(
+        "CREATE TABLE myTable (" + System.lineSeparator() + "pk1 INT NOT NULL," +
+        System.lineSeparator() + "pk2 INT NOT NULL," + System.lineSeparator() +
+        "col1 INT NOT NULL," + System.lineSeparator() + "PRIMARY KEY(pk1,pk2))");
   }
 
   @Test
@@ -165,6 +198,30 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
     String sql = dialect.buildUpsertQueryStatement(actor, columns(actor, "actor_id"),
                                                    columns(actor, "first_name", "last_name",
                                                            "score"));
+    assertEquals(expected, sql);
+
+    quoteTableNames = QuoteMethod.ALWAYS;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+
+    expected = "insert into `actor`(actor_id,first_name,last_name,score) " +
+                      "values(?,?,?,?) on duplicate key update first_name=values(first_name)," +
+                      "last_name=values(last_name),score=values(score)";
+    sql = dialect.buildUpsertQueryStatement(actor, columns(actor, "actor_id"),
+        columns(actor, "first_name", "last_name",
+            "score"));
+    assertEquals(expected, sql);
+
+    quoteTableNames = QuoteMethod.NEVER;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+
+    expected = "insert into actor(actor_id,first_name,last_name,score) " +
+               "values(?,?,?,?) on duplicate key update first_name=values(first_name)," +
+               "last_name=values(last_name),score=values(score)";
+    sql = dialect.buildUpsertQueryStatement(actor, columns(actor, "actor_id"),
+        columns(actor, "first_name", "last_name",
+            "score"));
     assertEquals(expected, sql);
   }
 

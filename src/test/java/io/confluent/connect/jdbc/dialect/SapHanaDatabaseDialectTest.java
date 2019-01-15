@@ -24,6 +24,7 @@ import org.junit.Test;
 
 import java.util.List;
 
+import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
@@ -118,10 +119,35 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
 
   @Test
   public void shouldBuildUpsertStatement() {
-    String expected = "UPSERT \"myTable\"(\"id1\",\"id2\",\"columnA\",\"columnB\",\"columnC\"," +
-                      "\"columnD\") VALUES(?,?,?,?,?,?) WITH PRIMARY KEY";
-    String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD);
-    assertEquals(expected, sql);
+    assertEquals(
+        "UPSERT \"myTable\""
+        + "(\"id1\",\"id2\",\"columnA\",\"columnB\",\"columnC\",\"columnD\") "
+        + "VALUES(?,?,?,?,?,?) "
+        + "WITH PRIMARY KEY",
+        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
+    );
+
+    quoteTableNames = QuoteMethod.ALWAYS;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertEquals(
+        "UPSERT \"myTable\""
+        + "(id1,id2,columnA,columnB,columnC,columnD) "
+        + "VALUES(?,?,?,?,?,?) "
+        + "WITH PRIMARY KEY",
+        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
+    );
+
+    quoteTableNames = QuoteMethod.NEVER;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertEquals(
+        "UPSERT myTable"
+        + "(id1,id2,columnA,columnB,columnC,columnD) "
+        + "VALUES(?,?,?,?,?,?) "
+        + "WITH PRIMARY KEY",
+        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
+    );
   }
 
 
@@ -144,6 +170,22 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
         "CREATE COLUMN TABLE \"myTable\" (" + System.lineSeparator() + "\"pk1\" INTEGER NOT NULL," +
         System.lineSeparator() + "\"pk2\" INTEGER NOT NULL," + System.lineSeparator() +
         "\"col1\" INTEGER NOT NULL," + System.lineSeparator() + "PRIMARY KEY(\"pk1\",\"pk2\"))");
+
+    quoteTableNames = QuoteMethod.ALWAYS;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+    verifyCreateThreeColTwoPk(
+        "CREATE COLUMN TABLE \"myTable\" (" + System.lineSeparator() + "pk1 INTEGER NOT NULL," +
+        System.lineSeparator() + "pk2 INTEGER NOT NULL," + System.lineSeparator() +
+        "col1 INTEGER NOT NULL," + System.lineSeparator() + "PRIMARY KEY(pk1,pk2))");
+
+    quoteTableNames = QuoteMethod.NEVER;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+    verifyCreateThreeColTwoPk(
+        "CREATE COLUMN TABLE myTable (" + System.lineSeparator() + "pk1 INTEGER NOT NULL," +
+        System.lineSeparator() + "pk2 INTEGER NOT NULL," + System.lineSeparator() +
+        "col1 INTEGER NOT NULL," + System.lineSeparator() + "PRIMARY KEY(pk1,pk2))");
   }
 
   @Test
@@ -164,8 +206,36 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
     TableId tableA = tableId("tableA");
     assertEquals(
         "UPSERT \"tableA\"(\"col1\",\"col2\",\"col3\",\"col4\") VALUES(?,?,?,?) WITH PRIMARY KEY",
-        dialect.buildUpsertQueryStatement(tableA, columns(tableA, "col1"),
-                                          columns(tableA, "col2", "col3", "col4")));
+        dialect.buildUpsertQueryStatement(
+            tableA,
+            columns(tableA, "col1"),
+            columns(tableA, "col2", "col3", "col4")
+        )
+    );
+
+    quoteTableNames = QuoteMethod.ALWAYS;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertEquals(
+        "UPSERT \"tableA\"(col1,col2,col3,col4) VALUES(?,?,?,?) WITH PRIMARY KEY",
+        dialect.buildUpsertQueryStatement(
+            tableA,
+            columns(tableA, "col1"),
+            columns(tableA, "col2", "col3", "col4")
+        )
+    );
+
+    quoteTableNames = QuoteMethod.NEVER;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertEquals(
+        "UPSERT tableA(col1,col2,col3,col4) VALUES(?,?,?,?) WITH PRIMARY KEY",
+        dialect.buildUpsertQueryStatement(
+            tableA,
+            columns(tableA, "col1"),
+            columns(tableA, "col2", "col3", "col4")
+        )
+    );
   }
 
   @Test

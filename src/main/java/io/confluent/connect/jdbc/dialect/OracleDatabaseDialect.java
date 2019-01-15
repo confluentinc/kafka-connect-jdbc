@@ -169,9 +169,9 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     final Transform<ColumnId> transform = (builder, col) -> {
       builder.append(table)
              .append(".")
-             .appendIdentifierQuoted(col.name())
+             .appendColumnName(col.name())
              .append("=incoming.")
-             .appendIdentifierQuoted(col.name());
+             .appendColumnName(col.name());
     };
 
     ExpressionBuilder builder = expressionBuilder();

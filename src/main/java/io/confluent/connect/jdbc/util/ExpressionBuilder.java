@@ -68,6 +68,27 @@ public class ExpressionBuilder {
         ExpressionBuilder builder,
         boolean useQuotes
     );
+
+    /**
+     * Append this object to the specified builder.
+     *
+     * @param builder the builder to use; may not be null
+     * @param useQuotes whether quotes should be used for this object
+     */
+    default void appendTo(
+        ExpressionBuilder builder,
+        QuoteMethod useQuotes
+    ) {
+      switch (useQuotes) {
+        case ALWAYS:
+          appendTo(builder, true);
+          break;
+        case NEVER:
+        default:
+          // do nothing
+          break;
+      }
+    }
   }
 
   /**
@@ -156,9 +177,20 @@ public class ExpressionBuilder {
    * Get a {@link Transform} that will surround the inputs with quotes.
    *
    * @return the transform; never null
+   * @deprecated use {@link #quoteColumns()} instead
    */
+  @Deprecated
   public static Transform<String> quote() {
-    return (builder, input) -> builder.appendIdentifierQuoted(input);
+    return quoteColumns();
+  }
+
+  /**
+   * Get a {@link Transform} that will surround the inputs with quotes if necesssary.
+   *
+   * @return the transform; never null
+   */
+  public static Transform<String> quoteColumns() {
+    return (builder, input) -> builder.appendColumnName(input);
   }
 
   /**
@@ -167,7 +199,7 @@ public class ExpressionBuilder {
    * @return the transform; never null
    */
   public static Transform<ColumnId> columnNames() {
-    return (builder, input) -> builder.appendIdentifierQuoted(input.name());
+    return (builder, input) -> builder.appendColumnName(input.name());
   }
 
   /**
@@ -178,7 +210,7 @@ public class ExpressionBuilder {
    */
   public static Transform<ColumnId> columnNamesWith(final String appended) {
     return (builder, input) -> {
-      builder.appendIdentifierQuoted(input.name());
+      builder.appendColumnName(input.name());
       builder.append(appended);
     };
   }
@@ -202,7 +234,7 @@ public class ExpressionBuilder {
   public static Transform<ColumnId> columnNamesWithPrefix(final String prefix) {
     return (builder, input) -> {
       builder.append(prefix);
-      builder.appendIdentifierQuoted(input.name());
+      builder.appendColumnName(input.name());
     };
   }
 
@@ -217,6 +249,8 @@ public class ExpressionBuilder {
 
   private final IdentifierRules rules;
   private final StringBuilder sb = new StringBuilder();
+  private QuoteMethod quoteTables = QuoteMethod.ALWAYS;
+  private QuoteMethod quoteColumns = QuoteMethod.ALWAYS;
 
   /**
    * Create a new expression builder with the default {@link IdentifierRules}.
@@ -232,6 +266,16 @@ public class ExpressionBuilder {
    */
   public ExpressionBuilder(IdentifierRules rules) {
     this.rules = rules != null ? rules : IdentifierRules.DEFAULT;
+  }
+
+  public ExpressionBuilder setQuoteTables(QuoteMethod method) {
+    this.quoteTables = method != null ? method : QuoteMethod.ALWAYS;
+    return this;
+  }
+
+  public ExpressionBuilder setQuoteColumns(QuoteMethod method) {
+    this.quoteColumns = method != null ? method : QuoteMethod.ALWAYS;
+    return this;
   }
 
   /**
@@ -260,24 +304,47 @@ public class ExpressionBuilder {
   }
 
   /**
-   * Append to this builder's expression the leading quote character(s) defined by this builder's
-   * {@link IdentifierRules}.
+   * Always append to this builder's expression the leading quote character(s) defined by this
+   * builder's {@link IdentifierRules}.
    *
    * @return this builder to enable methods to be chained; never null
    */
   public ExpressionBuilder appendLeadingQuote() {
-    sb.append(rules.leadingQuoteString());
+    return appendLeadingQuote(QuoteMethod.ALWAYS);
+  }
+
+
+  protected ExpressionBuilder appendLeadingQuote(QuoteMethod method) {
+    switch (method) {
+      case ALWAYS:
+        sb.append(rules.leadingQuoteString());
+        break;
+      case NEVER:
+      default:
+        break;
+    }
     return this;
   }
 
   /**
-   * Append to this builder's expression the trailing quote character(s) defined by this builder's
-   * {@link IdentifierRules}.
+   * Always append to this builder's expression the trailing quote character(s) defined by this
+   * builder's {@link IdentifierRules}.
    *
    * @return this builder to enable methods to be chained; never null
    */
   public ExpressionBuilder appendTrailingQuote() {
-    sb.append(rules.trailingQuoteString());
+    return appendTrailingQuote(QuoteMethod.ALWAYS);
+  }
+
+  protected ExpressionBuilder appendTrailingQuote(QuoteMethod method) {
+    switch (method) {
+      case ALWAYS:
+        sb.append(rules.trailingQuoteString());
+        break;
+      case NEVER:
+      default:
+        break;
+    }
     return this;
   }
 
@@ -293,6 +360,9 @@ public class ExpressionBuilder {
 
   /**
    * Append to this builder's expression a string surrounded by single quote characters ({@code '}).
+   * Use {@link #appendIdentifier(String, QuoteMethod)} for identifiers,
+   * {@link #appendColumnName(String, QuoteMethod)} for column names, or
+   * {@link #appendTableName(String, QuoteMethod)} for table names.
    *
    * @param name the object whose string representation is to be appended
    * @return this builder to enable methods to be chained; never null
@@ -310,18 +380,81 @@ public class ExpressionBuilder {
    * @param name the name to be appended
    * @param quoted true if the name should be quoted, or false otherwise
    * @return this builder to enable methods to be chained; never null
+   * @deprecated use {@link #appendIdentifier(String, QuoteMethod)} instead
    */
+  @Deprecated
   public ExpressionBuilder appendIdentifier(
       String name,
       boolean quoted
   ) {
-    if (quoted) {
-      appendLeadingQuote();
-    }
+    return appendIdentifier(name, quoted ? QuoteMethod.ALWAYS : QuoteMethod.NEVER);
+  }
+
+  /**
+   * Append to this builder's expression the identifier.
+   *
+   * @param name the name to be appended
+   * @param quoted true if the name should be quoted, or false otherwise
+   * @return this builder to enable methods to be chained; never null
+   */
+  public ExpressionBuilder appendIdentifier(
+      String name,
+      QuoteMethod quoted
+  ) {
+    appendLeadingQuote(quoted);
     sb.append(name);
-    if (quoted) {
-      appendTrailingQuote();
-    }
+    appendTrailingQuote(quoted);
+    return this;
+  }
+
+  /**
+   * Append to this builder's expression the specified Column identifier, possibly surrounded by
+   * the leading and trailing quotes based upon {@link #setQuoteTables(QuoteMethod)}.
+   *
+   * @param name the name to be appended
+   * @return this builder to enable methods to be chained; never null
+   */
+  public ExpressionBuilder appendTableName(String name) {
+    return appendTableName(name, quoteTables);
+  }
+
+  /**
+   * Append to this builder's expression the specified Column identifier, possibly surrounded by
+   * the leading and trailing quotes based upon {@link #setQuoteTables(QuoteMethod)}.
+   *
+   * @param name the name to be appended
+   * @return this builder to enable methods to be chained; never null
+   */
+  public ExpressionBuilder appendTableName(String name, QuoteMethod quote) {
+    appendLeadingQuote(quote);
+    sb.append(name);
+    appendTrailingQuote(quote);
+    return this;
+  }
+
+  /**
+   * Append to this builder's expression the specified Column identifier, possibly surrounded by
+   * the leading and trailing quotes based upon {@link #setQuoteColumns(QuoteMethod)}.
+   *
+   * @param name the name to be appended
+   * @return this builder to enable methods to be chained; never null
+   */
+  public ExpressionBuilder appendColumnName(String name) {
+    return appendColumnName(name, quoteColumns);
+  }
+
+  /**
+   * Append to this builder's expression the specified Column identifier, possibly surrounded by
+   * the leading and trailing quotes based upon {@link #setQuoteColumns(QuoteMethod)}.
+   *
+   * @param name the name to be appended
+   * @param quote whether to quote the column name; may not be null
+   * @return this builder to enable methods to be chained; never null
+   */
+  public ExpressionBuilder appendColumnName(String name, QuoteMethod quote) {
+    appendLeadingQuote(quote);
+    sb.append(name);
+    appendTrailingQuote(quote);
     return this;
   }
 
@@ -369,10 +502,29 @@ public class ExpressionBuilder {
    * @param obj the object to be appended
    * @param useQuotes true if the object should be surrounded by quotes, or false otherwise
    * @return this builder to enable methods to be chained; never null
+   * @deprecated use {@link #append(Object, QuoteMethod)} instead
    */
+  @Deprecated
   public ExpressionBuilder append(
       Object obj,
       boolean useQuotes
+  ) {
+    return append(obj, useQuotes ? QuoteMethod.ALWAYS : QuoteMethod.NEVER);
+  }
+
+  /**
+   * Append to this builder's expression the specified object. If the object is {@link Expressable},
+   * then this builder delegates to the object's
+   * {@link Expressable#appendTo(ExpressionBuilder, boolean)} method. Otherwise, the string
+   * representation of the object is appended to the expression.
+   *
+   * @param obj the object to be appended
+   * @param useQuotes true if the object should be surrounded by quotes, or false otherwise
+   * @return this builder to enable methods to be chained; never null
+   */
+  public ExpressionBuilder append(
+      Object obj,
+      QuoteMethod useQuotes
   ) {
     if (obj instanceof Expressable) {
       ((Expressable) obj).appendTo(this, useQuotes);
@@ -392,7 +544,15 @@ public class ExpressionBuilder {
    * @return this builder to enable methods to be chained; never null
    */
   public ExpressionBuilder append(Object obj) {
-    return append(obj, true);
+    QuoteMethod quoteMethod;
+    if (obj instanceof TableId) {
+      quoteMethod = quoteTables;
+    } else if (obj instanceof ColumnId) {
+      quoteMethod = quoteColumns;
+    } else {
+      quoteMethod = QuoteMethod.ALWAYS;
+    }
+    return append(obj, quoteMethod);
   }
 
   /**

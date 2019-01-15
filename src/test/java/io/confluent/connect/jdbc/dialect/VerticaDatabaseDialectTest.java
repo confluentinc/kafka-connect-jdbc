@@ -24,6 +24,8 @@ import org.junit.Test;
 
 import java.util.List;
 
+import io.confluent.connect.jdbc.util.QuoteMethod;
+
 import static org.junit.Assert.assertEquals;
 
 public class VerticaDatabaseDialectTest extends BaseDialectTest<VerticaDatabaseDialect> {
@@ -90,28 +92,104 @@ public class VerticaDatabaseDialectTest extends BaseDialectTest<VerticaDatabaseD
 
   @Test
   public void shouldBuildCreateQueryStatement() {
-    String expected =
-        "CREATE TABLE \"myTable\" (\n" + "\"c1\" INT NOT NULL,\n" + "\"c2\" INT NOT NULL,\n" +
-        "\"c3\" VARCHAR(1024) NOT NULL,\n" + "\"c4\" VARCHAR(1024) NULL,\n" +
-        "\"c5\" DATE DEFAULT '2001-03-15',\n" + "\"c6\" TIME DEFAULT '00:00:00.000',\n" +
-        "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" + "\"c8\" DECIMAL(18,4) NULL,\n" +
-        "PRIMARY KEY(\"c1\"))";
-    String sql = dialect.buildCreateTableStatement(tableId, sinkRecordFields);
-    assertEquals(expected, sql);
+    assertEquals(
+        "CREATE TABLE \"myTable\" (\n"
+        + "\"c1\" INT NOT NULL,\n"
+        + "\"c2\" INT NOT NULL,\n"
+        + "\"c3\" VARCHAR(1024) NOT NULL,\n"
+        + "\"c4\" VARCHAR(1024) NULL,\n"
+        + "\"c5\" DATE DEFAULT '2001-03-15',\n"
+        + "\"c6\" TIME DEFAULT '00:00:00.000',\n"
+        + "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
+        + "\"c8\" DECIMAL(18,4) NULL,\n"
+        + "PRIMARY KEY(\"c1\"))",
+        dialect.buildCreateTableStatement(tableId, sinkRecordFields)
+    );
+
+    quoteTableNames = QuoteMethod.ALWAYS;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertEquals(
+        "CREATE TABLE \"myTable\" (\n"
+        + "c1 INT NOT NULL,\n"
+        + "c2 INT NOT NULL,\n"
+        + "c3 VARCHAR(1024) NOT NULL,\n"
+        + "c4 VARCHAR(1024) NULL,\n"
+        + "c5 DATE DEFAULT '2001-03-15',\n"
+        + "c6 TIME DEFAULT '00:00:00.000',\n"
+        + "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
+        + "c8 DECIMAL(18,4) NULL,\n"
+        + "PRIMARY KEY(c1))",
+        dialect.buildCreateTableStatement(tableId, sinkRecordFields)
+    );
+
+    quoteTableNames = QuoteMethod.NEVER;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertEquals(
+        "CREATE TABLE myTable (\n"
+        + "c1 INT NOT NULL,\n"
+        + "c2 INT NOT NULL,\n"
+        + "c3 VARCHAR(1024) NOT NULL,\n"
+        + "c4 VARCHAR(1024) NULL,\n"
+        + "c5 DATE DEFAULT '2001-03-15',\n"
+        + "c6 TIME DEFAULT '00:00:00.000',\n"
+        + "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
+        + "c8 DECIMAL(18,4) NULL,\n"
+        + "PRIMARY KEY(c1))",
+        dialect.buildCreateTableStatement(tableId, sinkRecordFields)
+    );
   }
 
   @Test
   public void shouldBuildAlterTableStatement() {
-    List<String> statements = dialect.buildAlterTable(tableId, sinkRecordFields);
-    String[] sql = {"ALTER TABLE \"myTable\" ADD \"c1\" INT NOT NULL",
-                    "ALTER TABLE \"myTable\" ADD \"c2\" INT NOT NULL",
-                    "ALTER TABLE \"myTable\" ADD \"c3\" VARCHAR(1024) NOT NULL",
-                    "ALTER TABLE \"myTable\" ADD \"c4\" VARCHAR(1024) NULL",
-                    "ALTER TABLE \"myTable\" ADD \"c5\" DATE DEFAULT '2001-03-15'",
-                    "ALTER TABLE \"myTable\" ADD \"c6\" TIME DEFAULT '00:00:00.000'",
-                    "ALTER TABLE \"myTable\" ADD \"c7\" TIMESTAMP DEFAULT '2001-03-15 " +
-                    "00:00:00.000'", "ALTER TABLE \"myTable\" ADD \"c8\" DECIMAL(18,4) NULL"};
-    assertStatements(sql, statements);
+    assertStatements(
+        new String[]{
+            "ALTER TABLE \"myTable\" ADD \"c1\" INT NOT NULL",
+            "ALTER TABLE \"myTable\" ADD \"c2\" INT NOT NULL",
+            "ALTER TABLE \"myTable\" ADD \"c3\" VARCHAR(1024) NOT NULL",
+            "ALTER TABLE \"myTable\" ADD \"c4\" VARCHAR(1024) NULL",
+            "ALTER TABLE \"myTable\" ADD \"c5\" DATE DEFAULT '2001-03-15'",
+            "ALTER TABLE \"myTable\" ADD \"c6\" TIME DEFAULT '00:00:00.000'",
+            "ALTER TABLE \"myTable\" ADD \"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'",
+            "ALTER TABLE \"myTable\" ADD \"c8\" DECIMAL(18,4) NULL"
+        },
+        dialect.buildAlterTable(tableId, sinkRecordFields)
+    );
+
+    quoteTableNames = QuoteMethod.ALWAYS;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertStatements(
+        new String[]{
+            "ALTER TABLE \"myTable\" ADD c1 INT NOT NULL",
+            "ALTER TABLE \"myTable\" ADD c2 INT NOT NULL",
+            "ALTER TABLE \"myTable\" ADD c3 VARCHAR(1024) NOT NULL",
+            "ALTER TABLE \"myTable\" ADD c4 VARCHAR(1024) NULL",
+            "ALTER TABLE \"myTable\" ADD c5 DATE DEFAULT '2001-03-15'",
+            "ALTER TABLE \"myTable\" ADD c6 TIME DEFAULT '00:00:00.000'",
+            "ALTER TABLE \"myTable\" ADD c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'",
+            "ALTER TABLE \"myTable\" ADD c8 DECIMAL(18,4) NULL"
+        },
+        dialect.buildAlterTable(tableId, sinkRecordFields)
+    );
+
+    quoteTableNames = QuoteMethod.NEVER;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertStatements(
+        new String[]{
+            "ALTER TABLE myTable ADD c1 INT NOT NULL",
+            "ALTER TABLE myTable ADD c2 INT NOT NULL",
+            "ALTER TABLE myTable ADD c3 VARCHAR(1024) NOT NULL",
+            "ALTER TABLE myTable ADD c4 VARCHAR(1024) NULL",
+            "ALTER TABLE myTable ADD c5 DATE DEFAULT '2001-03-15'",
+            "ALTER TABLE myTable ADD c6 TIME DEFAULT '00:00:00.000'",
+            "ALTER TABLE myTable ADD c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'",
+            "ALTER TABLE myTable ADD c8 DECIMAL(18,4) NULL"
+        },
+        dialect.buildAlterTable(tableId, sinkRecordFields)
+    );
   }
 
   @Test(expected = UnsupportedOperationException.class)
@@ -139,6 +217,22 @@ public class VerticaDatabaseDialectTest extends BaseDialectTest<VerticaDatabaseD
         "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "\"pk1\" INT NOT NULL," +
         System.lineSeparator() + "\"pk2\" INT NOT NULL," + System.lineSeparator() +
         "\"col1\" INT NOT NULL," + System.lineSeparator() + "PRIMARY KEY(\"pk1\",\"pk2\"))");
+
+    quoteTableNames = QuoteMethod.ALWAYS;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+    verifyCreateThreeColTwoPk(
+        "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "pk1 INT NOT NULL," +
+        System.lineSeparator() + "pk2 INT NOT NULL," + System.lineSeparator() +
+        "col1 INT NOT NULL," + System.lineSeparator() + "PRIMARY KEY(pk1,pk2))");
+
+    quoteTableNames = QuoteMethod.NEVER;
+    quoteColumnNames = QuoteMethod.NEVER;
+    dialect = createDialect();
+    verifyCreateThreeColTwoPk(
+        "CREATE TABLE myTable (" + System.lineSeparator() + "pk1 INT NOT NULL," +
+        System.lineSeparator() + "pk2 INT NOT NULL," + System.lineSeparator() +
+        "col1 INT NOT NULL," + System.lineSeparator() + "PRIMARY KEY(pk1,pk2))");
   }
 
   @Test

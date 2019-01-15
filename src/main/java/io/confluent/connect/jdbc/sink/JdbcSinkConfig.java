@@ -26,6 +26,8 @@ import java.util.Set;
 
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
+import io.confluent.connect.jdbc.util.EnumRecommender;
+import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.StringUtils;
 
 import org.apache.kafka.common.config.AbstractConfig;
@@ -174,7 +176,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String CONNECTION_GROUP = "Connection";
   private static final String WRITES_GROUP = "Writes";
   private static final String DATAMAPPING_GROUP = "Data Mapping";
-  private static final String DDL_GROUP = "DDL Support";
+  private static final String DDL_GROUP = "SQL/DDL Support";
   private static final String RETRIES_GROUP = "Retries";
 
   public static final String DIALECT_NAME_CONFIG = "dialect.name";
@@ -186,6 +188,25 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "JDBC connection URL. Use this if you want to override that behavior and use a "
       + "specific dialect. All properly-packaged dialects in the JDBC connector plugin "
       + "can be used.";
+
+  public static final String QUOTE_TABLE_NAMES_CONFIG =
+      JdbcSourceConnectorConfig.QUOTE_TABLE_NAMES_CONFIG;
+  public static final String QUOTE_TABLE_NAMES_DEFAULT = QuoteMethod.ALWAYS.name().toString();
+  public static final String QUOTE_TABLE_NAMES_DOC =
+      "When to quote table names in DML and SQL statements. For backward compatibility, "
+      + "the default is 'always'.";
+  private static final String QUOTE_TABLE_NAMES_DISPLAY = "Quote Tables";
+
+  public static final String QUOTE_COLUMN_NAMES_CONFIG =
+      JdbcSourceConnectorConfig.QUOTE_COLUMN_NAMES_CONFIG;
+  public static final String QUOTE_COLUMN_NAMES_DEFAULT = QuoteMethod.ALWAYS.name().toString();
+  public static final String QUOTE_COLUMN_NAMES_DOC =
+      "When to quote column names in DML and SQL statements. For backward compatibility, "
+      + "the default is 'always'.";
+  private static final String QUOTE_COLUMN_NAMES_DISPLAY = "Quote Columns";
+
+  private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
+      EnumRecommender.in(QuoteMethod.values());
 
   public static final ConfigDef CONFIG_DEF = new ConfigDef()
         // Connection
@@ -324,6 +345,28 @@ public class JdbcSinkConfig extends AbstractConfig {
             2,
             ConfigDef.Width.SHORT,
             AUTO_EVOLVE_DISPLAY
+        ).define(
+            QUOTE_TABLE_NAMES_CONFIG,
+            ConfigDef.Type.STRING,
+            QUOTE_TABLE_NAMES_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            QUOTE_TABLE_NAMES_DOC,
+            DDL_GROUP,
+            3,
+            ConfigDef.Width.MEDIUM,
+            QUOTE_TABLE_NAMES_DISPLAY,
+            QUOTE_METHOD_RECOMMENDER
+        ).define(
+            QUOTE_COLUMN_NAMES_CONFIG,
+            ConfigDef.Type.STRING,
+            QUOTE_COLUMN_NAMES_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            QUOTE_COLUMN_NAMES_DOC,
+            DDL_GROUP,
+            4,
+            ConfigDef.Width.MEDIUM,
+            QUOTE_COLUMN_NAMES_DISPLAY,
+            QUOTE_METHOD_RECOMMENDER
         )
         // Retries
         .define(

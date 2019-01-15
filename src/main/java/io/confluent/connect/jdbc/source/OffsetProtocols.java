@@ -17,6 +17,7 @@
 package io.confluent.connect.jdbc.source;
 
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
+import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
 import java.util.Collections;
@@ -35,7 +36,7 @@ public class OffsetProtocols {
    * @return the partition map for V1 protocol
    */
   public static Map<String, String> sourcePartitionForProtocolV1(TableId tableId) {
-    String fqn = ExpressionBuilder.create().append(tableId, false).toString();
+    String fqn = ExpressionBuilder.create().append(tableId, QuoteMethod.NEVER).toString();
     Map<String, String> partitionForV1 = new HashMap<>();
     partitionForV1.put(JdbcSourceConnectorConstants.TABLE_NAME_KEY, fqn);
     partitionForV1.put(

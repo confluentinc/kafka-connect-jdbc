@@ -120,9 +120,9 @@ public class DerbyDatabaseDialect extends GenericDatabaseDialect {
     final Transform<ColumnId> transform = (builder, col) -> {
       builder.append(table)
              .append(".")
-             .appendIdentifierQuoted(col.name())
+             .appendColumnName(col.name())
              .append("=DAT.")
-             .appendIdentifierQuoted(col.name());
+             .appendColumnName(col.name());
     };
 
     ExpressionBuilder builder = expressionBuilder();

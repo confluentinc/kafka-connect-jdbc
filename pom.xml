@@ -29,7 +29,8 @@
   <groupId>io.confluent</groupId>
   <artifactId>kafka-connect-jdbc-au</artifactId>
 
-  <version>5.0.5-au</version>
+  <version>5.0.6-au</version>
+
   <packaging>jar</packaging>
   <name>kafka-connect-jdbc</name>
   <description>A Kafka Connect JDBC connector for copying data between databases and Kafka. Modified with some Au patches</description>

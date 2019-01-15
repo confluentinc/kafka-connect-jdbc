@@ -22,8 +22,6 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
-import java.util.List;
-
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
@@ -107,25 +105,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
 
-    quoteTableNames = QuoteMethod.ALWAYS;
-    quoteColumnNames = QuoteMethod.NEVER;
-    dialect = createDialect();
-    assertEquals(
-        "CREATE TABLE [myTable] (\n"
-        + "c1 int NOT NULL,\n"
-        + "c2 bigint NOT NULL,\n"
-        + "c3 varchar(max) NOT NULL,\n"
-        + "c4 varchar(max) NULL,\n"
-        + "c5 date DEFAULT '2001-03-15',\n"
-        + "c6 time DEFAULT '00:00:00.000',\n"
-        + "c7 datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "c8 decimal(38,4) NULL,\n" +
-        "PRIMARY KEY(c1))",
-        dialect.buildCreateTableStatement(tableId, sinkRecordFields)
-    );
-
-    quoteTableNames = QuoteMethod.NEVER;
-    quoteColumnNames = QuoteMethod.NEVER;
+    quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
     assertEquals(
         "CREATE TABLE myTable (\n"
@@ -159,26 +139,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );
 
-    quoteTableNames = QuoteMethod.ALWAYS;
-    quoteColumnNames = QuoteMethod.NEVER;
-    dialect = createDialect();
-    assertStatements(
-        new String[]{
-            "ALTER TABLE [myTable] ADD\n"
-            + "c1 int NOT NULL,\n"
-            + "c2 bigint NOT NULL,\n"
-            + "c3 varchar(max) NOT NULL,\n"
-            + "c4 varchar(max) NULL,\n"
-            + "c5 date DEFAULT '2001-03-15',\n"
-            + "c6 time DEFAULT '00:00:00.000',\n"
-            + "c7 datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
-            + "c8 decimal(38,4) NULL"
-        },
-        dialect.buildAlterTable(tableId, sinkRecordFields)
-    );
-
-    quoteTableNames = QuoteMethod.NEVER;
-    quoteColumnNames = QuoteMethod.NEVER;
+    quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
     assertStatements(
         new String[]{
@@ -211,24 +172,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
         dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
     );
 
-    quoteTableNames = QuoteMethod.ALWAYS;
-    quoteColumnNames = QuoteMethod.NEVER;
-    dialect = createDialect();
-    assertEquals(
-        "merge into [myTable] with (HOLDLOCK) AS target using (select ? AS id1, ?" +
-        " AS id2, ? AS columnA, ? AS columnB, ? AS columnC, ? AS columnD)" +
-        " AS incoming on (target.id1=incoming.id1 and target.id2=incoming" +
-        ".id2) when matched then update set columnA=incoming.columnA," +
-        "columnB=incoming.columnB,columnC=incoming.columnC," +
-        "columnD=incoming.columnD when not matched then insert (columnA, " +
-        "columnB, columnC, columnD, id1, id2) values (incoming.columnA," +
-        "incoming.columnB,incoming.columnC,incoming.columnD,incoming.id1," +
-        "incoming.id2);",
-        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
-    );
-
-    quoteTableNames = QuoteMethod.NEVER;
-    quoteColumnNames = QuoteMethod.NEVER;
+    quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
     assertEquals(
         "merge into myTable with (HOLDLOCK) AS target using (select ? AS id1, ?" +
@@ -295,25 +239,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
         )
     );
 
-    quoteTableNames = QuoteMethod.ALWAYS;
-    quoteColumnNames = QuoteMethod.NEVER;
-    dialect = createDialect();
-    assertEquals(
-        "merge into [Customer] with (HOLDLOCK) AS target using (select ? AS id, ? AS name, ? " +
-        "AS salary, ? AS address) AS incoming on (target.id=incoming.id) when matched then update set " +
-        "name=incoming.name,salary=incoming.salary,address=incoming" +
-        ".address when not matched then insert " +
-        "(name, salary, address, id) values (incoming.name,incoming" +
-        ".salary,incoming.address,incoming.id);",
-        dialect.buildUpsertQueryStatement(
-            customer,
-            columns(customer, "id"),
-            columns(customer, "name", "salary", "address")
-        )
-    );
-
-    quoteTableNames = QuoteMethod.NEVER;
-    quoteColumnNames = QuoteMethod.NEVER;
+    quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
     assertEquals(
         "merge into Customer with (HOLDLOCK) AS target using (select ? AS id, ? AS name, ? " +
@@ -348,26 +274,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
         )
     );
 
-    quoteTableNames = QuoteMethod.ALWAYS;
-    quoteColumnNames = QuoteMethod.NEVER;
-    dialect = createDialect();
-    assertEquals(
-        "merge into [Book] with (HOLDLOCK) AS target using (select ? AS author, ? AS title, ?" +
-        " AS ISBN, ? AS year, ? AS pages)" +
-        " AS incoming on (target.author=incoming.author and target.title=incoming.title)" +
-        " when matched then update set ISBN=incoming.ISBN,year=incoming.year," +
-        "pages=incoming.pages when not " +
-        "matched then insert (ISBN, year, pages, author, title) values (incoming" +
-        ".ISBN,incoming.year," + "incoming.pages,incoming.author,incoming.title);",
-        dialect.buildUpsertQueryStatement(
-            book,
-            columns(book, "author", "title"),
-            columns(book, "ISBN", "year", "pages")
-        )
-    );
-
-    quoteTableNames = QuoteMethod.NEVER;
-    quoteColumnNames = QuoteMethod.NEVER;
+    quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
     assertEquals(
         "merge into Book with (HOLDLOCK) AS target using (select ? AS author, ? AS title, ?" +

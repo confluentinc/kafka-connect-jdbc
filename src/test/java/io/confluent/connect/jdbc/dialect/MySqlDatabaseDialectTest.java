@@ -129,15 +129,7 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
     verifyCreateOneColNoPk(
         "CREATE TABLE `myTable` (" + System.lineSeparator() + "`col1` INT NOT NULL)");
 
-    quoteTableNames = QuoteMethod.ALWAYS;
-    quoteColumnNames = QuoteMethod.NEVER;
-    dialect = createDialect();
-
-    verifyCreateOneColNoPk(
-        "CREATE TABLE `myTable` (" + System.lineSeparator() + "col1 INT NOT NULL)");
-
-    quoteTableNames = QuoteMethod.NEVER;
-    quoteColumnNames = QuoteMethod.NEVER;
+    quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     verifyCreateOneColNoPk(
@@ -158,17 +150,7 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
         System.lineSeparator() + "`pk2` INT NOT NULL," + System.lineSeparator() +
         "`col1` INT NOT NULL," + System.lineSeparator() + "PRIMARY KEY(`pk1`,`pk2`))");
 
-    quoteTableNames = QuoteMethod.ALWAYS;
-    quoteColumnNames = QuoteMethod.NEVER;
-    dialect = createDialect();
-
-    verifyCreateThreeColTwoPk(
-        "CREATE TABLE `myTable` (" + System.lineSeparator() + "pk1 INT NOT NULL," +
-        System.lineSeparator() + "pk2 INT NOT NULL," + System.lineSeparator() +
-        "col1 INT NOT NULL," + System.lineSeparator() + "PRIMARY KEY(pk1,pk2))");
-
-    quoteTableNames = QuoteMethod.NEVER;
-    quoteColumnNames = QuoteMethod.NEVER;
+    quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     verifyCreateThreeColTwoPk(
@@ -200,20 +182,7 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
                                                            "score"));
     assertEquals(expected, sql);
 
-    quoteTableNames = QuoteMethod.ALWAYS;
-    quoteColumnNames = QuoteMethod.NEVER;
-    dialect = createDialect();
-
-    expected = "insert into `actor`(actor_id,first_name,last_name,score) " +
-                      "values(?,?,?,?) on duplicate key update first_name=values(first_name)," +
-                      "last_name=values(last_name),score=values(score)";
-    sql = dialect.buildUpsertQueryStatement(actor, columns(actor, "actor_id"),
-        columns(actor, "first_name", "last_name",
-            "score"));
-    assertEquals(expected, sql);
-
-    quoteTableNames = QuoteMethod.NEVER;
-    quoteColumnNames = QuoteMethod.NEVER;
+    quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     expected = "insert into actor(actor_id,first_name,last_name,score) " +

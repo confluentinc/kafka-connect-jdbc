@@ -177,19 +177,8 @@ public class ExpressionBuilder {
    * Get a {@link Transform} that will surround the inputs with quotes.
    *
    * @return the transform; never null
-   * @deprecated use {@link #quoteColumns()} instead
    */
-  @Deprecated
   public static Transform<String> quote() {
-    return quoteColumns();
-  }
-
-  /**
-   * Get a {@link Transform} that will surround the inputs with quotes if necesssary.
-   *
-   * @return the transform; never null
-   */
-  public static Transform<String> quoteColumns() {
     return (builder, input) -> builder.appendColumnName(input);
   }
 
@@ -249,8 +238,7 @@ public class ExpressionBuilder {
 
   private final IdentifierRules rules;
   private final StringBuilder sb = new StringBuilder();
-  private QuoteMethod quoteTables = QuoteMethod.ALWAYS;
-  private QuoteMethod quoteColumns = QuoteMethod.ALWAYS;
+  private QuoteMethod quoteSqlIdentifiers = QuoteMethod.ALWAYS;
 
   /**
    * Create a new expression builder with the default {@link IdentifierRules}.
@@ -268,13 +256,14 @@ public class ExpressionBuilder {
     this.rules = rules != null ? rules : IdentifierRules.DEFAULT;
   }
 
-  public ExpressionBuilder setQuoteTables(QuoteMethod method) {
-    this.quoteTables = method != null ? method : QuoteMethod.ALWAYS;
-    return this;
-  }
-
-  public ExpressionBuilder setQuoteColumns(QuoteMethod method) {
-    this.quoteColumns = method != null ? method : QuoteMethod.ALWAYS;
+  /**
+   * Set when this expression builder should quote identifiers, such as table and column names.
+   *
+   * @param method the quoting method; may be null if the default should be used
+   * @return this expression builder; never null
+   */
+  public ExpressionBuilder setQuoteIdentifiers(QuoteMethod method) {
+    this.quoteSqlIdentifiers = method != null ? method : QuoteMethod.ALWAYS;
     return this;
   }
 
@@ -409,18 +398,18 @@ public class ExpressionBuilder {
 
   /**
    * Append to this builder's expression the specified Column identifier, possibly surrounded by
-   * the leading and trailing quotes based upon {@link #setQuoteTables(QuoteMethod)}.
+   * the leading and trailing quotes based upon {@link #setQuoteIdentifiers(QuoteMethod)}.
    *
    * @param name the name to be appended
    * @return this builder to enable methods to be chained; never null
    */
   public ExpressionBuilder appendTableName(String name) {
-    return appendTableName(name, quoteTables);
+    return appendTableName(name, quoteSqlIdentifiers);
   }
 
   /**
    * Append to this builder's expression the specified Column identifier, possibly surrounded by
-   * the leading and trailing quotes based upon {@link #setQuoteTables(QuoteMethod)}.
+   * the leading and trailing quotes based upon {@link #setQuoteIdentifiers(QuoteMethod)}.
    *
    * @param name the name to be appended
    * @return this builder to enable methods to be chained; never null
@@ -434,18 +423,18 @@ public class ExpressionBuilder {
 
   /**
    * Append to this builder's expression the specified Column identifier, possibly surrounded by
-   * the leading and trailing quotes based upon {@link #setQuoteColumns(QuoteMethod)}.
+   * the leading and trailing quotes based upon {@link #setQuoteIdentifiers(QuoteMethod)}.
    *
    * @param name the name to be appended
    * @return this builder to enable methods to be chained; never null
    */
   public ExpressionBuilder appendColumnName(String name) {
-    return appendColumnName(name, quoteColumns);
+    return appendColumnName(name, quoteSqlIdentifiers);
   }
 
   /**
    * Append to this builder's expression the specified Column identifier, possibly surrounded by
-   * the leading and trailing quotes based upon {@link #setQuoteColumns(QuoteMethod)}.
+   * the leading and trailing quotes based upon {@link #setQuoteIdentifiers(QuoteMethod)}.
    *
    * @param name the name to be appended
    * @param quote whether to quote the column name; may not be null
@@ -544,15 +533,7 @@ public class ExpressionBuilder {
    * @return this builder to enable methods to be chained; never null
    */
   public ExpressionBuilder append(Object obj) {
-    QuoteMethod quoteMethod;
-    if (obj instanceof TableId) {
-      quoteMethod = quoteTables;
-    } else if (obj instanceof ColumnId) {
-      quoteMethod = quoteColumns;
-    } else {
-      quoteMethod = QuoteMethod.ALWAYS;
-    }
-    return append(obj, quoteMethod);
+    return append(obj, quoteSqlIdentifiers);
   }
 
   /**

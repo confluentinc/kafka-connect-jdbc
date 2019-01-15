@@ -45,8 +45,7 @@ public class TimestampIncrementingCriteriaTest {
   private static final List<ColumnId> TS_COLUMNS = Arrays.asList(TS1_COLUMN, TS2_COLUMN);
 
   private IdentifierRules rules;
-  private QuoteMethod tableQuotes;
-  private QuoteMethod columnQuotes;
+  private QuoteMethod identifierQuoting;
   private ExpressionBuilder builder;
   private TimestampIncrementingCriteria criteria;
   private TimestampIncrementingCriteria criteriaInc;
@@ -61,8 +60,7 @@ public class TimestampIncrementingCriteriaTest {
     criteriaInc = new TimestampIncrementingCriteria(INCREMENTING_COLUMN, null);
     criteriaTs = new TimestampIncrementingCriteria(null, TS_COLUMNS);
     criteriaIncTs = new TimestampIncrementingCriteria(INCREMENTING_COLUMN, TS_COLUMNS);
-    tableQuotes = null;
-    columnQuotes = null;
+    identifierQuoting = null;
     rules = null;
     builder = null;
   }
@@ -143,17 +141,7 @@ public class TimestampIncrementingCriteriaTest {
         builder.toString()
     );
 
-    tableQuotes = QuoteMethod.ALWAYS;
-    columnQuotes = QuoteMethod.NEVER;
-    builder = builder();
-    criteriaInc.incrementingWhereClause(builder);
-    assertEquals(
-        " WHERE \"myTable\".id > ? ORDER BY \"myTable\".id ASC",
-        builder.toString()
-    );
-
-    tableQuotes = QuoteMethod.NEVER;
-    columnQuotes = QuoteMethod.NEVER;
+    identifierQuoting = QuoteMethod.NEVER;
     builder = builder();
     criteriaInc.incrementingWhereClause(builder);
     assertEquals(
@@ -177,23 +165,7 @@ public class TimestampIncrementingCriteriaTest {
         builder.toString()
     );
 
-    tableQuotes = QuoteMethod.ALWAYS;
-    columnQuotes = QuoteMethod.NEVER;
-    builder = builder();
-    criteriaTs.timestampWhereClause(builder);
-    assertEquals(
-        " WHERE "
-        + "COALESCE(\"myTable\".ts1,\"myTable\".ts2) > ? "
-        + "AND "
-        + "COALESCE(\"myTable\".ts1,\"myTable\".ts2) < ? "
-        + "ORDER BY "
-        + "COALESCE(\"myTable\".ts1,\"myTable\".ts2) "
-        + "ASC",
-        builder.toString()
-    );
-
-    tableQuotes = QuoteMethod.NEVER;
-    columnQuotes = QuoteMethod.NEVER;
+    identifierQuoting = QuoteMethod.NEVER;
     builder = builder();
     criteriaTs.timestampWhereClause(builder);
     assertEquals(
@@ -224,24 +196,7 @@ public class TimestampIncrementingCriteriaTest {
         builder.toString()
     );
 
-    tableQuotes = QuoteMethod.ALWAYS;
-    columnQuotes = QuoteMethod.NEVER;
-    builder = builder();
-    criteriaIncTs.timestampIncrementingWhereClause(builder);
-    assertEquals(
-        " WHERE "
-        + "COALESCE(\"myTable\".ts1,\"myTable\".ts2) < ? "
-        + "AND ("
-        + "(COALESCE(\"myTable\".ts1,\"myTable\".ts2) = ? AND \"myTable\".id > ?) "
-        + "OR "
-        + "COALESCE(\"myTable\".ts1,\"myTable\".ts2) > ?) "
-        + "ORDER BY COALESCE(\"myTable\".ts1,\"myTable\".ts2),"
-        + "\"myTable\".id ASC",
-        builder.toString()
-    );
-
-    tableQuotes = QuoteMethod.NEVER;
-    columnQuotes = QuoteMethod.NEVER;
+    identifierQuoting = QuoteMethod.NEVER;
     builder = builder();
     criteriaIncTs.timestampIncrementingWhereClause(builder);
     assertEquals(
@@ -259,8 +214,7 @@ public class TimestampIncrementingCriteriaTest {
 
   protected ExpressionBuilder builder() {
     ExpressionBuilder result = new ExpressionBuilder(rules);
-    result.setQuoteTables(tableQuotes);
-    result.setQuoteColumns(columnQuotes);
+    result.setQuoteIdentifiers(identifierQuoting);
     return result;
   }
 }

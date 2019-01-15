@@ -32,14 +32,12 @@ public class ExpressionBuilderTest {
   protected static final ColumnId COLUMN_ID_T2_A = new ColumnId(TABLE_ID_T2, "c2");
 
   private IdentifierRules rules;
-  private QuoteMethod tableQuotes;
-  private QuoteMethod columnQuotes;
+  private QuoteMethod quoteIdentifiers;
 
   @Before
   public void setup() {
     rules = null;
-    tableQuotes = QuoteMethod.ALWAYS;
-    columnQuotes = QuoteMethod.ALWAYS;
+    quoteIdentifiers = QuoteMethod.ALWAYS;
   }
 
   @Test
@@ -53,14 +51,14 @@ public class ExpressionBuilderTest {
 
   @Test
   public void shouldQuoteTableNamesOnlyWhenSet() {
-    tableQuotes = QuoteMethod.ALWAYS;
+    quoteIdentifiers = QuoteMethod.ALWAYS;
     assertExpression("\"c\".\"s\".\"t1\"", b-> b.append(TABLE_ID_T1));
     assertExpression("\"t1\"", b-> b.appendTableName(TABLE_ID_T1.tableName()));
 
     assertExpression("\"t2\"", b-> b.append(TABLE_ID_T2));
     assertExpression("\"t2\"", b-> b.appendTableName(TABLE_ID_T2.tableName()));
 
-    tableQuotes = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     assertExpression("c.s.t1", b-> b.append(TABLE_ID_T1));
     assertExpression("t1", b-> b.appendTableName(TABLE_ID_T1.tableName()));
 
@@ -76,34 +74,22 @@ public class ExpressionBuilderTest {
 
   @Test
   public void shouldQuoteTableNamesAndColumnNamesOnlyWhenSet() {
-    tableQuotes = QuoteMethod.ALWAYS;
-    columnQuotes = QuoteMethod.ALWAYS;
+    quoteIdentifiers = QuoteMethod.ALWAYS;
     assertExpression("\"c\".\"s\".\"t1\".\"c1\"", b-> b.append(COLUMN_ID_T1_A));
     assertExpression("\"t2\".\"c2\"", b-> b.append(COLUMN_ID_T2_A));
 
-    tableQuotes = QuoteMethod.NEVER;
-    columnQuotes = QuoteMethod.ALWAYS;
-    assertExpression("c.s.t1.\"c1\"", b-> b.append(COLUMN_ID_T1_A));
-    assertExpression("t2.\"c2\"", b-> b.append(COLUMN_ID_T2_A));
-
-    tableQuotes = QuoteMethod.ALWAYS;
-    columnQuotes = QuoteMethod.NEVER;
-    assertExpression("\"c\".\"s\".\"t1\".c1", b-> b.append(COLUMN_ID_T1_A));
-    assertExpression("\"t2\".c2", b-> b.append(COLUMN_ID_T2_A));
-
-    tableQuotes = QuoteMethod.NEVER;
-    columnQuotes = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     assertExpression("c.s.t1.c1", b-> b.append(COLUMN_ID_T1_A));
     assertExpression("t2.c2", b-> b.append(COLUMN_ID_T2_A));
   }
 
   @Test
   public void shouldQuoteColumnNamesWhenSet() {
-    columnQuotes = QuoteMethod.ALWAYS;
+    quoteIdentifiers = QuoteMethod.ALWAYS;
     assertExpression("\"c1\"", b-> b.appendColumnName(COLUMN_ID_T1_A.name()));
     assertExpression("\"c2\"", b-> b.appendColumnName(COLUMN_ID_T2_A.name()));
 
-    columnQuotes = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     assertExpression("c1", b-> b.appendColumnName(COLUMN_ID_T1_A.name()));
     assertExpression("c2", b-> b.appendColumnName(COLUMN_ID_T2_A.name()));
   }
@@ -117,8 +103,7 @@ public class ExpressionBuilderTest {
 
   protected ExpressionBuilder builderWith(IdentifierRules rules) {
     ExpressionBuilder result = new ExpressionBuilder(rules);
-    result.setQuoteTables(tableQuotes);
-    result.setQuoteColumns(columnQuotes);
+    result.setQuoteIdentifiers(quoteIdentifiers);
     return result;
   }
 

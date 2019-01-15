@@ -129,8 +129,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   protected final String schemaPattern;
   protected final Set<String> tableTypes;
   protected final String jdbcUrl;
-  private final QuoteMethod quoteTableNames;
-  private final QuoteMethod quoteColumnNames;
+  private final QuoteMethod quoteSqlIdentifiers;
   private final IdentifierRules defaultIdentifierRules;
   private final AtomicReference<IdentifierRules> identifierRules = new AtomicReference<>();
   private final Queue<Connection> connections = new ConcurrentLinkedQueue<>();
@@ -163,21 +162,15 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       catalogPattern = JdbcSourceTaskConfig.CATALOG_PATTERN_DEFAULT;
       schemaPattern = JdbcSourceTaskConfig.SCHEMA_PATTERN_DEFAULT;
       tableTypes = new HashSet<>(Arrays.asList(JdbcSourceTaskConfig.TABLE_TYPE_DEFAULT));
-      quoteTableNames = QuoteMethod.get(
-          config.getString(JdbcSinkConfig.QUOTE_TABLE_NAMES_CONFIG)
-      );
-      quoteColumnNames = QuoteMethod.get(
-          config.getString(JdbcSinkConfig.QUOTE_COLUMN_NAMES_CONFIG)
+      quoteSqlIdentifiers = QuoteMethod.get(
+          config.getString(JdbcSinkConfig.QUOTE_SQL_IDENTIFIERS_CONFIG)
       );
     } else {
       catalogPattern = config.getString(JdbcSourceTaskConfig.CATALOG_PATTERN_CONFIG);
       schemaPattern = config.getString(JdbcSourceTaskConfig.SCHEMA_PATTERN_CONFIG);
       tableTypes = new HashSet<>(config.getList(JdbcSourceTaskConfig.TABLE_TYPE_CONFIG));
-      quoteTableNames = QuoteMethod.get(
-          config.getString(JdbcSourceConnectorConfig.QUOTE_TABLE_NAMES_CONFIG)
-      );
-      quoteColumnNames = QuoteMethod.get(
-          config.getString(JdbcSourceConnectorConfig.QUOTE_COLUMN_NAMES_CONFIG)
+      quoteSqlIdentifiers = QuoteMethod.get(
+          config.getString(JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_CONFIG)
       );
     }
     if (config instanceof JdbcSourceConnectorConfig) {
@@ -456,8 +449,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   @Override
   public ExpressionBuilder expressionBuilder() {
     return identifierRules().expressionBuilder()
-                            .setQuoteTables(quoteTableNames)
-                            .setQuoteColumns(quoteColumnNames);
+                            .setQuoteIdentifiers(quoteSqlIdentifiers);
   }
 
   /**
@@ -1541,7 +1533,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       builder.append("PRIMARY KEY(");
       builder.appendList()
              .delimitedBy(",")
-             .transformedBy(ExpressionBuilder.quoteColumns())
+             .transformedBy(ExpressionBuilder.quote())
              .of(pkFieldNames);
       builder.append(")");
     }

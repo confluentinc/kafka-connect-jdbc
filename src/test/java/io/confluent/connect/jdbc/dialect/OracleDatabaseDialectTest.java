@@ -22,8 +22,6 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
-import java.util.List;
-
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
@@ -119,27 +117,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );
 
-    quoteTableNames = QuoteMethod.ALWAYS;
-    quoteColumnNames = QuoteMethod.NEVER;
-    dialect = createDialect();
-
-    assertStatements(
-        new String[]{
-            "ALTER TABLE \"myTable\" ADD(\n" +
-            "c1 NUMBER(10,0) NOT NULL,\n" +
-            "c2 NUMBER(19,0) NOT NULL,\n" +
-            "c3 CLOB NOT NULL,\n" +
-            "c4 CLOB NULL,\n" +
-            "c5 DATE DEFAULT '2001-03-15',\n" +
-            "c6 DATE DEFAULT '00:00:00.000',\n" +
-            "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" +
-            "c8 NUMBER(*,4) NULL)"
-        },
-        dialect.buildAlterTable(tableId, sinkRecordFields)
-    );
-
-    quoteTableNames = QuoteMethod.NEVER;
-    quoteColumnNames = QuoteMethod.NEVER;
+    quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     assertStatements(
@@ -196,18 +174,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
         "\"col1\" NUMBER(10,0) NOT NULL," + System.lineSeparator() +
         "PRIMARY KEY(\"pk1\",\"pk2\"))");
 
-    quoteTableNames = QuoteMethod.ALWAYS;
-    quoteColumnNames = QuoteMethod.NEVER;
-    dialect = createDialect();
-
-    verifyCreateThreeColTwoPk(
-        "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "pk1 NUMBER(10,0) NOT NULL," +
-        System.lineSeparator() + "pk2 NUMBER(10,0) NOT NULL," + System.lineSeparator() +
-        "col1 NUMBER(10,0) NOT NULL," + System.lineSeparator() +
-        "PRIMARY KEY(pk1,pk2))");
-
-    quoteTableNames = QuoteMethod.NEVER;
-    quoteColumnNames = QuoteMethod.NEVER;
+    quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     verifyCreateThreeColTwoPk(

@@ -101,30 +101,8 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
   }
 
   @Test
-  public void shouldBuildCreateQueryStatementWithNoColumnQuoting() {
-    quoteTableNames = QuoteMethod.ALWAYS;
-    quoteColumnNames = QuoteMethod.NEVER;
-    dialect = createDialect();
-
-    String expected =
-        "CREATE TABLE \"myTable\" (\n"
-        + "c1 INTEGER NOT NULL,\n"
-        + "c2 BIGINT NOT NULL,\n"
-        + "c3 VARCHAR(32672) NOT NULL,\n"
-        + "c4 VARCHAR(32672) NULL,\n"
-        + "c5 DATE DEFAULT '2001-03-15',\n"
-        + "c6 TIME DEFAULT '00:00:00.000',\n"
-        + "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "c8 DECIMAL(31,4) NULL,\n"
-        + "PRIMARY KEY(c1))";
-    String sql = dialect.buildCreateTableStatement(tableId, sinkRecordFields);
-    assertEquals(expected, sql);
-  }
-
-  @Test
-  public void shouldBuildCreateQueryStatementWithNoTableOrColumnQuoting() {
-    quoteTableNames = QuoteMethod.NEVER;
-    quoteColumnNames = QuoteMethod.NEVER;
+  public void shouldBuildCreateQueryStatementWithNoIdentifierQuoting() {
+    quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     String expected =
@@ -158,28 +136,8 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
   }
 
   @Test
-  public void shouldBuildAlterTableStatementWithNoColumnQuoting() {
-    quoteTableNames = QuoteMethod.ALWAYS;
-    quoteColumnNames = QuoteMethod.NEVER;
-    dialect = createDialect();
-
-    List<String> statements = dialect.buildAlterTable(tableId, sinkRecordFields);
-    String[] sql = {"ALTER TABLE \"myTable\" \n"
-                    + "ADD c1 INTEGER NOT NULL,\n"
-                    + "ADD c2 BIGINT NOT NULL,\n"
-                    + "ADD c3 VARCHAR(32672) NOT NULL,\n"
-                    + "ADD c4 VARCHAR(32672) NULL,\n"
-                    + "ADD c5 DATE DEFAULT '2001-03-15',\n"
-                    + "ADD c6 TIME DEFAULT '00:00:00.000',\n"
-                    + "ADD c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
-                    + "ADD c8 DECIMAL(31,4) NULL"};
-    assertStatements(sql, statements);
-  }
-
-  @Test
-  public void shouldBuildAlterTableStatementWithNoTableOrColumnQuoting() {
-    quoteTableNames = QuoteMethod.NEVER;
-    quoteColumnNames = QuoteMethod.NEVER;
+  public void shouldBuildAlterTableStatementWithNoIdentifierQuoting() {
+    quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     List<String> statements = dialect.buildAlterTable(tableId, sinkRecordFields);
@@ -200,15 +158,7 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
     verifyCreateOneColNoPk(
         "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "\"col1\" INTEGER NOT NULL)");
 
-    quoteTableNames = QuoteMethod.ALWAYS;
-    quoteColumnNames = QuoteMethod.NEVER;
-    dialect = createDialect();
-
-    verifyCreateOneColNoPk(
-        "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "col1 INTEGER NOT NULL)");
-
-    quoteTableNames = QuoteMethod.NEVER;
-    quoteColumnNames = QuoteMethod.NEVER;
+    quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     verifyCreateOneColNoPk(
@@ -221,16 +171,7 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
         "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "\"pk1\" INTEGER NOT NULL," + System
             .lineSeparator() + "PRIMARY KEY(\"pk1\"))");
 
-    quoteTableNames = QuoteMethod.ALWAYS;
-    quoteColumnNames = QuoteMethod.NEVER;
-    dialect = createDialect();
-
-    verifyCreateOneColOnePk(
-        "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "pk1 INTEGER NOT NULL," + System
-            .lineSeparator() + "PRIMARY KEY(pk1))");
-
-    quoteTableNames = QuoteMethod.NEVER;
-    quoteColumnNames = QuoteMethod.NEVER;
+    quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     verifyCreateOneColOnePk(
@@ -245,17 +186,7 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
             .lineSeparator() + "\"pk2\" INTEGER NOT NULL," + System.lineSeparator()
         + "\"col1\" INTEGER NOT NULL," + System.lineSeparator() + "PRIMARY KEY(\"pk1\",\"pk2\"))");
 
-    quoteTableNames = QuoteMethod.ALWAYS;
-    quoteColumnNames = QuoteMethod.NEVER;
-    dialect = createDialect();
-
-    verifyCreateThreeColTwoPk(
-        "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "pk1 INTEGER NOT NULL," + System
-            .lineSeparator() + "pk2 INTEGER NOT NULL," + System.lineSeparator()
-        + "col1 INTEGER NOT NULL," + System.lineSeparator() + "PRIMARY KEY(pk1,pk2))");
-
-    quoteTableNames = QuoteMethod.NEVER;
-    quoteColumnNames = QuoteMethod.NEVER;
+    quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     verifyCreateThreeColTwoPk(
@@ -297,20 +228,7 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
     );
     assertEquals(expected, sql);
 
-    quoteTableNames = QuoteMethod.ALWAYS;
-    quoteColumnNames = QuoteMethod.NEVER;
-    dialect = createDialect();
-
-    expected =
-        "UPDATE \"customers\" SET age = ?, firstName = ?, lastName = ? WHERE "
-        + "id = ?";
-    sql = dialect.buildUpdateStatement(customers, columns(customers, "id"),
-        columns(customers, "age", "firstName", "lastName")
-    );
-    assertEquals(expected, sql);
-
-    quoteTableNames = QuoteMethod.NEVER;
-    quoteColumnNames = QuoteMethod.NEVER;
+    quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     expected =
@@ -344,34 +262,8 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
   }
 
   @Test
-  public void shouldBuildUpsertStatementWithNoColumnQuoting() {
-    quoteTableNames = QuoteMethod.ALWAYS;
-    quoteColumnNames = QuoteMethod.NEVER;
-    dialect = createDialect();
-
-    String expected = "merge into \"myTable\" using (values(?, ?, ?, ?, ?, ?)) "
-                      + "as DAT(id1, id2, columnA, columnB, columnC, "
-                      + "columnD) "
-                      + "on \"myTable\".id1=DAT.id1 and \"myTable\".id2=DAT.id2 "
-                      + "when matched then update set "
-                      + "\"myTable\".columnA=DAT.columnA, "
-                      + "\"myTable\".columnB=DAT.columnB, "
-                      + "\"myTable\".columnC=DAT.columnC, "
-                      + "\"myTable\".columnD=DAT.columnD " + "when not matched then "
-                      + "insert(\"myTable\".columnA,\"myTable\".columnB,\"myTable\""
-                      + ".columnC,"
-                      + "\"myTable\".columnD,\"myTable\".id1,\"myTable\".id2) "
-                      + "values(DAT.columnA,DAT.columnB,DAT.columnC,DAT.columnD,"
-                      + "DAT.id1,"
-                      + "DAT.id2)";
-    String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD);
-    assertEquals(expected, sql);
-  }
-
-  @Test
-  public void shouldBuildUpsertStatementWithNoColumnOrTableQuoting() {
-    quoteTableNames = QuoteMethod.NEVER;
-    quoteColumnNames = QuoteMethod.NEVER;
+  public void shouldBuildUpsertStatementWithNoIdentifierQuoting() {
+    quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     String expected = "merge into myTable using (values(?, ?, ?, ?, ?, ?)) "
@@ -422,19 +314,7 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
         actor, columns(actor, "actor_id"), columns(actor));
     assertEquals(expected, sql);
 
-    quoteTableNames = QuoteMethod.ALWAYS;
-    quoteColumnNames = QuoteMethod.NEVER;
-    dialect = createDialect();
-
-    expected = "merge into \"actor\" using (values(?)) as DAT(actor_id) on \"actor\""
-                      + ".actor_id=DAT.actor_id when not matched then insert(\"actor\""
-                      + ".actor_id) values(DAT.actor_id)";
-    sql = dialect.buildUpsertQueryStatement(
-        actor, columns(actor, "actor_id"), columns(actor));
-    assertEquals(expected, sql);
-
-    quoteTableNames = QuoteMethod.NEVER;
-    quoteColumnNames = QuoteMethod.NEVER;
+    quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     expected = "merge into actor using (values(?)) as DAT(actor_id) on actor"

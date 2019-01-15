@@ -23,7 +23,6 @@ import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
 import java.util.Arrays;
-import java.util.List;
 
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
@@ -106,26 +105,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
 
-    quoteTableNames = QuoteMethod.ALWAYS;
-    quoteColumnNames = QuoteMethod.NEVER;
-    dialect = createDialect();
-
-    assertEquals(
-        "CREATE TABLE \"myTable\" (\n"
-        + "c1 INT NOT NULL,\n"
-        + "c2 BIGINT NOT NULL,\n"
-        + "c3 TEXT NOT NULL,\n"
-        + "c4 TEXT NULL,\n"
-        + "c5 DATE DEFAULT '2001-03-15',\n"
-        + "c6 TIME DEFAULT '00:00:00.000',\n"
-        + "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "c8 DECIMAL NULL,\n"
-        + "PRIMARY KEY(c1))",
-        dialect.buildCreateTableStatement(tableId, sinkRecordFields)
-    );
-
-    quoteTableNames = QuoteMethod.NEVER;
-    quoteColumnNames = QuoteMethod.NEVER;
+    quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     assertEquals(
@@ -160,27 +140,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );
 
-    quoteTableNames = QuoteMethod.ALWAYS;
-    quoteColumnNames = QuoteMethod.NEVER;
-    dialect = createDialect();
-
-    assertEquals(
-        Arrays.asList(
-            "ALTER TABLE \"myTable\" \n"
-            + "ADD c1 INT NOT NULL,\n"
-            + "ADD c2 BIGINT NOT NULL,\n"
-            + "ADD c3 TEXT NOT NULL,\n"
-            + "ADD c4 TEXT NULL,\n"
-            + "ADD c5 DATE DEFAULT '2001-03-15',\n"
-            + "ADD c6 TIME DEFAULT '00:00:00.000',\n"
-            + "ADD c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
-            + "ADD c8 DECIMAL NULL"
-        ),
-        dialect.buildAlterTable(tableId, sinkRecordFields)
-    );
-
-    quoteTableNames = QuoteMethod.NEVER;
-    quoteColumnNames = QuoteMethod.NEVER;
+    quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     assertEquals(
@@ -210,21 +170,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
     );
 
-    quoteTableNames = QuoteMethod.ALWAYS;
-    quoteColumnNames = QuoteMethod.NEVER;
-    dialect = createDialect();
-
-    assertEquals(
-        "INSERT INTO \"myTable\" (id1,id2,columnA,columnB," +
-        "columnC,columnD) VALUES (?,?,?,?,?,?) ON CONFLICT (id1," +
-        "id2) DO UPDATE SET columnA=EXCLUDED" +
-        ".columnA,columnB=EXCLUDED.columnB,columnC=EXCLUDED" +
-        ".columnC,columnD=EXCLUDED.columnD",
-        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
-    );
-
-    quoteTableNames = QuoteMethod.NEVER;
-    quoteColumnNames = QuoteMethod.NEVER;
+    quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     assertEquals(
@@ -257,17 +203,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         System.lineSeparator() + "\"pk2\" INT NOT NULL," + System.lineSeparator() +
         "\"col1\" INT NOT NULL," + System.lineSeparator() + "PRIMARY KEY(\"pk1\",\"pk2\"))");
 
-    quoteTableNames = QuoteMethod.ALWAYS;
-    quoteColumnNames = QuoteMethod.NEVER;
-    dialect = createDialect();
-
-    verifyCreateThreeColTwoPk(
-        "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "pk1 INT NOT NULL," +
-        System.lineSeparator() + "pk2 INT NOT NULL," + System.lineSeparator() +
-        "col1 INT NOT NULL," + System.lineSeparator() + "PRIMARY KEY(pk1,pk2))");
-
-    quoteTableNames = QuoteMethod.NEVER;
-    quoteColumnNames = QuoteMethod.NEVER;
+    quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     verifyCreateThreeColTwoPk(
@@ -302,23 +238,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         )
     );
 
-    quoteTableNames = QuoteMethod.ALWAYS;
-    quoteColumnNames = QuoteMethod.NEVER;
-    dialect = createDialect();
-
-    assertEquals(
-        "INSERT INTO \"Customer\" (id,name,salary,address) " +
-        "VALUES (?,?,?,?) ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name," +
-        "salary=EXCLUDED.salary,address=EXCLUDED.address",
-        dialect.buildUpsertQueryStatement(
-            customer,
-            columns(customer, "id"),
-            columns(customer, "name", "salary", "address")
-        )
-    );
-
-    quoteTableNames = QuoteMethod.NEVER;
-    quoteColumnNames = QuoteMethod.NEVER;
+    quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     assertEquals(

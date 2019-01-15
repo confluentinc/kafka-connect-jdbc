@@ -239,19 +239,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final long TIMESTAMP_DELAY_INTERVAL_MS_DEFAULT = 0;
   private static final String TIMESTAMP_DELAY_INTERVAL_MS_DISPLAY = "Delay Interval (ms)";
 
-  public static final String QUOTE_TABLE_NAMES_CONFIG = "quote.table.names";
-  public static final String QUOTE_TABLE_NAMES_DEFAULT = QuoteMethod.ALWAYS.name().toString();
-  public static final String QUOTE_TABLE_NAMES_DOC =
-      "When to quote table names in DML query statements. For backward compatibility, "
-      + "the default is 'always'.";
-  private static final String QUOTE_TABLE_NAMES_DISPLAY = "Quote Tables";
-
-  public static final String QUOTE_COLUMN_NAMES_CONFIG = "quote.column.names";
-  public static final String QUOTE_COLUMN_NAMES_DEFAULT = QuoteMethod.ALWAYS.name().toString();
-  public static final String QUOTE_COLUMN_NAMES_DOC =
-      "When to quote column names in DML query statements. For backward compatibility, "
-      + "the default is 'always'.";
-  private static final String QUOTE_COLUMN_NAMES_DISPLAY = "Quote Columns";
+  public static final String QUOTE_SQL_IDENTIFIERS_CONFIG = "quote.table.names";
+  public static final String QUOTE_SQL_IDENTIFIERS_DEFAULT = QuoteMethod.ALWAYS.name().toString();
+  public static final String QUOTE_SQL_IDENTIFIERS_DOC =
+      "When to quote table names, column names, and other identifiers in DML and SQL statements. "
+      + "For backward compatibility, the default is 'always'.";
+  private static final String QUOTE_SQL_IDENTIFIERS_DISPLAY = "Quote Identifiers";
 
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
@@ -492,26 +485,15 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Width.SHORT,
         QUERY_DISPLAY
     ).define(
-        QUOTE_TABLE_NAMES_CONFIG,
+        QUOTE_SQL_IDENTIFIERS_CONFIG,
         Type.STRING,
-        QUOTE_TABLE_NAMES_DEFAULT,
+        QUOTE_SQL_IDENTIFIERS_DEFAULT,
         Importance.MEDIUM,
-        QUOTE_TABLE_NAMES_DOC,
+        QUOTE_SQL_IDENTIFIERS_DOC,
         MODE_GROUP,
         ++orderInGroup,
         Width.MEDIUM,
-        QUOTE_TABLE_NAMES_DISPLAY,
-        QUOTE_METHOD_RECOMMENDER
-    ).define(
-        QUOTE_COLUMN_NAMES_CONFIG,
-        Type.STRING,
-        QUOTE_COLUMN_NAMES_DEFAULT,
-        Importance.MEDIUM,
-        QUOTE_COLUMN_NAMES_DOC,
-        MODE_GROUP,
-        ++orderInGroup,
-        Width.MEDIUM,
-        QUOTE_COLUMN_NAMES_DISPLAY,
+        QUOTE_SQL_IDENTIFIERS_DISPLAY,
         QUOTE_METHOD_RECOMMENDER);
   }
 

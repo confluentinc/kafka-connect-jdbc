@@ -62,7 +62,7 @@ public class EnumRecommender implements ConfigDef.Validator, ConfigDef.Recommend
 
   @Override
   public List<Object> validValues(String name, Map<String, Object> connectorConfigs) {
-    return new ArrayList<Object>(canonicalValues);
+    return new ArrayList<>(canonicalValues);
   }
 
   @Override

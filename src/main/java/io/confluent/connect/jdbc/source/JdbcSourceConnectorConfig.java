@@ -244,7 +244,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String QUOTE_SQL_IDENTIFIERS_DOC =
       "When to quote table names, column names, and other identifiers in SQL statements. "
       + "For backward compatibility, the default is 'always'.";
-  private static final String QUOTE_SQL_IDENTIFIERS_DISPLAY = "Quote Identifiers";
+  public static final String QUOTE_SQL_IDENTIFIERS_DISPLAY = "Quote Identifiers";
 
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());

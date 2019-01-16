@@ -191,11 +191,12 @@ public class JdbcSinkConfig extends AbstractConfig {
 
   public static final String QUOTE_SQL_IDENTIFIERS_CONFIG =
       JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_CONFIG;
-  public static final String QUOTE_SQL_IDENTIFIERS_DEFAULT = QuoteMethod.ALWAYS.name().toString();
+  public static final String QUOTE_SQL_IDENTIFIERS_DEFAULT =
+      JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_DEFAULT;
   public static final String QUOTE_SQL_IDENTIFIERS_DOC =
-      "When to quote table names, column names, and other identifiers in SQL statements. "
-      + "For backward compatibility, the default is 'always'.";
-  private static final String QUOTE_SQL_IDENTIFIERS_DISPLAY = "Quote Identifiers";
+      JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_DOC;
+  private static final String QUOTE_SQL_IDENTIFIERS_DISPLAY =
+      JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_DISPLAY;
 
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());

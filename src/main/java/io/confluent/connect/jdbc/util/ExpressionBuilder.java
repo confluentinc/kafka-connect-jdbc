@@ -236,9 +236,11 @@ public class ExpressionBuilder {
     return new ExpressionBuilder();
   }
 
+  protected static final QuoteMethod DEFAULT_QUOTE_METHOD = QuoteMethod.ALWAYS;
+
   private final IdentifierRules rules;
   private final StringBuilder sb = new StringBuilder();
-  private QuoteMethod quoteSqlIdentifiers = QuoteMethod.ALWAYS;
+  private QuoteMethod quoteSqlIdentifiers = DEFAULT_QUOTE_METHOD;
 
   /**
    * Create a new expression builder with the default {@link IdentifierRules}.
@@ -259,11 +261,12 @@ public class ExpressionBuilder {
   /**
    * Set when this expression builder should quote identifiers, such as table and column names.
    *
-   * @param method the quoting method; may be null if the default should be used
+   * @param method the quoting method; may be null if the default method
+   *               ({@link QuoteMethod#ALWAYS always}) should be used
    * @return this expression builder; never null
    */
   public ExpressionBuilder setQuoteIdentifiers(QuoteMethod method) {
-    this.quoteSqlIdentifiers = method != null ? method : QuoteMethod.ALWAYS;
+    this.quoteSqlIdentifiers = method != null ? method : DEFAULT_QUOTE_METHOD;
     return this;
   }
 

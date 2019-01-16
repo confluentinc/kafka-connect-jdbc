@@ -193,7 +193,7 @@ public class JdbcSinkConfig extends AbstractConfig {
       JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_CONFIG;
   public static final String QUOTE_SQL_IDENTIFIERS_DEFAULT = QuoteMethod.ALWAYS.name().toString();
   public static final String QUOTE_SQL_IDENTIFIERS_DOC =
-      "When to quote table names, column names, and other identifiers in DML and SQL statements. "
+      "When to quote table names, column names, and other identifiers in SQL statements. "
       + "For backward compatibility, the default is 'always'.";
   private static final String QUOTE_SQL_IDENTIFIERS_DISPLAY = "Quote Identifiers";
 

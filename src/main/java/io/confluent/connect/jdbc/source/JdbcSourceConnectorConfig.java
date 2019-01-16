@@ -239,7 +239,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final long TIMESTAMP_DELAY_INTERVAL_MS_DEFAULT = 0;
   private static final String TIMESTAMP_DELAY_INTERVAL_MS_DISPLAY = "Delay Interval (ms)";
 
-  public static final String QUOTE_SQL_IDENTIFIERS_CONFIG = "quote.table.names";
+  public static final String QUOTE_SQL_IDENTIFIERS_CONFIG = "quote.sql.identifiers";
   public static final String QUOTE_SQL_IDENTIFIERS_DEFAULT = QuoteMethod.ALWAYS.name().toString();
   public static final String QUOTE_SQL_IDENTIFIERS_DOC =
       "When to quote table names, column names, and other identifiers in DML and SQL statements. "

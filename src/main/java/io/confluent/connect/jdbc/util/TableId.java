@@ -50,6 +50,14 @@ public class TableId implements Comparable<TableId>, Expressable {
 
   @Override
   public void appendTo(ExpressionBuilder builder, boolean useQuotes) {
+    appendTo(builder, useQuotes ? QuoteMethod.ALWAYS : QuoteMethod.NEVER);
+  }
+
+  @Override
+  public void appendTo(
+      ExpressionBuilder builder,
+      QuoteMethod useQuotes
+  ) {
     if (catalogName != null) {
       builder.appendIdentifier(catalogName, useQuotes);
       builder.appendIdentifierDelimiter();
@@ -58,7 +66,7 @@ public class TableId implements Comparable<TableId>, Expressable {
       builder.appendIdentifier(schemaName, useQuotes);
       builder.appendIdentifierDelimiter();
     }
-    builder.appendIdentifier(tableName, useQuotes);
+    builder.appendTableName(tableName, useQuotes);
   }
 
   @Override

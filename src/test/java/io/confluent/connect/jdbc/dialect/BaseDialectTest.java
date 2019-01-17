@@ -45,11 +45,11 @@ import java.util.TimeZone;
 import java.util.concurrent.ThreadLocalRandom;
 
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
-import io.confluent.connect.jdbc.sink.PreparedStatementBinder;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
+import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertArrayEquals;
@@ -77,6 +77,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     MARCH_15_2001_MIDNIGHT.setTimeZone(TimeZone.getTimeZone("UTC"));
   }
 
+  protected QuoteMethod quoteIdentfiiers;
   protected TableId tableId;
   protected ColumnId columnPK1;
   protected ColumnId columnPK2;
@@ -94,8 +95,6 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
   public void setup() throws Exception {
     defaultLoginTimeout = DriverManager.getLoginTimeout();
     DriverManager.setLoginTimeout(1);
-
-    dialect = createDialect();
 
     // Set up some data ...
     Schema optionalDateWithDefault = Date.builder().defaultValue(MARCH_15_2001_MIDNIGHT.getTime())
@@ -126,6 +125,8 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     SinkRecordField f7 = new SinkRecordField(optionalTsWithDefault, "c7", false);
     SinkRecordField f8 = new SinkRecordField(optionalDecimal, "c8", false);
     sinkRecordFields = Arrays.asList(f1, f2, f3, f4, f5, f6, f7, f8);
+
+    dialect = createDialect();
   }
 
   @After
@@ -156,6 +157,9 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     connProps.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, "test-");
     connProps.putAll(propertiesFromPairs(propertyPairs));
     connProps.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, url);
+    if (quoteIdentfiiers != null) {
+      connProps.put("quote.sql.identifiers", quoteIdentfiiers.toString());
+    }
     return new JdbcSourceConnectorConfig(connProps);
   }
 

@@ -31,6 +31,9 @@ import java.util.Arrays;
 import java.util.List;
 
 import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.ExpressionBuilder;
+import io.confluent.connect.jdbc.util.IdentifierRules;
+import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
@@ -43,6 +46,9 @@ public class TimestampIncrementingCriteriaTest {
   private static final ColumnId TS2_COLUMN = new ColumnId(TABLE_ID, "ts2");
   private static final List<ColumnId> TS_COLUMNS = Arrays.asList(TS1_COLUMN, TS2_COLUMN);
 
+  private IdentifierRules rules;
+  private QuoteMethod identifierQuoting;
+  private ExpressionBuilder builder;
   private TimestampIncrementingCriteria criteria;
   private TimestampIncrementingCriteria criteriaInc;
   private TimestampIncrementingCriteria criteriaTs;
@@ -57,6 +63,9 @@ public class TimestampIncrementingCriteriaTest {
     criteriaInc = new TimestampIncrementingCriteria(INCREMENTING_COLUMN, null, utcTimeZone);
     criteriaTs = new TimestampIncrementingCriteria(null, TS_COLUMNS, utcTimeZone);
     criteriaIncTs = new TimestampIncrementingCriteria(INCREMENTING_COLUMN, TS_COLUMNS, utcTimeZone);
+    identifierQuoting = null;
+    rules = null;
+    builder = null;
   }
 
   protected void assertExtractedOffset(long expected, Schema schema, Struct record) {
@@ -124,5 +133,91 @@ public class TimestampIncrementingCriteriaTest {
     record = new Struct(schema).put("id", 42);
     assertExtractedOffset(42L, schema, record);
 
+  }
+
+  @Test
+  public void createIncrementingWhereClause() {
+    builder = builder();
+    criteriaInc.incrementingWhereClause(builder);
+    assertEquals(
+        " WHERE \"myTable\".\"id\" > ? ORDER BY \"myTable\".\"id\" ASC",
+        builder.toString()
+    );
+
+    identifierQuoting = QuoteMethod.NEVER;
+    builder = builder();
+    criteriaInc.incrementingWhereClause(builder);
+    assertEquals(
+        " WHERE myTable.id > ? ORDER BY myTable.id ASC",
+        builder.toString()
+    );
+  }
+
+  @Test
+  public void createTimestampWhereClause() {
+    builder = builder();
+    criteriaTs.timestampWhereClause(builder);
+    assertEquals(
+        " WHERE "
+        + "COALESCE(\"myTable\".\"ts1\",\"myTable\".\"ts2\") > ? "
+        + "AND "
+        + "COALESCE(\"myTable\".\"ts1\",\"myTable\".\"ts2\") < ? "
+        + "ORDER BY "
+        + "COALESCE(\"myTable\".\"ts1\",\"myTable\".\"ts2\") "
+        + "ASC",
+        builder.toString()
+    );
+
+    identifierQuoting = QuoteMethod.NEVER;
+    builder = builder();
+    criteriaTs.timestampWhereClause(builder);
+    assertEquals(
+        " WHERE "
+        + "COALESCE(myTable.ts1,myTable.ts2) > ? "
+        + "AND "
+        + "COALESCE(myTable.ts1,myTable.ts2) < ? "
+        + "ORDER BY "
+        + "COALESCE(myTable.ts1,myTable.ts2) "
+        + "ASC",
+        builder.toString()
+    );
+  }
+
+  @Test
+  public void createTimestampIncrementingWhereClause() {
+    builder = builder();
+    criteriaIncTs.timestampIncrementingWhereClause(builder);
+    assertEquals(
+        " WHERE "
+        + "COALESCE(\"myTable\".\"ts1\",\"myTable\".\"ts2\") < ? "
+        + "AND ("
+        + "(COALESCE(\"myTable\".\"ts1\",\"myTable\".\"ts2\") = ? AND \"myTable\".\"id\" > ?) "
+        + "OR "
+        + "COALESCE(\"myTable\".\"ts1\",\"myTable\".\"ts2\") > ?) "
+        + "ORDER BY COALESCE(\"myTable\".\"ts1\",\"myTable\".\"ts2\"),"
+        + "\"myTable\".\"id\" ASC",
+        builder.toString()
+    );
+
+    identifierQuoting = QuoteMethod.NEVER;
+    builder = builder();
+    criteriaIncTs.timestampIncrementingWhereClause(builder);
+    assertEquals(
+        " WHERE "
+        + "COALESCE(myTable.ts1,myTable.ts2) < ? "
+        + "AND ("
+        + "(COALESCE(myTable.ts1,myTable.ts2) = ? AND myTable.id > ?) "
+        + "OR "
+        + "COALESCE(myTable.ts1,myTable.ts2) > ?) "
+        + "ORDER BY COALESCE(myTable.ts1,myTable.ts2),"
+        + "myTable.id ASC",
+        builder.toString()
+    );
+  }
+
+  protected ExpressionBuilder builder() {
+    ExpressionBuilder result = new ExpressionBuilder(rules);
+    result.setQuoteIdentifiers(identifierQuoting);
+    return result;
   }
 }

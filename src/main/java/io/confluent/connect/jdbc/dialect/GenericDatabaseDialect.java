@@ -84,6 +84,7 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.JdbcDriverInfo;
+import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 
@@ -128,6 +129,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   protected final String schemaPattern;
   protected final Set<String> tableTypes;
   protected final String jdbcUrl;
+  private final QuoteMethod quoteSqlIdentifiers;
   private final IdentifierRules defaultIdentifierRules;
   private final AtomicReference<IdentifierRules> identifierRules = new AtomicReference<>();
   private final Queue<Connection> connections = new ConcurrentLinkedQueue<>();
@@ -161,10 +163,16 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       catalogPattern = JdbcSourceTaskConfig.CATALOG_PATTERN_DEFAULT;
       schemaPattern = JdbcSourceTaskConfig.SCHEMA_PATTERN_DEFAULT;
       tableTypes = new HashSet<>(Arrays.asList(JdbcSourceTaskConfig.TABLE_TYPE_DEFAULT));
+      quoteSqlIdentifiers = QuoteMethod.get(
+          config.getString(JdbcSinkConfig.QUOTE_SQL_IDENTIFIERS_CONFIG)
+      );
     } else {
       catalogPattern = config.getString(JdbcSourceTaskConfig.CATALOG_PATTERN_CONFIG);
       schemaPattern = config.getString(JdbcSourceTaskConfig.SCHEMA_PATTERN_CONFIG);
       tableTypes = new HashSet<>(config.getList(JdbcSourceTaskConfig.TABLE_TYPE_CONFIG));
+      quoteSqlIdentifiers = QuoteMethod.get(
+          config.getString(JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_CONFIG)
+      );
     }
     if (config instanceof JdbcSourceConnectorConfig) {
       mapNumerics = ((JdbcSourceConnectorConfig)config).numericMapping();
@@ -449,7 +457,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
   @Override
   public ExpressionBuilder expressionBuilder() {
-    return identifierRules().expressionBuilder();
+    return identifierRules().expressionBuilder()
+                            .setQuoteIdentifiers(quoteSqlIdentifiers);
   }
 
   /**
@@ -1610,7 +1619,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       ExpressionBuilder builder,
       SinkRecordField f
   ) {
-    builder.appendIdentifierQuoted(f.name());
+    builder.appendColumnName(f.name());
     builder.append(" ");
     String sqlType = getSqlType(f);
     builder.append(sqlType);

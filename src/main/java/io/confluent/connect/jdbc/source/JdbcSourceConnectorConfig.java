@@ -17,15 +17,12 @@ package io.confluent.connect.jdbc.source;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.ZoneId;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -33,6 +30,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
+import io.confluent.connect.jdbc.util.EnumRecommender;
+import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.TimeZoneValidator;
 
@@ -248,6 +247,15 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "querying with time-based criteria. Defaults to UTC.";
   private static final String DB_TIMEZONE_CONFIG_DISPLAY = "DB time zone";
 
+  public static final String QUOTE_SQL_IDENTIFIERS_CONFIG = "quote.sql.identifiers";
+  public static final String QUOTE_SQL_IDENTIFIERS_DEFAULT = QuoteMethod.ALWAYS.name().toString();
+  public static final String QUOTE_SQL_IDENTIFIERS_DOC =
+      "When to quote table names, column names, and other identifiers in SQL statements. "
+      + "For backward compatibility, the default is 'always'.";
+  public static final String QUOTE_SQL_IDENTIFIERS_DISPLAY = "Quote Identifiers";
+
+  private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
+      EnumRecommender.in(QuoteMethod.values());
 
   public static final String DATABASE_GROUP = "Database";
   public static final String MODE_GROUP = "Mode";
@@ -483,7 +491,18 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         MODE_GROUP,
         ++orderInGroup,
         Width.SHORT,
-        QUERY_DISPLAY);
+        QUERY_DISPLAY
+    ).define(
+        QUOTE_SQL_IDENTIFIERS_CONFIG,
+        Type.STRING,
+        QUOTE_SQL_IDENTIFIERS_DEFAULT,
+        Importance.MEDIUM,
+        QUOTE_SQL_IDENTIFIERS_DOC,
+        MODE_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        QUOTE_SQL_IDENTIFIERS_DISPLAY,
+        QUOTE_METHOD_RECOMMENDER);
   }
 
   private static final void addConnectorOptions(ConfigDef config) {
@@ -722,53 +741,6 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         return NumericMapping.PRECISION_ONLY;
       }
       return NumericMapping.NONE;
-    }
-  }
-
-  //Porting from JdbcSinkConfig and extending to implement Recommender interface too.
-  //TODO: Should factor out to common class.
-  private static class EnumRecommender implements ConfigDef.Validator, ConfigDef.Recommender {
-    private final List<String> canonicalValues;
-    private final Set<String> validValues;
-
-    private EnumRecommender(List<String> canonicalValues, Set<String> validValues) {
-      this.canonicalValues = canonicalValues;
-      this.validValues = validValues;
-    }
-
-    @SafeVarargs
-    public static <E> EnumRecommender in(E... enumerators) {
-      final List<String> canonicalValues = new ArrayList<>(enumerators.length);
-      final Set<String> validValues = new HashSet<>(enumerators.length * 2);
-      for (E e : enumerators) {
-        canonicalValues.add(e.toString().toLowerCase());
-        validValues.add(e.toString().toUpperCase(Locale.ROOT));
-        validValues.add(e.toString().toLowerCase(Locale.ROOT));
-      }
-      return new EnumRecommender(canonicalValues, validValues);
-    }
-
-    @Override
-    public void ensureValid(String key, Object value) {
-      // calling toString on itself because IDE complains if the Object is passed.
-      if (value != null && !validValues.contains(value.toString())) {
-        throw new ConfigException(key, value, "Invalid enumerator");
-      }
-    }
-
-    @Override
-    public String toString() {
-      return canonicalValues.toString();
-    }
-
-    @Override
-    public List<Object> validValues(String name, Map<String, Object> connectorConfigs) {
-      return new ArrayList<Object>(canonicalValues);
-    }
-
-    @Override
-    public boolean visible(String name, Map<String, Object> connectorConfigs) {
-      return true;
     }
   }
 

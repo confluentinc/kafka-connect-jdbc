@@ -26,6 +26,8 @@ import java.util.TimeZone;
 
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
+import io.confluent.connect.jdbc.util.EnumRecommender;
+import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.StringUtils;
 import io.confluent.connect.jdbc.util.TimeZoneValidator;
 
@@ -175,7 +177,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String CONNECTION_GROUP = "Connection";
   private static final String WRITES_GROUP = "Writes";
   private static final String DATAMAPPING_GROUP = "Data Mapping";
-  private static final String DDL_GROUP = "DDL Support";
+  private static final String DDL_GROUP = "SQL/DDL Support";
   private static final String RETRIES_GROUP = "Retries";
 
   public static final String DIALECT_NAME_CONFIG = "dialect.name";
@@ -194,6 +196,18 @@ public class JdbcSinkConfig extends AbstractConfig {
       "Name of the JDBC timezone that should be used in the connector when "
       + "inserting time-based values. Defaults to UTC.";
   private static final String DB_TIMEZONE_CONFIG_DISPLAY = "DB Time Zone";
+
+  public static final String QUOTE_SQL_IDENTIFIERS_CONFIG =
+      JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_CONFIG;
+  public static final String QUOTE_SQL_IDENTIFIERS_DEFAULT =
+      JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_DEFAULT;
+  public static final String QUOTE_SQL_IDENTIFIERS_DOC =
+      JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_DOC;
+  private static final String QUOTE_SQL_IDENTIFIERS_DISPLAY =
+      JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_DISPLAY;
+
+  private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
+      EnumRecommender.in(QuoteMethod.values());
 
   public static final ConfigDef CONFIG_DEF = new ConfigDef()
         // Connection
@@ -343,6 +357,17 @@ public class JdbcSinkConfig extends AbstractConfig {
             2,
             ConfigDef.Width.SHORT,
             AUTO_EVOLVE_DISPLAY
+        ).define(
+            QUOTE_SQL_IDENTIFIERS_CONFIG,
+            ConfigDef.Type.STRING,
+            QUOTE_SQL_IDENTIFIERS_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            QUOTE_SQL_IDENTIFIERS_DOC,
+            DDL_GROUP,
+            3,
+            ConfigDef.Width.MEDIUM,
+            QUOTE_SQL_IDENTIFIERS_DISPLAY,
+            QUOTE_METHOD_RECOMMENDER
         )
         // Retries
         .define(

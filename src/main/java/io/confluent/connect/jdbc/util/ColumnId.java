@@ -67,11 +67,19 @@ public class ColumnId implements Expressable {
 
   @Override
   public void appendTo(ExpressionBuilder builder, boolean useQuotes) {
+    appendTo(builder, useQuotes ? QuoteMethod.ALWAYS : QuoteMethod.NEVER);
+  }
+
+  @Override
+  public void appendTo(
+      ExpressionBuilder builder,
+      QuoteMethod useQuotes
+  ) {
     if (tableId != null) {
       builder.append(tableId);
       builder.appendIdentifierDelimiter();
     }
-    builder.appendIdentifier(this.name, useQuotes);
+    builder.appendColumnName(this.name, useQuotes);
   }
 
   @Override

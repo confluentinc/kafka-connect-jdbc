@@ -166,6 +166,8 @@
                             <title>Kafka Connect JDBC</title>
                             <documentationUrl>https://docs.confluent.io/${project.version}/connect/connect-jdbc/docs/index.html</documentationUrl>
                             <description>
+                                The JDBC source and sink connectors allow you to exchange data between relational databases and Kafka.
+
                                 The JDBC source connector allows you to import data from any relational database with a JDBC driver into Kafka topics. By using JDBC, this connector can support a wide variety of databases without requiring custom code for each one.
 
                                 Data is loaded by periodically executing a SQL query and creating an output record for each row in the result set. By default, all tables in a database are copied, each to its own output topic. The database is monitored for new or deleted tables and adapts automatically. When copying data from a table, the connector can load only new or modified rows by specifying which columns should be used to detect new or modified data.

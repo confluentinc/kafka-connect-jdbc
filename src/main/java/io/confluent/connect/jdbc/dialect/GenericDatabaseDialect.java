@@ -1348,6 +1348,23 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     return builder.toString();
   }
 
+  public String buildDeleteStatement(
+          TableId table,
+          Collection<ColumnId> keyColumns
+  ) {
+    ExpressionBuilder builder = expressionBuilder();
+    builder.append("DELETE FROM ");
+    builder.append(table);
+    if (!keyColumns.isEmpty()) {
+      builder.append(" WHERE ");
+      builder.appendList()
+              .delimitedBy(" AND ")
+              .transformedBy(ExpressionBuilder.columnNamesWith(" = ?"))
+              .of(keyColumns);
+    }
+    return builder.toString();
+  }
+
   @Override
   public String buildUpdateStatement(
       TableId table,
@@ -1384,18 +1401,22 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   @Override
   public StatementBinder statementBinder(
       PreparedStatement statement,
+      PreparedStatement deleteStatement,
       PrimaryKeyMode pkMode,
       SchemaPair schemaPair,
       FieldsMetadata fieldsMetadata,
-      InsertMode insertMode
+      InsertMode insertMode,
+      JdbcSinkConfig config
   ) {
     return new PreparedStatementBinder(
         this,
         statement,
+        deleteStatement,
         pkMode,
         schemaPair,
         fieldsMetadata,
-        insertMode
+        insertMode,
+        config
     );
   }
 

@@ -16,6 +16,7 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.slf4j.Logger;
@@ -27,8 +28,8 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
@@ -48,10 +49,14 @@ public class BufferedRecords {
   private final Connection connection;
 
   private List<SinkRecord> records = new ArrayList<>();
-  private SchemaPair currentSchemaPair;
   private FieldsMetadata fieldsMetadata;
   private PreparedStatement preparedStatement;
   private StatementBinder preparedStatementBinder;
+
+  private Schema keySchema;
+  private Schema valueSchema;
+  private boolean batchContainsDeletes = false;
+  private PreparedStatement deletePreparedStatement;
 
   public BufferedRecords(
       JdbcSinkConfig config,
@@ -73,57 +78,85 @@ public class BufferedRecords {
         record.valueSchema()
     );
 
-    if (currentSchemaPair == null) {
-      currentSchemaPair = schemaPair;
-      // re-initialize everything that depends on the record schema
-      fieldsMetadata = FieldsMetadata.extract(
-          tableId.tableName(),
-          config.pkMode,
-          config.pkFields,
-          config.fieldsWhitelist,
-          currentSchemaPair
-      );
-      dbStructure.createOrAmendIfNecessary(
-          config,
-          connection,
-          tableId,
-          fieldsMetadata
-      );
+    List<SinkRecord> flushed = new ArrayList<>();
 
-      final String sql = getInsertSql();
-      log.debug(
-          "{} sql: {}",
-          config.insertMode,
-          sql
-      );
-      close();
-      preparedStatement = connection.prepareStatement(sql);
-      preparedStatementBinder = dbDialect.statementBinder(
-          preparedStatement,
-          config.pkMode,
-          schemaPair,
-          fieldsMetadata,
-          config.insertMode
-      );
+    boolean schemaChanged = false;
+
+    if (!Objects.equals(keySchema, record.keySchema())) {
+      keySchema = record.keySchema();
+      schemaChanged = true;
     }
 
-    final List<SinkRecord> flushed;
-    if (currentSchemaPair.equals(schemaPair)) {
-      // Continue with current batch state
-      records.add(record);
-      if (records.size() >= config.batchSize) {
-        flushed = flush();
-      } else {
-        flushed = Collections.emptyList();
+    if (schemaPair.valueSchema == null) {
+      // For deletes, both the value and value schema come in as null.
+      // We don't want to treat this as a schema change if key schemas is the same
+      // otherwise we flush unnecessarily.
+      if (config.deleteEnabled) {
+        batchContainsDeletes = true;
+      }
+    } else if (Objects.equals(valueSchema, record.valueSchema())) {
+      if (config.deleteEnabled && batchContainsDeletes) {
+        // flush so an insert after a delete of same record isn't lost
+        flushed.addAll(flush());
       }
     } else {
-      // Each batch needs to have the same SchemaPair, so get the buffered records out, reset
-      // state and re-attempt the add
-      flushed = flush();
-      currentSchemaPair = null;
-      flushed.addAll(add(record));
+      valueSchema = record.valueSchema();
+      schemaChanged = true;
     }
+
+    if (schemaChanged) {
+      // Each batch needs to have the same schemas, so get the buffered records out
+      flushed.addAll(flush());
+
+      onSchemaChanged(schemaPair);
+    }
+
+    records.add(record);
+    if (records.size() >= config.batchSize) {
+      log.debug("Flushing buffered records after exceeding configured batch size {}.",
+          config.batchSize);
+      flushed.addAll(flush());
+    }
+
     return flushed;
+  }
+
+  private void onSchemaChanged(SchemaPair schemaPair) throws SQLException {
+    // re-initialize everything that depends on the record schema
+    fieldsMetadata = FieldsMetadata.extract(
+        tableId.tableName(),
+        config.pkMode,
+        config.pkFields,
+        config.fieldsWhitelist,
+        schemaPair
+    );
+    dbStructure.createOrAmendIfNecessary(
+        config,
+        connection,
+        tableId,
+        fieldsMetadata
+    );
+
+    final String sql = getInsertSql();
+    final String deleteSql = getDeleteSql();
+    log.debug(
+        "{} sql: {}, DELETE sql: {}",
+        config.insertMode,
+        sql,
+        deleteSql
+    );
+    close();
+    preparedStatement = connection.prepareStatement(sql);
+    deletePreparedStatement = config.deleteEnabled ? connection.prepareStatement(deleteSql) : null;
+    preparedStatementBinder = dbDialect.statementBinder(
+        preparedStatement,
+        deletePreparedStatement,
+        config.pkMode,
+        schemaPair,
+        fieldsMetadata,
+        config.insertMode,
+        config
+    );
   }
 
   public List<SinkRecord> flush() throws SQLException {
@@ -142,21 +175,39 @@ public class BufferedRecords {
       }
       totalUpdateCount += updateCount;
     }
-    if (totalUpdateCount != records.size() && !successNoInfo) {
+    int totalDeleteCount = 0;
+    if (deletePreparedStatement != null) {
+      for (int updateCount : deletePreparedStatement.executeBatch()) {
+        if (updateCount != Statement.SUCCESS_NO_INFO) {
+          totalDeleteCount += updateCount;
+        }
+      }
+    }
+
+    checkAffectedRowCount(totalUpdateCount + totalDeleteCount, successNoInfo);
+
+    final List<SinkRecord> flushedRecords = records;
+    records = new ArrayList<>();
+    batchContainsDeletes = false;
+    return flushedRecords;
+  }
+
+  private void checkAffectedRowCount(int totalCount, boolean successNoInfo) {
+    if (totalCount != records.size() && !successNoInfo) {
       switch (config.insertMode) {
         case INSERT:
           throw new ConnectException(String.format(
-              "Update count (%d) did not sum up to total number of records inserted (%d)",
-              totalUpdateCount,
+              "Row count (%d) did not sum up to total number of records inserted/deleted (%d)",
+              totalCount,
               records.size()
           ));
         case UPSERT:
         case UPDATE:
-          log.trace(
-              "{} records:{} resulting in in totalUpdateCount:{}",
+          log.debug(
+              "{}/deleted records:{} resulting in in totalUpdateCount:{}",
               config.insertMode,
               records.size(),
-              totalUpdateCount
+              totalCount
           );
           break;
         default:
@@ -170,16 +221,19 @@ public class BufferedRecords {
           records.size()
       );
     }
-
-    final List<SinkRecord> flushedRecords = records;
-    records = new ArrayList<>();
-    return flushedRecords;
   }
 
   public void close() throws SQLException {
+    log.info("Closing BufferedRecords with preparedStatement: {} deletePreparedStatement: {}",
+        preparedStatement,
+        deletePreparedStatement);
     if (preparedStatement != null) {
       preparedStatement.close();
       preparedStatement = null;
+    }
+    if (deletePreparedStatement != null) {
+      deletePreparedStatement.close();
+      deletePreparedStatement = null;
     }
   }
 
@@ -221,6 +275,30 @@ public class BufferedRecords {
       default:
         throw new ConnectException("Invalid insert mode");
     }
+  }
+
+  private String getDeleteSql() {
+    String sql = null;
+    if (config.deleteEnabled) {
+      switch (config.pkMode) {
+        case NONE:
+        case KAFKA:
+        case RECORD_VALUE:
+          throw new ConnectException("Deletes are only supported for pk.mode record_key");
+        case RECORD_KEY:
+          if (fieldsMetadata.keyFieldNames.isEmpty()) {
+            throw new ConnectException("Require primary keys to support delete");
+          }
+          sql = dbDialect.buildDeleteStatement(
+              tableId,
+              asColumns(fieldsMetadata.keyFieldNames)
+          );
+          break;
+        default:
+          break;
+      }
+    }
+    return sql;
   }
 
   private Collection<ColumnId> asColumns(Collection<String> names) {

@@ -189,6 +189,14 @@ public class JdbcSourceTask extends SourceTask {
         }
       }
 
+      if (offset == null) {
+        log.info("Not found any offset");
+        offset = (new TimestampIncrementingOffset(
+                new java.sql.Timestamp(
+                        config.getLong(JdbcSourceTaskConfig.TIMESTAMP_DEFAULT_TIME_CONFIG)),
+                null)).toMap();
+      }
+
       String topicPrefix = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
 
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {

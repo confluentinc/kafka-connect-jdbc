@@ -165,6 +165,13 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String TIMESTAMP_COLUMN_NAME_DEFAULT = "";
   private static final String TIMESTAMP_COLUMN_NAME_DISPLAY = "Timestamp Column Name";
 
+  public static final String TIMESTAMP_DEFAULT_TIME_CONFIG = "timestamp.default.time";
+  private static final String TIMESTAMP_DEFAULT_TIME_DOC =
+          "The default timestamp (epoch millis) to use when starting with no pre-existing offset.";
+  public static final long TIMESTAMP_DEFAULT_TIME_DEFAULT = 0;
+  private static final String TIMESTAMP_DEFAULT_TIME_DISPLAY =
+          "Timestamp to start process data from (epoch ms)";
+
   public static final String TABLE_POLL_INTERVAL_MS_CONFIG = "table.poll.interval.ms";
   private static final String TABLE_POLL_INTERVAL_MS_DOC =
       "Frequency in ms to poll for new or removed tables, which may result in updated task "
@@ -537,6 +544,16 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.SHORT,
         BATCH_MAX_ROWS_DISPLAY
+    ).define(
+       TIMESTAMP_DEFAULT_TIME_CONFIG,
+       Type.LONG,
+       TIMESTAMP_DEFAULT_TIME_DEFAULT,
+       Importance.MEDIUM,
+       TIMESTAMP_DEFAULT_TIME_DOC,
+       CONNECTOR_GROUP,
+       ++orderInGroup,
+       Width.MEDIUM,
+       TIMESTAMP_DEFAULT_TIME_DISPLAY
     ).define(
         TABLE_POLL_INTERVAL_MS_CONFIG,
         Type.LONG,

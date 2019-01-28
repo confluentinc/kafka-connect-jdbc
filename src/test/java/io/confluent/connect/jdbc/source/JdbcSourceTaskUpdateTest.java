@@ -132,14 +132,14 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   @Test
   public void testManualIncrementing() throws Exception {
     expectInitializeNoOffsets(Arrays.asList(
-        SINGLE_TABLE_PARTITION_WITH_VERSION, 
-        SINGLE_TABLE_PARTITION)
+            SINGLE_TABLE_PARTITION_WITH_VERSION,
+            SINGLE_TABLE_PARTITION)
     );
 
     PowerMock.replayAll();
 
     db.createTable(SINGLE_TABLE_NAME,
-                   "id", "INT NOT NULL");
+            "id", "INT NOT NULL");
     db.insert(SINGLE_TABLE_NAME, "id", 1);
 
     startTask(null, "id", null);
@@ -150,6 +150,34 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     db.insert(SINGLE_TABLE_NAME, "id", 3);
 
     verifyPoll(2, "id", Arrays.asList(2, 3), false, true, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
+
+    PowerMock.verifyAll();
+  }
+
+  @Test
+  public void testManualIncrementingNonUniq() throws Exception {
+    expectInitializeNoOffsets(Arrays.asList(
+            SINGLE_TABLE_PARTITION_WITH_VERSION,
+            SINGLE_TABLE_PARTITION)
+    );
+
+    PowerMock.replayAll();
+
+    db.createTable(SINGLE_TABLE_NAME,
+            "id", "INT NOT NULL");
+    db.insert(SINGLE_TABLE_NAME, "id", 1);
+
+    startTask(null, "id", null);
+    verifyIncrementingFirstPoll(TOPIC_PREFIX + SINGLE_TABLE_NAME);
+
+    // Adding records should result in only those records during the next poll()
+    db.insert(SINGLE_TABLE_NAME, "id", 2);
+    db.insert(SINGLE_TABLE_NAME, "id", 2);
+    db.insert(SINGLE_TABLE_NAME, "id", 3);
+    db.insert(SINGLE_TABLE_NAME, "id", 3);
+    db.insert(SINGLE_TABLE_NAME, "id", 3);
+
+    verifyPoll(5, "id", Arrays.asList(2, 2, 3, 3, 3), false, true, false, true, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     PowerMock.verifyAll();
   }
@@ -788,10 +816,14 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     assertIncrementingOffsets(records);
   }
 
-
-
   private <T> void verifyPoll(int numRecords, String valueField, List<T> values,
                               boolean timestampOffsets, boolean incrementingOffsets, boolean multiTimestampOffsets,
+                              String topic) throws Exception {
+     verifyPoll(numRecords, valueField, values, timestampOffsets, incrementingOffsets, multiTimestampOffsets, false, topic);
+  }
+
+  private <T> void verifyPoll(int numRecords, String valueField, List<T> values,
+                              boolean timestampOffsets, boolean incrementingOffsets, boolean multiTimestampOffsets, boolean nonUniqIncrementing,
                               String topic)
       throws Exception {
     List<SourceRecord> records = task.poll();
@@ -799,7 +831,12 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
 
     HashMap<T, Integer> valueCounts = new HashMap<>();
     for(T value : values) {
-      valueCounts.put(value, 1);
+      if (nonUniqIncrementing) {
+        int i = valueCounts.getOrDefault(value, 0);
+        valueCounts.put(value, ++i);
+      } else {
+        valueCounts.put(value, 1);
+      }
     }
     assertEquals(valueCounts, countIntValues(records, valueField));
 

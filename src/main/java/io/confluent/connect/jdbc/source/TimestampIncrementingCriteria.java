@@ -197,7 +197,7 @@ public class TimestampIncrementingCriteria {
       // If we are only using an incrementing column, then this must be incrementing.
       // If we are also using a timestamp, then we may see updates to older rows.
       assert previousOffset == null || previousOffset.getIncrementingOffset() == -1L
-             || extractedId > previousOffset.getIncrementingOffset() || hasTimestampColumns();
+             || extractedId >= previousOffset.getIncrementingOffset() || hasTimestampColumns();
     }
     return new TimestampIncrementingOffset(extractedTimestamp, extractedId);
   }

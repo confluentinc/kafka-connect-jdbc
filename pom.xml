@@ -29,7 +29,7 @@
   <groupId>io.confluent</groupId>
   <artifactId>kafka-connect-jdbc-au</artifactId>
 
-  <version>5.0.6-au</version>
+  <version>5.2.0-jagan-au</version>
 
   <packaging>jar</packaging>
   <name>kafka-connect-jdbc</name>

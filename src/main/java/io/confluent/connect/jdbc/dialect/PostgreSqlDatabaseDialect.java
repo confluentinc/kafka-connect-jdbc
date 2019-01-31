@@ -78,24 +78,19 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return super.getConnection();
   }
 
-  @Override
-  public PreparedStatement createPreparedStatement(Connection db, String query)
-          throws SQLException {
-    log.trace("Creating a PreparedStatement '{}'", query);
-
-    PreparedStatement stmt = db.prepareStatement(query);
-
-    final int batchMaxRows = config.getInt(JdbcSourceTaskConfig.BATCH_MAX_ROWS_CONFIG);
-    log.trace("Initializing PreparedStatement fetch direction to FETCH_FORWARD for '{}'", stmt);
-    stmt.getConnection().setAutoCommit(false);
-    stmt.setFetchDirection(ResultSet.FETCH_FORWARD);
-    stmt.setFetchSize(batchMaxRows);
-
-    return PreparedStatementProxy.newInstance(stmt);
+  public PreparedStatement createPreparedStatement(
+      Connection db,
+      String query) throws SQLException {
+    return PreparedStatementProxy.newInstance(super.createPreparedStatement(db, query));
   }
 
   @Override
   protected void initializePreparedStatement(PreparedStatement stmt) throws SQLException {
+    final int batchMaxRows = config.getInt(JdbcSourceTaskConfig.BATCH_MAX_ROWS_CONFIG);
+    log.trace("Initializing PreparedStatement '{}' with max rows {}", stmt, batchMaxRows);
+    stmt.getConnection().setAutoCommit(false);
+    stmt.setFetchDirection(ResultSet.FETCH_FORWARD);
+    stmt.setFetchSize(batchMaxRows);
     stmt.setMaxRows(DEFAULT_LIMIT);
   }
 

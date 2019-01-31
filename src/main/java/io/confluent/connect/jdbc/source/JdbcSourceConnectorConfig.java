@@ -85,7 +85,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final String BATCH_MAX_ROWS_DOC =
       "Maximum number of rows to include in a single batch when polling for new data. This "
       + "setting can be used to limit the amount of data buffered internally in the connector.";
-  public static final int BATCH_MAX_ROWS_DEFAULT = 100;
+  public static final int BATCH_MAX_ROWS_DEFAULT = 10000;
   private static final String BATCH_MAX_ROWS_DISPLAY = "Max Rows Per Batch";
 
   public static final String NUMERIC_PRECISION_MAPPING_CONFIG = "numeric.precision.mapping";

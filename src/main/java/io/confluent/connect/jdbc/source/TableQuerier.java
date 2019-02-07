@@ -17,6 +17,8 @@
 package io.confluent.connect.jdbc.source;
 
 import org.apache.kafka.connect.source.SourceRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -37,6 +39,8 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     QUERY // User-specified query
   }
 
+  private final Logger log = LoggerFactory.getLogger(getClass()); // use concrete subclass
+
   protected final DatabaseDialect dialect;
   protected final QueryMode mode;
   protected final String query;
@@ -49,6 +53,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected PreparedStatement stmt;
   protected ResultSet resultSet;
   protected SchemaMapping schemaMapping;
+  private String loggedQueryString;
 
   public TableQuerier(
       DatabaseDialect dialect,
@@ -128,6 +133,14 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
       }
     }
     resultSet = null;
+  }
+
+  protected void recordQuery(String query) {
+    if (query != null && !query.equals(loggedQueryString)) {
+      // For usability, log the statement at INFO level only when it changes
+      log.info("Begin using SQL query: {}", query);
+      loggedQueryString = query;
+    }
   }
 
   @Override

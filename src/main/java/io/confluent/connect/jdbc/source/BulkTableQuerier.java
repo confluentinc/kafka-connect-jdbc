@@ -55,10 +55,12 @@ public class BulkTableQuerier extends TableQuerier {
                                  .append(tableId).toString();
         log.debug("{} prepared SQL query: {}", this, queryStr);
         stmt = dialect.createPreparedStatement(db, queryStr);
+        recordQuery(queryStr);
         break;
       case QUERY:
         log.debug("{} prepared SQL query: {}", this, query);
         stmt = dialect.createPreparedStatement(db, query);
+        recordQuery(query);
         break;
       default:
         throw new ConnectException("Unknown mode: " + mode);

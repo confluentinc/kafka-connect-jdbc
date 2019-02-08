@@ -53,10 +53,12 @@ public class BulkTableQuerier extends TableQuerier {
       case TABLE:
         String queryStr = dialect.expressionBuilder().append("SELECT * FROM ")
                                  .append(tableId).toString();
+        recordQuery(queryStr);
         log.debug("{} prepared SQL query: {}", this, queryStr);
         stmt = dialect.createPreparedStatement(db, queryStr);
         break;
       case QUERY:
+        recordQuery(query);
         log.debug("{} prepared SQL query: {}", this, query);
         stmt = dialect.createPreparedStatement(db, query);
         break;

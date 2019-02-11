@@ -26,14 +26,18 @@ import org.junit.Test;
 
 import java.sql.SQLException;
 import java.sql.Types;
+import java.util.Calendar;
+import java.util.TimeZone;
 
 import io.confluent.connect.jdbc.sink.SqliteHelper;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDialect> {
 
@@ -275,5 +279,11 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
     assertEquals(Types.INTEGER, columnDefn.type());
     assertEquals(false, columnDefn.isPrimaryKey());
     assertEquals(true, columnDefn.isOptional());
+  }
+
+  @Test
+  public void useCurrentTimestampValue() throws SQLException {
+    Calendar cal = DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone("PST"));
+    assertNotNull(dialect.currentTimeOnDB(sqliteHelper.connection, cal));
   }
 }

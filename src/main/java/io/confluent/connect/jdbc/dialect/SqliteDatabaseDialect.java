@@ -121,9 +121,9 @@ public class SqliteDatabaseDialect extends GenericDatabaseDialect {
     builder.append(table);
     builder.append("(");
     builder.appendList()
-        .delimitedBy(",")
-        .transformedBy(ExpressionBuilder.columnNames())
-        .of(keyColumns, nonKeyColumns);
+           .delimitedBy(",")
+           .transformedBy(ExpressionBuilder.columnNames())
+           .of(keyColumns, nonKeyColumns);
     builder.append(") VALUES(");
     builder.appendMultiple(",", "?", keyColumns.size() + nonKeyColumns.size());
     builder.append(")");
@@ -132,6 +132,7 @@ public class SqliteDatabaseDialect extends GenericDatabaseDialect {
 
   @Override
   protected String currentTimestampDatabaseQuery() {
+
     return "SELECT strftime('%Y-%m-%d %H:%M:%S.%f','now')";
   }
 }

@@ -14,7 +14,6 @@
 
 package io.confluent.connect.jdbc.dialect;
 
-import io.confluent.connect.jdbc.util.*;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -25,13 +24,17 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Calendar;
 import java.util.TimeZone;
 
 import io.confluent.connect.jdbc.sink.SqliteHelper;
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.DateTimeUtils;
+import io.confluent.connect.jdbc.util.QuoteMethod;
+import io.confluent.connect.jdbc.util.TableDefinition;
+import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -113,15 +116,15 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
   public void shouldBuildCreateQueryStatement() {
     assertEquals(
         "CREATE TABLE `myTable` (\n"
-        + "`c1` INTEGER NOT NULL,\n"
-        + "`c2` INTEGER NOT NULL,\n"
-        + "`c3` TEXT NOT NULL,\n"
-        + "`c4` TEXT NULL,\n"
-        + "`c5` NUMERIC DEFAULT '2001-03-15',\n"
-        + "`c6` NUMERIC DEFAULT '00:00:00.000',\n"
-        + "`c7` NUMERIC DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "`c8` NUMERIC NULL,\n"
-        + "PRIMARY KEY(`c1`))",
+            + "`c1` INTEGER NOT NULL,\n"
+            + "`c2` INTEGER NOT NULL,\n"
+            + "`c3` TEXT NOT NULL,\n"
+            + "`c4` TEXT NULL,\n"
+            + "`c5` NUMERIC DEFAULT '2001-03-15',\n"
+            + "`c6` NUMERIC DEFAULT '00:00:00.000',\n"
+            + "`c7` NUMERIC DEFAULT '2001-03-15 00:00:00.000',\n"
+            + "`c8` NUMERIC NULL,\n"
+            + "PRIMARY KEY(`c1`))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
 
@@ -129,15 +132,15 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
     dialect = createDialect();
     assertEquals(
         "CREATE TABLE myTable (\n"
-        + "c1 INTEGER NOT NULL,\n"
-        + "c2 INTEGER NOT NULL,\n"
-        + "c3 TEXT NOT NULL,\n"
-        + "c4 TEXT NULL,\n"
-        + "c5 NUMERIC DEFAULT '2001-03-15',\n"
-        + "c6 NUMERIC DEFAULT '00:00:00.000',\n"
-        + "c7 NUMERIC DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "c8 NUMERIC NULL,\n"
-        + "PRIMARY KEY(c1))",
+            + "c1 INTEGER NOT NULL,\n"
+            + "c2 INTEGER NOT NULL,\n"
+            + "c3 TEXT NOT NULL,\n"
+            + "c4 TEXT NULL,\n"
+            + "c5 NUMERIC DEFAULT '2001-03-15',\n"
+            + "c6 NUMERIC DEFAULT '00:00:00.000',\n"
+            + "c7 NUMERIC DEFAULT '2001-03-15 00:00:00.000',\n"
+            + "c8 NUMERIC NULL,\n"
+            + "PRIMARY KEY(c1))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
   }
@@ -178,7 +181,7 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
   @Test
   public void shouldBuildUpsertStatement() {
     String expected = "INSERT OR REPLACE INTO `myTable`(`id1`,`id2`,`columnA`,`columnB`," +
-                      "`columnC`,`columnD`) VALUES(?,?,?,?,?,?)";
+        "`columnC`,`columnD`) VALUES(?,?,?,?,?,?)";
     String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD);
     assertEquals(expected, sql);
   }
@@ -193,22 +196,22 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
   public void createOneColOnePk() {
     verifyCreateOneColOnePk(
         "CREATE TABLE `myTable` (" + System.lineSeparator() + "`pk1` INTEGER NOT NULL," +
-        System.lineSeparator() + "PRIMARY KEY(`pk1`))");
+            System.lineSeparator() + "PRIMARY KEY(`pk1`))");
   }
 
   @Test
   public void createThreeColTwoPk() {
     verifyCreateThreeColTwoPk(
         "CREATE TABLE `myTable` (" + System.lineSeparator() + "`pk1` INTEGER NOT NULL," +
-        System.lineSeparator() + "`pk2` INTEGER NOT NULL," + System.lineSeparator() +
-        "`col1` INTEGER NOT NULL," + System.lineSeparator() + "PRIMARY KEY(`pk1`,`pk2`))");
+            System.lineSeparator() + "`pk2` INTEGER NOT NULL," + System.lineSeparator() +
+            "`col1` INTEGER NOT NULL," + System.lineSeparator() + "PRIMARY KEY(`pk1`,`pk2`))");
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
     verifyCreateThreeColTwoPk(
         "CREATE TABLE myTable (" + System.lineSeparator() + "pk1 INTEGER NOT NULL," +
-        System.lineSeparator() + "pk2 INTEGER NOT NULL," + System.lineSeparator() +
-        "col1 INTEGER NOT NULL," + System.lineSeparator() + "PRIMARY KEY(pk1,pk2))");
+            System.lineSeparator() + "pk2 INTEGER NOT NULL," + System.lineSeparator() +
+            "col1 INTEGER NOT NULL," + System.lineSeparator() + "PRIMARY KEY(pk1,pk2))");
   }
 
   @Test
@@ -218,8 +221,10 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
 
   @Test
   public void alterAddTwoCol() {
-    verifyAlterAddTwoCols("ALTER TABLE `myTable` ADD `newcol1` INTEGER NULL",
-                          "ALTER TABLE `myTable` ADD `newcol2` INTEGER DEFAULT 42");
+    verifyAlterAddTwoCols(
+        "ALTER TABLE `myTable` ADD `newcol1` INTEGER NULL",
+        "ALTER TABLE `myTable` ADD `newcol2` INTEGER DEFAULT 42"
+    );
   }
 
   @Test
@@ -280,9 +285,7 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
 
   @Test
   public void useCurrentTimestampValue() throws SQLException {
-
     Calendar cal = DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone("PST"));
-    assertNotNull(dialect.currentTimeOnDB(sqliteHelper.connection,cal));
-
+    assertNotNull(dialect.currentTimeOnDB(sqliteHelper.connection, cal));
   }
 }

@@ -129,10 +129,4 @@ public class SqliteDatabaseDialect extends GenericDatabaseDialect {
     builder.append(")");
     return builder.toString();
   }
-
-  @Override
-  protected String currentTimestampDatabaseQuery() {
-
-    return "SELECT strftime('%Y-%m-%d %H:%M:%S.%f','now')";
-  }
 }

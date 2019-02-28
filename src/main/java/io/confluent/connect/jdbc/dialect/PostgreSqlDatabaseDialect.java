@@ -222,9 +222,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       Collection<ColumnId> nonKeyColumns
   ) {
     final Transform<ColumnId> transform = (builder, col) -> {
-      builder.appendIdentifierQuoted(col.name())
+      builder.appendColumnName(col.name())
              .append("=EXCLUDED.")
-             .appendIdentifierQuoted(col.name());
+             .appendColumnName(col.name());
     };
 
     ExpressionBuilder builder = expressionBuilder();

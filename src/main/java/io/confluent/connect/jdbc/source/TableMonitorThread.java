@@ -16,6 +16,7 @@ package io.confluent.connect.jdbc.source;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.util.ConnectionProvider;
+import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 import org.apache.kafka.connect.connector.ConnectorContext;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -152,8 +153,8 @@ public class TableMonitorThread extends Thread {
     final List<TableId> filteredTables = new ArrayList<>(tables.size());
     if (whitelist != null) {
       for (TableId table : tables) {
-        String fqn1 = dialect.expressionBuilder().append(table, false).toString();
-        String fqn2 = dialect.expressionBuilder().append(table, true).toString();
+        String fqn1 = dialect.expressionBuilder().append(table, QuoteMethod.NEVER).toString();
+        String fqn2 = dialect.expressionBuilder().append(table, QuoteMethod.ALWAYS).toString();
         if (whitelist.contains(fqn1) || whitelist.contains(fqn2)
             || whitelist.contains(table.tableName())) {
           filteredTables.add(table);
@@ -161,8 +162,8 @@ public class TableMonitorThread extends Thread {
       }
     } else if (blacklist != null) {
       for (TableId table : tables) {
-        String fqn1 = dialect.expressionBuilder().append(table, false).toString();
-        String fqn2 = dialect.expressionBuilder().append(table, true).toString();
+        String fqn1 = dialect.expressionBuilder().append(table, QuoteMethod.NEVER).toString();
+        String fqn2 = dialect.expressionBuilder().append(table, QuoteMethod.ALWAYS).toString();
         if (!(blacklist.contains(fqn1) || blacklist.contains(fqn2)
               || blacklist.contains(table.tableName()))) {
           filteredTables.add(table);

@@ -47,6 +47,7 @@ import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.ConnectionProvider;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.IdentifierRules;
+import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.StringUtils;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
@@ -353,6 +354,9 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
   private void verifyWriteColumnSpec(String expected, SinkRecordField field) {
     GenericDatabaseDialect dialect = dummyDialect();
     ExpressionBuilder builder = dialect.expressionBuilder();
+    if (quoteIdentfiiers != null) {
+      builder.setQuoteIdentifiers(quoteIdentfiiers);
+    }
     dialect.writeColumnSpec(builder, field);
     assertEquals(expected, builder.toString());
   }
@@ -373,11 +377,13 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
         SchemaBuilder.int32().defaultValue(42).build(), "foo", true));
     verifyWriteColumnSpec("\"foo\" DUMMY DEFAULT 42", new SinkRecordField(SchemaBuilder.int32().defaultValue(42).build(), "foo", false));
     verifyWriteColumnSpec("\"foo\" DUMMY DEFAULT 42", new SinkRecordField(SchemaBuilder.int32().optional().defaultValue(42).build(), "foo", true));
-    verifyWriteColumnSpec("\"foo\" DUMMY DEFAULT 42", new SinkRecordField(SchemaBuilder.int32().optional().defaultValue(42).build(), "foo", false));
-    verifyWriteColumnSpec("\"foo\" DUMMY NOT NULL", new SinkRecordField(Schema.INT32_SCHEMA, "foo", true));
-    verifyWriteColumnSpec("\"foo\" DUMMY NOT NULL", new SinkRecordField(Schema.INT32_SCHEMA, "foo", false));
-    verifyWriteColumnSpec("\"foo\" DUMMY NOT NULL", new SinkRecordField(Schema.OPTIONAL_INT32_SCHEMA, "foo", true));
-    verifyWriteColumnSpec("\"foo\" DUMMY NULL", new SinkRecordField(Schema.OPTIONAL_INT32_SCHEMA, "foo", false));
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    verifyWriteColumnSpec("foo DUMMY DEFAULT 42", new SinkRecordField(SchemaBuilder.int32().optional().defaultValue(42).build(), "foo", false));
+    verifyWriteColumnSpec("foo DUMMY NOT NULL", new SinkRecordField(Schema.INT32_SCHEMA, "foo", true));
+    verifyWriteColumnSpec("foo DUMMY NOT NULL", new SinkRecordField(Schema.INT32_SCHEMA, "foo", false));
+    verifyWriteColumnSpec("foo DUMMY NOT NULL", new SinkRecordField(Schema.OPTIONAL_INT32_SCHEMA, "foo", true));
+    verifyWriteColumnSpec("foo DUMMY NULL", new SinkRecordField(Schema.OPTIONAL_INT32_SCHEMA, "foo", false));
   }
 
   @Test

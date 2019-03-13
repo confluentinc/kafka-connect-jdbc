@@ -285,7 +285,7 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
 
   @Test
   public void useCurrentTimestampValue() throws SQLException {
-    Calendar cal = DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone("UTC"));
+    Calendar cal = DateTimeUtils.UTC_CALENDAR.get();
 
     //Regular expression to check if the timestamp is of the format %Y-%m-%d %H:%M:%S.%f
     Pattern p = Pattern.compile("(\\p{Nd}++)\\Q-\\E(\\p{Nd}++)\\Q-\\E(\\p{Nd}++)\\Q \\E(\\p{Nd}++)"

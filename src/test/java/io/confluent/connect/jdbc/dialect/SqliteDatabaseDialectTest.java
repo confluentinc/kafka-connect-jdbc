@@ -26,13 +26,19 @@ import org.junit.Test;
 
 import java.sql.SQLException;
 import java.sql.Types;
+import java.util.Calendar;
+import java.util.TimeZone;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import io.confluent.connect.jdbc.sink.SqliteHelper;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 
+import static junit.framework.TestCase.assertTrue;
 import static org.junit.Assert.assertEquals;
 
 public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDialect> {
@@ -275,5 +281,27 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
     assertEquals(Types.INTEGER, columnDefn.type());
     assertEquals(false, columnDefn.isPrimaryKey());
     assertEquals(true, columnDefn.isOptional());
+  }
+
+  @Test
+  public void useCurrentTimestampValue() throws SQLException {
+    Calendar cal = DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone("UTC"));
+
+    //Regular expression to check if the timestamp is of the format %Y-%m-%d %H:%M:%S.%f
+    Pattern p = Pattern.compile("(\\p{Nd}++)\\Q-\\E(\\p{Nd}++)\\Q-\\E(\\p{Nd}++)\\Q \\E(\\p{Nd}++)"
+        + "\\Q:\\E(\\p{Nd}++)"
+        + "\\Q:\\E"
+        + "(\\p{Nd}++)\\Q.\\E(\\p{Nd}++)");
+
+    java.util.Date timeOnDB = dialect.currentTimeOnDB(sqliteHelper.connection, cal);
+    java.util.Date currentTime = new java.util.Date();
+    Matcher matcher = p.matcher(timeOnDB.toString());
+
+    long timeOnDBInSeconds = timeOnDB.getTime() / 1000;
+    long currentTimeInSeconds = currentTime.getTime() / 1000;
+    long differenceInTime = Math.abs(timeOnDBInSeconds - currentTimeInSeconds);
+
+    assertTrue(differenceInTime < 5);
+    assertTrue(matcher.matches());
   }
 }

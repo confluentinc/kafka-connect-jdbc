@@ -374,12 +374,15 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
 
   @Test
   public void writeColumnSpec() {
-    verifyWriteColumnSpec("\"foo\" DUMMY DEFAULT 42 NOT NULL", new SinkRecordField(
-        SchemaBuilder.int32().defaultValue(42).build(), "foo", true));
+    verifyWriteColumnSpec("\"foo\" DUMMY DEFAULT 42 NOT NULL", new SinkRecordField(SchemaBuilder.int32().defaultValue(42).build(), "foo", true));
     verifyWriteColumnSpec("\"foo\" DUMMY DEFAULT 42 NOT NULL", new SinkRecordField(SchemaBuilder.int32().defaultValue(42).build(), "foo", false));
     verifyWriteColumnSpec("\"foo\" DUMMY DEFAULT 42 NOT NULL", new SinkRecordField(SchemaBuilder.int32().optional().defaultValue(42).build(), "foo", true));
+    verifyWriteColumnSpec("\"foo\" DUMMY DEFAULT 42", new SinkRecordField(SchemaBuilder.int32().optional().defaultValue(42).build(), "foo", false));
 
     quoteIdentfiiers = QuoteMethod.NEVER;
+    verifyWriteColumnSpec("foo DUMMY DEFAULT 42 NOT NULL", new SinkRecordField(SchemaBuilder.int32().defaultValue(42).build(), "foo", true));
+    verifyWriteColumnSpec("foo DUMMY DEFAULT 42 NOT NULL", new SinkRecordField(SchemaBuilder.int32().defaultValue(42).build(), "foo", false));
+    verifyWriteColumnSpec("foo DUMMY DEFAULT 42 NOT NULL", new SinkRecordField(SchemaBuilder.int32().optional().defaultValue(42).build(), "foo", true));
     verifyWriteColumnSpec("foo DUMMY DEFAULT 42", new SinkRecordField(SchemaBuilder.int32().optional().defaultValue(42).build(), "foo", false));
     verifyWriteColumnSpec("foo DUMMY NOT NULL", new SinkRecordField(Schema.INT32_SCHEMA, "foo", true));
     verifyWriteColumnSpec("foo DUMMY NOT NULL", new SinkRecordField(Schema.INT32_SCHEMA, "foo", false));

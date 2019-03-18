@@ -311,7 +311,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
   protected void verifyAlterAddTwoCols(String... expected) {
     assertArrayEquals(expected, dialect.buildAlterTable(tableId, Arrays.asList(
         new SinkRecordField(Schema.OPTIONAL_INT32_SCHEMA, "newcol1", false),
-        new SinkRecordField(SchemaBuilder.int32().defaultValue(42).build(), "newcol2", false)
+        new SinkRecordField(SchemaBuilder.int32().optional().defaultValue(42).build(), "newcol2", false)
     )).toArray());
   }
 

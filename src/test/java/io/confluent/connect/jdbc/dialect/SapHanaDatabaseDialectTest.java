@@ -128,7 +128,7 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
         dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
     );
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
     assertEquals(
         "UPSERT myTable"
@@ -160,7 +160,7 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
         System.lineSeparator() + "\"pk2\" INTEGER NOT NULL," + System.lineSeparator() +
         "\"col1\" INTEGER NOT NULL," + System.lineSeparator() + "PRIMARY KEY(\"pk1\",\"pk2\"))");
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
     verifyCreateThreeColTwoPk(
         "CREATE COLUMN TABLE myTable (" + System.lineSeparator() + "pk1 INTEGER NOT NULL," +
@@ -193,7 +193,7 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
         )
     );
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
     assertEquals(
         "UPSERT tableA(col1,col2,col3,col4) VALUES(?,?,?,?) WITH PRIMARY KEY",

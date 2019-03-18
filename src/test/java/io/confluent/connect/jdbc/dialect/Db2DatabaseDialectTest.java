@@ -103,7 +103,7 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
 
   @Test
   public void shouldBuildCreateQueryStatementWithNoIdentifierQuoting() {
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     String expected =
@@ -138,7 +138,7 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
 
   @Test
   public void shouldBuildAlterTableStatementWithNoIdentifierQuoting() {
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     List<String> statements = dialect.buildAlterTable(tableId, sinkRecordFields);
@@ -159,7 +159,7 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
     verifyCreateOneColNoPk(
         "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "\"col1\" INTEGER NOT NULL)");
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     verifyCreateOneColNoPk(
@@ -172,7 +172,7 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
         "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "\"pk1\" INTEGER NOT NULL," + System
             .lineSeparator() + "PRIMARY KEY(\"pk1\"))");
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     verifyCreateOneColOnePk(
@@ -187,7 +187,7 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
             .lineSeparator() + "\"pk2\" INTEGER NOT NULL," + System.lineSeparator()
         + "\"col1\" INTEGER NOT NULL," + System.lineSeparator() + "PRIMARY KEY(\"pk1\",\"pk2\"))");
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     verifyCreateThreeColTwoPk(
@@ -229,7 +229,7 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
     );
     assertEquals(expected, sql);
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     expected =
@@ -264,7 +264,7 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
 
   @Test
   public void shouldBuildUpsertStatementWithNoIdentifierQuoting() {
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     String expected = "merge into myTable using (values(?, ?, ?, ?, ?, ?)) "
@@ -315,7 +315,7 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
         actor, columns(actor, "actor_id"), columns(actor));
     assertEquals(expected, sql);
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     expected = "merge into actor using (values(?)) as DAT(actor_id) on actor"

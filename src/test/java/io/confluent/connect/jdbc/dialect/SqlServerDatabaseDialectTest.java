@@ -106,7 +106,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
     assertEquals(
         "CREATE TABLE myTable (\n"
@@ -140,7 +140,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
     assertStatements(
         new String[]{
@@ -173,7 +173,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
         dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
     );
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
     assertEquals(
         "merge into myTable with (HOLDLOCK) AS target using (select ? AS id1, ?" +
@@ -240,7 +240,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
         )
     );
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
     assertEquals(
         "merge into Customer with (HOLDLOCK) AS target using (select ? AS id, ? AS name, ? " +
@@ -275,7 +275,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
         )
     );
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
     assertEquals(
         "merge into Book with (HOLDLOCK) AS target using (select ? AS author, ? AS title, ?" +

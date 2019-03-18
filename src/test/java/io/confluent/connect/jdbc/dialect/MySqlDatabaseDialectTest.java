@@ -130,7 +130,7 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
     verifyCreateOneColNoPk(
         "CREATE TABLE `myTable` (" + System.lineSeparator() + "`col1` INT NOT NULL)");
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     verifyCreateOneColNoPk(
@@ -151,7 +151,7 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
         System.lineSeparator() + "`pk2` INT NOT NULL," + System.lineSeparator() +
         "`col1` INT NOT NULL," + System.lineSeparator() + "PRIMARY KEY(`pk1`,`pk2`))");
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     verifyCreateThreeColTwoPk(
@@ -183,7 +183,7 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
                                                            "score"));
     assertEquals(expected, sql);
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     expected = "insert into actor(actor_id,first_name,last_name,score) " +

@@ -106,7 +106,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     assertEquals(
@@ -141,7 +141,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     assertEquals(
@@ -171,7 +171,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
     );
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     assertEquals(
@@ -204,7 +204,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         System.lineSeparator() + "\"pk2\" INT NOT NULL," + System.lineSeparator() +
         "\"col1\" INT NOT NULL," + System.lineSeparator() + "PRIMARY KEY(\"pk1\",\"pk2\"))");
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     verifyCreateThreeColTwoPk(
@@ -239,7 +239,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         )
     );
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     assertEquals(

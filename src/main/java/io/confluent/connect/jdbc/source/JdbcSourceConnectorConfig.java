@@ -44,6 +44,11 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+import java.util.TimeZone;
+
+import io.confluent.connect.jdbc.util.TimeZoneValidator;
+
+
 public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   private static final Logger LOG = LoggerFactory.getLogger(JdbcSourceConnectorConfig.class);
@@ -216,6 +221,13 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + " from the last time we fetched until current time minus the delay.";
   public static final long TIMESTAMP_DELAY_INTERVAL_MS_DEFAULT = 0;
   private static final String TIMESTAMP_DELAY_INTERVAL_MS_DISPLAY = "Delay Interval (ms)";
+
+  public static final String DB_TIMEZONE_CONFIG = "db.timezone";
+  public static final String DB_TIMEZONE_DEFAULT = "UTC";
+  private static final String DB_TIMEZONE_CONFIG_DOC =
+      "Name of the JDBC timezone that should be used in the connector when "
+          + "querying with time-based criteria. Defaults to UTC.";
+  private static final String DB_TIMEZONE_CONFIG_DISPLAY = "DB time zone";
 
   public static final String DATABASE_GROUP = "Database";
   public static final String MODE_GROUP = "Mode";
@@ -492,7 +504,18 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         CONNECTOR_GROUP,
         ++orderInGroup,
         Width.MEDIUM,
-        TIMESTAMP_DELAY_INTERVAL_MS_DISPLAY);
+        TIMESTAMP_DELAY_INTERVAL_MS_DISPLAY
+    ).define(
+        DB_TIMEZONE_CONFIG,
+        Type.STRING,
+        DB_TIMEZONE_DEFAULT,
+        TimeZoneValidator.INSTANCE,
+        Importance.MEDIUM,
+        DB_TIMEZONE_CONFIG_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        DB_TIMEZONE_CONFIG_DISPLAY);
   }
 
   public static final ConfigDef CONFIG_DEF = baseConfigDef();
@@ -706,6 +729,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   protected JdbcSourceConnectorConfig(ConfigDef subclassConfigDef, Map<String, String> props) {
     super(subclassConfigDef, props);
+  }
+
+  public TimeZone timeZone() {
+    String dbTimeZone = getString(JdbcSourceTaskConfig.DB_TIMEZONE_CONFIG);
+    return TimeZone.getTimeZone(dbTimeZone);
   }
 
   public static void main(String[] args) {

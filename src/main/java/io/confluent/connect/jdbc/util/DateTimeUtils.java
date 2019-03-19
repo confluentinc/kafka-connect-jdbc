@@ -20,56 +20,82 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.GregorianCalendar;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.TimeZone;
 
 public class DateTimeUtils {
 
-  public static final TimeZone UTC = TimeZone.getTimeZone("UTC");
+  private static final ThreadLocal<Map<TimeZone, Calendar>> TIMEZONE_CALENDARS =
+      new ThreadLocal<Map<TimeZone, Calendar>>() {
+        @Override
+        public Map<TimeZone, Calendar> initialValue() {
+          return new HashMap<>();
+        }
+      };
 
-  public static final ThreadLocal<Calendar> UTC_CALENDAR = new ThreadLocal<Calendar>() {
-    @Override
-    protected Calendar initialValue() {
-      return new GregorianCalendar(TimeZone.getTimeZone("UTC"));
+  private static final ThreadLocal<Map<TimeZone, SimpleDateFormat>> TIMEZONE_DATE_FORMATS =
+      new ThreadLocal<Map<TimeZone, SimpleDateFormat>>() {
+        @Override
+        public Map<TimeZone, SimpleDateFormat> initialValue() {
+          return new HashMap<>();
+        }
+      };
+
+  private static final ThreadLocal<Map<TimeZone, SimpleDateFormat>> TIMEZONE_TIME_FORMATS =
+      new ThreadLocal<Map<TimeZone, SimpleDateFormat>>() {
+        @Override
+        public Map<TimeZone, SimpleDateFormat> initialValue() {
+          return new HashMap<>();
+        }
+      };
+
+  private static final ThreadLocal<Map<TimeZone, SimpleDateFormat>> TIMEZONE_TIMESTAMP_FORMATS =
+      new ThreadLocal<Map<TimeZone, SimpleDateFormat>>() {
+        @Override
+        public Map<TimeZone, SimpleDateFormat> initialValue() {
+          return new HashMap<>();
+        }
+    };
+
+  public static Calendar getTimeZoneCalendar(final TimeZone timeZone) {
+    Map<TimeZone, Calendar> map = TIMEZONE_CALENDARS.get();
+    if (!map.containsKey(timeZone)) {
+      map.put(timeZone, new GregorianCalendar(timeZone));
     }
-  };
-
-  private static final ThreadLocal<SimpleDateFormat> UTC_DATE_FORMAT
-      = new ThreadLocal<SimpleDateFormat>() {
-        protected SimpleDateFormat initialValue() {
-          SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-          sdf.setTimeZone(UTC);
-          return sdf;
-        }
-      };
-
-  private static final ThreadLocal<SimpleDateFormat> UTC_TIME_FORMAT
-      = new ThreadLocal<SimpleDateFormat>() {
-        protected SimpleDateFormat initialValue() {
-          SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss.SSS");
-          sdf.setTimeZone(UTC);
-          return sdf;
-        }
-      };
-
-  private static final ThreadLocal<SimpleDateFormat> UTC_TIMESTAMP_FORMAT
-      = new ThreadLocal<SimpleDateFormat>() {
-        protected SimpleDateFormat initialValue() {
-          SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
-          sdf.setTimeZone(UTC);
-          return sdf;
-        }
-      };
-
-  public static String formatUtcDate(Date date) {
-    return UTC_DATE_FORMAT.get().format(date);
+    return map.get(timeZone);
   }
 
-  public static String formatUtcTime(Date date) {
-    return UTC_TIME_FORMAT.get().format(date);
+  public static String formatDate(Date date, TimeZone timeZone) {
+    Map<TimeZone, SimpleDateFormat> map = TIMEZONE_DATE_FORMATS.get();
+    if (!map.containsKey(timeZone)) {
+      SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+      sdf.setTimeZone(timeZone);
+      map.put(timeZone, sdf);
+    }
+    return map.get(timeZone).format(date);
   }
 
-  public static String formatUtcTimestamp(Date date) {
-    return UTC_TIMESTAMP_FORMAT.get().format(date);
+  public static String formatTime(Date date, TimeZone timeZone) {
+    Map<TimeZone, SimpleDateFormat> map = TIMEZONE_TIME_FORMATS.get();
+    if (!map.containsKey(timeZone)) {
+      SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss.SSS");
+      sdf.setTimeZone(timeZone);
+      map.put(timeZone, sdf);
+    }
+    return map.get(timeZone).format(date);
   }
 
+  public static String formatTimestamp(Date date, TimeZone timeZone) {
+    Map<TimeZone, SimpleDateFormat> map = TIMEZONE_TIMESTAMP_FORMATS.get();
+    if (!map.containsKey(timeZone)) {
+      SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+      sdf.setTimeZone(timeZone);
+      map.put(timeZone, sdf);
+    }
+    return map.get(timeZone).format(date);
+  }
+
+  private DateTimeUtils() {
+  }
 }

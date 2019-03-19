@@ -30,6 +30,7 @@ import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.TimeZone;
 
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
@@ -42,19 +43,22 @@ public class PreparedStatementBinder {
   private final SchemaPair schemaPair;
   private final FieldsMetadata fieldsMetadata;
   private final JdbcSinkConfig.InsertMode insertMode;
+  private final TimeZone timeZone;
 
   public PreparedStatementBinder(
       PreparedStatement statement,
       JdbcSinkConfig.PrimaryKeyMode pkMode,
       SchemaPair schemaPair,
       FieldsMetadata fieldsMetadata,
-      JdbcSinkConfig.InsertMode insertMode
+      JdbcSinkConfig.InsertMode insertMode,
+      TimeZone timeZone
   ) {
     this.pkMode = pkMode;
     this.statement = statement;
     this.schemaPair = schemaPair;
     this.fieldsMetadata = fieldsMetadata;
     this.insertMode = insertMode;
+    this.timeZone = timeZone;
   }
 
   public void bindRecord(SinkRecord record) throws SQLException {
@@ -143,7 +147,7 @@ public class PreparedStatementBinder {
     bindField(statement, index, schema, value);
   }
 
-  static void bindField(
+  void bindField(
       PreparedStatement statement,
       int index,
       Schema schema,
@@ -197,7 +201,7 @@ public class PreparedStatementBinder {
     }
   }
 
-  static boolean maybeBindLogical(
+  boolean maybeBindLogical(
       PreparedStatement statement,
       int index,
       Schema schema,
@@ -209,7 +213,7 @@ public class PreparedStatementBinder {
           statement.setDate(
               index,
               new java.sql.Date(((java.util.Date) value).getTime()),
-              DateTimeUtils.UTC_CALENDAR.get()
+              DateTimeUtils.getTimeZoneCalendar(timeZone)
           );
           return true;
         case Decimal.LOGICAL_NAME:
@@ -219,14 +223,14 @@ public class PreparedStatementBinder {
           statement.setTime(
               index,
               new java.sql.Time(((java.util.Date) value).getTime()),
-              DateTimeUtils.UTC_CALENDAR.get()
+              DateTimeUtils.getTimeZoneCalendar(timeZone)
           );
           return true;
         case Timestamp.LOGICAL_NAME:
           statement.setTimestamp(
               index,
               new java.sql.Timestamp(((java.util.Date) value).getTime()),
-              DateTimeUtils.UTC_CALENDAR.get()
+              DateTimeUtils.getTimeZoneCalendar(timeZone)
           );
           return true;
         default:

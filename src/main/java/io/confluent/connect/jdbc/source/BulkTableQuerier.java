@@ -27,6 +27,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.Map;
+import java.util.TimeZone;
 
 import io.confluent.connect.jdbc.util.JdbcUtils;
 
@@ -37,10 +38,12 @@ import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.Numeric
  */
 public class BulkTableQuerier extends TableQuerier {
   private static final Logger log = LoggerFactory.getLogger(BulkTableQuerier.class);
+  private final TimeZone timeZone;
 
   public BulkTableQuerier(QueryMode mode, String name, String schemaPattern,
-                          String topicPrefix, NumericMapping mapNumerics) {
+                          String topicPrefix, NumericMapping mapNumerics, TimeZone timeZone) {
     super(mode, name, topicPrefix, schemaPattern, mapNumerics);
+    this.timeZone = timeZone;
   }
 
   @Override
@@ -68,7 +71,7 @@ public class BulkTableQuerier extends TableQuerier {
 
   @Override
   public SourceRecord extractRecord() throws SQLException {
-    Struct record = DataConverter.convertRecord(schema, resultSet, mapNumerics);
+    Struct record = DataConverter.convertRecord(schema, resultSet, mapNumerics, timeZone);
     // TODO: key from primary key? partition?
     final String topic;
     final Map<String, String> partition;

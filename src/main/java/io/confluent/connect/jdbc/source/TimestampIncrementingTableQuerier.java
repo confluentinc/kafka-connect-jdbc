@@ -18,6 +18,7 @@ package io.confluent.connect.jdbc.source;
 
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
+import java.util.TimeZone;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -65,16 +66,19 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   private String incrementingColumn;
   private long timestampDelay;
   private TimestampIncrementingOffset offset;
+  private final TimeZone timeZone;
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
                                            String timestampColumn, String incrementingColumn,
                                            Map<String, Object> offsetMap, Long timestampDelay,
+                                           TimeZone timeZone,
                                            String schemaPattern, NumericMapping mapNumerics) {
     super(mode, name, topicPrefix, schemaPattern, mapNumerics);
     this.timestampColumn = timestampColumn;
     this.incrementingColumn = incrementingColumn;
     this.timestampDelay = timestampDelay;
     this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
+    this.timeZone = timeZone;
   }
 
   @Override
@@ -169,18 +173,18 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       Long incOffset = offset.getIncrementingOffset();
       final long currentDbTime = JdbcUtils.getCurrentTimeOnDB(
           stmt.getConnection(),
-          DateTimeUtils.UTC_CALENDAR.get()
+          DateTimeUtils.getTimeZoneCalendar(timeZone)
       ).getTime();
       Timestamp endTime = new Timestamp(currentDbTime - timestampDelay);
-      stmt.setTimestamp(1, endTime, DateTimeUtils.UTC_CALENDAR.get());
-      stmt.setTimestamp(2, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
+      stmt.setTimestamp(1, endTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
+      stmt.setTimestamp(2, tsOffset, DateTimeUtils.getTimeZoneCalendar(timeZone));
       stmt.setLong(3, incOffset);
-      stmt.setTimestamp(4, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
+      stmt.setTimestamp(4, tsOffset, DateTimeUtils.getTimeZoneCalendar(timeZone));
       log.debug(
           "Executing prepared statement with start time value = {} end time = {} and incrementing"
           + " value = {}",
-          DateTimeUtils.formatUtcTimestamp(tsOffset),
-          DateTimeUtils.formatUtcTimestamp(endTime),
+          DateTimeUtils.formatTimestamp(tsOffset, timeZone),
+          DateTimeUtils.formatTimestamp(endTime, timeZone),
           incOffset
       );
     } else if (incrementingColumn != null) {
@@ -191,21 +195,21 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
       Timestamp tsOffset = offset.getTimestampOffset();
       final long currentDbTime = JdbcUtils.getCurrentTimeOnDB(
           stmt.getConnection(),
-          DateTimeUtils.UTC_CALENDAR.get()
+          DateTimeUtils.getTimeZoneCalendar(timeZone)
       ).getTime();
       Timestamp endTime = new Timestamp(currentDbTime - timestampDelay);
-      stmt.setTimestamp(1, tsOffset, DateTimeUtils.UTC_CALENDAR.get());
-      stmt.setTimestamp(2, endTime, DateTimeUtils.UTC_CALENDAR.get());
+      stmt.setTimestamp(1, tsOffset, DateTimeUtils.getTimeZoneCalendar(timeZone));
+      stmt.setTimestamp(2, endTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
       log.debug("Executing prepared statement with timestamp value = {} end time = {}",
-                DateTimeUtils.formatUtcTimestamp(tsOffset),
-                DateTimeUtils.formatUtcTimestamp(endTime));
+                DateTimeUtils.formatTimestamp(tsOffset, timeZone),
+                DateTimeUtils.formatTimestamp(endTime, timeZone));
     }
     return stmt.executeQuery();
   }
 
   @Override
   public SourceRecord extractRecord() throws SQLException {
-    final Struct record = DataConverter.convertRecord(schema, resultSet, mapNumerics);
+    final Struct record = DataConverter.convertRecord(schema, resultSet, mapNumerics, timeZone);
     offset = extractOffset(schema, record);
     // TODO: Key?
     final String topic;

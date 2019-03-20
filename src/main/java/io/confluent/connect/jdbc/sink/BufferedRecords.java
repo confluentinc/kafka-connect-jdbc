@@ -85,7 +85,8 @@ public class BufferedRecords {
           config.pkMode,
           schemaPair,
           fieldsMetadata,
-          config.insertMode
+          config.insertMode,
+          config.timeZone
       );
     }
 

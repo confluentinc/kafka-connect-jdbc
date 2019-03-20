@@ -209,7 +209,8 @@ public class BufferedRecords {
           return dbDialect.buildUpsertQueryStatement(
               tableId,
               asColumns(fieldsMetadata.keyFieldNames),
-              asColumns(fieldsMetadata.nonKeyFieldNames)
+              asColumns(fieldsMetadata.nonKeyFieldNames),
+              fieldsMetadata.allFields
           );
         } catch (UnsupportedOperationException e) {
           throw new ConnectException(String.format(

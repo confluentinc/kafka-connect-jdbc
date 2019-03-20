@@ -22,6 +22,7 @@ import java.nio.ByteBuffer;
 import java.sql.SQLException;
 import java.time.ZoneOffset;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.List;
 import java.util.TimeZone;
 import java.util.concurrent.ThreadLocalRandom;
@@ -191,7 +192,7 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
         "\"columnB\", \"columnC\", \"columnD\", \"id1\", \"id2\") values (incoming.\"columnA\"," +
         "incoming.\"columnB\",incoming.\"columnC\",incoming.\"columnD\",incoming.\"id1\"," +
         "incoming.\"id2\");",
-        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
+        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD, Collections.emptyMap())
     );
 
     quoteIdentfiiers = QuoteMethod.NEVER;
@@ -206,7 +207,7 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
         "columnB, columnC, columnD, id1, id2) values (incoming.columnA," +
         "incoming.columnB,incoming.columnC,incoming.columnD,incoming.id1," +
         "incoming.id2);",
-        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
+        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD, Collections.emptyMap())
     );
   }
 
@@ -264,7 +265,8 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
         dialect.buildUpsertQueryStatement(
             customer,
             columns(customer, "id"),
-            columns(customer, "name", "salary", "address")
+            columns(customer, "name", "salary", "address"),
+            Collections.emptyMap()
         )
     );
 
@@ -280,7 +282,8 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
         dialect.buildUpsertQueryStatement(
             customer,
             columns(customer, "id"),
-            columns(customer, "name", "salary", "address")
+            columns(customer, "name", "salary", "address"),
+            Collections.emptyMap()
         )
     );
   }
@@ -299,7 +302,8 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
         dialect.buildUpsertQueryStatement(
             book,
             columns(book, "author", "title"),
-            columns(book, "ISBN", "year", "pages")
+            columns(book, "ISBN", "year", "pages"),
+            Collections.emptyMap()
         )
     );
 
@@ -316,7 +320,8 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
         dialect.buildUpsertQueryStatement(
             book,
             columns(book, "author", "title"),
-            columns(book, "ISBN", "year", "pages")
+            columns(book, "ISBN", "year", "pages"),
+            Collections.emptyMap()
         )
     );
   }

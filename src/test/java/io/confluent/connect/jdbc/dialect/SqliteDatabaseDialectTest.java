@@ -28,6 +28,7 @@ import org.junit.Test;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.TimeZone;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -185,7 +186,7 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
   public void shouldBuildUpsertStatement() {
     String expected = "INSERT OR REPLACE INTO `myTable`(`id1`,`id2`,`columnA`,`columnB`," +
                       "`columnC`,`columnD`) VALUES(?,?,?,?,?,?)";
-    String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD);
+    String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD, Collections.emptyMap());
     assertEquals(expected, sql);
   }
 
@@ -236,7 +237,8 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
         dialect.buildUpsertQueryStatement(
             book,
             columns(book, "author", "title"),
-            columns(book, "ISBN", "year", "pages")
+            columns(book, "ISBN", "year", "pages"),
+            Collections.emptyMap()
         )
     );
 
@@ -247,7 +249,8 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
         dialect.buildUpsertQueryStatement(
             book,
             columns(book, "author", "title"),
-            columns(book, "ISBN", "year", "pages")
+            columns(book, "ISBN", "year", "pages"),
+            Collections.emptyMap()
         )
     );
   }

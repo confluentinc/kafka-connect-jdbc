@@ -24,6 +24,7 @@ import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.Collections;
 
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
@@ -168,7 +169,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         "\"id2\") DO UPDATE SET \"columnA\"=EXCLUDED" +
         ".\"columnA\",\"columnB\"=EXCLUDED.\"columnB\",\"columnC\"=EXCLUDED" +
         ".\"columnC\",\"columnD\"=EXCLUDED.\"columnD\"",
-        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
+        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD, Collections.emptyMap())
     );
 
     quoteIdentfiiers = QuoteMethod.NEVER;
@@ -180,7 +181,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         "id2) DO UPDATE SET columnA=EXCLUDED" +
         ".columnA,columnB=EXCLUDED.columnB,columnC=EXCLUDED" +
         ".columnC,columnD=EXCLUDED.columnD",
-        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
+        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD, Collections.emptyMap())
     );
   }
 
@@ -235,7 +236,8 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         dialect.buildUpsertQueryStatement(
             customer,
             columns(customer, "id"),
-            columns(customer, "name", "salary", "address")
+            columns(customer, "name", "salary", "address"),
+            Collections.emptyMap()
         )
     );
 
@@ -249,7 +251,8 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         dialect.buildUpsertQueryStatement(
             customer,
             columns(customer, "id"),
-            columns(customer, "name", "salary", "address")
+            columns(customer, "name", "salary", "address"),
+            Collections.emptyMap()
         )
     );
   }

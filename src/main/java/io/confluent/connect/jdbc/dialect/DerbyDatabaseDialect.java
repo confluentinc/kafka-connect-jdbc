@@ -22,6 +22,7 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 
 import java.util.Collection;
+import java.util.Map;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
@@ -113,7 +114,8 @@ public class DerbyDatabaseDialect extends GenericDatabaseDialect {
   public String buildUpsertQueryStatement(
       final TableId table,
       Collection<ColumnId> keyColumns,
-      Collection<ColumnId> nonKeyColumns
+      Collection<ColumnId> nonKeyColumns,
+      Map<String, SinkRecordField> allFields
   ) {
     // https://db.apache.org/derby/docs/10.11/ref/rrefsqljmerge.html
     final Transform<ColumnId> transform = (builder, col) -> {

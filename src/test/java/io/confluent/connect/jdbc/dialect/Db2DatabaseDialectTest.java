@@ -23,6 +23,7 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.List;
 
 import io.confluent.connect.jdbc.util.QuoteMethod;
@@ -258,7 +259,7 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
                       + "values(DAT.\"columnA\",DAT.\"columnB\",DAT.\"columnC\",DAT.\"columnD\","
                       + "DAT.\"id1\","
                       + "DAT.\"id2\")";
-    String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD);
+    String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD, Collections.emptyMap());
     assertEquals(expected, sql);
   }
 
@@ -282,7 +283,7 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
                       + "values(DAT.columnA,DAT.columnB,DAT.columnC,DAT.columnD,"
                       + "DAT.id1,"
                       + "DAT.id2)";
-    String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD);
+    String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD, Collections.emptyMap());
     assertEquals(expected, sql);
   }
 
@@ -298,9 +299,8 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
                       + ".\"actor_id\") values(DAT.\"first_name\",DAT.\"last_name\",DAT"
                       + ".\"score\",DAT.\"actor_id\")";
     String sql = dialect.buildUpsertQueryStatement(actor, columns(actor, "actor_id"),
-                                                   columns(actor, "first_name", "last_name",
-                                                           "score"
-                                                   )
+                                                   columns(actor, "first_name", "last_name", "score"),
+                                                   Collections.emptyMap()
     );
     assertEquals(expected, sql);
   }
@@ -312,7 +312,7 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
                       + ".\"actor_id\"=DAT.\"actor_id\" when not matched then insert(\"actor\""
                       + ".\"actor_id\") values(DAT.\"actor_id\")";
     String sql = dialect.buildUpsertQueryStatement(
-        actor, columns(actor, "actor_id"), columns(actor));
+        actor, columns(actor, "actor_id"), columns(actor), Collections.emptyMap());
     assertEquals(expected, sql);
 
     quoteIdentfiiers = QuoteMethod.NEVER;
@@ -322,7 +322,7 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
                + ".actor_id=DAT.actor_id when not matched then insert(actor"
                + ".actor_id) values(DAT.actor_id)";
     sql = dialect.buildUpsertQueryStatement(
-        actor, columns(actor, "actor_id"), columns(actor));
+        actor, columns(actor, "actor_id"), columns(actor), Collections.emptyMap());
     assertEquals(expected, sql);
   }
 

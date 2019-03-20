@@ -320,7 +320,7 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
 
   @Test(expected = UnsupportedOperationException.class)
   public void shouldBuildUpsertStatement() {
-    dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD);
+    dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD, Collections.emptyMap());
   }
 
 

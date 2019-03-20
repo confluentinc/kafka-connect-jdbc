@@ -24,6 +24,7 @@ import org.apache.kafka.connect.data.Timestamp;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
@@ -135,7 +136,8 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
   public String buildUpsertQueryStatement(
       TableId table,
       Collection<ColumnId> keyColumns,
-      Collection<ColumnId> nonKeyColumns
+      Collection<ColumnId> nonKeyColumns,
+      Map<String, SinkRecordField> allFields
   ) {
     // https://help.sap.com/hana_one/html/sql_replace_upsert.html
     ExpressionBuilder builder = expressionBuilder();

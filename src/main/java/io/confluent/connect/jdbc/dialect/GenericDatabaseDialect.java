@@ -219,15 +219,20 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       return connection.isValid(timeout);
     }
     // issue a test query ...
-    String query = checkConnectionQuery();
-    if (query != null) {
-      try (Statement statement = connection.createStatement()) {
-        if (statement.execute(query)) {
-          try (ResultSet rs = statement.getResultSet()) {
-            // do nothing with the result set
+    try {
+      String query = checkConnectionQuery();
+      if (query != null) {
+        try (Statement statement = connection.createStatement()) {
+          if (statement.execute(query)) {
+            try (ResultSet rs = statement.getResultSet()) {
+              // do nothing with the result set
+            }
           }
         }
       }
+    } catch (SQLException e) {
+      log.warn("Error running test query, {}", e);
+      return false;
     }
     return true;
   }

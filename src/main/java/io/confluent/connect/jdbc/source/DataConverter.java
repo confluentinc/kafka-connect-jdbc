@@ -35,7 +35,6 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.SQLXML;
 import java.sql.Types;
-import java.util.TimeZone;
 
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 
@@ -65,15 +64,14 @@ public class DataConverter {
     return builder.build();
   }
 
-  public static Struct convertRecord(Schema schema, ResultSet resultSet, NumericMapping mapNumerics,
-                                     TimeZone timeZone)
+  public static Struct convertRecord(Schema schema, ResultSet resultSet, NumericMapping mapNumerics)
       throws SQLException {
     ResultSetMetaData metadata = resultSet.getMetaData();
     Struct struct = new Struct(schema);
     for (int col = 1; col <= metadata.getColumnCount(); col++) {
       try {
         convertFieldValue(resultSet, col, metadata.getColumnType(col), struct,
-                          metadata.getColumnLabel(col), mapNumerics, timeZone);
+                          metadata.getColumnLabel(col), mapNumerics);
       } catch (IOException e) {
         log.warn("Ignoring record because processing failed:", e);
       } catch (SQLException e) {
@@ -358,8 +356,7 @@ public class DataConverter {
   }
 
   private static void convertFieldValue(ResultSet resultSet, int col, int colType,
-                                        Struct struct, String fieldName, NumericMapping mapNumerics,
-                                        TimeZone timeZone)
+                                        Struct struct, String fieldName, NumericMapping mapNumerics)
       throws SQLException, IOException {
     final Object colValue;
     switch (colType) {
@@ -512,19 +509,19 @@ public class DataConverter {
 
       // Date is day + moth + year
       case Types.DATE: {
-        colValue = resultSet.getDate(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
+        colValue = resultSet.getDate(col, DateTimeUtils.UTC_CALENDAR.get());
         break;
       }
 
       // Time is a time of day -- hour, minute, seconds, nanoseconds
       case Types.TIME: {
-        colValue = resultSet.getTime(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
+        colValue = resultSet.getTime(col, DateTimeUtils.UTC_CALENDAR.get());
         break;
       }
 
       // Timestamp is a date + time
       case Types.TIMESTAMP: {
-        colValue = resultSet.getTimestamp(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
+        colValue = resultSet.getTimestamp(col, DateTimeUtils.UTC_CALENDAR.get());
         break;
       }
 

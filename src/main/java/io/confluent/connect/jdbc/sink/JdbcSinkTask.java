@@ -47,8 +47,7 @@ public class JdbcSinkTask extends SinkTask {
   }
 
   void initWriter() {
-    final DbDialect dbDialect = DbDialect.fromConnectionString(config.connectionUrl)
-        .withTimeZone(config.timeZone);
+    final DbDialect dbDialect = DbDialect.fromConnectionString(config.connectionUrl);
     final DbStructure dbStructure = new DbStructure(dbDialect);
     log.info("Initializing writer using SQL dialect: {}", dbDialect.getClass().getSimpleName());
     writer = new JdbcDbWriter(config, dbDialect, dbStructure);

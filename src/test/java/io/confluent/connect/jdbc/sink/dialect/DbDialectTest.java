@@ -27,7 +27,6 @@ import org.junit.Test;
 
 import java.math.BigDecimal;
 import java.util.Map;
-import java.util.TimeZone;
 
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 
@@ -65,7 +64,6 @@ public class DbDialectTest {
 
   private void verifyFormatColumnValue(String expected, Schema schema, Object value) {
     final StringBuilder builder = new StringBuilder();
-    DUMMY_DIALECT.withTimeZone(TimeZone.getTimeZone("UTC"));
     DUMMY_DIALECT.formatColumnValue(builder, schema.name(), schema.parameters(), schema.type(), value);
     assertEquals(expected, builder.toString());
   }

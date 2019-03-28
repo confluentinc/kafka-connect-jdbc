@@ -31,7 +31,6 @@ import java.sql.ResultSetMetaData;
 import java.sql.Types;
 import java.util.Arrays;
 import java.util.List;
-import java.util.TimeZone;
 
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.NumericMapping;
 import static org.junit.Assert.assertEquals;
@@ -179,8 +178,7 @@ public class DataConverterTest {
     when(metadata.getScale(1)).thenReturn(scale);
 
     Schema schema = DataConverter.convertSchema("foo", metadata, numMapping);
-    Struct record = DataConverter.convertRecord(schema, resultSet, numMapping,
-        TimeZone.getTimeZone("UTC"));
+    Struct record = DataConverter.convertRecord(schema, resultSet, numMapping);
 
     Object value = record.get("PrimitiveField1");
     assertEquals(expectedValue, value);

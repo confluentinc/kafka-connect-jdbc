@@ -16,8 +16,6 @@
 
 package io.confluent.connect.jdbc.sink;
 
-import java.util.Calendar;
-import java.util.TimeZone;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -35,6 +33,7 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.text.ParseException;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
@@ -100,8 +99,7 @@ public class PreparedStatementBinderTest {
         pkMode,
         schemaPair,
         fieldsMetadata,
-        JdbcSinkConfig.InsertMode.INSERT,
-        TimeZone.getTimeZone("UTC")
+        JdbcSinkConfig.InsertMode.INSERT
     );
 
     binder.bindRecord(new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));
@@ -120,19 +118,9 @@ public class PreparedStatementBinderTest {
     verify(statement, times(1)).setDouble(index++, valueStruct.getFloat64("double"));
     verify(statement, times(1)).setBytes(index++, valueStruct.getBytes("bytes"));
     verify(statement, times(1)).setBigDecimal(index++, (BigDecimal) valueStruct.get("decimal"));
-    Calendar utcCalendar = DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone("UTC"));
-    verify(
-        statement,
-        times(1)
-    ).setDate(index++, new java.sql.Date(((java.util.Date) valueStruct.get("date")).getTime()), utcCalendar);
-    verify(
-        statement,
-        times(1)
-    ).setTime(index++, new java.sql.Time(((java.util.Date) valueStruct.get("time")).getTime()), utcCalendar);
-    verify(
-        statement,
-        times(1)
-    ).setTimestamp(index++, new java.sql.Timestamp(((java.util.Date) valueStruct.get("timestamp")).getTime()), utcCalendar);
+    verify(statement, times(1)).setDate(index++, new java.sql.Date(((java.util.Date) valueStruct.get("date")).getTime()), DateTimeUtils.UTC_CALENDAR.get());
+    verify(statement, times(1)).setTime(index++, new java.sql.Time(((java.util.Date) valueStruct.get("time")).getTime()), DateTimeUtils.UTC_CALENDAR.get());
+    verify(statement, times(1)).setTimestamp(index++, new java.sql.Timestamp(((java.util.Date) valueStruct.get("timestamp")).getTime()), DateTimeUtils.UTC_CALENDAR.get());
     // last field is optional and is null-valued in struct
     verify(statement, times(1)).setObject(index++, null);
   }
@@ -162,8 +150,7 @@ public class PreparedStatementBinderTest {
                 statement,
                 pkMode,
                 schemaPair,
-                fieldsMetadata, JdbcSinkConfig.InsertMode.UPSERT,
-                TimeZone.getTimeZone("UTC")
+                fieldsMetadata, JdbcSinkConfig.InsertMode.UPSERT
         );
 
         binder.bindRecord(new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));
@@ -201,8 +188,7 @@ public class PreparedStatementBinderTest {
                 statement,
                 pkMode,
                 schemaPair,
-                fieldsMetadata, JdbcSinkConfig.InsertMode.UPDATE,
-                TimeZone.getTimeZone("UTC")
+                fieldsMetadata, JdbcSinkConfig.InsertMode.UPDATE
         );
 
         binder.bindRecord(new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));
@@ -232,11 +218,9 @@ public class PreparedStatementBinderTest {
     verifyBindField(++index, Schema.BYTES_SCHEMA, ByteBuffer.wrap(new byte[]{42})).setBytes(index, new byte[]{42});
     verifyBindField(++index, Schema.STRING_SCHEMA, "yep").setString(index, "yep");
     verifyBindField(++index, Decimal.schema(0), new BigDecimal("1.5").setScale(0, BigDecimal.ROUND_HALF_EVEN)).setBigDecimal(index, new BigDecimal(2));
-    verifyBindField(++index, Date.SCHEMA, new java.util.Date(0)).setDate(index, new java.sql.Date(0), DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone("UTC")));
-    verifyBindField(++index, Time.SCHEMA, new java.util.Date(1000)).setTime(index, new java.sql.Time(1000), DateTimeUtils.getTimeZoneCalendar(
-        TimeZone.getTimeZone("UTC")));
-    verifyBindField(++index, Timestamp.SCHEMA, new java.util.Date(100)).setTimestamp(index, new java.sql.Timestamp(100), DateTimeUtils.getTimeZoneCalendar(
-        TimeZone.getTimeZone("UTC")));
+    verifyBindField(++index, Date.SCHEMA, new java.util.Date(0)).setDate(index, new java.sql.Date(0), DateTimeUtils.UTC_CALENDAR.get());
+    verifyBindField(++index, Time.SCHEMA, new java.util.Date(1000)).setTime(index, new java.sql.Time(1000), DateTimeUtils.UTC_CALENDAR.get());
+    verifyBindField(++index, Timestamp.SCHEMA, new java.util.Date(100)).setTimestamp(index, new java.sql.Timestamp(100), DateTimeUtils.UTC_CALENDAR.get());
   }
 
   @Test
@@ -265,34 +249,24 @@ public class PreparedStatementBinderTest {
   @Test(expected = ConnectException.class)
   public void bindFieldStructUnsupported() throws SQLException {
     Schema structSchema = SchemaBuilder.struct().field("test", Schema.BOOLEAN_SCHEMA).build();
-    PreparedStatementBinder binder =
-        new PreparedStatementBinder(null, null, null, null, null, TimeZone.getTimeZone("UTC"));
-    binder.bindField(mock(PreparedStatement.class), 1, structSchema, new Struct(structSchema));
+    PreparedStatementBinder.bindField(mock(PreparedStatement.class), 1, structSchema, new Struct(structSchema));
   }
 
   @Test(expected = ConnectException.class)
   public void bindFieldArrayUnsupported() throws SQLException {
     Schema arraySchema = SchemaBuilder.array(Schema.INT8_SCHEMA);
-    PreparedStatementBinder binder = new PreparedStatementBinder(
-        null, null, null, null, null,
-        TimeZone.getTimeZone("UTC")
-    );
-    binder.bindField(mock(PreparedStatement.class), 1, arraySchema, Collections.emptyList());
+    PreparedStatementBinder.bindField(mock(PreparedStatement.class), 1, arraySchema, Collections.emptyList());
   }
 
   @Test(expected = ConnectException.class)
   public void bindFieldMapUnsupported() throws SQLException {
     Schema mapSchema = SchemaBuilder.map(Schema.INT8_SCHEMA, Schema.INT8_SCHEMA);
-    PreparedStatementBinder binder =
-        new PreparedStatementBinder(null, null, null, null, null, TimeZone.getTimeZone("UTC"));
-    binder.bindField(mock(PreparedStatement.class), 1, mapSchema, Collections.emptyMap());
+    PreparedStatementBinder.bindField(mock(PreparedStatement.class), 1, mapSchema, Collections.emptyMap());
   }
 
   private PreparedStatement verifyBindField(int index, Schema schema, Object value) throws SQLException {
     PreparedStatement statement = mock(PreparedStatement.class);
-    PreparedStatementBinder binder =
-        new PreparedStatementBinder(null, null, null, null, null, TimeZone.getTimeZone("UTC"));
-    binder.bindField(statement, index, schema, value);
+    PreparedStatementBinder.bindField(statement, index, schema, value);
     return verify(statement, times(1));
   }
 

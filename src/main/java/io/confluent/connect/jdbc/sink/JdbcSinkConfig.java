@@ -27,11 +27,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TimeZone;
 
 import io.confluent.connect.jdbc.util.StringUtils;
-import io.confluent.connect.jdbc.util.TimeZoneValidator;
-
 import org.apache.kafka.common.config.types.Password;
 
 public class JdbcSinkConfig extends AbstractConfig {
@@ -177,13 +174,6 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String DDL_GROUP = "DDL Support";
   private static final String RETRIES_GROUP = "Retries";
 
-  public static final String DB_TIMEZONE_CONFIG = "db.timezone";
-  public static final String DB_TIMEZONE_DEFAULT = "UTC";
-  private static final String DB_TIMEZONE_CONFIG_DOC =
-      "Name of the JDBC timezone that should be used in the connector when "
-          + "inserting time-based values. Defaults to UTC.";
-  private static final String DB_TIMEZONE_CONFIG_DISPLAY = "DB Time Zone";
-
   public static final ConfigDef CONFIG_DEF = new ConfigDef()
       // Connection
       .define(CONNECTION_URL, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE,
@@ -231,20 +221,7 @@ public class JdbcSinkConfig extends AbstractConfig {
       .define(RETRY_BACKOFF_MS, ConfigDef.Type.INT, RETRY_BACKOFF_MS_DEFAULT,
               NON_NEGATIVE_INT_VALIDATOR,
               ConfigDef.Importance.MEDIUM, RETRY_BACKOFF_MS_DOC,
-              RETRIES_GROUP, 2, ConfigDef.Width.SHORT, RETRY_BACKOFF_MS_DISPLAY)
-       .define(
-          DB_TIMEZONE_CONFIG,
-          ConfigDef.Type.STRING,
-          DB_TIMEZONE_DEFAULT,
-          TimeZoneValidator.INSTANCE,
-          ConfigDef.Importance.MEDIUM,
-          DB_TIMEZONE_CONFIG_DOC,
-          DATAMAPPING_GROUP,
-          5,
-          ConfigDef.Width.MEDIUM,
-          DB_TIMEZONE_CONFIG_DISPLAY
-        );
-
+              RETRIES_GROUP, 2, ConfigDef.Width.SHORT, RETRY_BACKOFF_MS_DISPLAY);
 
   public final String connectionUrl;
   public final String connectionUser;
@@ -259,8 +236,6 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final PrimaryKeyMode pkMode;
   public final List<String> pkFields;
   public final Set<String> fieldsWhitelist;
-
-  public final TimeZone timeZone;
 
   public JdbcSinkConfig(Map<?, ?> props) {
     super(CONFIG_DEF, props);
@@ -277,8 +252,6 @@ public class JdbcSinkConfig extends AbstractConfig {
     pkMode = PrimaryKeyMode.valueOf(getString(PK_MODE).toUpperCase());
     pkFields = getList(PK_FIELDS);
     fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
-    String dbTimeZone = getString(DB_TIMEZONE_CONFIG);
-    timeZone = TimeZone.getTimeZone(dbTimeZone);
   }
 
   private String getPasswordValue(String key) {

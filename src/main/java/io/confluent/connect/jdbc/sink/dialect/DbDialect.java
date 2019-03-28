@@ -29,7 +29,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.TimeZone;
 
 import javax.xml.bind.DatatypeConverter;
 
@@ -44,26 +43,10 @@ public abstract class DbDialect {
 
   private final String escapeStart;
   private final String escapeEnd;
-  private TimeZone timeZone;
 
   DbDialect(String escapeStart, String escapeEnd) {
     this.escapeStart = escapeStart;
     this.escapeEnd = escapeEnd;
-  }
-
-  /**
-   * Must be called on a DbDialect object before doing anything else with it. Written this
-   * way to be minimally invasive on the public interfaces.
-   * Default not provided since an error is better than silently contradicting user
-   * configuration
-   * Added to support backport of "db.timezone" config.
-   *
-   * @param timeZone Timezone the user has configured for timestamps in their config file
-   * @return DbDialect instance
-   */
-  public DbDialect withTimeZone(TimeZone timeZone) {
-    this.timeZone = timeZone;
-    return this;
   }
 
   public final String getInsert(
@@ -197,15 +180,15 @@ public abstract class DbDialect {
           return;
         case Date.LOGICAL_NAME:
           builder.append("'")
-              .append(DateTimeUtils.formatDate((java.util.Date) value, timeZone)).append("'");
+              .append(DateTimeUtils.formatUtcDate((java.util.Date) value)).append("'");
           return;
         case Time.LOGICAL_NAME:
           builder.append("'")
-              .append(DateTimeUtils.formatTime((java.util.Date) value, timeZone)).append("'");
+              .append(DateTimeUtils.formatUtcTime((java.util.Date) value)).append("'");
           return;
         case Timestamp.LOGICAL_NAME:
           builder.append("'")
-              .append(DateTimeUtils.formatTimestamp((java.util.Date) value, timeZone)).append("'");
+              .append(DateTimeUtils.formatUtcTimestamp((java.util.Date) value)).append("'");
           return;
         default:
           // fall through to regular types

@@ -16,8 +16,9 @@
 
 package io.confluent.connect.jdbc.util;
 
-import java.time.DateTimeException;
-import java.time.ZoneId;
+import java.util.Arrays;
+import java.util.TimeZone;
+
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
 
@@ -28,9 +29,7 @@ public class TimeZoneValidator implements ConfigDef.Validator {
   @Override
   public void ensureValid(String name, Object value) {
     if (value != null) {
-      try {
-        ZoneId.of(value.toString());
-      } catch (DateTimeException e) {
+      if (!Arrays.asList(TimeZone.getAvailableIDs()).contains(value.toString())) {
         throw new ConfigException(name, value, "Invalid time zone identifier");
       }
     }

@@ -26,8 +26,6 @@ public class TimeZoneValidatorTest {
         "Asia/Tokyo",
         "America/Los_Angeles",
         "UTC",
-        "GMT+01:00",
-        "UTC"
     };
 
     for (String timeZone: validTimeZones) {

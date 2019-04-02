@@ -213,7 +213,7 @@ public class TimestampIncrementingCriteria {
       Struct record
   ) {
     for (ColumnId timestampColumn : timestampColumns) {
-      Timestamp ts = (Timestamp) record.get(timestampColumn.name());
+      Timestamp ts = Timestamp.valueOf(record.get(timestampColumn.name()).toString());
       if (ts != null) {
         return ts;
       }

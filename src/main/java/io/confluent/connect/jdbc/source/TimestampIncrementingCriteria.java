@@ -217,8 +217,7 @@ public class TimestampIncrementingCriteria {
       Object timestampObject = record.get(timestampColumn.name());
       if (timestampObject instanceof  String) {
         ts = Timestamp.valueOf(record.get(timestampColumn.name()).toString());
-      }
-      else {
+      } else {
         ts = (Timestamp) record.get(timestampColumn.name());
       }
       if (ts != null) {

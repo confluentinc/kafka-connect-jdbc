@@ -29,6 +29,7 @@ import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 
 public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> {
 
@@ -350,5 +351,15 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
         "jdbc:db2://sysmvs1.stl.ibm.com:5021/STLEC1:password=****;user=dbadm;"
         + "traceLevel=all"
     );
+  }
+
+  @Test
+  public void testCurrentTimestampDatabaseQuery() {
+    assertFalse(dialect.currentTimestampDatabaseQuery().contains(";"));
+  }
+
+  @Test
+  public void testCheckConnectionQuery() {
+    assertFalse(dialect.checkConnectionQuery().contains(";"));
   }
 }

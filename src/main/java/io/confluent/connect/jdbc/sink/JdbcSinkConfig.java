@@ -26,12 +26,14 @@ import java.util.Set;
 import java.util.TimeZone;
 
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
+
 import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
+import io.confluent.connect.jdbc.util.DeleteEnabledRecommender;
 import io.confluent.connect.jdbc.util.EnumRecommender;
+import io.confluent.connect.jdbc.util.PrimaryKeyModeRecommender;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.StringUtils;
 import io.confluent.connect.jdbc.util.TimeZoneValidator;
-
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
@@ -297,7 +299,8 @@ public class JdbcSinkConfig extends AbstractConfig {
             DELETE_ENABLED_DOC, WRITES_GROUP,
             3,
             ConfigDef.Width.SHORT,
-            DELETE_ENABLED_DISPLAY
+            DELETE_ENABLED_DISPLAY,
+            DeleteEnabledRecommender.INSTANCE
         )
         // Data Mapping
         .define(
@@ -321,7 +324,8 @@ public class JdbcSinkConfig extends AbstractConfig {
             DATAMAPPING_GROUP,
             2,
             ConfigDef.Width.MEDIUM,
-            PK_MODE_DISPLAY
+            PK_MODE_DISPLAY,
+            PrimaryKeyModeRecommender.INSTANCE
         )
         .define(
             PK_FIELDS,
@@ -449,6 +453,11 @@ public class JdbcSinkConfig extends AbstractConfig {
     fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
     String dbTimeZone = getString(DB_TIMEZONE_CONFIG);
     timeZone = TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
+
+    if (deleteEnabled && pkMode != PrimaryKeyMode.RECORD_KEY) {
+      throw new ConfigException(
+          "Primary key mode must be 'record_key' when delete support is enabled");
+    }
   }
 
   private String getPasswordValue(String key) {

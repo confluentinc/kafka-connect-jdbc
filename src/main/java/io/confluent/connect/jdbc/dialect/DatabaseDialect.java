@@ -368,12 +368,14 @@ public interface DatabaseDialect extends ConnectionProvider {
    * @param keyColumns    the identifiers of the columns in the primary/unique key; may not be null
    *                      but may be empty
    * @return the delete statement; may not be null
-   * @throws UnsupportedOperationException if the dialect does not support upserts
+   * @throws UnsupportedOperationException if the dialect does not support deletes
    */
-  String buildDeleteStatement(
+  default String buildDeleteStatement(
       TableId table,
       Collection<ColumnId> keyColumns
-  );
+  ) {
+    throw new UnsupportedOperationException();
+  }
 
   /**
    * Build the DROP TABLE statement expression for the given table.

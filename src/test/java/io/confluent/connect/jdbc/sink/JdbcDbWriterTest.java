@@ -43,9 +43,7 @@ import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static junit.framework.TestCase.assertTrue;
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.*;
 
 public class JdbcDbWriterTest {
 
@@ -240,6 +238,51 @@ public class JdbcDbWriterTest {
 
     SinkRecord deleteRecord = new SinkRecord(topic, partition, keySchema, keyStruct, null, null, offset);
     writer.write(Collections.nCopies(2, deleteRecord));
+
+    assertEquals(
+        1,
+        sqliteHelper.select("select count(*) from books", new SqliteHelper.ResultSetReadCallback() {
+          @Override
+          public void read(ResultSet rs) throws SQLException {
+            assertEquals(0, rs.getInt(1));
+          }
+        })
+    );
+  }
+
+  @Test
+  public void insertDeleteSameRecord() throws SQLException {
+    String topic = "books";
+    int partition = 7;
+    long offset = 42;
+
+    Map<String, String> props = new HashMap<>();
+    props.put("connection.url", sqliteHelper.sqliteUri());
+    props.put("auto.create", "true");
+    props.put("delete.enabled", "true");
+    props.put("pk.mode", "record_key");
+    props.put("insert.mode", "upsert");
+
+    writer = newWriter(props);
+
+    Schema keySchema = SchemaBuilder.struct()
+        .field("id", SchemaBuilder.INT64_SCHEMA);
+
+    Struct keyStruct = new Struct(keySchema).put("id", 0L);
+
+    Schema valueSchema = SchemaBuilder.struct()
+        .field("author", Schema.STRING_SCHEMA)
+        .field("title", Schema.STRING_SCHEMA)
+        .build();
+
+    Struct valueStruct = new Struct(valueSchema)
+        .put("author", "Tom Robbins")
+        .put("title", "Villa Incognito");
+
+    SinkRecord record = new SinkRecord(topic, partition, keySchema, keyStruct, valueSchema, valueStruct, offset);
+    SinkRecord deleteRecord = new SinkRecord(topic, partition, keySchema, keyStruct, null, null, offset);
+    writer.write(Collections.singletonList(record));
+    writer.write(Collections.singletonList(deleteRecord));
 
     assertEquals(
         1,

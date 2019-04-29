@@ -134,8 +134,7 @@ public class BufferedRecords {
           fieldsMetadata
       );
       close();
-      // should this be using dbDialect.createPreparedStatement ?
-      updatePreparedStatement = connection.prepareStatement(insertSql);
+      updatePreparedStatement = dbDialect.createPreparedStatement(connection, insertSql);
       updateStatementBinder = dbDialect.statementBinder(
           updatePreparedStatement,
           config.pkMode,
@@ -144,7 +143,7 @@ public class BufferedRecords {
           config.insertMode
       );
       if (config.deleteEnabled && nonNull(deleteSql)) {
-        deletePreparedStatement = connection.prepareStatement(deleteSql);
+        deletePreparedStatement = dbDialect.createPreparedStatement(connection, deleteSql);
         deleteStatementBinder = dbDialect.statementBinder(
             deletePreparedStatement,
             config.pkMode,
@@ -180,13 +179,15 @@ public class BufferedRecords {
 
     final long expectedCount = updateRecordCount();
     log.trace("{} records:{} resulting in totalUpdateCount:{} totalDeleteCount:{}",
-        config.insertMode, records.size(), totalUpdateCount, totalDeleteCount);
+        config.insertMode, records.size(), totalUpdateCount, totalDeleteCount
+    );
     if (totalUpdateCount.filter(total -> total != expectedCount).isPresent()
         && config.insertMode == INSERT) {
       throw new ConnectException(String.format(
           "Update count (%d) did not sum up to total number of records inserted (%d)",
           totalUpdateCount.get(),
-          expectedCount));
+          expectedCount
+      ));
     }
     if (!totalUpdateCount.isPresent()) {
       log.info(
@@ -211,7 +212,7 @@ public class BufferedRecords {
       if (updateCount != Statement.SUCCESS_NO_INFO) {
         count = count.isPresent()
             ? count.map(total -> total + updateCount)
-            : Optional.of((long)updateCount);
+            : Optional.of((long) updateCount);
       }
     }
     return count;
@@ -265,7 +266,7 @@ public class BufferedRecords {
         if (fieldsMetadata.keyFieldNames.isEmpty()) {
           throw new ConnectException(String.format(
               "Write to table '%s' in UPSERT mode requires key field names to be known, check the"
-              + " primary key configuration",
+                  + " primary key configuration",
               tableId
           ));
         }
@@ -301,11 +302,20 @@ public class BufferedRecords {
           if (fieldsMetadata.keyFieldNames.isEmpty()) {
             throw new ConnectException("Require primary keys to support delete");
           }
-          sql = dbDialect.buildDeleteStatement(
-              tableId,
-              asColumns(fieldsMetadata.keyFieldNames)
-          );
+          try {
+            sql = dbDialect.buildDeleteStatement(
+                tableId,
+                asColumns(fieldsMetadata.keyFieldNames)
+            );
+          } catch (UnsupportedOperationException e) {
+            throw new ConnectException(String.format(
+                "Deletes to table '%s' are not supported with the %s dialect.",
+                tableId,
+                dbDialect.name()
+            ));
+          }
           break;
+
         default:
           throw new ConnectException("Deletes are only supported for pk.mode record_key");
       }
@@ -315,7 +325,7 @@ public class BufferedRecords {
 
   private Collection<ColumnId> asColumns(Collection<String> names) {
     return names.stream()
-                .map(name -> new ColumnId(tableId, name))
-                .collect(Collectors.toList());
+        .map(name -> new ColumnId(tableId, name))
+        .collect(Collectors.toList());
   }
 }

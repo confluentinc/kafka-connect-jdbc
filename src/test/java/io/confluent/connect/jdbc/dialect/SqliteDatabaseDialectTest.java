@@ -131,7 +131,7 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
     assertEquals(
         "CREATE TABLE myTable (\n"
@@ -164,7 +164,7 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
     assertStatements(
         new String[]{
@@ -209,7 +209,7 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
         System.lineSeparator() + "`pk2` INTEGER NOT NULL," + System.lineSeparator() +
         "`col1` INTEGER NOT NULL," + System.lineSeparator() + "PRIMARY KEY(`pk1`,`pk2`))");
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
     verifyCreateThreeColTwoPk(
         "CREATE TABLE myTable (" + System.lineSeparator() + "pk1 INTEGER NOT NULL," +
@@ -240,7 +240,7 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
         )
     );
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
     assertEquals(
         "INSERT OR REPLACE INTO Book(author,title,ISBN,year,pages) VALUES(?,?,?,?,?)",

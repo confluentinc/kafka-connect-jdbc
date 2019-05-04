@@ -78,7 +78,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     MARCH_15_2001_MIDNIGHT.setTimeZone(TimeZone.getTimeZone("UTC"));
   }
 
-  protected QuoteMethod quoteIdentfiiers;
+  protected QuoteMethod quoteIdentifiers;
   protected TableId tableId;
   protected ColumnId columnPK1;
   protected ColumnId columnPK2;
@@ -158,8 +158,8 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     connProps.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, "test-");
     connProps.putAll(propertiesFromPairs(propertyPairs));
     connProps.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, url);
-    if (quoteIdentfiiers != null) {
-      connProps.put("quote.sql.identifiers", quoteIdentfiiers.toString());
+    if (quoteIdentifiers != null) {
+      connProps.put("quote.sql.identifiers", quoteIdentifiers.toString());
     }
     return new JdbcSourceConnectorConfig(connProps);
   }

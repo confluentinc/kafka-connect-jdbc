@@ -104,7 +104,7 @@ public class DerbyDatabaseDialectTest extends BaseDialectTest<DerbyDatabaseDiale
 
   @Test
   public void shouldBuildCreateQueryStatementWithNoIdentifierQuoting() {
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     String expected =
@@ -132,7 +132,7 @@ public class DerbyDatabaseDialectTest extends BaseDialectTest<DerbyDatabaseDiale
 
   @Test
   public void shouldBuildAlterTableStatementWithNoIdentifierQuoting() {
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     List<String> statements = dialect.buildAlterTable(tableId, sinkRecordFields);
@@ -258,7 +258,7 @@ public class DerbyDatabaseDialectTest extends BaseDialectTest<DerbyDatabaseDiale
 
   @Test
   public void upsertOnlyKeyColsWithNoIdentifiernQuoting() {
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     TableId actor = tableId("actor");

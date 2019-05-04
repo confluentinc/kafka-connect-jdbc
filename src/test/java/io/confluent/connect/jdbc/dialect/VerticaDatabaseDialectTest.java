@@ -105,7 +105,7 @@ public class VerticaDatabaseDialectTest extends BaseDialectTest<VerticaDatabaseD
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
     assertEquals(
         "CREATE TABLE myTable (\n"
@@ -138,7 +138,7 @@ public class VerticaDatabaseDialectTest extends BaseDialectTest<VerticaDatabaseD
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
     assertStatements(
         new String[]{
@@ -181,7 +181,7 @@ public class VerticaDatabaseDialectTest extends BaseDialectTest<VerticaDatabaseD
         System.lineSeparator() + "\"pk2\" INT NOT NULL," + System.lineSeparator() +
         "\"col1\" INT NOT NULL," + System.lineSeparator() + "PRIMARY KEY(\"pk1\",\"pk2\"))");
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
     verifyCreateThreeColTwoPk(
         "CREATE TABLE myTable (" + System.lineSeparator() + "pk1 INT NOT NULL," +

@@ -118,7 +118,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     assertStatements(
@@ -175,7 +175,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
         "\"col1\" NUMBER(10,0) NOT NULL," + System.lineSeparator() +
         "PRIMARY KEY(\"pk1\",\"pk2\"))");
 
-    quoteIdentfiiers = QuoteMethod.NEVER;
+    quoteIdentifiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
     verifyCreateThreeColTwoPk(

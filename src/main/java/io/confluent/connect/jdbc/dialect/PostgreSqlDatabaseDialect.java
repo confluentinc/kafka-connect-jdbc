@@ -250,5 +250,22 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
            .of(nonKeyColumns);
     return builder.toString();
   }
-
+  //Add VIEW in table search. this will allow to insert in view and from there in postgres with triggers we can push it any where we want
+  @Override
+  public boolean tableExists(
+          Connection connection,
+          TableId tableId
+  ) throws SQLException {
+    log.info("Checking {} dialect for existence of table {}", this, tableId);
+    try (ResultSet rs = connection.getMetaData().getTables(
+            tableId.catalogName(),
+            tableId.schemaName(),
+            tableId.tableName(),
+            new String[]{"TABLE","VIEW"}
+    )) {
+      final boolean exists = rs.next();
+      log.info("Using {} dialect table {} {}", this, tableId, exists ? "present" : "absent");
+      return exists;
+    }
+  }
 }

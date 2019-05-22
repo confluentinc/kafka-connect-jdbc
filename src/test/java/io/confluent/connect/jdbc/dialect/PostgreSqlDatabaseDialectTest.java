@@ -239,6 +239,16 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         )
     );
 
+    assertEquals(
+            "INSERT INTO \"Customer\" (\"id\",\"name\",\"salary\",\"address\") " +
+                    "VALUES (?,?,?,?) ON CONFLICT (\"id\",\"name\",\"salary\",\"address\") DO NOTHING",
+            dialect.buildUpsertQueryStatement(
+                    customer,
+                    columns(customer, "id", "name", "salary", "address"),
+                    columns(customer)
+            )
+    );
+
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
 
@@ -251,6 +261,16 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
             columns(customer, "id"),
             columns(customer, "name", "salary", "address")
         )
+    );
+
+    assertEquals(
+            "INSERT INTO Customer (id,name,salary,address) " +
+                    "VALUES (?,?,?,?) ON CONFLICT (id,name,salary,address) DO NOTHING",
+            dialect.buildUpsertQueryStatement(
+                    customer,
+                    columns(customer, "id", "name", "salary", "address"),
+                    columns(customer)
+            )
     );
   }
 

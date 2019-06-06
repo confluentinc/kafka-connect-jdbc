@@ -139,7 +139,12 @@ public class TableMonitorThread extends Thread {
     }
 
     if (!filteredTables.equals(this.tables)) {
-      log.debug("After filtering we got tables: " + Arrays.toString(filteredTables.toArray()));
+      if (filteredTables.isEmpty()) {
+        log.debug("Based on the supplied filtering rules, there are no matching tables to read from: ");
+      } else {
+        log.debug("Based on the supplied filtering rules, the tables available to read from include: "
+                + Arrays.toString(filteredTables.toArray()));
+      }
       List<String> previousTables = this.tables;
       this.tables = filteredTables;
       notifyAll();

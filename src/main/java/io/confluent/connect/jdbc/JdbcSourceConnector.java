@@ -117,15 +117,14 @@ public class JdbcSourceConnector extends SourceConnector {
     String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
     List<Map<String, String>> taskConfigs;
     if (!query.isEmpty()) {
-      taskConfigs = new ArrayList<>(1);
       Map<String, String> taskProps = new HashMap<>(configProperties);
       taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
-      taskConfigs.add(taskProps);
+      taskConfigs = Collections.singletonList(taskProps);
     } else {
       List<String> currentTables = tableMonitorThread.tables();
       if (currentTables.isEmpty()) {
-        taskConfigs = new ArrayList<>();
-        log.warn("No tasks are running because no tables were found");
+        taskConfigs = Collections.emptyList();
+        log.warn("No tasks will be run because no tables were found");
       } else {
         int numGroups = Math.min(currentTables.size(), maxTasks);
         List<List<String>> tablesGrouped = ConnectorUtils.groupPartitions(currentTables, numGroups);

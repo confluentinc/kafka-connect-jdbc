@@ -112,7 +112,7 @@ public class TableMonitorThread extends Thread {
     final List<String> tables;
     try {
       tables = JdbcUtils.getTables(cachedConnectionProvider.getValidConnection(), schemaPattern, tableTypes);
-      log.debug("Got the following tables: " + Arrays.toString(tables.toArray()));
+      log.debug("Got the following tables: {}", Arrays.toString(tables.toArray()));
     } catch (SQLException e) {
       log.error("Error while trying to get updated table list, ignoring and waiting for next table poll interval", e);
       cachedConnectionProvider.closeQuietly();
@@ -140,10 +140,9 @@ public class TableMonitorThread extends Thread {
 
     if (!filteredTables.equals(this.tables)) {
       if (filteredTables.isEmpty()) {
-        log.debug("Based on the supplied filtering rules, there are no matching tables to read from: ");
+        log.debug("Based on the supplied filtering rules, there are no matching tables to read from");
       } else {
-        log.debug("Based on the supplied filtering rules, the tables available to read from include: "
-                + Arrays.toString(filteredTables.toArray()));
+        log.debug("Based on the supplied filtering rules, the tables available to read from include: {}",  Arrays.toString(filteredTables.toArray()));
       }
       List<String> previousTables = this.tables;
       this.tables = filteredTables;

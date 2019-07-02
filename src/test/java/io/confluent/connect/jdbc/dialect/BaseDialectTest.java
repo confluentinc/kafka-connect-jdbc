@@ -294,6 +294,12 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     )));
   }
 
+  protected void verifyCreateOneColOnePkAsString(String expected) {
+    assertEquals(expected, dialect.buildCreateTableStatement(tableId, Arrays.asList(
+            new SinkRecordField(Schema.STRING_SCHEMA, "pk1", true)
+    )));
+  }
+
   protected void verifyCreateThreeColTwoPk(String expected) {
     assertEquals(expected, dialect.buildCreateTableStatement(tableId, Arrays.asList(
         new SinkRecordField(Schema.INT32_SCHEMA, "pk1", true),

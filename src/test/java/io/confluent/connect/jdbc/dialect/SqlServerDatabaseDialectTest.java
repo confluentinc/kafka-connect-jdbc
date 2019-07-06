@@ -203,6 +203,13 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
   }
 
   @Test
+  public void createOneColOnePkInString() {
+    verifyCreateOneColOnePkAsString(
+        "CREATE TABLE [myTable] (" + System.lineSeparator() + "[pk1] varchar(900) NOT NULL," +
+          System.lineSeparator() + "PRIMARY KEY([pk1]))");
+  }
+
+  @Test
   public void createThreeColTwoPk() {
     verifyCreateThreeColTwoPk(
         "CREATE TABLE [myTable] (" + System.lineSeparator() + "[pk1] int NOT NULL," +

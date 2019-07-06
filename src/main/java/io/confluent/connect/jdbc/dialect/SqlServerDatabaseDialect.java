@@ -104,7 +104,12 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "bit";
       case STRING:
-        return "varchar(max)";
+        if (field.isPrimaryKey()) {
+          // Should be no more than 900 which is the MSSQL constraint
+          return "varchar(900)";
+        } else {
+          return "varchar(max)";
+        }
       case BYTES:
         return "varbinary(max)";
       default:

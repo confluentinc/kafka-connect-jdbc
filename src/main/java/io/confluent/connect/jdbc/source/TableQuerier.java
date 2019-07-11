@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.util.TopicNameProvider;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,6 +46,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected final String query;
   protected final String topicPrefix;
   protected final TableId tableId;
+  protected final TopicNameProvider topicNameProvider;
 
   // Mutable state
 
@@ -58,13 +60,15 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
       DatabaseDialect dialect,
       QueryMode mode,
       String nameOrQuery,
-      String topicPrefix
+      String topicPrefix,
+      TopicNameProvider topicNameProvider
   ) {
     this.dialect = dialect;
     this.mode = mode;
     this.tableId = mode.equals(QueryMode.TABLE) ? dialect.parseTableIdentifier(nameOrQuery) : null;
     this.query = mode.equals(QueryMode.QUERY) ? nameOrQuery : null;
     this.topicPrefix = topicPrefix;
+    this.topicNameProvider = topicNameProvider;
     this.lastUpdate = 0;
   }
 

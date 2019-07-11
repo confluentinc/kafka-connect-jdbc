@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.util.TopicNameProvider;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -41,9 +42,10 @@ public class BulkTableQuerier extends TableQuerier {
       DatabaseDialect dialect,
       QueryMode mode,
       String name,
-      String topicPrefix
+      String topicPrefix,
+      TopicNameProvider topicNameProvider
   ) {
-    super(dialect, mode, name, topicPrefix);
+    super(dialect, mode, name, topicPrefix, topicNameProvider);
   }
 
   @Override
@@ -90,7 +92,7 @@ public class BulkTableQuerier extends TableQuerier {
       case TABLE:
         String name = tableId.tableName(); // backwards compatible
         partition = Collections.singletonMap(JdbcSourceConnectorConstants.TABLE_NAME_KEY, name);
-        topic = topicPrefix + name;
+        topic = topicNameProvider.getTopicName(topicPrefix, name);
         break;
       case QUERY:
         partition = Collections.singletonMap(JdbcSourceConnectorConstants.QUERY_NAME_KEY,

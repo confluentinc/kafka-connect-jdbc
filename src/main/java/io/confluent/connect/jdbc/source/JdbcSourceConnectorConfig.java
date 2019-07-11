@@ -223,6 +223,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "to, or in the case of a custom query, the full name of the topic to publish to.";
   private static final String TOPIC_PREFIX_DISPLAY = "Topic Prefix";
 
+  public static final String TOPIC_NAME_PROVIDER_CLASS_CONFIG = "topic.name.provider.class";
+  private static final String TOPIC_NAME_PROVIDER_CLASS_DOC =
+      "A fully-qualified class name of a user-defined class implementing TopicNameProvider that "
+      + "can provide the topic names from topic.prefix and table names for source connectors, i.e. "
+      + "reformatting table names, replacing unwanted chars, checking maximum length, etc. "
+      + "By default the topic names are the concatenation of topic.prefix & table names without any"
+      + " additional character in between";
+  public static final String TOPIC_NAME_PROVIDER_CLASS_DEFAULT =
+      "io.confluent.connect.jdbc.util.DefaultTopicNameProvider";
+  private static final String TOPIC_NAME_PROVIDER_CLASS_DISPLAY = "Topic Name Provider class";
+
   public static final String VALIDATE_NON_NULL_CONFIG = "validate.non.null";
   private static final String VALIDATE_NON_NULL_DOC =
       "By default, the JDBC connector will validate that all incrementing and timestamp tables "
@@ -557,6 +568,16 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.MEDIUM,
         TOPIC_PREFIX_DISPLAY
+    ).define(
+        TOPIC_NAME_PROVIDER_CLASS_CONFIG,
+        Type.STRING,
+        TOPIC_NAME_PROVIDER_CLASS_DEFAULT,
+        Importance.MEDIUM,
+        TOPIC_NAME_PROVIDER_CLASS_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        TOPIC_NAME_PROVIDER_CLASS_DISPLAY
     ).define(
         TIMESTAMP_DELAY_INTERVAL_MS_CONFIG,
         Type.LONG,

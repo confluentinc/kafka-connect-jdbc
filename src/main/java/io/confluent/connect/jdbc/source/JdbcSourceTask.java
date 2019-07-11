@@ -16,6 +16,8 @@
 package io.confluent.connect.jdbc.source;
 
 import java.util.TimeZone;
+
+import io.confluent.connect.jdbc.util.TopicNameProvider;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.common.utils.Time;
@@ -191,10 +193,21 @@ public class JdbcSourceTask extends SourceTask {
       }
 
       String topicPrefix = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
+      String topicNameProviderClass = config.getString(
+          JdbcSourceConnectorConfig.TOPIC_NAME_PROVIDER_CLASS_CONFIG);
+      TopicNameProvider topicNameProvider;
+      try {
+        topicNameProvider = Class.forName(topicNameProviderClass)
+            .asSubclass(TopicNameProvider.class).newInstance();
+      } catch (ClassNotFoundException | IllegalAccessException | InstantiationException e) {
+        log.error("Unable to create provided TopicNameProvider {}", topicNameProviderClass, e);
+        throw new ConnectException("Unable to instantiate provided TopicNameProvider "
+            + topicNameProviderClass, e);
+      }
 
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(
-            new BulkTableQuerier(dialect, queryMode, tableOrQuery, topicPrefix)
+            new BulkTableQuerier(dialect, queryMode, tableOrQuery, topicPrefix, topicNameProvider)
         );
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)) {
         tableQueue.add(
@@ -203,6 +216,7 @@ public class JdbcSourceTask extends SourceTask {
                 queryMode,
                 tableOrQuery,
                 topicPrefix,
+                topicNameProvider,
                 null,
                 incrementingColumn,
                 offset,
@@ -217,6 +231,7 @@ public class JdbcSourceTask extends SourceTask {
                 queryMode,
                 tableOrQuery,
                 topicPrefix,
+                topicNameProvider,
                 timestampColumns,
                 null,
                 offset,
@@ -231,6 +246,7 @@ public class JdbcSourceTask extends SourceTask {
                 queryMode,
                 tableOrQuery,
                 topicPrefix,
+                topicNameProvider,
                 timestampColumns,
                 incrementingColumn,
                 offset,

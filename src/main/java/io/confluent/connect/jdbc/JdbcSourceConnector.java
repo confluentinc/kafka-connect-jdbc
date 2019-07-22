@@ -137,28 +137,34 @@ public class JdbcSourceConnector extends SourceConnector {
   @Override
   public List<Map<String, String>> taskConfigs(int maxTasks) {
     String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
+    List<Map<String, String>> taskConfigs;
     if (!query.isEmpty()) {
-      List<Map<String, String>> taskConfigs = new ArrayList<>(1);
       Map<String, String> taskProps = new HashMap<>(configProperties);
       taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
-      taskConfigs.add(taskProps);
+      taskConfigs = Collections.singletonList(taskProps);
       log.trace("Task configs with no query");
       return taskConfigs;
     } else {
       List<TableId> currentTables = tableMonitorThread.tables();
-      int numGroups = Math.min(currentTables.size(), maxTasks);
-      List<List<TableId>> tablesGrouped = ConnectorUtils.groupPartitions(currentTables, numGroups);
-      List<Map<String, String>> taskConfigs = new ArrayList<>(tablesGrouped.size());
-      for (List<TableId> taskTables : tablesGrouped) {
-        Map<String, String> taskProps = new HashMap<>(configProperties);
-        ExpressionBuilder builder = dialect.expressionBuilder();
-        builder.appendList().delimitedBy(",").of(taskTables);
-        taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, builder.toString());
-        taskConfigs.add(taskProps);
+      if (currentTables.isEmpty()) {
+        taskConfigs = Collections.emptyList();
+        log.warn("No tasks will be run because no tables were found");
+      } else {
+        int numGroups = Math.min(currentTables.size(), maxTasks);
+        List<List<TableId>> tablesGrouped =
+            ConnectorUtils.groupPartitions(currentTables, numGroups);
+        taskConfigs = new ArrayList<>(tablesGrouped.size());
+        for (List<TableId> taskTables : tablesGrouped) {
+          Map<String, String> taskProps = new HashMap<>(configProperties);
+          ExpressionBuilder builder = dialect.expressionBuilder();
+          builder.appendList().delimitedBy(",").of(taskTables);
+          taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, builder.toString());
+          taskConfigs.add(taskProps);
+        }
+        log.trace("Task configs with query: {}, tables: {}", taskConfigs, currentTables.toArray());
       }
-      log.trace("Task configs with query: {}, tables: {}", taskConfigs, currentTables.toArray());
-      return taskConfigs;
     }
+    return taskConfigs;
   }
 
   @Override

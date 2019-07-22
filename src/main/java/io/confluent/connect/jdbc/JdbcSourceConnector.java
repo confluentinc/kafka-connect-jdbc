@@ -115,25 +115,29 @@ public class JdbcSourceConnector extends SourceConnector {
   @Override
   public List<Map<String, String>> taskConfigs(int maxTasks) {
     String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
+    List<Map<String, String>> taskConfigs;
     if (!query.isEmpty()) {
-      List<Map<String, String>> taskConfigs = new ArrayList<>(1);
       Map<String, String> taskProps = new HashMap<>(configProperties);
       taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
-      taskConfigs.add(taskProps);
-      return taskConfigs;
+      taskConfigs = Collections.singletonList(taskProps);
     } else {
       List<String> currentTables = tableMonitorThread.tables();
-      int numGroups = Math.min(currentTables.size(), maxTasks);
-      List<List<String>> tablesGrouped = ConnectorUtils.groupPartitions(currentTables, numGroups);
-      List<Map<String, String>> taskConfigs = new ArrayList<>(tablesGrouped.size());
-      for (List<String> taskTables : tablesGrouped) {
-        Map<String, String> taskProps = new HashMap<>(configProperties);
-        taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG,
-                      StringUtils.join(taskTables, ","));
-        taskConfigs.add(taskProps);
+      if (currentTables.isEmpty()) {
+        taskConfigs = Collections.emptyList();
+        log.warn("No tasks will be run because no tables were found");
+      } else {
+        int numGroups = Math.min(currentTables.size(), maxTasks);
+        List<List<String>> tablesGrouped = ConnectorUtils.groupPartitions(currentTables, numGroups);
+        taskConfigs = new ArrayList<>(tablesGrouped.size());
+        for (List<String> taskTables : tablesGrouped) {
+          Map<String, String> taskProps = new HashMap<>(configProperties);
+          taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG,
+                  StringUtils.join(taskTables, ","));
+          taskConfigs.add(taskProps);
+        }
       }
-      return taskConfigs;
     }
+    return taskConfigs;
   }
 
   @Override

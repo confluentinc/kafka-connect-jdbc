@@ -23,7 +23,6 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -112,7 +111,7 @@ public class TableMonitorThread extends Thread {
     final List<String> tables;
     try {
       tables = JdbcUtils.getTables(cachedConnectionProvider.getValidConnection(), schemaPattern, tableTypes);
-      log.debug("Got the following tables: " + Arrays.toString(tables.toArray()));
+      log.debug("Got the following tables: {}", tables);
     } catch (SQLException e) {
       log.error("Error while trying to get updated table list, ignoring and waiting for next table poll interval", e);
       cachedConnectionProvider.closeQuietly();
@@ -139,7 +138,11 @@ public class TableMonitorThread extends Thread {
     }
 
     if (!filteredTables.equals(this.tables)) {
-      log.debug("After filtering we got tables: " + Arrays.toString(filteredTables.toArray()));
+      if (filteredTables.isEmpty()) {
+        log.debug("Based on the supplied filtering rules, there are no matching tables to read from");
+      } else {
+        log.debug("Based on the supplied filtering rules, the tables available to read from include: {}",  tables);
+      }
       List<String> previousTables = this.tables;
       this.tables = filteredTables;
       notifyAll();

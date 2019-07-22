@@ -44,6 +44,7 @@ import io.confluent.connect.jdbc.util.JdbcUtils;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 @RunWith(PowerMockRunner.class)
 @PrepareForTest({JdbcSourceConnector.class, JdbcUtils.class})
@@ -119,6 +120,16 @@ public class JdbcSourceConnectorTest {
     connector.stop();
 
     PowerMock.verifyAll();
+  }
+
+  @Test
+  public void testNoTablesNoTasks() throws Exception {
+    // Tests case where there are no readable tables and ensures that no tasks
+    // are returned to be run
+    connector.start(connProps);
+    List<Map<String, String>> configs = connector.taskConfigs(3);
+    assertTrue(configs.isEmpty());
+    connector.stop();
   }
 
   @Test

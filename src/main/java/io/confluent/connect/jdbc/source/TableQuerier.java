@@ -39,7 +39,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     QUERY // User-specified query
   }
 
-  private final Logger log = LoggerFactory.getLogger(getClass()); // use concrete subclass
+  private final Logger log = LoggerFactory.getLogger(TableQuerier.class);
 
   protected final DatabaseDialect dialect;
   protected final QueryMode mode;

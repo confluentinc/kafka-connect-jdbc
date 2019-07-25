@@ -17,3 +17,6 @@ derby.log
 __test_database_*
 test.sqlite
 *.db-journal
+
+# Config files may contains sensitive information
+config/*

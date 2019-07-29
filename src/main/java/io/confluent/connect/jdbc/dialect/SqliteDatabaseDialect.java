@@ -38,6 +38,8 @@ import io.confluent.connect.jdbc.util.TableId;
  */
 public class SqliteDatabaseDialect extends GenericDatabaseDialect {
 
+  private boolean shouldUseTempTableMerge = false;
+
   /**
    * The provider for {@link SqliteDatabaseDialect}.
    */
@@ -59,6 +61,24 @@ public class SqliteDatabaseDialect extends GenericDatabaseDialect {
    */
   public SqliteDatabaseDialect(AbstractConfig config) {
     super(config, new IdentifierRules(".", "`", "`"));
+  }
+
+  /**
+   * For testing.
+   * Create a new dialect instance with the given connector configuration.
+   *
+   * @param config the connector configuration; may not be null
+   * @param shouldLoadMergeOnUpsert wither or not to use temp table merge flow.
+   */
+  public SqliteDatabaseDialect(AbstractConfig config, boolean shouldLoadMergeOnUpsert) {
+    super(config, new IdentifierRules(".", "`", "`"));
+    this.shouldUseTempTableMerge = shouldLoadMergeOnUpsert;
+  }
+
+
+  @Override
+  public boolean shouldLoadMergeOnUpsert() {
+    return shouldUseTempTableMerge;
   }
 
   @Override
@@ -109,6 +129,37 @@ public class SqliteDatabaseDialect extends GenericDatabaseDialect {
       queries.addAll(super.buildAlterTable(table, Collections.singleton(field)));
     }
     return queries;
+  }
+
+  @Override
+  public String buildCreateTempTableStatement(
+          TableId table,
+          Collection<SinkRecordField> fields
+  ) {
+    ExpressionBuilder builder = expressionBuilder();
+
+    builder.append("CREATE TEMPORARY TABLE ");
+    builder.append(table);
+    builder.append("(");
+    writeColumnsSpec(builder, fields);
+    builder.append(")");
+    return builder.toString();
+  }
+
+  @Override
+  public String buildTempTableMergeQueryStatement(
+          TableId table,
+          TableId tempTable,
+          Collection<ColumnId> keyColumns,
+          Collection<ColumnId> nonKeyColumns
+  ) {
+
+    ExpressionBuilder builder = expressionBuilder();
+    builder.append("INSERT OR REPLACE INTO ");
+    builder.append(table);
+    builder.append(" SELECT * FROM ");
+    builder.append(tempTable);
+    return builder.toString();
   }
 
   @Override

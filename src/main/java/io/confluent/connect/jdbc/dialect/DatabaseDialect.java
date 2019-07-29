@@ -133,6 +133,19 @@ public interface DatabaseDialect extends ConnectionProvider {
   String name();
 
   /**
+   * Specifies whether the dialect supports and/or should use the load merging technique
+   * when performing batched upserts.
+   *
+   * <p>When set to true and performing upserts, each batch
+   * of records will be inserted into a newly generated temp/staging table then that table
+   * is merged into the target table. Some databases won't perform well when performing
+   * large batches of upserts directly so this technique helps get around that issue.
+   *
+   * @return true if dialect should use the temp table merge technique.
+   */
+  boolean shouldLoadMergeOnUpsert();
+
+  /**
    * Create a new prepared statement using the specified database connection.
    *
    * @param connection the database connection; may not be null
@@ -361,6 +374,27 @@ public interface DatabaseDialect extends ConnectionProvider {
   );
 
   /**
+   * Build the MERGE prepared statement expression to merge record entries from a temporary table
+   * into the given table; resulting in new records be added and existing records being updated.
+   * Table Variables for each key column should also appear in the WHERE clause of the statement.
+   *
+   * @param table         identifier of the table; may not be null
+   * @param tempTable     identifier of the temp table the merge is performing from; may not be null
+   * @param keyColumns    identifiers of the columns in the primary/unique key; may not be null
+   *                      but may be empty
+   * @param nonKeyColumns the identifiers of the other columns in the table; may not be null but may
+   *                      be empty
+   * @return the upsert/merge statement; may not be null
+   * @throws UnsupportedOperationException if the dialect does not support upserts
+   */
+  String buildTempTableMergeQueryStatement(
+          TableId table,
+          TableId tempTable,
+          Collection<ColumnId> keyColumns,
+          Collection<ColumnId> nonKeyColumns
+  );
+
+  /**
    * Build the DELETE prepared statement expression for the given table and its columns. Variables
    * for each key column should also appear in the WHERE clause of the statement.
    *
@@ -394,6 +428,15 @@ public interface DatabaseDialect extends ConnectionProvider {
    * @return the CREATE TABLE statement; may not be null
    */
   String buildCreateTableStatement(TableId table, Collection<SinkRecordField> fields);
+
+  /**
+   * Build the CREATE TABLE statement expression for the given table and its columns.
+   *
+   * @param table  the identifier of the table; may not be null
+   * @param fields the information about the fields in the sink records; may not be null
+   * @return the CREATE TABLE statement; may not be null
+   */
+  String buildCreateTempTableStatement(TableId table, Collection<SinkRecordField> fields);
 
   /**
    * Build the ALTER TABLE statement expression for the given table and its columns.

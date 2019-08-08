@@ -59,7 +59,6 @@ public class MockTime implements Time {
         this.nanos += TimeUnit.NANOSECONDS.convert(ms, TimeUnit.MILLISECONDS);
     }
 
-    @Override
     public void waitObject(Object obj, Supplier<Boolean> condition, long timeoutMs) {
         throw new UnsupportedOperationException();
     }

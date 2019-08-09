@@ -286,7 +286,7 @@ public class TimestampIncrementingCriteria {
     // get only the row with id = 23:
     //  timestamp 1234, id 22 <- last
     //  timestamp 1234, id 23
-    // The second check only uses the timestamp >= last timestamp. This covers everything new,
+    // The second check only uses the timestamp > last timestamp. This covers everything new,
     // even if it is an update of the existing row. If we previously had:
     //  timestamp 1234, id 22 <- last
     // and then these rows were written:

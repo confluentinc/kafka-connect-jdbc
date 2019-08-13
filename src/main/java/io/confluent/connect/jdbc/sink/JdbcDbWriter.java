@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.sink;
 
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.apache.kafka.connect.transforms.SetSchema;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -30,6 +31,7 @@ import io.confluent.connect.jdbc.util.TableId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
 public class JdbcDbWriter {
   private static final Logger log = LoggerFactory.getLogger(JdbcDbWriter.class);
 
@@ -37,6 +39,7 @@ public class JdbcDbWriter {
   private final DatabaseDialect dbDialect;
   private final DbStructure dbStructure;
   final CachedConnectionProvider cachedConnectionProvider;
+  private final SetSchema<SinkRecord> xform = new SetSchema.Value<>();
 
   JdbcDbWriter(final JdbcSinkConfig config, DatabaseDialect dbDialect, DbStructure dbStructure) {
     this.config = config;
@@ -57,6 +60,7 @@ public class JdbcDbWriter {
 
     final Map<TableId, BufferedRecords> bufferByTable = new HashMap<>();
     for (SinkRecord record : records) {
+      record = xform.apply(record);
       final TableId tableId = destinationTable(record.topic());
       BufferedRecords buffer = bufferByTable.get(tableId);
       if (buffer == null) {

@@ -82,6 +82,12 @@
             <artifactId>connect-api</artifactId>
             <scope>provided</scope>
         </dependency>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>connect-transforms</artifactId>
+            <version>5.4.0-ccs-SNAPSHOT</version>
+            <scope>provided</scope>
+        </dependency>
 
          <!-- JDBC drivers, only included in runtime so they get packaged -->
         <dependency>

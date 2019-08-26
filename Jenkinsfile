@@ -1,5 +1,5 @@
 #!/usr/bin/env groovy
 common {
-  slackChannel = '#connect-eng'
+  slackChannel = ''
   upstreamProjects = 'confluentinc/common'
 }

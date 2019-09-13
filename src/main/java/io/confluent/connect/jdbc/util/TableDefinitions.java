@@ -83,8 +83,10 @@ public class TableDefinitions {
       TableId tableId
   ) throws SQLException {
     TableDefinition dbTable = dialect.describeTable(connection, tableId);
-    log.info("Refreshing metadata for table {} to {}", tableId, dbTable);
-    cache.put(dbTable.id(), dbTable);
+    if (dbTable != null) {
+      log.info("Refreshing metadata for table {} to {}", tableId, dbTable);
+      cache.put(dbTable.id(), dbTable);
+    }
     return dbTable;
   }
 }

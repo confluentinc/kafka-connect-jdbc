@@ -2,4 +2,5 @@
 common {
   slackChannel = '#connect-warn'
   upstreamProjects = 'confluentinc/common'
+  pintMerge = true
 }

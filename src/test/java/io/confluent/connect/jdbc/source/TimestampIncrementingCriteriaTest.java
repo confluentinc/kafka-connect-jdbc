@@ -46,6 +46,7 @@ public class TimestampIncrementingCriteriaTest {
   private static final ColumnId TS1_COLUMN = new ColumnId(TABLE_ID, "ts1");
   private static final ColumnId TS2_COLUMN = new ColumnId(TABLE_ID, "ts2");
   private static final List<ColumnId> TS_COLUMNS = Arrays.asList(TS1_COLUMN, TS2_COLUMN);
+  private static final String SUFFIX = "/* <OPTGUIDELINES><IXSCAN TABLE=’\"Tpcd\".PARTS’/></OPTGUIDELINES> */";
 
   private IdentifierRules rules;
   private QuoteMethod identifierQuoting;
@@ -60,10 +61,10 @@ public class TimestampIncrementingCriteriaTest {
 
   @Before
   public void beforeEach() {
-    criteria = new TimestampIncrementingCriteria(null, null, utcTimeZone);
-    criteriaInc = new TimestampIncrementingCriteria(INCREMENTING_COLUMN, null, utcTimeZone);
-    criteriaTs = new TimestampIncrementingCriteria(null, TS_COLUMNS, utcTimeZone);
-    criteriaIncTs = new TimestampIncrementingCriteria(INCREMENTING_COLUMN, TS_COLUMNS, utcTimeZone);
+    criteria = new TimestampIncrementingCriteria(null, null, utcTimeZone, SUFFIX);
+    criteriaInc = new TimestampIncrementingCriteria(INCREMENTING_COLUMN, null, utcTimeZone, SUFFIX);
+    criteriaTs = new TimestampIncrementingCriteria(null, TS_COLUMNS, utcTimeZone, SUFFIX);
+    criteriaIncTs = new TimestampIncrementingCriteria(INCREMENTING_COLUMN, TS_COLUMNS, utcTimeZone, SUFFIX);
     identifierQuoting = null;
     rules = null;
     builder = null;
@@ -141,7 +142,7 @@ public class TimestampIncrementingCriteriaTest {
     builder = builder();
     criteriaInc.incrementingWhereClause(builder);
     assertEquals(
-        " WHERE \"myTable\".\"id\" > ? ORDER BY \"myTable\".\"id\" ASC",
+        " WHERE \"myTable\".\"id\" > ? ORDER BY \"myTable\".\"id\" ASC " + SUFFIX,
         builder.toString()
     );
 
@@ -149,7 +150,7 @@ public class TimestampIncrementingCriteriaTest {
     builder = builder();
     criteriaInc.incrementingWhereClause(builder);
     assertEquals(
-        " WHERE myTable.id > ? ORDER BY myTable.id ASC",
+        " WHERE myTable.id > ? ORDER BY myTable.id ASC " + SUFFIX,
         builder.toString()
     );
   }
@@ -165,7 +166,7 @@ public class TimestampIncrementingCriteriaTest {
         + "COALESCE(\"myTable\".\"ts1\",\"myTable\".\"ts2\") < ? "
         + "ORDER BY "
         + "COALESCE(\"myTable\".\"ts1\",\"myTable\".\"ts2\") "
-        + "ASC",
+        + "ASC " + SUFFIX,
         builder.toString()
     );
 
@@ -179,7 +180,7 @@ public class TimestampIncrementingCriteriaTest {
         + "COALESCE(myTable.ts1,myTable.ts2) < ? "
         + "ORDER BY "
         + "COALESCE(myTable.ts1,myTable.ts2) "
-        + "ASC",
+        + "ASC " + SUFFIX,
         builder.toString()
     );
   }
@@ -196,7 +197,7 @@ public class TimestampIncrementingCriteriaTest {
         + "OR "
         + "COALESCE(\"myTable\".\"ts1\",\"myTable\".\"ts2\") > ?) "
         + "ORDER BY COALESCE(\"myTable\".\"ts1\",\"myTable\".\"ts2\"),"
-        + "\"myTable\".\"id\" ASC",
+        + "\"myTable\".\"id\" ASC " + SUFFIX,
         builder.toString()
     );
 
@@ -211,7 +212,7 @@ public class TimestampIncrementingCriteriaTest {
         + "OR "
         + "COALESCE(myTable.ts1,myTable.ts2) > ?) "
         + "ORDER BY COALESCE(myTable.ts1,myTable.ts2),"
-        + "myTable.id ASC",
+        + "myTable.id ASC " + SUFFIX,
         builder.toString()
     );
   }

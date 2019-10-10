@@ -28,14 +28,6 @@ import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import io.confluent.connect.jdbc.dialect.DatabaseDialect;
-import io.confluent.connect.jdbc.dialect.DatabaseDialects;
-import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
-import io.confluent.connect.jdbc.util.EnumRecommender;
-import io.confluent.connect.jdbc.util.QuoteMethod;
-import io.confluent.connect.jdbc.util.TableId;
-import io.confluent.connect.jdbc.util.TimeZoneValidator;
-
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Importance;
@@ -46,6 +38,14 @@ import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.dialect.DatabaseDialects;
+import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
+import io.confluent.connect.jdbc.util.EnumRecommender;
+import io.confluent.connect.jdbc.util.QuoteMethod;
+import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.util.TimeZoneValidator;
 
 public class JdbcSourceConnectorConfig extends AbstractConfig {
 
@@ -254,6 +254,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       "When to quote table names, column names, and other identifiers in SQL statements. "
       + "For backward compatibility, the default is 'always'.";
   public static final String QUOTE_SQL_IDENTIFIERS_DISPLAY = "Quote Identifiers";
+
+  public static final String QUERY_SUFFIX_CONFIG = "suffix.query";
+  public static final String QUERY_SUFFIX_DEFAULT = "";
+  public static final String QUERY_SUFFIX_DOC = 
+      "Suffix to append at the end of the generated query.";
+  public static final String QUERY_SUFFIX_DISPLAY = "Query suffix";
 
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
@@ -503,7 +509,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.MEDIUM,
         QUOTE_SQL_IDENTIFIERS_DISPLAY,
-        QUOTE_METHOD_RECOMMENDER);
+        QUOTE_METHOD_RECOMMENDER
+    ).define(
+        QUERY_SUFFIX_CONFIG,
+        Type.STRING,
+        QUERY_SUFFIX_DEFAULT,
+        Importance.LOW,
+        QUERY_SUFFIX_DOC,
+        MODE_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        QUERY_SUFFIX_DISPLAY);
   }
 
   private static final void addConnectorOptions(ConfigDef config) {

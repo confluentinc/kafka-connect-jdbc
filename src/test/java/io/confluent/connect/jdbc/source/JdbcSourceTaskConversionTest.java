@@ -221,16 +221,18 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
   public void testDecimal() throws Exception {
     typeConversion("DECIMAL(5,2)", false,
                    new EmbeddedDerby.Literal("CAST (123.45 AS DECIMAL(5,2))"),
-                   Decimal.schema(2),new BigDecimal(new BigInteger("12345"), 2));
+            !extendedMapping ? Decimal.schema(2) :  Schema.FLOAT64_SCHEMA,
+            !extendedMapping ? new BigDecimal(new BigInteger("12345"), 2) : 123.45);
   }
 
   @Test
   public void testNullableDecimal() throws Exception {
     typeConversion("DECIMAL(5,2)", true,
                    new EmbeddedDerby.Literal("CAST(123.45 AS DECIMAL(5,2))"),
-                   Decimal.builder(2).optional().build(),
-                   new BigDecimal(new BigInteger("12345"), 2));
-    typeConversion("DECIMAL(5,2)", true, null, Decimal.builder(2).optional().build(),
+            !extendedMapping ? Decimal.builder(2).optional().build() : Schema.OPTIONAL_FLOAT64_SCHEMA,
+            !extendedMapping ? new BigDecimal(new BigInteger("12345"), 2) : 123.45);
+    typeConversion("DECIMAL(5,2)", true, null,
+            !extendedMapping ? Decimal.builder(2).optional().build() : Schema.OPTIONAL_FLOAT64_SCHEMA,
                    null);
   }
 

@@ -101,7 +101,8 @@ public class BulkTableQuerier extends TableQuerier {
       default:
         throw new ConnectException("Unexpected query mode: " + mode);
     }
-    return new SourceRecord(partition, null, topic, record.schema(), record);
+    return new SourceRecord(partition, null, topic, null,null,null,
+              record.schema(), record,System.currentTimeMillis());
   }
 
   @Override

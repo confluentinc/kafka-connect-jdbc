@@ -18,6 +18,7 @@ package io.confluent.connect.jdbc.source;
 
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -80,8 +81,10 @@ public class BulkTableQuerier extends TableQuerier {
         setter.setField(record, resultSet);
       } catch (IOException e) {
         log.warn("Ignoring record because processing failed:", e);
+        throw new ConnectException(e);
       } catch (SQLException e) {
         log.warn("Ignoring record due to SQL error:", e);
+        throw new DataException(e);
       }
     }
     // TODO: key from primary key? partition?

@@ -97,7 +97,7 @@ public class JdbcSourceTask extends SourceTask {
     }
     log.info("Using JDBC dialect {}", dialect.name());
 
-    cachedConnectionProvider = new CachedConnectionProvider(dialect, maxConnAttempts, retryBackoff);
+    cachedConnectionProvider = connectionProvider(maxConnAttempts, retryBackoff);
 
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
     String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
@@ -244,6 +244,10 @@ public class JdbcSourceTask extends SourceTask {
 
     running.set(true);
     log.info("Started JDBC source task");
+  }
+
+  protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
+    return new CachedConnectionProvider(dialect, maxConnAttempts, retryBackoff);
   }
 
   //This method returns a list of possible partition maps for different offset protocols

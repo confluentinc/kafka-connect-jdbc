@@ -48,7 +48,6 @@ import io.confluent.connect.jdbc.util.DateTimeUtils;
 // Tests of polling that return data updates, i.e. verifies the different behaviors for getting
 // incremental data updates from the database
 @RunWith(PowerMockRunner.class)
-@PrepareForTest({JdbcSourceTask.class})
 @PowerMockIgnore("javax.management.*")
 public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   private static final Map<String, String> QUERY_SOURCE_PARTITION

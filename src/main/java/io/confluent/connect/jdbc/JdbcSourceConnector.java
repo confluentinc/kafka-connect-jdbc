@@ -86,11 +86,7 @@ public class JdbcSourceConnector extends SourceConnector {
         dbUrl,
         config
     );
-    cachedConnectionProvider = new CachedConnectionProvider(
-        dialect,
-        maxConnectionAttempts,
-        connectionRetryBackoff
-    );
+    cachedConnectionProvider = connectionProvider(maxConnectionAttempts, connectionRetryBackoff);
 
     // Initial connection attempt
     cachedConnectionProvider.getConnection();
@@ -126,6 +122,10 @@ public class JdbcSourceConnector extends SourceConnector {
         blacklistSet
     );
     tableMonitorThread.start();
+  }
+
+  protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
+    return new CachedConnectionProvider(dialect, maxConnAttempts, retryBackoff);
   }
 
   @Override

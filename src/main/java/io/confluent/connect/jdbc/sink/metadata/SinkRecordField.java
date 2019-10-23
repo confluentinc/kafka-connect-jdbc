@@ -31,6 +31,10 @@ public class SinkRecordField {
     this.isPrimaryKey = isPrimaryKey;
   }
 
+  public Schema schema() {
+    return schema;
+  }
+
   public String schemaName() {
     return schema.name();
   }

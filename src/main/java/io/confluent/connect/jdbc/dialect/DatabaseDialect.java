@@ -285,7 +285,8 @@ public interface DatabaseDialect extends ConnectionProvider {
    */
   TimestampIncrementingCriteria criteriaFor(
       ColumnId incrementingColumn,
-      List<ColumnId> timestampColumns
+      List<ColumnId> timestampColumns,
+      String suffix
   );
 
   /**

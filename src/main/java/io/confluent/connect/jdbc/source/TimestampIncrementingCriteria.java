@@ -72,17 +72,20 @@ public class TimestampIncrementingCriteria {
   protected final List<ColumnId> timestampColumns;
   protected final ColumnId incrementingColumn;
   protected final TimeZone timeZone;
+  protected final String suffix;
 
 
   public TimestampIncrementingCriteria(
       ColumnId incrementingColumn,
       List<ColumnId> timestampColumns,
-      TimeZone timeZone
+      TimeZone timeZone,
+      String suffix
   ) {
     this.timestampColumns =
         timestampColumns != null ? timestampColumns : Collections.<ColumnId>emptyList();
     this.incrementingColumn = incrementingColumn;
     this.timeZone = timeZone;
+    this.suffix = suffix;
   }
 
   protected boolean hasTimestampColumns() {
@@ -278,6 +281,12 @@ public class TimestampIncrementingCriteria {
     }
     return builder.toString();
   }
+  
+  protected void addSuffixIfPresent(ExpressionBuilder builder) {
+    if (!this.suffix.trim().isEmpty()) {
+      builder.append(" ").append(suffix);
+    }  
+  }
 
   protected void timestampIncrementingWhereClause(ExpressionBuilder builder) {
     // This version combines two possible conditions. The first checks timestamp == last
@@ -308,6 +317,7 @@ public class TimestampIncrementingCriteria {
     builder.append(",");
     builder.append(incrementingColumn);
     builder.append(" ASC");
+    addSuffixIfPresent(builder);
   }
 
   protected void incrementingWhereClause(ExpressionBuilder builder) {
@@ -317,6 +327,7 @@ public class TimestampIncrementingCriteria {
     builder.append(" ORDER BY ");
     builder.append(incrementingColumn);
     builder.append(" ASC");
+    addSuffixIfPresent(builder);
   }
 
   protected void timestampWhereClause(ExpressionBuilder builder) {
@@ -327,6 +338,7 @@ public class TimestampIncrementingCriteria {
     builder.append(" < ? ORDER BY ");
     coalesceTimestampColumns(builder);
     builder.append(" ASC");
+    addSuffixIfPresent(builder);
   }
 
 }

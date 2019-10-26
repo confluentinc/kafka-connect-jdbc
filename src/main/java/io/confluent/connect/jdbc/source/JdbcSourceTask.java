@@ -195,7 +195,12 @@ public class JdbcSourceTask extends SourceTask {
 
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(
-            new BulkTableQuerier(dialect, queryMode, tableOrQuery, topicPrefix)
+            new BulkTableQuerier(
+                dialect, 
+                queryMode, 
+                tableOrQuery, 
+                topicPrefix, 
+                suffix)
         );
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)) {
         tableQueue.add(

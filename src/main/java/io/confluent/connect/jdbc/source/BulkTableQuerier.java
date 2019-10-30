@@ -80,10 +80,10 @@ public class BulkTableQuerier extends TableQuerier {
       try {
         setter.setField(record, resultSet);
       } catch (IOException e) {
-        log.warn("Ignoring record because processing failed:", e);
+        log.warn("Error mapping fields into Connect record", e);
         throw new ConnectException(e);
       } catch (SQLException e) {
-        log.warn("Ignoring record due to SQL error:", e);
+        log.warn("SQL error mapping fields into Connect record", e);
         throw new DataException(e);
       }
     }

@@ -24,12 +24,8 @@ import java.util.List;
 import java.util.TimeZone;
 
 import io.confluent.connect.jdbc.util.ColumnId;
-import org.apache.kafka.connect.data.Date;
-import org.apache.kafka.connect.data.Decimal;
-import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.*;
 import org.apache.kafka.connect.data.Schema.Type;
-import org.apache.kafka.connect.data.Time;
-import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.junit.Test;
 
@@ -117,6 +113,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
     verifyDataTypeMapping("float", Schema.FLOAT64_SCHEMA);
     verifyDataTypeMapping("bit", Schema.BOOLEAN_SCHEMA);
     verifyDataTypeMapping("varchar(max)", Schema.STRING_SCHEMA);
+    verifyDataTypeMapping("nvarchar(255)", SchemaBuilder.string().parameter("length","255").build());
     verifyDataTypeMapping("varbinary(max)", Schema.BYTES_SCHEMA);
     verifyDataTypeMapping("decimal(38,0)", Decimal.schema(0));
     verifyDataTypeMapping("decimal(38,4)", Decimal.schema(4));

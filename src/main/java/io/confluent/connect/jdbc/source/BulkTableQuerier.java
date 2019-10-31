@@ -50,11 +50,10 @@ public class BulkTableQuerier extends TableQuerier {
 
   @Override
   protected void createPreparedStatement(Connection db) throws SQLException {
+    ExpressionBuilder builder = dialect.expressionBuilder();  
     switch (mode) {
       case TABLE:
-        ExpressionBuilder builder = dialect.expressionBuilder();
-
-        builder.append("SELECT * FROM").append(tableId);
+        builder.append("SELECT * FROM ").append(tableId);
         addSuffixIfPresent(builder);
 
         String queryStr = builder.toString();
@@ -64,9 +63,12 @@ public class BulkTableQuerier extends TableQuerier {
         stmt = dialect.createPreparedStatement(db, queryStr);
         break;
       case QUERY:
-        recordQuery(query);
-        log.debug("{} prepared SQL query: {}", this, query);
-        stmt = dialect.createPreparedStatement(db, query);
+        addSuffixIfPresent(builder);
+        queryStr = query + builder.toString();
+
+        recordQuery(queryStr);
+        log.debug("{} prepared SQL query: {}", this, queryStr);
+        stmt = dialect.createPreparedStatement(db, queryStr);
         break;
       default:
         throw new ConnectException("Unknown mode: " + mode);

@@ -24,6 +24,7 @@ import io.confluent.connect.jdbc.util.TableId;
 import java.sql.Connection;
 import java.sql.SQLException;
 
+import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Matchers;
 
@@ -35,13 +36,18 @@ import static org.mockito.Mockito.when;
 public class TableQuerierTest {  
   private static final String TABLE_NAME = "name";
   private static final String INCREMENTING_COLUMN_NAME = "column";
-  private static final String SUFFIX = "/* SUFFIX */";  
+  private static final String SUFFIX = "/* SUFFIX */";   
   private static final Long TIMESTAMP_DELAY = 0l;
   private static final String QUERY = "SELECT * FROM name";
 
-  @Test
-  public void testTimestampIncrementingTableQuerierInTableMode() throws SQLException {
-    DatabaseDialect databaseDialectMock = mock(DatabaseDialect.class);
+  DatabaseDialect databaseDialectMock;
+  
+  Connection connectionMock;
+  
+  @Before
+  public void init()
+  {
+    databaseDialectMock = mock(DatabaseDialect.class);
     when(databaseDialectMock.parseTableIdentifier(Matchers.anyString()))
       .thenReturn(new TableId(null,null,TABLE_NAME));	  
     when(databaseDialectMock.expressionBuilder())
@@ -49,18 +55,23 @@ public class TableQuerierTest {
     when(databaseDialectMock.criteriaFor(Matchers.any(ColumnId.class), Matchers.anyListOf(ColumnId.class)))
       .thenReturn(new TimestampIncrementingCriteria(new ColumnId(new TableId(null,null,TABLE_NAME),INCREMENTING_COLUMN_NAME), null,null));
 	    
-    Connection connectionMock = mock(Connection.class);
-	    
-    TimestampIncrementingTableQuerier querier = new TimestampIncrementingTableQuerier(databaseDialectMock, 
-              QueryMode.TABLE, 
-              TABLE_NAME, 
-              null, 
-              null, 
-              INCREMENTING_COLUMN_NAME, 
-              null, 
-              TIMESTAMP_DELAY, 
-              null, 
-              SUFFIX);
+    connectionMock = mock(Connection.class);	  
+  }
+  
+  @Test
+  public void testTimestampIncrementingTableQuerierInTableModeWithSuffix() throws SQLException {
+    TimestampIncrementingTableQuerier querier = new TimestampIncrementingTableQuerier(
+                                                    databaseDialectMock, 
+                                                    QueryMode.TABLE, 
+                                                    TABLE_NAME, 
+                                                    null, 
+                                                    null,
+                                                    INCREMENTING_COLUMN_NAME, 
+                                                    null,
+                                                    TIMESTAMP_DELAY,
+                                                    null,
+                                                    SUFFIX
+                                                );
       
     querier.createPreparedStatement(connectionMock);
 
@@ -68,27 +79,19 @@ public class TableQuerierTest {
   }
 
   @Test
-  public void testTimestampIncrementingTableQuerierInQueryMode() throws SQLException {
-    DatabaseDialect databaseDialectMock = mock(DatabaseDialect.class);
-    when(databaseDialectMock.parseTableIdentifier(Matchers.anyString()))
-      .thenReturn(new TableId(null,null,TABLE_NAME));	  
-    when(databaseDialectMock.expressionBuilder())
-      .thenReturn(ExpressionBuilder.create());
-    when(databaseDialectMock.criteriaFor(Matchers.any(ColumnId.class), Matchers.anyListOf(ColumnId.class)))
-      .thenReturn(new TimestampIncrementingCriteria(new ColumnId(new TableId(null,null,TABLE_NAME),INCREMENTING_COLUMN_NAME), null,null));
-	    
-    Connection connectionMock = mock(Connection.class);
-	    
-    TimestampIncrementingTableQuerier querier = new TimestampIncrementingTableQuerier(databaseDialectMock, 
-              QueryMode.QUERY, 
-              QUERY, 
-              null, 
-              null, 
-              INCREMENTING_COLUMN_NAME, 
-              null, 
-              TIMESTAMP_DELAY, 
-              null, 
-              SUFFIX);
+  public void testTimestampIncrementingTableQuerierInQueryModeWithSuffix() throws SQLException {	    
+    TimestampIncrementingTableQuerier querier = new TimestampIncrementingTableQuerier(
+                                                    databaseDialectMock, 
+                                                    QueryMode.QUERY, 
+                                                    QUERY, 
+                                                    null, 
+                                                    null, 
+                                                    INCREMENTING_COLUMN_NAME, 
+                                                    null, 
+                                                    TIMESTAMP_DELAY, 
+                                                    null, 
+                                                    SUFFIX
+                                                );
       
     querier.createPreparedStatement(connectionMock);
 
@@ -96,20 +99,14 @@ public class TableQuerierTest {
   }
   
   @Test
-  public void testBulkTableQuerierInTableMode() throws SQLException {
-    DatabaseDialect databaseDialectMock = mock(DatabaseDialect.class);
-    when(databaseDialectMock.parseTableIdentifier(Matchers.anyString()))
-      .thenReturn(new TableId(null,null,TABLE_NAME));	  
-    when(databaseDialectMock.expressionBuilder())
-      .thenReturn(ExpressionBuilder.create());
-	    
-    Connection connectionMock = mock(Connection.class);
-	    
-    BulkTableQuerier querier = new BulkTableQuerier(databaseDialectMock, 
-              QueryMode.TABLE, 
-              TABLE_NAME, 
-              null, 
-              SUFFIX);
+  public void testBulkTableQuerierInTableModeWithSuffix() throws SQLException {	    
+    BulkTableQuerier querier = new BulkTableQuerier(
+                                   databaseDialectMock,
+                                   QueryMode.TABLE, 
+                                   TABLE_NAME, 
+                                   null, 
+                                   SUFFIX
+                               );
       
     querier.createPreparedStatement(connectionMock);
 
@@ -117,23 +114,32 @@ public class TableQuerierTest {
   }
 
   @Test
-  public void testBulkTableQuerierInQueryMode() throws SQLException {
-    DatabaseDialect databaseDialectMock = mock(DatabaseDialect.class);
-    when(databaseDialectMock.parseTableIdentifier(Matchers.anyString()))
-      .thenReturn(new TableId(null,null,TABLE_NAME));	  
-    when(databaseDialectMock.expressionBuilder())
-      .thenReturn(ExpressionBuilder.create());
-	    
-    Connection connectionMock = mock(Connection.class);
-	    
-    BulkTableQuerier querier = new BulkTableQuerier(databaseDialectMock, 
-              QueryMode.QUERY, 
-              QUERY, 
-              null, 
-              SUFFIX);
+  public void testBulkTableQuerierInQueryModeWithSuffix() throws SQLException {
+	BulkTableQuerier querier = new BulkTableQuerier(
+                                   databaseDialectMock, 
+                                   QueryMode.QUERY,
+                                   QUERY, 
+                                   null, 
+                                   SUFFIX
+                               );
       
     querier.createPreparedStatement(connectionMock);
 
     verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM name /* SUFFIX */"));
   }
+
+  @Test
+  public void testBulkTableQuerierInQueryModeWithoutSuffix() throws SQLException {
+    BulkTableQuerier querier = new BulkTableQuerier(
+                                   databaseDialectMock, 
+                                   QueryMode.QUERY, 
+                                   QUERY, 
+                                   null, 
+                                   "" /* default value */
+                               );
+      
+    querier.createPreparedStatement(connectionMock);
+
+    verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM name"));
+  }  
 }

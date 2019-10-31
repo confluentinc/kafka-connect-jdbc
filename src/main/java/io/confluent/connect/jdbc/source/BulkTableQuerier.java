@@ -54,25 +54,23 @@ public class BulkTableQuerier extends TableQuerier {
     switch (mode) {
       case TABLE:
         builder.append("SELECT * FROM ").append(tableId);
-        addSuffixIfPresent(builder);
 
-        String queryStr = builder.toString();
-        
-        recordQuery(queryStr);
-        log.debug("{} prepared SQL query: {}", this, queryStr);
-        stmt = dialect.createPreparedStatement(db, queryStr);
         break;
       case QUERY:
-        addSuffixIfPresent(builder);
-        queryStr = query + builder.toString();
-
-        recordQuery(queryStr);
-        log.debug("{} prepared SQL query: {}", this, queryStr);
-        stmt = dialect.createPreparedStatement(db, queryStr);
+        builder.append(query);  
+        
         break;
       default:
         throw new ConnectException("Unknown mode: " + mode);
     }
+
+    addSuffixIfPresent(builder);
+    
+    String queryStr = builder.toString();
+
+    recordQuery(queryStr);
+    log.debug("{} prepared SQL query: {}", this, queryStr);
+    stmt = dialect.createPreparedStatement(db, queryStr);
   }
 
   @Override

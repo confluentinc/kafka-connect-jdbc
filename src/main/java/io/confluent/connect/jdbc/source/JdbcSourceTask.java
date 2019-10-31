@@ -149,7 +149,7 @@ public class JdbcSourceTask extends SourceTask {
     boolean validateNonNulls
         = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
     TimeZone timeZone = config.timeZone();
-    String suffix = config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG);
+    String suffix = config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG).trim();
 
     for (String tableOrQuery : tablesOrQuery) {
       final List<Map<String, String>> tablePartitionsToCheck;
@@ -200,7 +200,8 @@ public class JdbcSourceTask extends SourceTask {
                 queryMode, 
                 tableOrQuery, 
                 topicPrefix, 
-                suffix)
+                suffix
+            )
         );
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)) {
         tableQueue.add(

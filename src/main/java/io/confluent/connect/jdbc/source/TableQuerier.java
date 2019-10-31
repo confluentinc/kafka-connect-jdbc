@@ -139,7 +139,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   }
 
   protected void addSuffixIfPresent(ExpressionBuilder builder) {
-    if (!this.suffix.trim().isEmpty()) {
+    if (!this.suffix.isEmpty()) {
       builder.append(" ").append(suffix);
     }  
   }

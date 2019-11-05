@@ -60,7 +60,7 @@ public class DatabaseDialects {
    *
    * <p>The subprotocol will be in group 1, and the subname will be in group 2.
    */
-  private static final Pattern PROTOCOL_PATTERN = Pattern.compile("jdbc:([^:]+):(.*)");
+  private static final Pattern PROTOCOL_PATTERN = Pattern.compile("jdbc:([^:]+):(.*)|\$\{(env|vault)");
   private static final Logger LOG = LoggerFactory.getLogger(DatabaseDialects.class);
   // Sort lexicographically to maintain order
   private static final ConcurrentMap<String, DatabaseDialectProvider> REGISTRY = new

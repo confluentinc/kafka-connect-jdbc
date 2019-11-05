@@ -109,6 +109,16 @@ public class DatabaseDialectsTest {
     DatabaseDialects.extractJdbcUrlInfo("mysql://Server:port");
   }
 
+  @Test
+  public void shouldFindVaultConfigProviderPrefix() {
+    assertDialect(GenericDatabaseDialect.class, "${vault:path:key}");
+  }
+
+  @Test
+  public void shouldFindEnvConfigProviderPrefix() {
+    assertDialect(GenericDatabaseDialect.class, "${env:VAR}");
+  }
+
 
   private void assertDialect(
       Class<? extends DatabaseDialect> clazz,

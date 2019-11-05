@@ -15,6 +15,9 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import io.confluent.connect.jdbc.sink.bufferedrecords.BatchedBufferedRecords;
+import io.confluent.connect.jdbc.sink.bufferedrecords.BufferedRecords;
+import io.confluent.connect.jdbc.sink.bufferedrecords.LoadMergeBufferedRecords;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
@@ -433,6 +436,39 @@ public class JdbcDbWriterTest {
             }
         )
     );
+  }
+
+  @Test
+  public void selectLoadMergeBufferedRecordsOnSupportedDialects()  {
+    Map<String, String> props = new HashMap<>();
+    props.put("connection.url", sqliteHelper.sqliteUri());
+    props.put("insert.mode", "upsert");
+    final JdbcSinkConfig config = new JdbcSinkConfig(props);
+
+    dialect = new SqliteDatabaseDialect(config, true);
+    final DbStructure dbStructure = new DbStructure(dialect);
+    writer = new JdbcDbWriter(config, dialect, dbStructure);
+
+    final TableId tableId = writer.destinationTable("dummy");
+    BufferedRecords bufferedRecords = writer.createBufferedRecords(tableId, writer.cachedConnectionProvider.getConnection());
+
+    assertTrue(bufferedRecords instanceof LoadMergeBufferedRecords);
+  }
+
+  @Test
+  public void selectBatchedBufferedRecords()  {
+    Map<String, String> props = new HashMap<>();
+    props.put("connection.url", sqliteHelper.sqliteUri());
+    final JdbcSinkConfig config = new JdbcSinkConfig(props);
+
+    dialect = new SqliteDatabaseDialect(config);
+    final DbStructure dbStructure = new DbStructure(dialect);
+    writer = new JdbcDbWriter(config, dialect, dbStructure);
+
+    final TableId tableId = writer.destinationTable("dummy");
+    BufferedRecords bufferedRecords = writer.createBufferedRecords(tableId, writer.cachedConnectionProvider.getConnection());
+
+    assertTrue(bufferedRecords instanceof BatchedBufferedRecords);
   }
 
 }

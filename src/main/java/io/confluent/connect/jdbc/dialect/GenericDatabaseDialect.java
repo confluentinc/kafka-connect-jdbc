@@ -196,6 +196,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   @Override
+  public boolean shouldLoadMergeOnUpsert() {
+    return false;
+  }
+
+  @Override
   public Connection getConnection() throws SQLException {
     // These config names are the same for both source and sink configs ...
     String username = config.getString(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG);
@@ -1401,6 +1406,16 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   @Override
+  public String buildTempTableMergeQueryStatement(
+          TableId table,
+          TableId tempTable,
+          Collection<ColumnId> keyColumns,
+          Collection<ColumnId> nonKeyColumns
+  ) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
   public final String buildDeleteStatement(
       TableId table,
       Collection<ColumnId> keyColumns
@@ -1567,6 +1582,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     }
     builder.append(")");
     return builder.toString();
+  }
+
+  @Override
+  public String buildCreateTempTableStatement(
+          TableId table,
+          Collection<SinkRecordField> fields
+  ) {
+    throw new UnsupportedOperationException();
   }
 
   @Override

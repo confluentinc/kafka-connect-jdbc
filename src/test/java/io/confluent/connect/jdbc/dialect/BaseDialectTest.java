@@ -308,6 +308,26 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     )));
   }
 
+  protected void verifyCreateTempTableOneColNoPk(String expected) {
+    assertEquals(expected, dialect.buildCreateTempTableStatement(tableId, Arrays.asList(
+            new SinkRecordField(Schema.INT32_SCHEMA, "col1", false)
+    )));
+  }
+
+  protected void verifyCreateTempTableOneColOnePk(String expected) {
+    assertEquals(expected, dialect.buildCreateTempTableStatement(tableId, Arrays.asList(
+            new SinkRecordField(Schema.INT32_SCHEMA, "pk1", true)
+    )));
+  }
+
+  protected void verifyCreateTempTableThreeColTwoPk(String expected) {
+    assertEquals(expected, dialect.buildCreateTempTableStatement(tableId, Arrays.asList(
+            new SinkRecordField(Schema.INT32_SCHEMA, "pk1", true),
+            new SinkRecordField(Schema.INT32_SCHEMA, "pk2", true),
+            new SinkRecordField(Schema.INT32_SCHEMA, "col1", false)
+    )));
+  }
+
   protected void verifyAlterAddOneCol(String... expected) {
     assertArrayEquals(expected, dialect.buildAlterTable(tableId, Arrays.asList(
         new SinkRecordField(Schema.OPTIONAL_INT32_SCHEMA, "newcol1", false)

@@ -15,6 +15,9 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import io.confluent.connect.jdbc.sink.bufferedrecords.BatchedBufferedRecords;
+import io.confluent.connect.jdbc.sink.bufferedrecords.BufferedRecords;
+import io.confluent.connect.jdbc.sink.bufferedrecords.LoadMergeBufferedRecords;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
 
@@ -29,6 +32,8 @@ import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.TableId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode.UPSERT;
 
 public class JdbcDbWriter {
   private static final Logger log = LoggerFactory.getLogger(JdbcDbWriter.class);
@@ -60,7 +65,7 @@ public class JdbcDbWriter {
       final TableId tableId = destinationTable(record.topic());
       BufferedRecords buffer = bufferByTable.get(tableId);
       if (buffer == null) {
-        buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
+        buffer = createBufferedRecords(tableId, connection);
         bufferByTable.put(tableId, buffer);
       }
       buffer.add(record);
@@ -89,5 +94,12 @@ public class JdbcDbWriter {
       ));
     }
     return dbDialect.parseTableIdentifier(tableName);
+  }
+
+  BufferedRecords createBufferedRecords(TableId tableId, Connection connection) {
+    if (config.insertMode == UPSERT && dbDialect.shouldLoadMergeOnUpsert()) {
+      return new LoadMergeBufferedRecords(config, tableId, dbDialect, dbStructure, connection);
+    }
+    return new BatchedBufferedRecords(config, tableId, dbDialect, dbStructure, connection);
   }
 }

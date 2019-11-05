@@ -13,8 +13,13 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package io.confluent.connect.jdbc.sink;
+package io.confluent.connect.jdbc.sink.bufferedrecords;
 
+import io.confluent.connect.jdbc.dialect.SnowflakeDatabaseDialect;
+import io.confluent.connect.jdbc.dialect.SqliteDatabaseDialect;
+import io.confluent.connect.jdbc.sink.DbStructure;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.sink.SqliteHelper;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -34,7 +39,6 @@ import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Random;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
@@ -42,10 +46,9 @@ import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
-public class BufferedRecordsTest {
+public class BatchedBatchedBufferedRecordsTest {
 
   private final SqliteHelper sqliteHelper = new SqliteHelper(getClass().getSimpleName());
 
@@ -73,7 +76,7 @@ public class BufferedRecordsTest {
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
     final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+    final BatchedBufferedRecords buffer = new BatchedBufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
 
     final Schema schemaA = SchemaBuilder.struct()
         .field("name", Schema.STRING_SCHEMA)
@@ -134,7 +137,7 @@ public class BufferedRecordsTest {
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
     final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+    final BatchedBufferedRecords buffer = new BatchedBufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
 
     final Schema keySchemaA = SchemaBuilder.struct()
         .field("id", Schema.INT64_SCHEMA)
@@ -193,7 +196,7 @@ public class BufferedRecordsTest {
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
     final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+    final BatchedBufferedRecords buffer = new BatchedBufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
 
     final Schema keySchemaA = SchemaBuilder.struct()
         .field("id", Schema.INT64_SCHEMA)
@@ -252,7 +255,7 @@ public class BufferedRecordsTest {
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
     final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+    final BatchedBufferedRecords buffer = new BatchedBufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
 
     final Schema keySchemaA = SchemaBuilder.struct()
         .field("id", Schema.INT64_SCHEMA)
@@ -322,7 +325,7 @@ public class BufferedRecordsTest {
     when(connectionMock.prepareStatement(Matchers.anyString())).thenReturn(preparedStatementMock);
 
     final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect,
+    final BatchedBufferedRecords buffer = new BatchedBufferedRecords(config, tableId, dbDialect,
                                                        dbStructureMock, connectionMock);
 
     final Schema schemaA = SchemaBuilder.struct().field("name", Schema.STRING_SCHEMA).build();
@@ -360,7 +363,7 @@ public class BufferedRecordsTest {
 
     final Connection connectionMock = mock(Connection.class);
     final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructureMock,
+    final BatchedBufferedRecords buffer = new BatchedBufferedRecords(config, tableId, dbDialect, dbStructureMock,
             connectionMock);
 
     final Schema schemaA = SchemaBuilder.struct().field("name", Schema.STRING_SCHEMA).build();

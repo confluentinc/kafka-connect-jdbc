@@ -357,7 +357,8 @@ public interface DatabaseDialect extends ConnectionProvider {
   String buildUpsertQueryStatement(
       TableId table,
       Collection<ColumnId> keyColumns,
-      Collection<ColumnId> nonKeyColumns
+      Collection<ColumnId> nonKeyColumns,
+      Map<String, SinkRecordField> allFields
   );
 
   /**

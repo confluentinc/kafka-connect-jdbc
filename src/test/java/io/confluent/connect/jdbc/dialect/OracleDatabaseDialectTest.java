@@ -26,6 +26,8 @@ import org.junit.Test;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
+import java.util.Collections;
+
 import static org.junit.Assert.assertEquals;
 
 public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDialect> {
@@ -150,7 +152,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
                       "\"myTable\".\"id1\",\"myTable\".\"id2\") values(incoming.\"columnA\"," +
                       "incoming.\"columnB\",incoming.\"columnC\",incoming.\"columnD\",incoming" +
                       ".\"id1\",incoming.\"id2\")";
-    String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD);
+    String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD, Collections.emptyMap());
     assertEquals(expected, sql);
   }
 
@@ -211,7 +213,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
                       "\"ARTICLE\".\"author\") " +
                       "values(incoming.\"body\",incoming.\"title\",incoming.\"author\")";
     String actual = dialect.buildUpsertQueryStatement(article, columns(article, "title", "author"),
-                                                      columns(article, "body"));
+                                                      columns(article, "body"), Collections.emptyMap());
     assertEquals(expected, actual);
   }
 

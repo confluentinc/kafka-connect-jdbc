@@ -23,6 +23,7 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.List;
 
 import io.confluent.connect.jdbc.util.QuoteMethod;
@@ -125,7 +126,7 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
         + "(\"id1\",\"id2\",\"columnA\",\"columnB\",\"columnC\",\"columnD\") "
         + "VALUES(?,?,?,?,?,?) "
         + "WITH PRIMARY KEY",
-        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
+        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD, Collections.emptyMap())
     );
 
     quoteIdentfiiers = QuoteMethod.NEVER;
@@ -135,7 +136,7 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
         + "(id1,id2,columnA,columnB,columnC,columnD) "
         + "VALUES(?,?,?,?,?,?) "
         + "WITH PRIMARY KEY",
-        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
+        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD, Collections.emptyMap())
     );
   }
 
@@ -189,7 +190,8 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
         dialect.buildUpsertQueryStatement(
             tableA,
             columns(tableA, "col1"),
-            columns(tableA, "col2", "col3", "col4")
+            columns(tableA, "col2", "col3", "col4"),
+            Collections.emptyMap()
         )
     );
 
@@ -200,7 +202,8 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
         dialect.buildUpsertQueryStatement(
             tableA,
             columns(tableA, "col1"),
-            columns(tableA, "col2", "col3", "col4")
+            columns(tableA, "col2", "col3", "col4"),
+            Collections.emptyMap()
         )
     );
   }

@@ -23,6 +23,7 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.List;
 
 import io.confluent.connect.jdbc.util.QuoteMethod;
@@ -121,7 +122,7 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
                       " values(?,?,?,?,?,?) on duplicate key update `columnA`=values(`columnA`)," +
                       "`columnB`=values(`columnB`),`columnC`=values(`columnC`),`columnD`=values" +
                       "(`columnD`)";
-    String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD);
+    String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD, Collections.emptyMap());
     assertEquals(expected, sql);
   }
 
@@ -179,8 +180,8 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
                       "values(?,?,?,?) on duplicate key update `first_name`=values(`first_name`)," +
                       "`last_name`=values(`last_name`),`score`=values(`score`)";
     String sql = dialect.buildUpsertQueryStatement(actor, columns(actor, "actor_id"),
-                                                   columns(actor, "first_name", "last_name",
-                                                           "score"));
+                                                   columns(actor, "first_name", "last_name", "score"),
+                                                   Collections.emptyMap());
     assertEquals(expected, sql);
 
     quoteIdentfiiers = QuoteMethod.NEVER;
@@ -191,7 +192,7 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
                "last_name=values(last_name),score=values(score)";
     sql = dialect.buildUpsertQueryStatement(actor, columns(actor, "actor_id"),
         columns(actor, "first_name", "last_name",
-            "score"));
+            "score"), Collections.emptyMap());
     assertEquals(expected, sql);
   }
 
@@ -201,7 +202,7 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
     String expected = "insert into `actor`(`actor_id`) " +
                       "values(?) on duplicate key update `actor_id`=values(`actor_id`)";
     String sql = dialect
-        .buildUpsertQueryStatement(actor, columns(actor, "actor_id"), columns(actor));
+        .buildUpsertQueryStatement(actor, columns(actor, "actor_id"), columns(actor), Collections.emptyMap());
     assertEquals(expected, sql);
   }
 

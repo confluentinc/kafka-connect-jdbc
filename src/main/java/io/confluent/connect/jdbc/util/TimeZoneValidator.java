@@ -34,4 +34,9 @@ public class TimeZoneValidator implements ConfigDef.Validator {
       }
     }
   }
+
+  @Override
+  public String toString() {
+    return "Any valid JDK time zone";
+  }
 }

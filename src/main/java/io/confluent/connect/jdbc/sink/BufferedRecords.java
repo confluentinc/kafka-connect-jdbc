@@ -85,7 +85,7 @@ public class BufferedRecords {
       schemaChanged = true;
     }
     if (isNull(record.valueSchema())) {
-      // For deletes, both the value and value schema come in as null.
+      // For deletes, value and optionally value schema come in as null.
       // We don't want to treat this as a schema change if key schemas is the same
       // otherwise we flush unnecessarily.
       if (config.deleteEnabled) {
@@ -101,7 +101,6 @@ public class BufferedRecords {
       valueSchema = record.valueSchema();
       schemaChanged = true;
     }
-
     if (schemaChanged) {
       // Each batch needs to have the same schemas, so get the buffered records out
       flushed.addAll(flush());
@@ -153,6 +152,12 @@ public class BufferedRecords {
         );
       }
     }
+    
+    // set deletesInBatch if schema value is not null
+    if (isNull(record.value()) && config.deleteEnabled) {
+      deletesInBatch = true;
+    }
+
     records.add(record);
 
     if (records.size() >= config.batchSize) {

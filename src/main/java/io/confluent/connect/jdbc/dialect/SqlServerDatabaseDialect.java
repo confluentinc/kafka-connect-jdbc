@@ -19,15 +19,24 @@ package io.confluent.connect.jdbc.dialect;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 
+import java.io.IOException;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.TimeZone;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import io.confluent.connect.jdbc.source.ColumnMapping;
+import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.IdentifierRules;
@@ -37,6 +46,16 @@ import io.confluent.connect.jdbc.util.TableId;
  * A {@link DatabaseDialect} for SQL Server.
  */
 public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
+
+  /**
+   * JDBC Type constant for SQL Server's custom data types.
+   */
+  private static final int DATETIMEOFFSET = -155;
+
+  private static final String DATE_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss.SSSSSSS ZZZZZ";
+  private static final DateTimeFormatter DATE_TIME_FORMATTER =
+      DateTimeFormatter.ofPattern(DATE_TIME_FORMAT);
+
   /**
    * The provider for {@link SqlServerDatabaseDialect}.
    */
@@ -66,6 +85,74 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     // SQL Server uses JDBC's catalog to represent the database,
     // and JDBC's schema to represent the owner (e.g., "dbo")
     return true;
+  }
+
+  @Override
+  protected String addFieldToSchema(
+      ColumnDefinition columnDefn,
+      SchemaBuilder builder,
+      String fieldName,
+      int sqlType,
+      boolean optional
+  ) {
+    // Handle SQL Server specific types first
+    switch (sqlType) {
+      case DATETIMEOFFSET:
+        // jTDS has no support for reading this value, so get the string form
+        SchemaBuilder tsSchemaBuilder = org.apache.kafka.connect.data.Timestamp.builder();
+        if (optional) {
+          tsSchemaBuilder.optional();
+        }
+        builder.field(fieldName, tsSchemaBuilder.build());
+        return fieldName;
+      default:
+        break;
+    }
+
+    // Delegate for the remaining logic to handle the standard types
+    return super.addFieldToSchema(columnDefn, builder, fieldName, sqlType, optional);
+  }
+
+  @Override
+  protected ColumnConverter columnConverterFor(
+      ColumnMapping mapping,
+      ColumnDefinition defn,
+      int col,
+      boolean isJdbc4
+  ) {
+    // Handle any SQL Server specific data types first
+    switch (defn.type()) {
+      case DATETIMEOFFSET:
+        return rs -> convertDateTimeOffset(rs, col);
+      default:
+        break;
+    }
+
+    // Delegate for the remaining logic to handle the standard types
+    return super.createColumnConverter(mapping);
+  }
+
+  /**
+   * Get the {@link java.sql.Timestamp} for the DATETIMEOFFSET column.
+   * The jTDS driver doesn't support DATETIMEOFFSET, so the recommended approach for legacy driver
+   * (see https://docs.microsoft.com/en-us/sql/t-sql/data-types/datetimeoffset-transact-sql) is to
+   * get the value in string form.
+   *
+   * @param rs the result set; never null
+   * @param col the column index
+   * @return the {@link java.sql.Timestamp} value
+   * @throws SQLException if there is a problem getting the value
+   * @throws IOException if there is a problem reading the value
+   */
+  protected Object convertDateTimeOffset(ResultSet rs, int col) throws SQLException, IOException {
+    String valueRetrieved = rs.getString(col);  // e.g., "2016-12-08 12:34:56.7850000 -07:00"
+    return dateTimeOffsetFrom(valueRetrieved, timeZone());
+  }
+
+  protected static java.sql.Timestamp dateTimeOffsetFrom(String value, TimeZone timeZone) {
+    ZonedDateTime zdt = ZonedDateTime.parse(value, DATE_TIME_FORMATTER);
+    zdt = zdt.withZoneSameInstant(timeZone.toZoneId());
+    return java.sql.Timestamp.from(zdt.toInstant());
   }
 
   @Override

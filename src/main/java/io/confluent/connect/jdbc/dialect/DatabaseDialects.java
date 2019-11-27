@@ -169,19 +169,11 @@ public class DatabaseDialects {
   }
 
   static JdbcUrlInfo extractJdbcUrlInfo(final String url) {
-    JdbcUrlInfo result = extractJdbcUrlInfoOrNull(url);
-    if (result == null) {
-      throw new ConnectException("Not a valid JDBC URL: " + url);
-    }
-    return result;
-  }
-
-  static JdbcUrlInfo extractJdbcUrlInfoOrNull(final String url) {
     Matcher matcher = PROTOCOL_PATTERN.matcher(url);
     if (matcher.matches()) {
       return new JdbcUrlDetails(matcher.group(1), matcher.group(2), url);
     }
-    return null;
+    throw new ConnectException("Not a valid JDBC URL: " + url);
   }
 
   /**

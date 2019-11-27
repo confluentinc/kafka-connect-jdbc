@@ -54,6 +54,11 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
    */
   private static final int DATETIMEOFFSET = -155;
 
+  /**
+   * This is the format of the string form of DATETIMEOFFSET values, and used to parse such
+   * string values into {@link java.sql.Timestamp} values.
+   * https://docs.microsoft.com/en-us/sql/t-sql/data-types/datetimeoffset-transact-sql
+   */
   private static final String DATE_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss.SSSSSSS ZZZZZ";
   private static final DateTimeFormatter DATE_TIME_FORMATTER =
       DateTimeFormatter.ofPattern(DATE_TIME_FORMAT);
@@ -141,9 +146,9 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
    * JDBC driver supports SQL Server's DATETIMEOFFSET data type and converting to a
    * {@link java.sql.Timestamp} via {@link ResultSet#getTimestamp(int, Calendar)}.
    *
-   * @param rs the result set; never null
+   * @param rs  the result set; never null
    * @param col the column index
-   * @return the {@link java.sql.Timestamp} value
+   * @return the {@link java.sql.Timestamp} value; may be null
    * @throws SQLException if there is a problem getting the value
    */
   protected Object convertDateTimeOffset(ResultSet rs, int col) throws SQLException {
@@ -156,18 +161,28 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
    * (see https://docs.microsoft.com/en-us/sql/t-sql/data-types/datetimeoffset-transact-sql) is to
    * get the value in string form and then parse it into a timestamp.
    *
-   * @param rs the result set; never null
+   * @param rs  the result set; never null
    * @param col the column index
-   * @return the {@link java.sql.Timestamp} value
+   * @return the {@link java.sql.Timestamp} value; may be null
    * @throws SQLException if there is a problem getting the value
    */
   protected Object convertDateTimeOffsetFromString(
       ResultSet rs,
       int col
   ) throws SQLException {
-    return dateTimeOffsetFrom(rs.getString(col), timeZone());
+    String value = rs.getString(col);
+    return value == null ? null : dateTimeOffsetFrom(rs.getString(col), timeZone());
   }
 
+  /**
+   * Utility method to parse the string form of a SQL Server DATETIMEOFFSET value into a
+   * {@link java.sql.Timestamp} value.
+   *
+   * @param value    the string DATETIMEOFFSET value; never null
+   * @param timeZone the timezone in which the {@link java.sql.Timestamp} should be defined; may
+   *                 not be null
+   * @return the equivalent {@link java.sql.Timestamp}; never null
+   */
   protected static java.sql.Timestamp dateTimeOffsetFrom(String value, TimeZone timeZone) {
     ZonedDateTime zdt = ZonedDateTime.parse(value, DATE_TIME_FORMATTER);
     zdt = zdt.withZoneSameInstant(timeZone.toZoneId());

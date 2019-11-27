@@ -37,10 +37,12 @@ import java.util.HashMap;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
+import io.confluent.connect.jdbc.dialect.SqliteDatabaseDialect;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -165,6 +167,7 @@ public class BufferedRecordsTest {
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+    assertTrue(dbDialect instanceof SqliteDatabaseDialect);
     final DbStructure dbStructureMock = mock(DbStructure.class);
     when(dbStructureMock.createOrAmendIfNecessary(Matchers.any(JdbcSinkConfig.class),
                                                   Matchers.any(Connection.class),
@@ -182,6 +185,8 @@ public class BufferedRecordsTest {
     final SinkRecord recordA = new SinkRecord("dummy", 0, null, null, schemaA, valueA, 0);
     buffer.add(recordA);
 
+    // Even though we're using the SQLite dialect, which uses backtick as the default quote
+    // character, the SQLite JDBC driver does return double quote as the quote characters.
     Mockito.verify(
         connectionMock,
         Mockito.times(1)

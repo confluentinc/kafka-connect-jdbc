@@ -45,17 +45,11 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
 
     String value = "2016-12-08 12:34:56.7850000 -07:00";
     java.sql.Timestamp ts = SqlServerDatabaseDialect.dateTimeOffsetFrom(value, timeZone);
-    assertTimestamp(
-        ZonedDateTime.of(2016, 12, 8, 19, 34, 56, 785000000, utc),
-        ts
-    );
+    assertTimestamp(ZonedDateTime.of(2016, 12, 8, 19, 34, 56, 785000000, utc), ts);
 
     value = "2019-12-08 12:34:56.7850200 -00:00";
     ts = SqlServerDatabaseDialect.dateTimeOffsetFrom(value, timeZone);
-    assertTimestamp(
-        ZonedDateTime.of(2019, 12, 8, 12, 34, 56, 785020000, utc),
-        ts
-    );
+    assertTimestamp(ZonedDateTime.of(2019, 12, 8, 12, 34, 56, 785020000, utc), ts);
   }
 
   protected void assertTimestamp(ZonedDateTime expected, java.sql.Timestamp actual) {

@@ -51,6 +51,7 @@ public class DataConverter {
   private static final int NUMERIC_TYPE_SCALE_LOW = -84;
   private static final int NUMERIC_TYPE_SCALE_HIGH = 127;
   private static final int NUMERIC_TYPE_SCALE_UNSET = -127;
+  private static final int DATETIMEOFFSET = -155;
 
   public static Schema convertSchema(
       String tableName,
@@ -334,6 +335,7 @@ public class DataConverter {
       }
 
       // Timestamp is a date + time
+      case DATETIMEOFFSET:
       case Types.TIMESTAMP: {
         SchemaBuilder tsSchemaBuilder = Timestamp.builder();
         if (optional) {
@@ -523,6 +525,7 @@ public class DataConverter {
       }
 
       // Timestamp is a date + time
+      case DATETIMEOFFSET: // SQL Server with the MS JDBC driver
       case Types.TIMESTAMP: {
         colValue = resultSet.getTimestamp(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
         break;

@@ -106,14 +106,15 @@ public class BufferedRecordsTest {
 
   @Test
   public void testFlushSuccessNoInfo() throws SQLException {
+    final String url = sqliteHelper.sqliteUri();
+
     final HashMap<Object, Object> props = new HashMap<>();
-    props.put("connection.url", "");
+    props.put("connection.url", url);
     props.put("auto.create", true);
     props.put("auto.evolve", true);
     props.put("batch.size", 1000);
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
-    final String url = sqliteHelper.sqliteUri();
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
 
     int[] batchResponse = new int[2];
@@ -153,15 +154,16 @@ public class BufferedRecordsTest {
 
   @Test
   public void testInsertModeUpdate() throws SQLException {
+    final String url = sqliteHelper.sqliteUri();
+
     final HashMap<Object, Object> props = new HashMap<>();
-    props.put("connection.url", "");
+    props.put("connection.url", url);
     props.put("auto.create", true);
     props.put("auto.evolve", true);
     props.put("batch.size", 1000);
     props.put("insert.mode", "update");
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
-    final String url = sqliteHelper.sqliteUri();
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
     final DbStructure dbStructureMock = mock(DbStructure.class);
     when(dbStructureMock.createOrAmendIfNecessary(Matchers.any(JdbcSinkConfig.class),
@@ -180,7 +182,10 @@ public class BufferedRecordsTest {
     final SinkRecord recordA = new SinkRecord("dummy", 0, null, null, schemaA, valueA, 0);
     buffer.add(recordA);
 
-    Mockito.verify(connectionMock, Mockito.times(1)).prepareStatement(Matchers.eq("UPDATE `dummy` SET `name` = ?"));
+    Mockito.verify(
+        connectionMock,
+        Mockito.times(1)
+    ).prepareStatement(Matchers.eq("UPDATE \"dummy\" SET \"name\" = ?"));
 
   }
 }

@@ -14,11 +14,8 @@
 
 package io.confluent.connect.jdbc.dialect;
 
-import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
-import java.time.temporal.ChronoField;
-import java.time.temporal.TemporalField;
 import java.util.TimeZone;
 
 import org.apache.kafka.connect.data.Date;
@@ -38,7 +35,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
 
   @Override
   protected SqlServerDatabaseDialect createDialect() {
-    return new SqlServerDatabaseDialect(sourceConfigWithUrl("jdbc:sqlsserver://something"));
+    return new SqlServerDatabaseDialect(sourceConfigWithUrl("jdbc:jtds:sqlsserver://something"));
   }
 
   @Test

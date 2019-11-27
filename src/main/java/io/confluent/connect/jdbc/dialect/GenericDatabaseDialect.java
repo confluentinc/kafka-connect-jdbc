@@ -131,6 +131,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   protected final String schemaPattern;
   protected final Set<String> tableTypes;
   protected final String jdbcUrl;
+  protected final DatabaseDialectProvider.JdbcUrlInfo jdbcUrlInfo;
+
   private final QuoteMethod quoteSqlIdentifiers;
   private final IdentifierRules defaultIdentifierRules;
   private final AtomicReference<IdentifierRules> identifierRules = new AtomicReference<>();
@@ -161,6 +163,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     this.config = config;
     this.defaultIdentifierRules = defaultIdentifierRules;
     this.jdbcUrl = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
+    this.jdbcUrlInfo = DatabaseDialects.extractJdbcUrlInfoOrNull(jdbcUrl);
     if (config instanceof JdbcSinkConfig) {
       catalogPattern = JdbcSourceTaskConfig.CATALOG_PATTERN_DEFAULT;
       schemaPattern = JdbcSourceTaskConfig.SCHEMA_PATTERN_DEFAULT;

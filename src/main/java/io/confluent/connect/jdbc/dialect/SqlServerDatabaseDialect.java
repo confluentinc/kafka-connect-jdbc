@@ -28,6 +28,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Calendar;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -38,6 +39,7 @@ import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.TableId;
@@ -71,6 +73,8 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     }
   }
 
+  private final boolean jtdsDriver;
+
   /**
    * Create a new dialect instance with the given connector configuration.
    *
@@ -78,6 +82,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
    */
   public SqlServerDatabaseDialect(AbstractConfig config) {
     super(config, new IdentifierRules(".", "[", "]"));
+    jtdsDriver = jdbcUrlInfo == null ? false : jdbcUrlInfo.subprotocol().matches("jtds");
   }
 
   @Override
@@ -123,13 +128,32 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     // Handle any SQL Server specific data types first
     switch (defn.type()) {
       case DATETIMEOFFSET:
-        return rs -> convertDateTimeOffset(rs, col);
+        if (jtdsDriver) {
+          return rs -> convertDateTimeOffsetFromString(rs, col);
+        } else {
+          return rs -> convertDateTimeOffset(rs, col);
+        }
       default:
         break;
     }
 
     // Delegate for the remaining logic to handle the standard types
     return super.createColumnConverter(mapping);
+  }
+
+  /**
+   * Get the {@link java.sql.Timestamp} for the DATETIMEOFFSET column. This requires that the
+   * JDBC driver supports SQL Server's DATETIMEOFFSET data type and converting to a
+   * {@link java.sql.Timestamp} via {@link ResultSet#getTimestamp(int, Calendar)}.
+   *
+   * @param rs the result set; never null
+   * @param col the column index
+   * @return the {@link java.sql.Timestamp} value
+   * @throws SQLException if there is a problem getting the value
+   * @throws IOException if there is a problem reading the value
+   */
+  protected Object convertDateTimeOffset(ResultSet rs, int col) throws SQLException, IOException {
+    return rs.getTimestamp(col, DateTimeUtils.getTimeZoneCalendar(timeZone()));
   }
 
   /**
@@ -144,7 +168,10 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
    * @throws SQLException if there is a problem getting the value
    * @throws IOException if there is a problem reading the value
    */
-  protected Object convertDateTimeOffset(ResultSet rs, int col) throws SQLException, IOException {
+  protected Object convertDateTimeOffsetFromString(
+      ResultSet rs,
+      int col
+  ) throws SQLException, IOException {
     String valueRetrieved = rs.getString(col);  // e.g., "2016-12-08 12:34:56.7850000 -07:00"
     return dateTimeOffsetFrom(valueRetrieved, timeZone());
   }

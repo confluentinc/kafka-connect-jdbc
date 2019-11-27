@@ -23,9 +23,9 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 
-import java.io.IOException;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Calendar;
@@ -103,13 +103,8 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     // Handle SQL Server specific types first
     switch (sqlType) {
       case DATETIMEOFFSET:
-        // jTDS has no support for reading this value, so get the string form
-        SchemaBuilder tsSchemaBuilder = org.apache.kafka.connect.data.Timestamp.builder();
-        if (optional) {
-          tsSchemaBuilder.optional();
-        }
-        builder.field(fieldName, tsSchemaBuilder.build());
-        return fieldName;
+        // Use the same schema definition as a standard timestamp
+        return super.addFieldToSchema(columnDefn, builder, fieldName, Types.TIMESTAMP, optional);
       default:
         break;
     }
@@ -150,9 +145,8 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
    * @param col the column index
    * @return the {@link java.sql.Timestamp} value
    * @throws SQLException if there is a problem getting the value
-   * @throws IOException if there is a problem reading the value
    */
-  protected Object convertDateTimeOffset(ResultSet rs, int col) throws SQLException, IOException {
+  protected Object convertDateTimeOffset(ResultSet rs, int col) throws SQLException {
     return rs.getTimestamp(col, DateTimeUtils.getTimeZoneCalendar(timeZone()));
   }
 
@@ -160,20 +154,18 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
    * Get the {@link java.sql.Timestamp} for the DATETIMEOFFSET column.
    * The jTDS driver doesn't support DATETIMEOFFSET, so the recommended approach for legacy driver
    * (see https://docs.microsoft.com/en-us/sql/t-sql/data-types/datetimeoffset-transact-sql) is to
-   * get the value in string form.
+   * get the value in string form and then parse it into a timestamp.
    *
    * @param rs the result set; never null
    * @param col the column index
    * @return the {@link java.sql.Timestamp} value
    * @throws SQLException if there is a problem getting the value
-   * @throws IOException if there is a problem reading the value
    */
   protected Object convertDateTimeOffsetFromString(
       ResultSet rs,
       int col
-  ) throws SQLException, IOException {
-    String valueRetrieved = rs.getString(col);  // e.g., "2016-12-08 12:34:56.7850000 -07:00"
-    return dateTimeOffsetFrom(valueRetrieved, timeZone());
+  ) throws SQLException {
+    return dateTimeOffsetFrom(rs.getString(col), timeZone());
   }
 
   protected static java.sql.Timestamp dateTimeOffsetFrom(String value, TimeZone timeZone) {

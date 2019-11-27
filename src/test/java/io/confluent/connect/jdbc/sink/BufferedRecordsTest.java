@@ -109,7 +109,6 @@ public class BufferedRecordsTest {
   @Test
   public void testFlushSuccessNoInfo() throws SQLException {
     final String url = sqliteHelper.sqliteUri();
-
     final HashMap<Object, Object> props = new HashMap<>();
     props.put("connection.url", url);
     props.put("auto.create", true);
@@ -157,7 +156,6 @@ public class BufferedRecordsTest {
   @Test
   public void testInsertModeUpdate() throws SQLException {
     final String url = sqliteHelper.sqliteUri();
-
     final HashMap<Object, Object> props = new HashMap<>();
     props.put("connection.url", url);
     props.put("auto.create", true);

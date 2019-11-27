@@ -131,6 +131,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   protected final String schemaPattern;
   protected final Set<String> tableTypes;
   protected final String jdbcUrl;
+  protected final DatabaseDialectProvider.JdbcUrlInfo jdbcUrlInfo;
   private final QuoteMethod quoteSqlIdentifiers;
   private final IdentifierRules defaultIdentifierRules;
   private final AtomicReference<IdentifierRules> identifierRules = new AtomicReference<>();
@@ -161,6 +162,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     this.config = config;
     this.defaultIdentifierRules = defaultIdentifierRules;
     this.jdbcUrl = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
+    this.jdbcUrlInfo = DatabaseDialects.extractJdbcUrlInfo(jdbcUrl);
     if (config instanceof JdbcSinkConfig) {
       catalogPattern = JdbcSourceTaskConfig.CATALOG_PATTERN_DEFAULT;
       schemaPattern = JdbcSourceTaskConfig.SCHEMA_PATTERN_DEFAULT;
@@ -194,6 +196,10 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   @Override
   public String name() {
     return getClass().getSimpleName().replace("DatabaseDialect", "");
+  }
+
+  protected TimeZone timeZone() {
+    return timeZone;
   }
 
   @Override
@@ -242,8 +248,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     if (query != null) {
       try (Statement statement = connection.createStatement()) {
         if (statement.execute(query)) {
-          try (ResultSet rs = statement.getResultSet()) {
+          ResultSet rs = null;
+          try {
             // do nothing with the result set
+            rs = statement.getResultSet();
+          } finally {
+            if (rs != null) {
+              rs.close();
+            }
           }
         }
       }
@@ -868,6 +880,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
    * @param optional   true if the field is to be optional as obtained from the column definition
    * @return the name of the field, or null if no field was added
    */
+  @SuppressWarnings("fallthrough")
   protected String addFieldToSchema(
       final ColumnDefinition columnDefn,
       final SchemaBuilder builder,
@@ -1088,7 +1101,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     );
   }
 
-  @SuppressWarnings("deprecation")
+  @SuppressWarnings({"deprecation", "fallthrough"})
   protected ColumnConverter columnConverterFor(
       final ColumnMapping mapping,
       final ColumnDefinition defn,

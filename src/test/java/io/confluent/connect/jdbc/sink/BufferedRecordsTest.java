@@ -36,10 +36,12 @@ import java.util.HashMap;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
+import io.confluent.connect.jdbc.dialect.SqliteDatabaseDialect;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -105,14 +107,14 @@ public class BufferedRecordsTest {
 
   @Test
   public void testFlushSuccessNoInfo() throws SQLException {
+    final String url = sqliteHelper.sqliteUri();
     final HashMap<Object, Object> props = new HashMap<>();
-    props.put("connection.url", "");
+    props.put("connection.url", url);
     props.put("auto.create", true);
     props.put("auto.evolve", true);
     props.put("batch.size", 1000);
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
-    final String url = sqliteHelper.sqliteUri();
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
 
     int[] batchResponse = new int[2];
@@ -152,16 +154,17 @@ public class BufferedRecordsTest {
 
   @Test
   public void testInsertModeUpdate() throws SQLException {
+    final String url = sqliteHelper.sqliteUri();
     final HashMap<Object, Object> props = new HashMap<>();
-    props.put("connection.url", "");
+    props.put("connection.url", url);
     props.put("auto.create", true);
     props.put("auto.evolve", true);
     props.put("batch.size", 1000);
     props.put("insert.mode", "update");
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
-    final String url = sqliteHelper.sqliteUri();
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+    assertTrue(dbDialect instanceof SqliteDatabaseDialect);
     final DbStructure dbStructureMock = mock(DbStructure.class);
     when(dbStructureMock.createOrAmendIfNecessary(Matchers.any(JdbcSinkConfig.class),
                                                   Matchers.any(Connection.class),
@@ -179,7 +182,12 @@ public class BufferedRecordsTest {
     final SinkRecord recordA = new SinkRecord("dummy", 0, null, null, schemaA, valueA, 0);
     buffer.add(recordA);
 
-    Mockito.verify(connectionMock, Mockito.times(1)).prepareStatement(Matchers.eq("UPDATE `dummy` SET `name` = ?"));
+    // Even though we're using the SQLite dialect, which uses backtick as the default quote
+    // character, the SQLite JDBC driver does return double quote as the quote characters.
+    Mockito.verify(
+        connectionMock,
+        Mockito.times(1)
+    ).prepareStatement(Matchers.eq("UPDATE \"dummy\" SET \"name\" = ?"));
 
   }
 }

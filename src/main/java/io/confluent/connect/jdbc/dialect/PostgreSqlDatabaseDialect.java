@@ -16,6 +16,7 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -81,6 +82,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * to {@link ResultSet#FETCH_FORWARD forward} as an optimization for the driver to allow it to
    * scroll more efficiently through the result set and prevent out of memory errors.
    *
+   * <p>This method also sets the {@link PreparedStatement#setFetchSize(int) fetch size} to
+   * the {@link JdbcSourceConnectorConfig#BATCH_MAX_ROWS_CONFIG batch size} of the connector.
+   * This will bound the memory usage of the connector for large tables.
+   *
    * @param stmt the prepared statement; never null
    * @throws SQLException the error that might result from initialization
    */
@@ -88,6 +93,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   protected void initializePreparedStatement(PreparedStatement stmt) throws SQLException {
     log.trace("Initializing PreparedStatement fetch direction to FETCH_FORWARD for '{}'", stmt);
     stmt.setFetchDirection(ResultSet.FETCH_FORWARD);
+    stmt.setFetchSize(config.getInt(JdbcSourceConnectorConfig.BATCH_MAX_ROWS_CONFIG));
   }
 
 

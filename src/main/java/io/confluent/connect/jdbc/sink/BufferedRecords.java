@@ -239,7 +239,7 @@ public class BufferedRecords {
   }
 
   public void close() throws SQLException {
-    log.info(
+    log.debug(
         "Closing BufferedRecords with updatePreparedStatement: {} deletePreparedStatement: {}",
         updatePreparedStatement,
         deletePreparedStatement

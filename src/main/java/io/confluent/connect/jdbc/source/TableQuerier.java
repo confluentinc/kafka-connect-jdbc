@@ -50,6 +50,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   // Mutable state
 
   protected long lastUpdate;
+  protected Connection db;
   protected PreparedStatement stmt;
   protected ResultSet resultSet;
   protected SchemaMapping schemaMapping;
@@ -89,6 +90,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
 
   public void maybeStartQuery(Connection db) throws SQLException {
     if (resultSet == null) {
+      this.db = db;
       stmt = getOrCreatePreparedStatement(db);
       resultSet = executeQuery();
       String schemaName = tableId != null ? tableId.tableName() : null; // backwards compatible
@@ -107,10 +109,22 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   public void reset(long now) {
     closeResultSetQuietly();
     closeStatementQuietly();
+    releaseLocksQuietly();
     // TODO: Can we cache this and quickly check that it's identical for the next query
     // instead of constructing from scratch since it's almost always the same
     schemaMapping = null;
     lastUpdate = now;
+  }
+
+  private void releaseLocksQuietly() {
+    if (db != null) {
+      try {
+        db.commit();
+      } catch (SQLException e) {
+        // intentionally ignored
+      }
+    }
+    db = null;
   }
 
   private void closeStatementQuietly() {

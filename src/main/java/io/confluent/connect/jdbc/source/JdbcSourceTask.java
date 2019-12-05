@@ -99,6 +99,8 @@ public class JdbcSourceTask extends SourceTask {
 
     cachedConnectionProvider = connectionProvider(maxConnAttempts, retryBackoff);
 
+    disableAutoCommit(cachedConnectionProvider.getConnection());
+
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
     String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
     if ((tables.isEmpty() && query.isEmpty()) || (!tables.isEmpty() && !query.isEmpty())) {
@@ -355,6 +357,14 @@ public class JdbcSourceTask extends SourceTask {
     return null;
   }
 
+  private void disableAutoCommit(Connection connection) {
+    try {
+      connection.setAutoCommit(false);
+    } catch (SQLException e) {
+      throw new ConnectException("Failed trying to disable autocommit for table queries");
+    }
+  }
+
   private void resetAndRequeueHead(TableQuerier expectedHead) {
     log.debug("Resetting querier {}", expectedHead.toString());
     TableQuerier removedQuerier = tableQueue.poll();
@@ -378,16 +388,20 @@ public class JdbcSourceTask extends SourceTask {
       boolean incrementingOptional = false;
       boolean atLeastOneTimestampNotOptional = false;
       final Connection conn = cachedConnectionProvider.getConnection();
-      Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, table, null);
-      for (ColumnDefinition defn : defnsById.values()) {
-        String columnName = defn.id().name();
-        if (columnName.equalsIgnoreCase(incrementingColumn)) {
-          incrementingOptional = defn.isOptional();
-        } else if (lowercaseTsColumns.contains(columnName.toLowerCase(Locale.getDefault()))) {
-          if (!defn.isOptional()) {
-            atLeastOneTimestampNotOptional = true;
+      try {
+        Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, table, null);
+        for (ColumnDefinition defn : defnsById.values()) {
+          String columnName = defn.id().name();
+          if (columnName.equalsIgnoreCase(incrementingColumn)) {
+            incrementingOptional = defn.isOptional();
+          } else if (lowercaseTsColumns.contains(columnName.toLowerCase(Locale.getDefault()))) {
+            if (!defn.isOptional()) {
+              atLeastOneTimestampNotOptional = true;
+            }
           }
         }
+      } finally {
+        conn.commit();
       }
 
       // Validate that requested columns for offsets are NOT NULL. Currently this is only performed

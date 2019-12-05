@@ -99,8 +99,6 @@ public class JdbcSourceTask extends SourceTask {
 
     cachedConnectionProvider = connectionProvider(maxConnAttempts, retryBackoff);
 
-    disableAutoCommit(cachedConnectionProvider.getConnection());
-
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
     String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
     if ((tables.isEmpty() && query.isEmpty()) || (!tables.isEmpty() && !query.isEmpty())) {
@@ -244,6 +242,7 @@ public class JdbcSourceTask extends SourceTask {
       }
     }
 
+    disableAutoCommit(cachedConnectionProvider.getConnection());
     running.set(true);
     log.info("Started JDBC source task");
   }
@@ -388,20 +387,16 @@ public class JdbcSourceTask extends SourceTask {
       boolean incrementingOptional = false;
       boolean atLeastOneTimestampNotOptional = false;
       final Connection conn = cachedConnectionProvider.getConnection();
-      try {
-        Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, table, null);
-        for (ColumnDefinition defn : defnsById.values()) {
-          String columnName = defn.id().name();
-          if (columnName.equalsIgnoreCase(incrementingColumn)) {
-            incrementingOptional = defn.isOptional();
-          } else if (lowercaseTsColumns.contains(columnName.toLowerCase(Locale.getDefault()))) {
-            if (!defn.isOptional()) {
-              atLeastOneTimestampNotOptional = true;
-            }
+      Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, table, null);
+      for (ColumnDefinition defn : defnsById.values()) {
+        String columnName = defn.id().name();
+        if (columnName.equalsIgnoreCase(incrementingColumn)) {
+          incrementingOptional = defn.isOptional();
+        } else if (lowercaseTsColumns.contains(columnName.toLowerCase(Locale.getDefault()))) {
+          if (!defn.isOptional()) {
+            atLeastOneTimestampNotOptional = true;
           }
         }
-      } finally {
-        conn.commit();
       }
 
       // Validate that requested columns for offsets are NOT NULL. Currently this is only performed

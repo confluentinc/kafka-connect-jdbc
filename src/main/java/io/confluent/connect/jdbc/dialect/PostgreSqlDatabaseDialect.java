@@ -15,10 +15,12 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import java.util.Map;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
@@ -249,6 +251,21 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
            .transformedBy(transform)
            .of(nonKeyColumns);
     return builder.toString();
+  }
+
+  @Override
+  protected void formatColumnValue(
+      ExpressionBuilder builder,
+      String schemaName,
+      Map<String, String> schemaParameters,
+      Schema.Type type,
+      Object value
+  ) {
+    if (schemaName == null && Type.BOOLEAN.equals(type)) {
+      builder.append((Boolean) value ? "TRUE" : "FALSE");
+    } else {
+      super.formatColumnValue(builder, schemaName, schemaParameters, type, value);
+    }
   }
 
 }

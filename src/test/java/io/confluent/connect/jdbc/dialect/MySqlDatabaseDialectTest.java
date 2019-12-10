@@ -97,7 +97,8 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
         "`c3` VARCHAR(256) NOT NULL,\n" + "`c4` VARCHAR(256) NULL,\n" +
         "`c5` DATE DEFAULT '2001-03-15',\n" + "`c6` TIME(3) DEFAULT '00:00:00.000',\n" +
         "`c7` DATETIME(3) DEFAULT '2001-03-15 00:00:00.000',\n" + "`c8` DECIMAL(65,4) NULL,\n" +
-        "`c9` TINYINT DEFAULT 1,\n" + "PRIMARY KEY(`c1`))";
+        "`c9` TINYINT DEFAULT 1,\n" +
+        "PRIMARY KEY(`c1`))";
     String sql = dialect.buildCreateTableStatement(tableId, sinkRecordFields);
     assertEquals(expected, sql);
   }

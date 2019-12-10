@@ -111,7 +111,8 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
         + "\"c5\" date DEFAULT '2001-03-15',\n"
         + "\"c6\" time DEFAULT '00:00:00.000',\n"
         + "\"c7\" datetime DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "\"c8\" decimal(38,4) NULL,\n" +
+        + "\"c8\" decimal(38,4) NULL,\n"
+        + "\"c9\" bit DEFAULT 1,\n" +
         "PRIMARY KEY(\"c1\"))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
@@ -127,7 +128,8 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
         + "c5 date DEFAULT '2001-03-15',\n"
         + "c6 time DEFAULT '00:00:00.000',\n"
         + "c7 datetime DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "c8 decimal(38,4) NULL,\n" +
+        + "c8 decimal(38,4) NULL,\n"
+        + "c9 bit DEFAULT 1,\n" +
         "PRIMARY KEY(c1))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
@@ -175,7 +177,8 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
         "ALTER TABLE \"myTable\" ADD\n" + "\"c1\" int NOT NULL,\n" + "\"c2\" bigint NOT NULL,\n" +
         "\"c3\" text NOT NULL,\n" + "\"c4\" text NULL,\n" +
         "\"c5\" date DEFAULT '2001-03-15',\n" + "\"c6\" time DEFAULT '00:00:00.000',\n" +
-        "\"c7\" datetime DEFAULT '2001-03-15 00:00:00.000',\n" + "\"c8\" decimal(38,4) NULL"};
+        "\"c7\" datetime DEFAULT '2001-03-15 00:00:00.000',\n" + "\"c8\" decimal(38,4) NULL,\n" +
+        "\"c9\" bit DEFAULT 1"};
     assertStatements(sql, statements);
   }
 

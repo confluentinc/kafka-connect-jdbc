@@ -129,7 +129,8 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
         + "[c5] date DEFAULT '2001-03-15',\n"
         + "[c6] time DEFAULT '00:00:00.000',\n"
         + "[c7] datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "[c8] decimal(38,4) NULL,\n" +
+        + "[c8] decimal(38,4) NULL,\n"
+        + "[c9] bit DEFAULT 1,\n" +
         "PRIMARY KEY([c1]))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
@@ -145,7 +146,8 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
         + "c5 date DEFAULT '2001-03-15',\n"
         + "c6 time DEFAULT '00:00:00.000',\n"
         + "c7 datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "c8 decimal(38,4) NULL,\n" +
+        + "c8 decimal(38,4) NULL,\n"
+        + "c9 bit DEFAULT 1,\n" +
         "PRIMARY KEY(c1))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
@@ -163,7 +165,8 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
             + "[c5] date DEFAULT '2001-03-15',\n"
             + "[c6] time DEFAULT '00:00:00.000',\n"
             + "[c7] datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
-            + "[c8] decimal(38,4) NULL"
+            + "[c8] decimal(38,4) NULL,\n"
+            + "[c9] bit DEFAULT 1"
         },
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );
@@ -180,7 +183,8 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
             + "c5 date DEFAULT '2001-03-15',\n"
             + "c6 time DEFAULT '00:00:00.000',\n"
             + "c7 datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
-            + "c8 decimal(38,4) NULL"
+            + "c8 decimal(38,4) NULL,\n"
+            + "c9 bit DEFAULT 1"
         },
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );

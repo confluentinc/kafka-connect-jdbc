@@ -99,7 +99,8 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
         System.lineSeparator() + "\"c5\" DATE DEFAULT '2001-03-15'," + System.lineSeparator() +
         "\"c6\" DATE DEFAULT '00:00:00.000'," + System.lineSeparator() +
         "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
-        "\"c8\" DECIMAL NULL," + System.lineSeparator() + "PRIMARY KEY(\"c1\"))";
+        "\"c8\" DECIMAL NULL," + System.lineSeparator() +
+        "\"c9\" BOOLEAN DEFAULT 1," + System.lineSeparator() + "PRIMARY KEY(\"c1\"))";
     String sql = dialect.buildCreateTableStatement(tableId, sinkRecordFields);
     assertEquals(expected, sql);
   }
@@ -114,7 +115,8 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
         System.lineSeparator() + "\"c5\" DATE DEFAULT '2001-03-15'," + System.lineSeparator() +
         "\"c6\" DATE DEFAULT '00:00:00.000'," + System.lineSeparator() +
         "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
-        "\"c8\" DECIMAL NULL)"};
+        "\"c8\" DECIMAL NULL," + System.lineSeparator() +
+        "\"c9\" BOOLEAN DEFAULT 1)"};
     assertStatements(sql, statements);
   }
 

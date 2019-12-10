@@ -129,6 +129,7 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
         + "`c6` NUMERIC DEFAULT '00:00:00.000',\n"
         + "`c7` NUMERIC DEFAULT '2001-03-15 00:00:00.000',\n"
         + "`c8` NUMERIC NULL,\n"
+        + "`c9` INTEGER DEFAULT 1,\n"
         + "PRIMARY KEY(`c1`))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
@@ -145,6 +146,7 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
         + "c6 NUMERIC DEFAULT '00:00:00.000',\n"
         + "c7 NUMERIC DEFAULT '2001-03-15 00:00:00.000',\n"
         + "c8 NUMERIC NULL,\n"
+        + "c9 INTEGER DEFAULT 1,\n"
         + "PRIMARY KEY(c1))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
@@ -161,7 +163,8 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
             "ALTER TABLE `myTable` ADD `c5` NUMERIC DEFAULT '2001-03-15'",
             "ALTER TABLE `myTable` ADD `c6` NUMERIC DEFAULT '00:00:00.000'",
             "ALTER TABLE `myTable` ADD `c7` NUMERIC DEFAULT '2001-03-15 00:00:00.000'",
-            "ALTER TABLE `myTable` ADD `c8` NUMERIC NULL"
+            "ALTER TABLE `myTable` ADD `c8` NUMERIC NULL",
+            "ALTER TABLE `myTable` ADD `c9` INTEGER DEFAULT 1"
         },
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );
@@ -177,7 +180,8 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
             "ALTER TABLE myTable ADD c5 NUMERIC DEFAULT '2001-03-15'",
             "ALTER TABLE myTable ADD c6 NUMERIC DEFAULT '00:00:00.000'",
             "ALTER TABLE myTable ADD c7 NUMERIC DEFAULT '2001-03-15 00:00:00.000'",
-            "ALTER TABLE myTable ADD c8 NUMERIC NULL"
+            "ALTER TABLE myTable ADD c8 NUMERIC NULL",
+            "ALTER TABLE myTable ADD c9 INTEGER DEFAULT 1"
         },
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );

@@ -36,16 +36,6 @@ import static org.junit.Assert.assertEquals;
 public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDatabaseDialect> {
 
   @Override
-  @Before
-  public void setup() throws Exception {
-    super.setup();
-    Schema booleanWithDefault = SchemaBuilder.bool().defaultValue(true);
-    SinkRecordField f9 = new SinkRecordField(booleanWithDefault, "c9", false);
-    sinkRecordFields = new ArrayList<>(sinkRecordFields);
-    sinkRecordFields.add(f9);
-  }
-
-  @Override
   protected PostgreSqlDatabaseDialect createDialect() {
     return new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something"));
   }

@@ -97,6 +97,7 @@ public class DerbyDatabaseDialectTest extends BaseDialectTest<DerbyDatabaseDiale
         + "\"c3\" VARCHAR(32672) NOT NULL,\n" + "\"c4\" VARCHAR(32672) NULL,\n"
         + "\"c5\" DATE DEFAULT '2001-03-15',\n" + "\"c6\" TIME DEFAULT '00:00:00.000',\n"
         + "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" + "\"c8\" DECIMAL(31,4) NULL,\n"
+        + "\"c9\" SMALLINT DEFAULT 1,\n"
         + "PRIMARY KEY(\"c1\"))";
     String sql = dialect.buildCreateTableStatement(tableId, sinkRecordFields);
     assertEquals(expected, sql);
@@ -112,6 +113,7 @@ public class DerbyDatabaseDialectTest extends BaseDialectTest<DerbyDatabaseDiale
         + "c3 VARCHAR(32672) NOT NULL,\nc4 VARCHAR(32672) NULL,\n"
         + "c5 DATE DEFAULT '2001-03-15',\nc6 TIME DEFAULT '00:00:00.000',\n"
         + "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\nc8 DECIMAL(31,4) NULL,\n"
+        + "c9 SMALLINT DEFAULT 1,\n"
         + "PRIMARY KEY(c1))";
     String sql = dialect.buildCreateTableStatement(tableId, sinkRecordFields);
     assertEquals(expected, sql);
@@ -126,7 +128,8 @@ public class DerbyDatabaseDialectTest extends BaseDialectTest<DerbyDatabaseDiale
                     + "ADD \"c5\" DATE DEFAULT '2001-03-15',\n"
                     + "ADD \"c6\" TIME DEFAULT '00:00:00.000',\n"
                     + "ADD \"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
-                    + "ADD \"c8\" DECIMAL(31,4) NULL"};
+                    + "ADD \"c8\" DECIMAL(31,4) NULL,\n"
+                    + "ADD \"c9\" SMALLINT DEFAULT 1"};
     assertStatements(sql, statements);
   }
 
@@ -144,7 +147,8 @@ public class DerbyDatabaseDialectTest extends BaseDialectTest<DerbyDatabaseDiale
                     + "ADD c5 DATE DEFAULT '2001-03-15',\n"
                     + "ADD c6 TIME DEFAULT '00:00:00.000',\n"
                     + "ADD c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
-                    + "ADD c8 DECIMAL(31,4) NULL"};
+                    + "ADD c8 DECIMAL(31,4) NULL,\n"
+                    + "ADD c9 SMALLINT DEFAULT 1"};
     assertStatements(sql, statements);
   }
 

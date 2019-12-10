@@ -107,6 +107,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
                                             .optional().build();
     Schema optionalDecimal = Decimal.builder(4).optional().parameter("p1", "v1")
                                     .parameter("p2", "v2").build();
+    Schema booleanWithDefault = SchemaBuilder.bool().defaultValue(true);
     tableId = new TableId(null, null, "myTable");
     columnPK1 = new ColumnId(tableId, "id1");
     columnPK2 = new ColumnId(tableId, "id2");
@@ -125,7 +126,8 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     SinkRecordField f6 = new SinkRecordField(optionalTimeWithDefault, "c6", false);
     SinkRecordField f7 = new SinkRecordField(optionalTsWithDefault, "c7", false);
     SinkRecordField f8 = new SinkRecordField(optionalDecimal, "c8", false);
-    sinkRecordFields = Arrays.asList(f1, f2, f3, f4, f5, f6, f7, f8);
+    SinkRecordField f9 = new SinkRecordField(booleanWithDefault, "c9", false);
+    sinkRecordFields = Arrays.asList(f1, f2, f3, f4, f5, f6, f7, f8, f9);
 
     dialect = createDialect();
   }

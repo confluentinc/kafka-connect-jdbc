@@ -74,7 +74,7 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
     };
 
     // Should request a connection, then should close it on stop()
-    EasyMock.expect(mockCachedConnectionProvider.getConnection()).andReturn(db.getConnection()).times(2);
+    EasyMock.expect(mockCachedConnectionProvider.getConnection()).andReturn(db.getConnection());
 
     PowerMock.expectLastCall();
 

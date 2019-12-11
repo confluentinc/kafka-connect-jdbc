@@ -100,6 +100,7 @@ public class VerticaDatabaseDialectTest extends BaseDialectTest<VerticaDatabaseD
         + "\"c6\" TIME DEFAULT '00:00:00.000',\n"
         + "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
         + "\"c8\" DECIMAL(18,4) NULL,\n"
+        + "\"c9\" BOOLEAN DEFAULT 1,\n"
         + "PRIMARY KEY(\"c1\"))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
@@ -116,6 +117,7 @@ public class VerticaDatabaseDialectTest extends BaseDialectTest<VerticaDatabaseD
         + "c6 TIME DEFAULT '00:00:00.000',\n"
         + "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
         + "c8 DECIMAL(18,4) NULL,\n"
+        + "c9 BOOLEAN DEFAULT 1,\n"
         + "PRIMARY KEY(c1))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
@@ -132,7 +134,8 @@ public class VerticaDatabaseDialectTest extends BaseDialectTest<VerticaDatabaseD
             "ALTER TABLE \"myTable\" ADD \"c5\" DATE DEFAULT '2001-03-15'",
             "ALTER TABLE \"myTable\" ADD \"c6\" TIME DEFAULT '00:00:00.000'",
             "ALTER TABLE \"myTable\" ADD \"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'",
-            "ALTER TABLE \"myTable\" ADD \"c8\" DECIMAL(18,4) NULL"
+            "ALTER TABLE \"myTable\" ADD \"c8\" DECIMAL(18,4) NULL",
+            "ALTER TABLE \"myTable\" ADD \"c9\" BOOLEAN DEFAULT 1"
         },
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );
@@ -148,7 +151,8 @@ public class VerticaDatabaseDialectTest extends BaseDialectTest<VerticaDatabaseD
             "ALTER TABLE myTable ADD c5 DATE DEFAULT '2001-03-15'",
             "ALTER TABLE myTable ADD c6 TIME DEFAULT '00:00:00.000'",
             "ALTER TABLE myTable ADD c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'",
-            "ALTER TABLE myTable ADD c8 DECIMAL(18,4) NULL"
+            "ALTER TABLE myTable ADD c8 DECIMAL(18,4) NULL",
+            "ALTER TABLE myTable ADD c9 BOOLEAN DEFAULT 1"
         },
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );

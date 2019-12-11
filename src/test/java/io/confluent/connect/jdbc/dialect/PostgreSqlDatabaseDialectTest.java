@@ -14,12 +14,16 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import java.util.ArrayList;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
+import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Arrays;
@@ -101,6 +105,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         + "\"c6\" TIME DEFAULT '00:00:00.000',\n"
         + "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
         + "\"c8\" DECIMAL NULL,\n"
+        + "\"c9\" BOOLEAN DEFAULT TRUE,\n"
         + "PRIMARY KEY(\"c1\"))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
@@ -118,6 +123,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         + "c6 TIME DEFAULT '00:00:00.000',\n"
         + "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
         + "c8 DECIMAL NULL,\n"
+        + "c9 BOOLEAN DEFAULT TRUE,\n"
         + "PRIMARY KEY(c1))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
@@ -135,7 +141,8 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
             + "ADD \"c5\" DATE DEFAULT '2001-03-15',\n"
             + "ADD \"c6\" TIME DEFAULT '00:00:00.000',\n"
             + "ADD \"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
-            + "ADD \"c8\" DECIMAL NULL"
+            + "ADD \"c8\" DECIMAL NULL,\n"
+            + "ADD \"c9\" BOOLEAN DEFAULT TRUE"
         ),
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );
@@ -153,7 +160,8 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
             + "ADD c5 DATE DEFAULT '2001-03-15',\n"
             + "ADD c6 TIME DEFAULT '00:00:00.000',\n"
             + "ADD c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
-            + "ADD c8 DECIMAL NULL"
+            + "ADD c8 DECIMAL NULL,\n"
+            + "ADD c9 BOOLEAN DEFAULT TRUE"
         ),
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );

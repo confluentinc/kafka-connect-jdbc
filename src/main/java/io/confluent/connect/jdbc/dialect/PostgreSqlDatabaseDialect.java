@@ -62,8 +62,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     }
   }
 
-  private static final String JSON_TYPE_NAME = "json";
-  private static final String JSONB_TYPE_NAME = "jsonb";
+  static final String JSON_TYPE_NAME = "json";
+  static final String JSONB_TYPE_NAME = "jsonb";
 
   /**
    * Create a new dialect instance with the given connector configuration.

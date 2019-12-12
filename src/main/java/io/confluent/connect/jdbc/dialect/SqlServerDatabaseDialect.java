@@ -138,7 +138,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     }
 
     // Delegate for the remaining logic to handle the standard types
-    return super.createColumnConverter(mapping);
+    return super.columnConverterFor(mapping, defn, col, isJdbc4);
   }
 
   /**

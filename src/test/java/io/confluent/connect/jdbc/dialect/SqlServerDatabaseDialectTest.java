@@ -53,6 +53,11 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
     assertTimestamp(ZonedDateTime.of(2019, 12, 8, 12, 34, 56, 785020000, utc), ts);
   }
 
+  @Test
+  public void testCustomColumnConverters() {
+    assertColumnConverter(SqlServerDatabaseDialect.DATETIMEOFFSET, null, Timestamp.SCHEMA, Timestamp.class);
+  }
+
   protected void assertTimestamp(ZonedDateTime expected, java.sql.Timestamp actual) {
     ZonedDateTime zdt = ZonedDateTime.ofInstant(actual.toInstant(), ZoneId.of("UTC"));
     assertEquals(expected.getYear(), zdt.getYear());

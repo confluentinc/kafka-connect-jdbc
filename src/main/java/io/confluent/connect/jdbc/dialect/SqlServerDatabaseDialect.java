@@ -51,7 +51,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
   /**
    * JDBC Type constant for SQL Server's custom data types.
    */
-  private static final int DATETIMEOFFSET = -155;
+  static final int DATETIMEOFFSET = -155;
 
   /**
    * This is the format of the string form of DATETIMEOFFSET values, and used to parse such
@@ -137,7 +137,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     }
 
     // Delegate for the remaining logic to handle the standard types
-    return super.createColumnConverter(mapping);
+    return super.columnConverterFor(mapping, defn, col, isJdbc4);
   }
 
   /**

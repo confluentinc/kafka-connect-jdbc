@@ -62,8 +62,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     }
   }
 
-  private static final String JSON_TYPE_NAME = "json";
-  private static final String JSONB_TYPE_NAME = "jsonb";
+  static final String JSON_TYPE_NAME = "json";
+  static final String JSONB_TYPE_NAME = "jsonb";
 
   /**
    * Create a new dialect instance with the given connector configuration.
@@ -140,12 +140,14 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   @Override
-  public ColumnConverter createColumnConverter(
-      ColumnMapping mapping
+  protected ColumnConverter columnConverterFor(
+      ColumnMapping mapping,
+      ColumnDefinition defn,
+      int col,
+      boolean isJdbc4
   ) {
     // First handle any PostgreSQL-specific types
     ColumnDefinition columnDefn = mapping.columnDefn();
-    int col = mapping.columnNumber();
     switch (columnDefn.type()) {
       case Types.BIT: {
         // PostgreSQL allows variable length bit strings, but when length is 1 then the driver
@@ -171,7 +173,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     }
 
     // Delegate for the remaining logic
-    return super.createColumnConverter(mapping);
+    return super.columnConverterFor(mapping, defn, col, isJdbc4);
   }
 
   protected boolean isJsonType(ColumnDefinition columnDefn) {

@@ -15,16 +15,13 @@
 
 package io.confluent.connect.jdbc.dialect;
 
-import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
-import java.util.ArrayList;
+import java.sql.Types;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
-import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Arrays;
@@ -60,6 +57,12 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     assertDecimalMapping(3, "DECIMAL");
     assertDecimalMapping(4, "DECIMAL");
     assertDecimalMapping(5, "DECIMAL");
+  }
+
+  @Test
+  public void testCustomColumnConverters() {
+    assertColumnConverter(Types.OTHER, PostgreSqlDatabaseDialect.JSON_TYPE_NAME, Schema.STRING_SCHEMA, String.class);
+    assertColumnConverter(Types.OTHER, PostgreSqlDatabaseDialect.JSONB_TYPE_NAME, Schema.STRING_SCHEMA, String.class);
   }
 
   @Test

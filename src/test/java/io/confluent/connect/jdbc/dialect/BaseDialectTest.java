@@ -15,9 +15,15 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.source.ColumnMapping;
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.ColumnDefinition.Mutability;
+import io.confluent.connect.jdbc.util.ColumnDefinition.Nullability;
+import java.sql.Types;
 import java.time.ZoneOffset;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -53,6 +59,7 @@ import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
+import static junit.framework.TestCase.assertNotNull;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
@@ -241,6 +248,83 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
   ) {
     Map<String, String> schemaProps = propertiesFromPairs(schemaParamPairs);
     assertMapping(expectedSqlType, type, schemaName, schemaProps);
+  }
+
+  /**
+   * Verify that column converters are defined and return non-null converter objects.
+   * These are inherited by most dialects from {@link GenericDatabaseDialect}, but cannot live
+   * inside {@link GenericDatabaseDialectTest} because specific dialect tests don't inherit from
+   * the generic test class.
+   */
+  @Test
+  public void testGenericColumnConverters() {
+    assertColumnConverter(Types.BOOLEAN, null, Schema.BOOLEAN_SCHEMA, Boolean.class);
+    assertColumnConverter(Types.BIT, null, Schema.INT8_SCHEMA, Byte.class);
+    assertColumnConverter(Types.TINYINT, null, Schema.INT8_SCHEMA, Byte.class);
+    assertColumnConverter(Types.SMALLINT, null, Schema.INT16_SCHEMA, Short.class);
+    assertColumnConverter(Types.INTEGER, null, Schema.INT32_SCHEMA, Integer.class);
+    assertColumnConverter(Types.BIGINT, null, Schema.INT64_SCHEMA, Long.class);
+    assertColumnConverter(Types.REAL, null, Schema.FLOAT32_SCHEMA, Float.class);
+    assertColumnConverter(Types.FLOAT, null, Schema.FLOAT64_SCHEMA, Double.class);
+    assertColumnConverter(Types.DOUBLE, null, Schema.FLOAT64_SCHEMA, Double.class);
+    assertColumnConverter(Types.NUMERIC, null, Schema.INT8_SCHEMA, Integer.class); // assume 0 precision and 0 scale
+    assertColumnConverter(Types.DECIMAL, null, Decimal.schema(0), Decimal.class);
+    assertColumnConverter(Types.CHAR, null, Schema.STRING_SCHEMA, String.class);
+    assertColumnConverter(Types.VARCHAR, null, Schema.STRING_SCHEMA, String.class);
+    assertColumnConverter(Types.LONGVARCHAR, null, Schema.STRING_SCHEMA, String.class);
+    assertColumnConverter(Types.NCHAR, null, Schema.STRING_SCHEMA, String.class);
+    assertColumnConverter(Types.NVARCHAR, null, Schema.STRING_SCHEMA, String.class);
+    assertColumnConverter(Types.LONGNVARCHAR, null, Schema.STRING_SCHEMA, String.class);
+    assertColumnConverter(Types.CLOB, null, Schema.STRING_SCHEMA, String.class);
+    assertColumnConverter(Types.NCLOB, null, Schema.STRING_SCHEMA, String.class);
+    assertColumnConverter(Types.DATALINK, null, Schema.STRING_SCHEMA, String.class);
+    assertColumnConverter(Types.SQLXML, null, Schema.STRING_SCHEMA, String.class);
+    assertColumnConverter(Types.BINARY, null, Schema.BYTES_SCHEMA, byte[].class);
+    assertColumnConverter(Types.BLOB, null, Schema.BYTES_SCHEMA, byte[].class);
+    assertColumnConverter(Types.VARBINARY, null, Schema.BYTES_SCHEMA, byte[].class);
+    assertColumnConverter(Types.LONGVARBINARY, null, Schema.BYTES_SCHEMA, byte[].class);
+    assertColumnConverter(Types.DATE, null, Date.SCHEMA, java.sql.Date.class);
+    assertColumnConverter(Types.TIME, null, Time.SCHEMA, java.sql.Time.class);
+    assertColumnConverter(Types.TIMESTAMP, null, Timestamp.SCHEMA, java.sql.Timestamp.class);
+  }
+
+
+  protected void assertColumnConverter(
+      int jdbcType,
+      String typeName,
+      Schema schema,
+      Class<?> clazz) {
+    ColumnMapping mapping = new ColumnMapping(
+        new ColumnDefinition(
+            columnA,
+            jdbcType,
+            typeName,
+            clazz.getCanonicalName(),
+            Nullability.NOT_NULL,
+            Mutability.UNKNOWN,
+            0,
+            0,
+            false,
+            1,
+            false,
+            false,
+            false,
+            false,
+            false
+        ),
+        1,
+        new Field(
+            "b",
+            1,
+            schema
+        )
+    );
+    assertNotNull(dialect.columnConverterFor(
+        mapping,
+        mapping.columnDefn(),
+        mapping.columnNumber(),
+        true
+    ));
   }
 
 

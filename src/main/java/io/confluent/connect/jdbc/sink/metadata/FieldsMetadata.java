@@ -19,9 +19,9 @@ import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -82,7 +82,7 @@ public class FieldsMetadata {
       throw new ConnectException("Value schema must be of type Struct");
     }
 
-    final Map<String, SinkRecordField> allFields = new HashMap<>();
+    final Map<String, SinkRecordField> allFields = new LinkedHashMap<>();
 
     final Set<String> keyFieldNames = new LinkedHashSet<>();
     switch (pkMode) {

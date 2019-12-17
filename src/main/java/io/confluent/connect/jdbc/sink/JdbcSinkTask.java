@@ -84,7 +84,18 @@ public class JdbcSinkTask extends SinkTask {
         sqleAllMessages += e + System.lineSeparator();
       }
       if (remainingRetries == 0) {
-        throw new ConnectException(new SQLException(sqleAllMessages));
+        if (config.dropInvalidBatch) {
+          log.error(
+                  "Can't write records. First record from topic/partition/offset {}/{}/{}. "
+                          + "Error message: {}",
+                  first.topic(),
+                  first.kafkaPartition(),
+                  first.kafkaOffset(),
+                  sqle.getMessage()
+          );
+        } else {
+          throw new ConnectException(new SQLException(sqleAllMessages));
+        }
       } else {
         writer.closeQuietly();
         initWriter();

@@ -263,4 +263,62 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     verifyAll();
   }
 
+  @Test
+  public void dropInvalidMessage() throws SQLException {
+    final int maxRetries = 2;
+    final int retryBackoffMs = 1000;
+
+    Set<SinkRecord> records = Collections.singleton(new SinkRecord("stub", 0, null, null, null, null, 0));
+    final JdbcDbWriter mockWriter = createMock(JdbcDbWriter.class);
+    SinkTaskContext ctx = createMock(SinkTaskContext.class);
+
+    mockWriter.write(records);
+    expectLastCall().andThrow(new SQLException()).times(1 + maxRetries);
+
+    ctx.timeout(retryBackoffMs);
+    expectLastCall().times(maxRetries);
+
+    mockWriter.closeQuietly();
+    expectLastCall().times(maxRetries);
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(ctx);
+
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSinkConfig.CONNECTION_URL, "stub");
+    props.put(JdbcSinkConfig.MAX_RETRIES, String.valueOf(maxRetries));
+    props.put(JdbcSinkConfig.RETRY_BACKOFF_MS, String.valueOf(retryBackoffMs));
+    props.put(JdbcSinkConfig.DROP_INVALID_BATCH_CONFIG, "true");
+    task.start(props);
+
+    replayAll();
+
+    try {
+      task.put(records);
+      fail();
+    } catch (RetriableException expected) {
+    }
+
+    try {
+      task.put(records);
+      fail();
+    } catch (RetriableException expected) {
+    }
+
+    try {
+      task.put(records);
+    } catch (RetriableException e) {
+      fail("Non-retriable exception expected");
+    } catch (ConnectException expected) {
+      fail("No exception expected due to drop invalid message");
+    }
+
+    verifyAll();
+  }
+
 }

@@ -424,15 +424,15 @@ public class JdbcSinkConfig extends AbstractConfig {
             RETRY_BACKOFF_MS_DISPLAY
         )
         .define(
-                DROP_INVALID_BATCH_CONFIG,
+            DROP_INVALID_BATCH_CONFIG,
             ConfigDef.Type.BOOLEAN,
-                DROP_INVALID_BATCH_DEFAULT,
+            DROP_INVALID_BATCH_DEFAULT,
             ConfigDef.Importance.MEDIUM,
-                DROP_INVALID_BATCH_DOC,
+            DROP_INVALID_BATCH_DOC,
             RETRIES_GROUP,
             3,
             ConfigDef.Width.SHORT,
-                DROP_INVALID_BATCH_DISPLAY
+            DROP_INVALID_BATCH_DISPLAY
         );
 
   public final String connectionUrl;

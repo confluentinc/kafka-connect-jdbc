@@ -218,6 +218,10 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       properties.setProperty("password", dbPassword.value());
     }
     properties = addConnectionProperties(properties);
+    // Timeout is 40 seconds to be as long as possible for customer to have a long connection
+    // handshake, while still giving enough time to validate once in the follower worker,
+    // and again in the leader worker and still be under 90s REST serving timeout
+    DriverManager.setLoginTimeout(40);
     Connection connection = DriverManager.getConnection(jdbcUrl, properties);
     if (jdbcDriverInfo == null) {
       jdbcDriverInfo = createJdbcDriverInfo(connection);

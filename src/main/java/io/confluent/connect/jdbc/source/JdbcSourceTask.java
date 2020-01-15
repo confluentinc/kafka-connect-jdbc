@@ -149,6 +149,7 @@ public class JdbcSourceTask extends SourceTask {
     boolean validateNonNulls
         = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
     TimeZone timeZone = config.timeZone();
+    String suffix = config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG).trim();
 
     for (String tableOrQuery : tablesOrQuery) {
       final List<Map<String, String>> tablePartitionsToCheck;
@@ -194,7 +195,13 @@ public class JdbcSourceTask extends SourceTask {
 
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(
-            new BulkTableQuerier(dialect, queryMode, tableOrQuery, topicPrefix)
+            new BulkTableQuerier(
+                dialect, 
+                queryMode, 
+                tableOrQuery, 
+                topicPrefix, 
+                suffix
+            )
         );
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)) {
         tableQueue.add(
@@ -207,7 +214,8 @@ public class JdbcSourceTask extends SourceTask {
                 incrementingColumn,
                 offset,
                 timestampDelayInterval,
-                timeZone
+                timeZone,
+                suffix
             )
         );
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
@@ -221,7 +229,8 @@ public class JdbcSourceTask extends SourceTask {
                 null,
                 offset,
                 timestampDelayInterval,
-                timeZone
+                timeZone,
+                suffix
             )
         );
       } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
@@ -235,7 +244,8 @@ public class JdbcSourceTask extends SourceTask {
                 incrementingColumn,
                 offset,
                 timestampDelayInterval,
-                timeZone
+                timeZone,
+                suffix
             )
         );
       }

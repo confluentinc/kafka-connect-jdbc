@@ -255,6 +255,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "For backward compatibility, the default is 'always'.";
   public static final String QUOTE_SQL_IDENTIFIERS_DISPLAY = "Quote Identifiers";
 
+  public static final String QUERY_SUFFIX_CONFIG = "query.suffix";
+  public static final String QUERY_SUFFIX_DEFAULT = "";
+  public static final String QUERY_SUFFIX_DOC = 
+      "Suffix to append at the end of the generated query.";
+  public static final String QUERY_SUFFIX_DISPLAY = "Query suffix";
+
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
 
@@ -503,7 +509,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.MEDIUM,
         QUOTE_SQL_IDENTIFIERS_DISPLAY,
-        QUOTE_METHOD_RECOMMENDER);
+        QUOTE_METHOD_RECOMMENDER
+    ).define(
+        QUERY_SUFFIX_CONFIG,
+        Type.STRING,
+        QUERY_SUFFIX_DEFAULT,
+        Importance.LOW,
+        QUERY_SUFFIX_DOC,
+        MODE_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        QUERY_SUFFIX_DISPLAY);
   }
 
   private static final void addConnectorOptions(ConfigDef config) {

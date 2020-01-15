@@ -25,6 +25,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.TableId;
 
 /**
@@ -45,6 +46,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected final String query;
   protected final String topicPrefix;
   protected final TableId tableId;
+  protected final String suffix;
 
   // Mutable state
 
@@ -59,7 +61,8 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
       DatabaseDialect dialect,
       QueryMode mode,
       String nameOrQuery,
-      String topicPrefix
+      String topicPrefix,
+      String suffix
   ) {
     this.dialect = dialect;
     this.mode = mode;
@@ -67,6 +70,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     this.query = mode.equals(QueryMode.QUERY) ? nameOrQuery : null;
     this.topicPrefix = topicPrefix;
     this.lastUpdate = 0;
+    this.suffix = suffix;
   }
 
   public long getLastUpdate() {
@@ -148,6 +152,12 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     resultSet = null;
   }
 
+  protected void addSuffixIfPresent(ExpressionBuilder builder) {
+    if (!this.suffix.isEmpty()) {
+      builder.append(" ").append(suffix);
+    }  
+  }
+  
   protected void recordQuery(String query) {
     if (query != null && !query.equals(loggedQueryString)) {
       // For usability, log the statement at INFO level only when it changes

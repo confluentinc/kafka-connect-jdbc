@@ -246,7 +246,13 @@ public class JdbcSourceTask extends SourceTask {
   }
 
   protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
-    return new CachedConnectionProvider(dialect, maxConnAttempts, retryBackoff);
+    return new CachedConnectionProvider(dialect, maxConnAttempts, retryBackoff) {
+      @Override
+      protected void onConnect(final Connection connection) throws SQLException {
+        super.onConnect(connection);
+        connection.setAutoCommit(false);
+      }
+    };
   }
 
   //This method returns a list of possible partition maps for different offset protocols
@@ -377,16 +383,22 @@ public class JdbcSourceTask extends SourceTask {
       boolean incrementingOptional = false;
       boolean atLeastOneTimestampNotOptional = false;
       final Connection conn = cachedConnectionProvider.getConnection();
-      Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, table, null);
-      for (ColumnDefinition defn : defnsById.values()) {
-        String columnName = defn.id().name();
-        if (columnName.equalsIgnoreCase(incrementingColumn)) {
-          incrementingOptional = defn.isOptional();
-        } else if (lowercaseTsColumns.contains(columnName.toLowerCase(Locale.getDefault()))) {
-          if (!defn.isOptional()) {
-            atLeastOneTimestampNotOptional = true;
+      boolean autoCommit = conn.getAutoCommit();
+      try {
+        conn.setAutoCommit(true);
+        Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, table, null);
+        for (ColumnDefinition defn : defnsById.values()) {
+          String columnName = defn.id().name();
+          if (columnName.equalsIgnoreCase(incrementingColumn)) {
+            incrementingOptional = defn.isOptional();
+          } else if (lowercaseTsColumns.contains(columnName.toLowerCase(Locale.getDefault()))) {
+            if (!defn.isOptional()) {
+              atLeastOneTimestampNotOptional = true;
+            }
           }
         }
+      } finally {
+        conn.setAutoCommit(autoCommit);
       }
 
       // Validate that requested columns for offsets are NOT NULL. Currently this is only performed

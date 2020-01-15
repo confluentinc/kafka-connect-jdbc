@@ -145,6 +145,12 @@
             <artifactId>slf4j-log4j12</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>io.zonky.test</groupId>
+            <artifactId>embedded-postgres</artifactId>
+            <version>1.2.6</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -222,6 +228,34 @@
                             </tags>
 
                             <confluentControlCenterIntegration>true</confluentControlCenterIntegration>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <!--normal integration tests should not run the memory-restricted tests -->
+                        <id>integration-test</id>
+                        <configuration>
+                            <excludes>
+                                <exclude>**/*OOM*.java</exclude>
+                            </excludes>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>integration-test-memory-restricted</id>
+                        <goals>
+                            <goal>integration-test</goal>
+                        </goals>
+                        <configuration>
+                            <!-- out-of-memory tests should have a restricted heap size-->
+                            <argLine>@{argLine} -Djava.awt.headless=true -Xmx256M</argLine>
+                            <includes>
+                                <include>**/*OOM*.java</include>
+                            </includes>
                         </configuration>
                     </execution>
                 </executions>

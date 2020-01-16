@@ -17,9 +17,11 @@ package io.confluent.connect.jdbc.source;
 
 import java.util.TimeZone;
 import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.errors.DataException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,6 +31,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
@@ -234,7 +237,13 @@ public class TimestampIncrementingCriteria {
       Struct record
   ) {
     final Long extractedId;
-    final Schema incrementingColumnSchema = schema.field(incrementingColumn.name()).schema();
+    final Field field = schema.field(incrementingColumn.name());
+    if (field == null) {
+      throw new DataException("Incrementing column " + incrementingColumn.name() + " not found in "
+              + schema.fields().stream().map(f -> f.name()).collect(Collectors.joining(",")));
+    }
+
+    final Schema incrementingColumnSchema = field.schema();
     final Object incrementingColumnValue = record.get(incrementingColumn.name());
     if (incrementingColumnValue == null) {
       throw new ConnectException(

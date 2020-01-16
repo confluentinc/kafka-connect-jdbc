@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.source;
 
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,6 +31,7 @@ import java.util.Map;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.source.SchemaMapping.FieldSetter;
+import io.confluent.connect.jdbc.util.ExpressionBuilder;
 
 /**
  * BulkTableQuerier always returns the entire table.
@@ -41,29 +43,35 @@ public class BulkTableQuerier extends TableQuerier {
       DatabaseDialect dialect,
       QueryMode mode,
       String name,
-      String topicPrefix
+      String topicPrefix,
+      String suffix
   ) {
-    super(dialect, mode, name, topicPrefix);
+    super(dialect, mode, name, topicPrefix, suffix);
   }
 
   @Override
   protected void createPreparedStatement(Connection db) throws SQLException {
+    ExpressionBuilder builder = dialect.expressionBuilder();  
     switch (mode) {
       case TABLE:
-        String queryStr = dialect.expressionBuilder().append("SELECT * FROM ")
-                                 .append(tableId).toString();
-        recordQuery(queryStr);
-        log.debug("{} prepared SQL query: {}", this, queryStr);
-        stmt = dialect.createPreparedStatement(db, queryStr);
+        builder.append("SELECT * FROM ").append(tableId);
+
         break;
       case QUERY:
-        recordQuery(query);
-        log.debug("{} prepared SQL query: {}", this, query);
-        stmt = dialect.createPreparedStatement(db, query);
+        builder.append(query);  
+        
         break;
       default:
         throw new ConnectException("Unknown mode: " + mode);
     }
+
+    addSuffixIfPresent(builder);
+    
+    String queryStr = builder.toString();
+
+    recordQuery(queryStr);
+    log.debug("{} prepared SQL query: {}", this, queryStr);
+    stmt = dialect.createPreparedStatement(db, queryStr);
   }
 
   @Override
@@ -78,9 +86,11 @@ public class BulkTableQuerier extends TableQuerier {
       try {
         setter.setField(record, resultSet);
       } catch (IOException e) {
-        log.warn("Ignoring record because processing failed:", e);
+        log.warn("Error mapping fields into Connect record", e);
+        throw new ConnectException(e);
       } catch (SQLException e) {
-        log.warn("Ignoring record due to SQL error:", e);
+        log.warn("SQL error mapping fields into Connect record", e);
+        throw new DataException(e);
       }
     }
     // TODO: key from primary key? partition?

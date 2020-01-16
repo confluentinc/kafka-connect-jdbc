@@ -15,10 +15,12 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import java.util.Map;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
@@ -32,6 +34,7 @@ import java.util.Collection;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
@@ -59,8 +62,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     }
   }
 
-  private static final String JSON_TYPE_NAME = "json";
-  private static final String JSONB_TYPE_NAME = "jsonb";
+  static final String JSON_TYPE_NAME = "json";
+  static final String JSONB_TYPE_NAME = "jsonb";
 
   /**
    * Create a new dialect instance with the given connector configuration.
@@ -80,6 +83,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * to {@link ResultSet#FETCH_FORWARD forward} as an optimization for the driver to allow it to
    * scroll more efficiently through the result set and prevent out of memory errors.
    *
+   * <p>This method also sets the {@link PreparedStatement#setFetchSize(int) fetch size} to
+   * the {@link JdbcSourceConnectorConfig#BATCH_MAX_ROWS_CONFIG batch size} of the connector.
+   * This will bound the memory usage of the connector for large tables.
+   *
    * @param stmt the prepared statement; never null
    * @throws SQLException the error that might result from initialization
    */
@@ -87,6 +94,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   protected void initializePreparedStatement(PreparedStatement stmt) throws SQLException {
     log.trace("Initializing PreparedStatement fetch direction to FETCH_FORWARD for '{}'", stmt);
     stmt.setFetchDirection(ResultSet.FETCH_FORWARD);
+    stmt.setFetchSize(config.getInt(JdbcSourceConnectorConfig.BATCH_MAX_ROWS_CONFIG));
   }
 
 
@@ -137,12 +145,14 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   @Override
-  public ColumnConverter createColumnConverter(
-      ColumnMapping mapping
+  protected ColumnConverter columnConverterFor(
+      ColumnMapping mapping,
+      ColumnDefinition defn,
+      int col,
+      boolean isJdbc4
   ) {
     // First handle any PostgreSQL-specific types
     ColumnDefinition columnDefn = mapping.columnDefn();
-    int col = mapping.columnNumber();
     switch (columnDefn.type()) {
       case Types.BIT: {
         // PostgreSQL allows variable length bit strings, but when length is 1 then the driver
@@ -168,7 +178,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     }
 
     // Delegate for the remaining logic
-    return super.createColumnConverter(mapping);
+    return super.columnConverterFor(mapping, defn, col, isJdbc4);
   }
 
   protected boolean isJsonType(ColumnDefinition columnDefn) {
@@ -253,6 +263,21 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
               .of(nonKeyColumns);
     }
     return builder.toString();
+  }
+
+  @Override
+  protected void formatColumnValue(
+      ExpressionBuilder builder,
+      String schemaName,
+      Map<String, String> schemaParameters,
+      Schema.Type type,
+      Object value
+  ) {
+    if (schemaName == null && Type.BOOLEAN.equals(type)) {
+      builder.append((Boolean) value ? "TRUE" : "FALSE");
+    } else {
+      super.formatColumnValue(builder, schemaName, schemaParameters, type, value);
+    }
   }
 
 }

@@ -23,6 +23,7 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.errors.DataException;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -133,7 +134,17 @@ public class TimestampIncrementingCriteriaTest {
                           .build();
     record = new Struct(schema).put("id", 42);
     assertExtractedOffset(42L, schema, record);
+  }
 
+  @Test(expected = DataException.class)
+  public void extractWithIncColumnNotExisting() throws Exception {
+    schema = SchemaBuilder.struct()
+            .field("real-id", SchemaBuilder.INT32_SCHEMA)
+            .field(TS1_COLUMN.name(), Timestamp.SCHEMA)
+            .field(TS2_COLUMN.name(), Timestamp.SCHEMA)
+            .build();
+    record = new Struct(schema).put("real-id", 42);
+    criteriaIncTs.extractValues(schema, record, null);
   }
 
   @Test

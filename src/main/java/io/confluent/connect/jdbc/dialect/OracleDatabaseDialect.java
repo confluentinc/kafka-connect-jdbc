@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -192,7 +193,11 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       builder.appendList()
              .delimitedBy(",")
              .transformedBy(transform)
-             .of(nonKeyColumns);
+              .of(nonKeyColumns);
+      if (config.values().containsKey(JdbcSinkConfig.UPDATE_CONDITION_CONFIG)) {
+        String condition = config.getString(JdbcSinkConfig.UPDATE_CONDITION_CONFIG);
+        builder.append(" ").append(condition);
+      }
     }
 
     builder.append(" when not matched then insert(");

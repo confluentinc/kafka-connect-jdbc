@@ -173,6 +173,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     return new JdbcSourceConnectorConfig(connProps);
   }
 
+
   /**
    * Create a {@link JdbcSinkConfig} with the specified URL and optional config props.
    *

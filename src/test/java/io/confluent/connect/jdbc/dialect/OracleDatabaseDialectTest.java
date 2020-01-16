@@ -15,6 +15,8 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -32,7 +34,15 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
 
   @Override
   protected OracleDatabaseDialect createDialect() {
-    return new OracleDatabaseDialect(sourceConfigWithUrl("jdbc:oracle:thin://something"));
+    final JdbcSourceConnectorConfig config = sourceConfigWithUrl("jdbc:oracle:thin://something",
+            JdbcSinkConfig.UPDATE_CONDITION_CONFIG, " where \"ARTICLE\".\"body\" <> incoming.\"body\" ");
+    return new OracleDatabaseDialect(config);
+  }
+
+  protected OracleDatabaseDialect createSinkDialect() {
+    final JdbcSinkConfig config = sinkConfigWithUrl("jdbc:oracle:thin://something",
+            JdbcSinkConfig.UPDATE_CONDITION_CONFIG, " where \"ARTICLE\".\"body\" <> incoming.\"body\" ");
+    return new OracleDatabaseDialect(config);
   }
 
   @Test
@@ -217,6 +227,25 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
     String actual = dialect.buildUpsertQueryStatement(article, columns(article, "title", "author"),
                                                       columns(article, "body"));
     assertEquals(expected, actual);
+  }
+
+  @Test
+  public void upsertUpdateCondition() {
+    dialect = createSinkDialect();
+    TableId article = tableId("ARTICLE");
+    String expected = "merge into \"ARTICLE\" " +
+            "using (select ? \"title\", ? \"author\", ? \"body\" FROM dual) incoming on" +
+            "(\"ARTICLE\".\"title\"=incoming.\"title\" and \"ARTICLE\"" +
+            ".\"author\"=incoming.\"author\") " +
+            "when matched then update set \"ARTICLE\".\"body\"=incoming.\"body\" " +
+            "where \"ARTICLE\".\"body\" <> incoming.\"body\"" +
+            " when not matched then insert(\"ARTICLE\".\"body\",\"ARTICLE\".\"title\"," +
+            "\"ARTICLE\".\"author\") " +
+            "values(incoming.\"body\",incoming.\"title\",incoming.\"author\")";
+    String actual = dialect.buildUpsertQueryStatement(article, columns(article, "title", "author"),
+            columns(article, "body"));
+    assertEquals(expected, actual);
+    dialect = createDialect();
   }
 
   @Test

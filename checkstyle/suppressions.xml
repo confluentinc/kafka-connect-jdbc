@@ -13,7 +13,7 @@
               files="(DbDialect|JdbcSourceTask|GenericDatabaseDialect).java"/>
 
     <suppress checks="NPathComplexity"
-              files="(DataConverter|FieldsMetadata|JdbcSourceTask|GenericDatabaseDialect).java"/>
+              files="(BufferedRecords|DataConverter|FieldsMetadata|JdbcSourceTask|GenericDatabaseDialect).java"/>
 
     <suppress checks="JavaNCSS"
               files="(DataConverter|FieldsMetadata|JdbcSourceTask|GenericDatabaseDialect).java"/>

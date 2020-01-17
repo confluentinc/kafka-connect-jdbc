@@ -329,13 +329,17 @@ public class GenericDatabaseDialect implements DatabaseDialect {
    * the {@link #createPreparedStatement(Connection, String)} method after the statement is
    * created but before it is returned/used.
    *
-   * <p>By default this method does nothing.
+   * <p>By default this method sets the {@link PreparedStatement#setFetchSize(int) fetch size} to
+   * the {@link JdbcSourceConnectorConfig#BATCH_MAX_ROWS_CONFIG batch size} of the connector.
+   * This will provide a hint to the JDBC driver as to the number of rows to fetch from the database
+   * in an attempt to limit memory usage when reading from large tables. Driver implementations
+   * often require further configuration to make use of the fetch size.
    *
    * @param stmt the prepared statement; never null
    * @throws SQLException the error that might result from initialization
    */
   protected void initializePreparedStatement(PreparedStatement stmt) throws SQLException {
-    // do nothing
+    stmt.setFetchSize(config.getInt(JdbcSourceConnectorConfig.BATCH_MAX_ROWS_CONFIG));
   }
 
   @Override

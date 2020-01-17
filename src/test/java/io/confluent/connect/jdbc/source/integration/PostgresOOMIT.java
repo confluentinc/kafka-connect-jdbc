@@ -14,8 +14,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.HashMap;
-import java.util.Map;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -24,87 +22,46 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Integration test for Postgres OOM conditions
- * Expects to be run with -Xmx64M or -Xmx128M for minimum runtime
- * but will behave correctly with any heap size (just with less performance)
+ * Integration test for Postgres OOM conditions Expects to be run with -Xmx64M or -Xmx128M for
+ * minimum runtime but will behave correctly with any heap size (just with less performance)
  */
 @Category(IntegrationTest.class)
-public class PostgresOOMIT {
+public class PostgresOOMIT extends BaseOOMIntegrationTest {
 
   private static Logger log = LoggerFactory.getLogger(PostgresOOMIT.class);
-
-  public static final long MAX_MEMORY = Runtime.getRuntime().maxMemory();
-
-  public static final int BYTES_PER_ROW = 1024;
-  // enough rows to take up the whole heap
-  public static final long LARGE_QUERY_ROW_COUNT = MAX_MEMORY / BYTES_PER_ROW;
-
-  public static final String LARGE_QUERY;
-
-  static {
-    StringBuilder qb = new StringBuilder();
-    qb.append("select");
-    qb.append(" '");
-      for (int i = 0; i < BYTES_PER_ROW; i++) {
-        qb.append('a');
-      }
-    qb.append("' ");
-    qb.append("from generate_series(1, ");
-    qb.append(LARGE_QUERY_ROW_COUNT);
-    qb.append(") s(i)");
-    LARGE_QUERY = qb.toString();
-    log.info(
-        "Large query will generate "
-            + MAX_MEMORY
-            + " bytes across "
-            + LARGE_QUERY_ROW_COUNT + " rows"
-    );
-  }
 
   @Rule
   public SingleInstancePostgresRule pg = EmbeddedPostgresRules.singleInstance();
 
-  public Map<String, String> props;
-  public JdbcSourceTask task;
-
   @Before
   public void before() {
     props = new HashMap<>();
-    String jdbcURL = String.format("jdbc:postgresql://localhost:%s/postgres", pg.getEmbeddedPostgres().getPort());
+    String jdbcURL = String
+        .format("jdbc:postgresql://localhost:%s/postgres", pg.getEmbeddedPostgres().getPort());
     props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, jdbcURL);
     props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "postgres");
     props.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
     props.put(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG, "topic_");
   }
 
-  public void startTask() {
-
-    task = new JdbcSourceTask();
-    task.start(props);
-  }
-
-  @After
-  public void after() {
-    if (task != null) {
-      task.stop();
+  protected String buildLargeQuery() {
+    StringBuilder qb = new StringBuilder();
+    qb.append("SELECT");
+    qb.append(" '");
+    for (int i = 0; i < BYTES_PER_ROW; i++) {
+      qb.append('a');
     }
-  }
-
-  @Test(expected = OutOfMemoryError.class)
-  public void assertOutOfMemoryWithLargeBatch() throws InterruptedException {
-    props.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
-    props.put(JdbcSourceConnectorConfig.QUERY_CONFIG, LARGE_QUERY);
-    props.put(JdbcSourceConnectorConfig.BATCH_MAX_ROWS_CONFIG, Long.toString(LARGE_QUERY_ROW_COUNT));
-    startTask();
-    task.poll();
-  }
-
-  @Test
-  public void testStreamingReads() throws InterruptedException {
-    props.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
-    props.put(JdbcSourceConnectorConfig.QUERY_CONFIG, LARGE_QUERY);
-    startTask();
-    assertTrue(task.poll().size() > 0);
+    qb.append("' ");
+    qb.append("FROM generate_series(1, ");
+    qb.append(LARGE_QUERY_ROW_COUNT);
+    qb.append(") s(i)");
+    log.info(
+        "Large query will generate "
+            + MAX_MEMORY
+            + " bytes across "
+            + LARGE_QUERY_ROW_COUNT + " rows"
+    );
+    return qb.toString();
   }
 
   @Test

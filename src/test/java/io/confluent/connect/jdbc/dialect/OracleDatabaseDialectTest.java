@@ -35,7 +35,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
   @Override
   protected OracleDatabaseDialect createDialect() {
     final JdbcSourceConnectorConfig config = sourceConfigWithUrl("jdbc:oracle:thin://something",
-            JdbcSinkConfig.UPDATE_CONDITION_CONFIG, "\"ARTICLE\".\"body\" <> incoming.\"body\" ");
+            JdbcSinkConfig.UPDATE_CLAUSE_CONFIG, "\"ARTICLE\".\"body\" <> incoming.\"body\" ");
     return new OracleDatabaseDialect(config);
   }
 
@@ -230,7 +230,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
 
   @Test
   public void upsertUpdateCondition() {
-    OracleDatabaseDialect sinkDialect = createSinkDialect(JdbcSinkConfig.UPDATE_CONDITION_CONFIG, "\"ARTICLE\".\"body\" <> incoming.\"body\" ");
+    OracleDatabaseDialect sinkDialect = createSinkDialect(JdbcSinkConfig.UPDATE_CLAUSE_CONFIG, "\"ARTICLE\".\"body\" <> incoming.\"body\" ");
     TableId article = tableId("ARTICLE");
     String expected = "merge into \"ARTICLE\" " +
             "using (select ? \"title\", ? \"author\", ? \"body\" FROM dual) incoming on" +
@@ -248,7 +248,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
 
   @Test
   public void update() {
-    OracleDatabaseDialect sinkDialect = createSinkDialect(JdbcSinkConfig.UPDATE_CONDITION_CONFIG, "change_date > sysdate");
+    OracleDatabaseDialect sinkDialect = createSinkDialect(JdbcSinkConfig.UPDATE_CLAUSE_CONFIG, "change_date > sysdate");
     TableId article = tableId("ARTICLE");
     String expected =
             "UPDATE \"ARTICLE\" SET \"title\" = ?, \"change_date\" = ? WHERE \"id\" = ? AND change_date > sysdate";

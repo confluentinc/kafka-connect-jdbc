@@ -194,8 +194,8 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
              .delimitedBy(",")
              .transformedBy(transform)
               .of(nonKeyColumns);
-      if (config.values().containsKey(JdbcSinkConfig.UPDATE_CONDITION_CONFIG)) {
-        String condition = config.getString(JdbcSinkConfig.UPDATE_CONDITION_CONFIG);
+      if (config.values().containsKey(JdbcSinkConfig.UPDATE_CLAUSE_CONFIG)) {
+        String condition = config.getString(JdbcSinkConfig.UPDATE_CLAUSE_CONFIG);
         if (condition != null && !"".equals(condition)) {
           builder.append(" where ").append(condition);
         }

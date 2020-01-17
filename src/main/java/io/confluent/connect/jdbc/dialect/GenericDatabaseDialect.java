@@ -1400,13 +1400,13 @@ public class GenericDatabaseDialect implements DatabaseDialect {
              .delimitedBy(" AND ")
              .transformedBy(ExpressionBuilder.columnNamesWith(" = ?"))
              .of(keyColumns);
-      if (config.values().containsKey(JdbcSinkConfig.UPDATE_CONDITION_CONFIG)) {
-        String condition = config.getString(JdbcSinkConfig.UPDATE_CONDITION_CONFIG);
+      if (config.values().containsKey(JdbcSinkConfig.UPDATE_CLAUSE_CONFIG)) {
+        String condition = config.getString(JdbcSinkConfig.UPDATE_CLAUSE_CONFIG);
         builder.append(" AND ").append(condition);
       }
     } else {
-      if (config.values().containsKey(JdbcSinkConfig.UPDATE_CONDITION_CONFIG)) {
-        String condition = config.getString(JdbcSinkConfig.UPDATE_CONDITION_CONFIG);
+      if (config.values().containsKey(JdbcSinkConfig.UPDATE_CLAUSE_CONFIG)) {
+        String condition = config.getString(JdbcSinkConfig.UPDATE_CLAUSE_CONFIG);
         if (condition != null && !"".equals(condition)) {
           builder.append(" WHERE ").append(condition);
         }

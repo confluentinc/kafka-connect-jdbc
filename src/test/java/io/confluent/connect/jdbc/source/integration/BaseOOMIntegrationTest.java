@@ -38,15 +38,6 @@ public abstract class BaseOOMIntegrationTest {
     }
   }
 
-  @Test(expected = OutOfMemoryError.class)
-  public void assertOutOfMemoryWithLargeBatch() throws InterruptedException {
-    props.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
-    props.put(JdbcSourceConnectorConfig.QUERY_CONFIG, buildLargeQuery());
-    props.put(JdbcSourceConnectorConfig.BATCH_MAX_ROWS_CONFIG, Long.toString(LARGE_QUERY_ROW_COUNT));
-    startTask();
-    task.poll();
-  }
-
   @Test
   public void testStreamingReads() throws InterruptedException {
     props.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");

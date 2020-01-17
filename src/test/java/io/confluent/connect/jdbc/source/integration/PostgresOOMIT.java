@@ -22,8 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Integration test for Postgres OOM conditions Expects to be run with -Xmx64M or -Xmx128M for
- * minimum runtime but will behave correctly with any heap size (just with less performance)
+ * Integration test for Postgres OOM conditions.
  */
 @Category(IntegrationTest.class)
 public class PostgresOOMIT extends BaseOOMIntegrationTest {
@@ -55,12 +54,6 @@ public class PostgresOOMIT extends BaseOOMIntegrationTest {
     qb.append("FROM generate_series(1, ");
     qb.append(LARGE_QUERY_ROW_COUNT);
     qb.append(") s(i)");
-    log.info(
-        "Large query will generate "
-            + MAX_MEMORY
-            + " bytes across "
-            + LARGE_QUERY_ROW_COUNT + " rows"
-    );
     return qb.toString();
   }
 

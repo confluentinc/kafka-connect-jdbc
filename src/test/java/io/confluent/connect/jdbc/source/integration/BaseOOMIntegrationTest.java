@@ -11,6 +11,12 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Base class for OOM integration tests.
+ *
+ * <p>These tests expect to be run with -Xmx64M or -Xmx128M for minimum runtime but will behave
+ * correctly with any heap size (just with less performance).
+ */
 public abstract class BaseOOMIntegrationTest {
 
   private static Logger log = LoggerFactory.getLogger(BaseOOMIntegrationTest.class);

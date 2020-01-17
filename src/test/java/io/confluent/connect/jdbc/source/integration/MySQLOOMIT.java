@@ -11,6 +11,9 @@ import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Integration test for MySQL OOM conditions.
+ */
 @Category(IntegrationTest.class)
 public class MySQLOOMIT extends BaseOOMIntegrationTest {
 
@@ -23,7 +26,7 @@ public class MySQLOOMIT extends BaseOOMIntegrationTest {
   public void before() {
     props = new HashMap<>();
     props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG,
-            dbRule.getDBConfiguration().getURL("test") + "?useCursorFetch=true");
+        dbRule.getDBConfiguration().getURL("test") + "?useCursorFetch=true");
     props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "root");
     props.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
     props.put(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG, "topic_");
@@ -39,12 +42,6 @@ public class MySQLOOMIT extends BaseOOMIntegrationTest {
     qb.append("' ");
     qb.append("FROM seq_1_to_");
     qb.append(LARGE_QUERY_ROW_COUNT);
-    log.info(
-        "Large query will generate "
-            + MAX_MEMORY
-            + " bytes across "
-            + LARGE_QUERY_ROW_COUNT + " rows"
-    );
     return qb.toString();
   }
 }

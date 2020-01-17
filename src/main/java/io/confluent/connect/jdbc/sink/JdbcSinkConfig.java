@@ -219,7 +219,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
 
-  public static final String UPDATE_CONDITION_CONFIG = "update.condition";
+  public static final String UPDATE_CONDITION_CONFIG = "update.clause";
   public static final String UPDATE_CONDITION_DEFAULT = "";
   private static final String UPDATE_CONDITION_CONFIG_DOC =
           "Use in update query clause in upsert and update mode";
@@ -237,17 +237,6 @@ public class JdbcSinkConfig extends AbstractConfig {
             1,
             ConfigDef.Width.LONG,
             CONNECTION_URL_DISPLAY
-        )
-        .define(
-            UPDATE_CONDITION_CONFIG,
-            ConfigDef.Type.STRING,
-            ConfigDef.NO_DEFAULT_VALUE,
-            ConfigDef.Importance.LOW,
-            UPDATE_CONDITION_CONFIG_DOC,
-            DATAMAPPING_GROUP,
-            6,
-            ConfigDef.Width.LONG,
-            UPDATE_CONDITION_DISPLAY
         )
         .define(
             CONNECTION_USER,
@@ -376,7 +365,18 @@ public class JdbcSinkConfig extends AbstractConfig {
           ConfigDef.Width.MEDIUM,
           DB_TIMEZONE_CONFIG_DISPLAY
         )
-        // DDL
+         .define(
+           UPDATE_CONDITION_CONFIG,
+           ConfigDef.Type.STRING,
+           "",
+           ConfigDef.Importance.LOW,
+           UPDATE_CONDITION_CONFIG_DOC,
+           DATAMAPPING_GROUP,
+           6,
+           ConfigDef.Width.LONG,
+           UPDATE_CONDITION_DISPLAY
+         )
+        //
         .define(
             AUTO_CREATE,
             ConfigDef.Type.BOOLEAN,

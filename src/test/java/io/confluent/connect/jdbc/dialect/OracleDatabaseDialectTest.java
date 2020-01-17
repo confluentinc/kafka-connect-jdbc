@@ -35,13 +35,12 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
   @Override
   protected OracleDatabaseDialect createDialect() {
     final JdbcSourceConnectorConfig config = sourceConfigWithUrl("jdbc:oracle:thin://something",
-            JdbcSinkConfig.UPDATE_CONDITION_CONFIG, " where \"ARTICLE\".\"body\" <> incoming.\"body\" ");
+            JdbcSinkConfig.UPDATE_CONDITION_CONFIG, "\"ARTICLE\".\"body\" <> incoming.\"body\" ");
     return new OracleDatabaseDialect(config);
   }
 
-  protected OracleDatabaseDialect createSinkDialect() {
-    final JdbcSinkConfig config = sinkConfigWithUrl("jdbc:oracle:thin://something",
-            JdbcSinkConfig.UPDATE_CONDITION_CONFIG, " where \"ARTICLE\".\"body\" <> incoming.\"body\" ");
+  protected OracleDatabaseDialect createSinkDialect(String... properyPairs) {
+    final JdbcSinkConfig config = sinkConfigWithUrl("jdbc:oracle:thin://something", properyPairs);
     return new OracleDatabaseDialect(config);
   }
 
@@ -231,21 +230,31 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
 
   @Test
   public void upsertUpdateCondition() {
-    dialect = createSinkDialect();
+    OracleDatabaseDialect sinkDialect = createSinkDialect(JdbcSinkConfig.UPDATE_CONDITION_CONFIG, "\"ARTICLE\".\"body\" <> incoming.\"body\" ");
     TableId article = tableId("ARTICLE");
     String expected = "merge into \"ARTICLE\" " +
             "using (select ? \"title\", ? \"author\", ? \"body\" FROM dual) incoming on" +
             "(\"ARTICLE\".\"title\"=incoming.\"title\" and \"ARTICLE\"" +
             ".\"author\"=incoming.\"author\") " +
-            "when matched then update set \"ARTICLE\".\"body\"=incoming.\"body\" " +
-            "where \"ARTICLE\".\"body\" <> incoming.\"body\"" +
+            "when matched then update set \"ARTICLE\".\"body\"=incoming.\"body\"" +
+            " where \"ARTICLE\".\"body\" <> incoming.\"body\"" +
             " when not matched then insert(\"ARTICLE\".\"body\",\"ARTICLE\".\"title\"," +
             "\"ARTICLE\".\"author\") " +
             "values(incoming.\"body\",incoming.\"title\",incoming.\"author\")";
-    String actual = dialect.buildUpsertQueryStatement(article, columns(article, "title", "author"),
+    String actual = sinkDialect.buildUpsertQueryStatement(article, columns(article, "title", "author"),
             columns(article, "body"));
     assertEquals(expected, actual);
-    dialect = createDialect();
+  }
+
+  @Test
+  public void update() {
+    OracleDatabaseDialect sinkDialect = createSinkDialect(JdbcSinkConfig.UPDATE_CONDITION_CONFIG, "change_date > sysdate");
+    TableId article = tableId("ARTICLE");
+    String expected =
+            "UPDATE \"ARTICLE\" SET \"title\" = ?, \"change_date\" = ? WHERE \"id\" = ? AND change_date > sysdate";
+    String sql = sinkDialect.buildUpdateStatement(article, columns(article, "id"),
+            columns(article, "title", "change_date"));
+    assertEquals(expected, sql);
   }
 
   @Test

@@ -196,7 +196,9 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
               .of(nonKeyColumns);
       if (config.values().containsKey(JdbcSinkConfig.UPDATE_CONDITION_CONFIG)) {
         String condition = config.getString(JdbcSinkConfig.UPDATE_CONDITION_CONFIG);
-        builder.append(" ").append(condition);
+        if (condition != null && !"".equals(condition)) {
+          builder.append(" where ").append(condition);
+        }
       }
     }
 
@@ -212,6 +214,8 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     builder.append(")");
     return builder.toString();
   }
+
+
 
   @Override
   protected String sanitizedUrl(String url) {

@@ -76,6 +76,8 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
    */
   @Override
   protected void initializePreparedStatement(PreparedStatement stmt) throws SQLException {
+    super.initializePreparedStatement(stmt);
+
     log.trace("Initializing PreparedStatement fetch direction to FETCH_FORWARD for '{}'", stmt);
     stmt.setFetchDirection(ResultSet.FETCH_FORWARD);
   }

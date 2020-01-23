@@ -151,6 +151,18 @@
             <version>1.2.6</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>ch.vorburger.mariaDB4j</groupId>
+            <artifactId>mariaDB4j</artifactId>
+            <version>2.4.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mariadb.jdbc</groupId>
+            <artifactId>mariadb-java-client</artifactId>
+            <version>2.5.3</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -252,7 +264,7 @@
                         </goals>
                         <configuration>
                             <!-- out-of-memory tests should have a restricted heap size-->
-                            <argLine>@{argLine} -Djava.awt.headless=true -Xmx256M</argLine>
+                            <argLine>@{argLine} -Djava.awt.headless=true -Xmx128M</argLine>
                             <includes>
                                 <include>**/*OOM*.java</include>
                             </includes>

@@ -137,6 +137,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   private final AtomicReference<IdentifierRules> identifierRules = new AtomicReference<>();
   private final Queue<Connection> connections = new ConcurrentLinkedQueue<>();
   private volatile JdbcDriverInfo jdbcDriverInfo;
+  private final int batchMaxRows;
   private final TimeZone timeZone;
 
   /**
@@ -180,8 +181,10 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     }
     if (config instanceof JdbcSourceConnectorConfig) {
       mapNumerics = ((JdbcSourceConnectorConfig)config).numericMapping();
+      batchMaxRows = config.getInt(JdbcSourceConnectorConfig.BATCH_MAX_ROWS_CONFIG);
     } else {
       mapNumerics = NumericMapping.NONE;
+      batchMaxRows = 0;
     }
 
     if (config instanceof JdbcSourceConnectorConfig) {
@@ -339,7 +342,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
    * @throws SQLException the error that might result from initialization
    */
   protected void initializePreparedStatement(PreparedStatement stmt) throws SQLException {
-    stmt.setFetchSize(config.getInt(JdbcSourceConnectorConfig.BATCH_MAX_ROWS_CONFIG));
+    if (batchMaxRows > 0) {
+      stmt.setFetchSize(batchMaxRows);
+    }
   }
 
   @Override

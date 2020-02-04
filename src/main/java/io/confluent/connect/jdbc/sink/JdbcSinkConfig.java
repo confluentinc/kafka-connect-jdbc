@@ -54,7 +54,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String CONNECTION_URL_DOC =
       "JDBC connection URL.\n"
           + "For example: ``jdbc:oracle:thin:@localhost:1521:orclpdb1``, "
-          + "``jdbc:mysql://localhost/high_performance_java_persistence``, "
+          + "``jdbc:mysql://localhost/db_name``, "
           + "``jdbc:sqlserver://localhost;instance=SQLEXPRESS;"
           + "databaseName=high_performance_java_persistence``";
   private static final String CONNECTION_URL_DISPLAY = "JDBC URL";

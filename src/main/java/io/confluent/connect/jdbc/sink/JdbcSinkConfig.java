@@ -62,7 +62,12 @@ public class JdbcSinkConfig extends AbstractConfig {
   );
 
   public static final String CONNECTION_URL = JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG;
-  private static final String CONNECTION_URL_DOC = "JDBC connection URL.";
+  private static final String CONNECTION_URL_DOC =
+      "JDBC connection URL.\n"
+          + "For example: ``jdbc:oracle:thin:@localhost:1521:orclpdb1``, "
+          + "``jdbc:mysql://localhost/db_name``, "
+          + "``jdbc:sqlserver://localhost;instance=SQLEXPRESS;"
+          + "databaseName=db_name``";
   private static final String CONNECTION_URL_DISPLAY = "JDBC URL";
 
   public static final String CONNECTION_USER = JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG;
@@ -476,4 +481,5 @@ public class JdbcSinkConfig extends AbstractConfig {
   public static void main(String... args) {
     System.out.println(CONFIG_DEF.toEnrichedRst());
   }
+
 }

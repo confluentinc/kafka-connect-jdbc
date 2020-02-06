@@ -20,6 +20,8 @@ import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -131,9 +133,25 @@ public class FieldsMetadata {
     }
 
     final Map<String, SinkRecordField> allFieldsOrdered = new LinkedHashMap<>();
-    for (Field field : valueSchema.fields()) {
-      String fieldName = field.name();
+    for (String fieldName : JdbcSinkConfig.DEFAULT_KAFKA_PK_NAMES) {
       if (allFields.containsKey(fieldName)) {
+        allFieldsOrdered.put(fieldName, allFields.get(fieldName));
+      }
+    }
+
+    if (valueSchema != null) {
+      for (Field field : valueSchema.fields()) {
+        String fieldName = field.name();
+        if (allFields.containsKey(fieldName)) {
+          allFieldsOrdered.put(fieldName, allFields.get(fieldName));
+        }
+      }
+    }
+
+    ArrayList<String> fieldKeys = new ArrayList<>(allFields.keySet());
+    Collections.sort(fieldKeys);
+    for (String fieldName : fieldKeys) {
+      if (!allFieldsOrdered.containsKey(fieldName)) {
         allFieldsOrdered.put(fieldName, allFields.get(fieldName));
       }
     }

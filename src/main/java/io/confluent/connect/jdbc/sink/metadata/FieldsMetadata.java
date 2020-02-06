@@ -22,6 +22,7 @@ import org.apache.kafka.connect.errors.ConnectException;
 
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -129,7 +130,15 @@ public class FieldsMetadata {
       );
     }
 
-    return new FieldsMetadata(keyFieldNames, nonKeyFieldNames, allFields);
+    final Map<String, SinkRecordField> allFieldsOrdered = new LinkedHashMap<>();
+    for (Field field : valueSchema.fields()) {
+      String fieldName = field.name();
+      if (allFields.containsKey(fieldName)) {
+        allFieldsOrdered.put(fieldName, allFields.get(fieldName));
+      }
+    }
+
+    return new FieldsMetadata(keyFieldNames, nonKeyFieldNames, allFieldsOrdered);
   }
 
   private static void extractKafkaPk(

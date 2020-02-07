@@ -289,6 +289,23 @@ public class FieldsMetadataTest {
     );
 
     assertEquals(Arrays.asList("field4", "field1", "field3"), new ArrayList<>(metadata.allFields.keySet()));
+
+    final Schema keySchema =
+            SchemaBuilder.struct()
+                    .field("field1", Schema.INT64_SCHEMA)
+                    .field("field3", Schema.INT64_SCHEMA)
+                    .field("field2", Schema.INT64_SCHEMA)
+                    .build();
+
+    metadata = extract(
+            JdbcSinkConfig.PrimaryKeyMode.RECORD_KEY,
+            Arrays.asList("field2", "field3", "field1"),
+            new HashSet<>(Arrays.asList("field3", "field1")),
+            keySchema,
+            null
+    );
+
+    assertEquals(Arrays.asList("field1", "field2", "field3"), new ArrayList<>(metadata.allFields.keySet()));
   }
 
   private static FieldsMetadata extract(JdbcSinkConfig.PrimaryKeyMode pkMode, List<String> pkFields, Schema keySchema, Schema valueSchema) {

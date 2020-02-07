@@ -148,11 +148,13 @@ public class FieldsMetadata {
       }
     }
 
-    ArrayList<String> fieldKeys = new ArrayList<>(allFields.keySet());
-    Collections.sort(fieldKeys);
-    for (String fieldName : fieldKeys) {
-      if (!allFieldsOrdered.containsKey(fieldName)) {
-        allFieldsOrdered.put(fieldName, allFields.get(fieldName));
+    if (allFieldsOrdered.size() < allFields.size()) {
+      ArrayList<String> fieldKeys = new ArrayList<>(allFields.keySet());
+      Collections.sort(fieldKeys);
+      for (String fieldName : fieldKeys) {
+        if (!allFieldsOrdered.containsKey(fieldName)) {
+          allFieldsOrdered.put(fieldName, allFields.get(fieldName));
+        }
       }
     }
 

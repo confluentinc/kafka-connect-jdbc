@@ -1,16 +1,17 @@
-/**
- * Copyright 2017 Confluent Inc.
+/*
+ * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
- * in compliance with the License. You may obtain a copy of the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
- * Unless required by applicable law or agreed to in writing, software distributed under the License
- * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
- * or implied. See the License for the specific language governing permissions and limitations under
- * the License.
- **/
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
 
 package io.confluent.connect.jdbc.dialect;
 
@@ -24,6 +25,7 @@ import org.junit.Test;
 
 import java.util.List;
 
+import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
@@ -97,7 +99,8 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
         System.lineSeparator() + "\"c5\" DATE DEFAULT '2001-03-15'," + System.lineSeparator() +
         "\"c6\" DATE DEFAULT '00:00:00.000'," + System.lineSeparator() +
         "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
-        "\"c8\" DECIMAL NULL," + System.lineSeparator() + "PRIMARY KEY(\"c1\"))";
+        "\"c8\" DECIMAL NULL," + System.lineSeparator() +
+        "\"c9\" BOOLEAN DEFAULT 1," + System.lineSeparator() + "PRIMARY KEY(\"c1\"))";
     String sql = dialect.buildCreateTableStatement(tableId, sinkRecordFields);
     assertEquals(expected, sql);
   }
@@ -112,16 +115,30 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
         System.lineSeparator() + "\"c5\" DATE DEFAULT '2001-03-15'," + System.lineSeparator() +
         "\"c6\" DATE DEFAULT '00:00:00.000'," + System.lineSeparator() +
         "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000'," + System.lineSeparator() +
-        "\"c8\" DECIMAL NULL)"};
+        "\"c8\" DECIMAL NULL," + System.lineSeparator() +
+        "\"c9\" BOOLEAN DEFAULT 1)"};
     assertStatements(sql, statements);
   }
 
   @Test
   public void shouldBuildUpsertStatement() {
-    String expected = "UPSERT \"myTable\"(\"id1\",\"id2\",\"columnA\",\"columnB\",\"columnC\"," +
-                      "\"columnD\") VALUES(?,?,?,?,?,?) WITH PRIMARY KEY";
-    String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD);
-    assertEquals(expected, sql);
+    assertEquals(
+        "UPSERT \"myTable\""
+        + "(\"id1\",\"id2\",\"columnA\",\"columnB\",\"columnC\",\"columnD\") "
+        + "VALUES(?,?,?,?,?,?) "
+        + "WITH PRIMARY KEY",
+        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
+    );
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertEquals(
+        "UPSERT myTable"
+        + "(id1,id2,columnA,columnB,columnC,columnD) "
+        + "VALUES(?,?,?,?,?,?) "
+        + "WITH PRIMARY KEY",
+        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
+    );
   }
 
 
@@ -144,6 +161,13 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
         "CREATE COLUMN TABLE \"myTable\" (" + System.lineSeparator() + "\"pk1\" INTEGER NOT NULL," +
         System.lineSeparator() + "\"pk2\" INTEGER NOT NULL," + System.lineSeparator() +
         "\"col1\" INTEGER NOT NULL," + System.lineSeparator() + "PRIMARY KEY(\"pk1\",\"pk2\"))");
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+    verifyCreateThreeColTwoPk(
+        "CREATE COLUMN TABLE myTable (" + System.lineSeparator() + "pk1 INTEGER NOT NULL," +
+        System.lineSeparator() + "pk2 INTEGER NOT NULL," + System.lineSeparator() +
+        "col1 INTEGER NOT NULL," + System.lineSeparator() + "PRIMARY KEY(pk1,pk2))");
   }
 
   @Test
@@ -164,8 +188,23 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
     TableId tableA = tableId("tableA");
     assertEquals(
         "UPSERT \"tableA\"(\"col1\",\"col2\",\"col3\",\"col4\") VALUES(?,?,?,?) WITH PRIMARY KEY",
-        dialect.buildUpsertQueryStatement(tableA, columns(tableA, "col1"),
-                                          columns(tableA, "col2", "col3", "col4")));
+        dialect.buildUpsertQueryStatement(
+            tableA,
+            columns(tableA, "col1"),
+            columns(tableA, "col2", "col3", "col4")
+        )
+    );
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertEquals(
+        "UPSERT tableA(col1,col2,col3,col4) VALUES(?,?,?,?) WITH PRIMARY KEY",
+        dialect.buildUpsertQueryStatement(
+            tableA,
+            columns(tableA, "col1"),
+            columns(tableA, "col2", "col3", "col4")
+        )
+    );
   }
 
   @Test

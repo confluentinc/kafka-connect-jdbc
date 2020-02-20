@@ -1,17 +1,16 @@
 /*
  * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
  */
 
 package io.confluent.connect.jdbc.dialect;
@@ -77,6 +76,8 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
    */
   @Override
   protected void initializePreparedStatement(PreparedStatement stmt) throws SQLException {
+    super.initializePreparedStatement(stmt);
+
     log.trace("Initializing PreparedStatement fetch direction to FETCH_FORWARD for '{}'", stmt);
     stmt.setFetchDirection(ResultSet.FETCH_FORWARD);
   }
@@ -131,9 +132,9 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
   ) {
     //MySql doesn't support SQL 2003:merge so here how the upsert is handled
     final Transform<ColumnId> transform = (builder, col) -> {
-      builder.appendIdentifierQuoted(col.name());
+      builder.appendColumnName(col.name());
       builder.append("=values(");
-      builder.appendIdentifierQuoted(col.name());
+      builder.appendColumnName(col.name());
       builder.append(")");
     };
 

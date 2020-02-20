@@ -1,18 +1,23 @@
-/**
- * Copyright 2017 Confluent Inc.
+/*
+ * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
- * in compliance with the License. You may obtain a copy of the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
- * Unless required by applicable law or agreed to in writing, software distributed under the License
- * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
- * or implied. See the License for the specific language governing permissions and limitations under
- * the License.
- **/
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
 
 package io.confluent.connect.jdbc.dialect;
+
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.util.TimeZone;
 
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -22,8 +27,7 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
-import java.util.List;
-
+import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
@@ -32,9 +36,38 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
 
   @Override
   protected SqlServerDatabaseDialect createDialect() {
-    return new SqlServerDatabaseDialect(sourceConfigWithUrl("jdbc:sqlsserver://something"));
+    return new SqlServerDatabaseDialect(sourceConfigWithUrl("jdbc:jtds:sqlsserver://something"));
   }
 
+  @Test
+  public void shouldConvertFromDateTimeOffset() {
+    ZoneId utc = ZoneId.of("UTC");
+    TimeZone timeZone = TimeZone.getTimeZone(utc.getId());
+
+    String value = "2016-12-08 12:34:56.7850000 -07:00";
+    java.sql.Timestamp ts = SqlServerDatabaseDialect.dateTimeOffsetFrom(value, timeZone);
+    assertTimestamp(ZonedDateTime.of(2016, 12, 8, 19, 34, 56, 785000000, utc), ts);
+
+    value = "2019-12-08 12:34:56.7850200 -00:00";
+    ts = SqlServerDatabaseDialect.dateTimeOffsetFrom(value, timeZone);
+    assertTimestamp(ZonedDateTime.of(2019, 12, 8, 12, 34, 56, 785020000, utc), ts);
+  }
+
+  @Test
+  public void testCustomColumnConverters() {
+    assertColumnConverter(SqlServerDatabaseDialect.DATETIMEOFFSET, null, Timestamp.SCHEMA, Timestamp.class);
+  }
+
+  protected void assertTimestamp(ZonedDateTime expected, java.sql.Timestamp actual) {
+    ZonedDateTime zdt = ZonedDateTime.ofInstant(actual.toInstant(), ZoneId.of("UTC"));
+    assertEquals(expected.getYear(), zdt.getYear());
+    assertEquals(expected.getMonthValue(), zdt.getMonthValue());
+    assertEquals(expected.getDayOfMonth(), zdt.getDayOfMonth());
+    assertEquals(expected.getHour(), zdt.getHour());
+    assertEquals(expected.getMinute(), zdt.getMinute());
+    assertEquals(expected.getSecond(), zdt.getSecond());
+    assertEquals(expected.getNano(), zdt.getNano());
+  }
 
   @Test
   public void shouldMapPrimitiveSchemaTypeToSqlTypes() {
@@ -92,40 +125,105 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
 
   @Test
   public void shouldBuildCreateQueryStatement() {
-    String expected =
-        "CREATE TABLE [myTable] (\n" + "[c1] int NOT NULL,\n" + "[c2] bigint NOT NULL,\n" +
-        "[c3] varchar(max) NOT NULL,\n" + "[c4] varchar(max) NULL,\n" +
-        "[c5] date DEFAULT '2001-03-15',\n" + "[c6] time DEFAULT '00:00:00.000',\n" +
-        "[c7] datetime2 DEFAULT '2001-03-15 00:00:00.000',\n" + "[c8] decimal(38,4) NULL,\n" +
-        "PRIMARY KEY([c1]))";
-    String sql = dialect.buildCreateTableStatement(tableId, sinkRecordFields);
-    assertEquals(expected, sql);
+    assertEquals(
+        "CREATE TABLE [myTable] (\n"
+        + "[c1] int NOT NULL,\n"
+        + "[c2] bigint NOT NULL,\n"
+        + "[c3] varchar(max) NOT NULL,\n"
+        + "[c4] varchar(max) NULL,\n"
+        + "[c5] date DEFAULT '2001-03-15',\n"
+        + "[c6] time DEFAULT '00:00:00.000',\n"
+        + "[c7] datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
+        + "[c8] decimal(38,4) NULL,\n"
+        + "[c9] bit DEFAULT 1,\n" +
+        "PRIMARY KEY([c1]))",
+        dialect.buildCreateTableStatement(tableId, sinkRecordFields)
+    );
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertEquals(
+        "CREATE TABLE myTable (\n"
+        + "c1 int NOT NULL,\n"
+        + "c2 bigint NOT NULL,\n"
+        + "c3 varchar(max) NOT NULL,\n"
+        + "c4 varchar(max) NULL,\n"
+        + "c5 date DEFAULT '2001-03-15',\n"
+        + "c6 time DEFAULT '00:00:00.000',\n"
+        + "c7 datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
+        + "c8 decimal(38,4) NULL,\n"
+        + "c9 bit DEFAULT 1,\n" +
+        "PRIMARY KEY(c1))",
+        dialect.buildCreateTableStatement(tableId, sinkRecordFields)
+    );
   }
 
   @Test
   public void shouldBuildAlterTableStatement() {
-    List<String> statements = dialect.buildAlterTable(tableId, sinkRecordFields);
-    String[] sql = {
-        "ALTER TABLE [myTable] ADD\n" + "[c1] int NOT NULL,\n" + "[c2] bigint NOT NULL,\n" +
-        "[c3] varchar(max) NOT NULL,\n" + "[c4] varchar(max) NULL,\n" +
-        "[c5] date DEFAULT '2001-03-15',\n" + "[c6] time DEFAULT '00:00:00.000',\n" +
-        "[c7] datetime2 DEFAULT '2001-03-15 00:00:00.000',\n" + "[c8] decimal(38,4) NULL"};
-    assertStatements(sql, statements);
+    assertStatements(
+        new String[]{
+            "ALTER TABLE [myTable] ADD\n"
+            + "[c1] int NOT NULL,\n"
+            + "[c2] bigint NOT NULL,\n"
+            + "[c3] varchar(max) NOT NULL,\n"
+            + "[c4] varchar(max) NULL,\n"
+            + "[c5] date DEFAULT '2001-03-15',\n"
+            + "[c6] time DEFAULT '00:00:00.000',\n"
+            + "[c7] datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
+            + "[c8] decimal(38,4) NULL,\n"
+            + "[c9] bit DEFAULT 1"
+        },
+        dialect.buildAlterTable(tableId, sinkRecordFields)
+    );
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertStatements(
+        new String[]{
+            "ALTER TABLE myTable ADD\n"
+            + "c1 int NOT NULL,\n"
+            + "c2 bigint NOT NULL,\n"
+            + "c3 varchar(max) NOT NULL,\n"
+            + "c4 varchar(max) NULL,\n"
+            + "c5 date DEFAULT '2001-03-15',\n"
+            + "c6 time DEFAULT '00:00:00.000',\n"
+            + "c7 datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
+            + "c8 decimal(38,4) NULL,\n"
+            + "c9 bit DEFAULT 1"
+        },
+        dialect.buildAlterTable(tableId, sinkRecordFields)
+    );
   }
 
   @Test
   public void shouldBuildUpsertStatement() {
-    String expected = "merge into [myTable] with (HOLDLOCK) AS target using (select ? AS [id1], ?" +
-                      " AS [id2], ? AS [columnA], ? AS [columnB], ? AS [columnC], ? AS [columnD])" +
-                      " AS incoming on (target.[id1]=incoming.[id1] and target.[id2]=incoming" +
-                      ".[id2]) when matched then update set [columnA]=incoming.[columnA]," +
-                      "[columnB]=incoming.[columnB],[columnC]=incoming.[columnC]," +
-                      "[columnD]=incoming.[columnD] when not matched then insert ([columnA], " +
-                      "[columnB], [columnC], [columnD], [id1], [id2]) values (incoming.[columnA]," +
-                      "incoming.[columnB],incoming.[columnC],incoming.[columnD],incoming.[id1]," +
-                      "incoming.[id2]);";
-    String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD);
-    assertEquals(expected, sql);
+    assertEquals(
+        "merge into [myTable] with (HOLDLOCK) AS target using (select ? AS [id1], ?" +
+        " AS [id2], ? AS [columnA], ? AS [columnB], ? AS [columnC], ? AS [columnD])" +
+        " AS incoming on (target.[id1]=incoming.[id1] and target.[id2]=incoming" +
+        ".[id2]) when matched then update set [columnA]=incoming.[columnA]," +
+        "[columnB]=incoming.[columnB],[columnC]=incoming.[columnC]," +
+        "[columnD]=incoming.[columnD] when not matched then insert ([columnA], " +
+        "[columnB], [columnC], [columnD], [id1], [id2]) values (incoming.[columnA]," +
+        "incoming.[columnB],incoming.[columnC],incoming.[columnD],incoming.[id1]," +
+        "incoming.[id2]);",
+        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
+    );
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertEquals(
+        "merge into myTable with (HOLDLOCK) AS target using (select ? AS id1, ?" +
+        " AS id2, ? AS columnA, ? AS columnB, ? AS columnC, ? AS columnD)" +
+        " AS incoming on (target.id1=incoming.id1 and target.id2=incoming" +
+        ".id2) when matched then update set columnA=incoming.columnA," +
+        "columnB=incoming.columnB,columnC=incoming.columnC," +
+        "columnD=incoming.columnD when not matched then insert (columnA, " +
+        "columnB, columnC, columnD, id1, id2) values (incoming.columnA," +
+        "incoming.columnB,incoming.columnC,incoming.columnD,incoming.id1," +
+        "incoming.id2);",
+        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
+    );
   }
 
   @Test
@@ -139,6 +237,13 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
     verifyCreateOneColOnePk(
         "CREATE TABLE [myTable] (" + System.lineSeparator() + "[pk1] int NOT NULL," +
         System.lineSeparator() + "PRIMARY KEY([pk1]))");
+  }
+
+  @Test
+  public void createOneColOnePkInString() {
+    verifyCreateOneColOnePkAsString(
+        "CREATE TABLE [myTable] (" + System.lineSeparator() + "[pk1] varchar(900) NOT NULL," +
+          System.lineSeparator() + "PRIMARY KEY([pk1]))");
   }
 
   @Test
@@ -172,8 +277,28 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
         ".[address] when not matched then insert " +
         "([name], [salary], [address], [id]) values (incoming.[name],incoming" +
         ".[salary],incoming.[address],incoming.[id]);",
-        dialect.buildUpsertQueryStatement(customer, columns(customer, "id"),
-                                          columns(customer, "name", "salary", "address")));
+        dialect.buildUpsertQueryStatement(
+            customer,
+            columns(customer, "id"),
+            columns(customer, "name", "salary", "address")
+        )
+    );
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertEquals(
+        "merge into Customer with (HOLDLOCK) AS target using (select ? AS id, ? AS name, ? " +
+        "AS salary, ? AS address) AS incoming on (target.id=incoming.id) when matched then update set " +
+        "name=incoming.name,salary=incoming.salary,address=incoming" +
+        ".address when not matched then insert " +
+        "(name, salary, address, id) values (incoming.name,incoming" +
+        ".salary,incoming.address,incoming.id);",
+        dialect.buildUpsertQueryStatement(
+            customer,
+            columns(customer, "id"),
+            columns(customer, "name", "salary", "address")
+        )
+    );
   }
 
   @Test
@@ -187,8 +312,29 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
         "[pages]=incoming.[pages] when not " +
         "matched then insert ([ISBN], [year], [pages], [author], [title]) values (incoming" +
         ".[ISBN],incoming.[year]," + "incoming.[pages],incoming.[author],incoming.[title]);",
-        dialect.buildUpsertQueryStatement(book, columns(book, "author", "title"),
-                                          columns(book, "ISBN", "year", "pages")));
+        dialect.buildUpsertQueryStatement(
+            book,
+            columns(book, "author", "title"),
+            columns(book, "ISBN", "year", "pages")
+        )
+    );
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertEquals(
+        "merge into Book with (HOLDLOCK) AS target using (select ? AS author, ? AS title, ?" +
+        " AS ISBN, ? AS year, ? AS pages)" +
+        " AS incoming on (target.author=incoming.author and target.title=incoming.title)" +
+        " when matched then update set ISBN=incoming.ISBN,year=incoming.year," +
+        "pages=incoming.pages when not " +
+        "matched then insert (ISBN, year, pages, author, title) values (incoming" +
+        ".ISBN,incoming.year," + "incoming.pages,incoming.author,incoming.title);",
+        dialect.buildUpsertQueryStatement(
+            book,
+            columns(book, "author", "title"),
+            columns(book, "ISBN", "year", "pages")
+        )
+    );
   }
 
   @Test

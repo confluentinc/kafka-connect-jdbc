@@ -1,17 +1,16 @@
 /*
  * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
  */
 
 package io.confluent.connect.jdbc.dialect;
@@ -19,24 +18,52 @@ package io.confluent.connect.jdbc.dialect;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Types;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Calendar;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.TimeZone;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import io.confluent.connect.jdbc.source.ColumnMapping;
+import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.util.ColumnDefinition.Mutability;
+import io.confluent.connect.jdbc.util.ColumnDefinition.Nullability;
 
 /**
  * A {@link DatabaseDialect} for SQL Server.
  */
 public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
+
+  /**
+   * JDBC Type constant for SQL Server's custom data types.
+   */
+  static final int DATETIMEOFFSET = -155;
+
+  /**
+   * This is the format of the string form of DATETIMEOFFSET values, and used to parse such
+   * string values into {@link java.sql.Timestamp} values.
+   * https://docs.microsoft.com/en-us/sql/t-sql/data-types/datetimeoffset-transact-sql
+   */
+  private static final String DATE_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss.SSSSSSS ZZZZZ";
+  private static final DateTimeFormatter DATE_TIME_FORMATTER =
+      DateTimeFormatter.ofPattern(DATE_TIME_FORMAT);
+
   /**
    * The provider for {@link SqlServerDatabaseDialect}.
    */
@@ -52,6 +79,8 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     }
   }
 
+  private final boolean jtdsDriver;
+
   /**
    * Create a new dialect instance with the given connector configuration.
    *
@@ -59,6 +88,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
    */
   public SqlServerDatabaseDialect(AbstractConfig config) {
     super(config, new IdentifierRules(".", "[", "]"));
+    jtdsDriver = jdbcUrlInfo == null ? false : jdbcUrlInfo.subprotocol().matches("jtds");
   }
 
   @Override
@@ -66,6 +96,98 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     // SQL Server uses JDBC's catalog to represent the database,
     // and JDBC's schema to represent the owner (e.g., "dbo")
     return true;
+  }
+
+  @Override
+  protected String addFieldToSchema(
+      ColumnDefinition columnDefn,
+      SchemaBuilder builder,
+      String fieldName,
+      int sqlType,
+      boolean optional
+  ) {
+    // Handle SQL Server specific types first
+    switch (sqlType) {
+      case DATETIMEOFFSET:
+        // Use the same schema definition as a standard timestamp
+        return super.addFieldToSchema(columnDefn, builder, fieldName, Types.TIMESTAMP, optional);
+      default:
+        break;
+    }
+
+    // Delegate for the remaining logic to handle the standard types
+    return super.addFieldToSchema(columnDefn, builder, fieldName, sqlType, optional);
+  }
+
+  @Override
+  protected ColumnConverter columnConverterFor(
+      ColumnMapping mapping,
+      ColumnDefinition defn,
+      int col,
+      boolean isJdbc4
+  ) {
+    // Handle any SQL Server specific data types first
+    switch (defn.type()) {
+      case DATETIMEOFFSET:
+        if (jtdsDriver) {
+          return rs -> convertDateTimeOffsetFromString(rs, col);
+        } else {
+          return rs -> convertDateTimeOffset(rs, col);
+        }
+      default:
+        break;
+    }
+
+    // Delegate for the remaining logic to handle the standard types
+    return super.columnConverterFor(mapping, defn, col, isJdbc4);
+  }
+
+  /**
+   * Get the {@link java.sql.Timestamp} for the DATETIMEOFFSET column. This requires that the
+   * JDBC driver supports SQL Server's DATETIMEOFFSET data type and converting to a
+   * {@link java.sql.Timestamp} via {@link ResultSet#getTimestamp(int, Calendar)}.
+   *
+   * @param rs  the result set; never null
+   * @param col the column index
+   * @return the {@link java.sql.Timestamp} value; may be null
+   * @throws SQLException if there is a problem getting the value
+   */
+  protected Object convertDateTimeOffset(ResultSet rs, int col) throws SQLException {
+    return rs.getTimestamp(col, DateTimeUtils.getTimeZoneCalendar(timeZone()));
+  }
+
+  /**
+   * Get the {@link java.sql.Timestamp} for the DATETIMEOFFSET column.
+   * The jTDS driver doesn't support DATETIMEOFFSET, so the recommended approach for legacy driver
+   * (see https://docs.microsoft.com/en-us/sql/t-sql/data-types/datetimeoffset-transact-sql) is to
+   * get the value in string form and then parse it into a timestamp.
+   *
+   * @param rs  the result set; never null
+   * @param col the column index
+   * @return the {@link java.sql.Timestamp} value; may be null
+   * @throws SQLException if there is a problem getting the value
+   */
+  protected Object convertDateTimeOffsetFromString(
+      ResultSet rs,
+      int col
+  ) throws SQLException {
+    String value = rs.getString(col);
+    return value == null ? null : dateTimeOffsetFrom(rs.getString(col), timeZone());
+  }
+
+  /**
+   * Utility method to parse the string form of a SQL Server DATETIMEOFFSET value into a
+   * {@link java.sql.Timestamp} value.
+   *
+   * @param value    the string DATETIMEOFFSET value; never null
+   * @param timeZone the timezone in which the {@link java.sql.Timestamp} should be defined; may
+   *                 not be null
+   * @return the equivalent {@link java.sql.Timestamp}; never null
+   */
+  protected static java.sql.Timestamp dateTimeOffsetFrom(String value, TimeZone timeZone) {
+    ZonedDateTime zdt = ZonedDateTime.parse(value, DATE_TIME_FORMATTER);
+    zdt = zdt.withZoneSameInstant(timeZone.toZoneId());
+    return java.sql.Timestamp.from(zdt.toInstant());
   }
 
   @Override
@@ -100,7 +222,12 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "bit";
       case STRING:
-        return "varchar(max)";
+        if (field.isPrimaryKey()) {
+          // Should be no more than 900 which is the MSSQL constraint
+          return "varchar(900)";
+        } else {
+          return "varchar(max)";
+        }
       case BYTES:
         return "varbinary(max)";
       default:
@@ -183,17 +310,68 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     return builder.toString();
   }
 
+  @Override
+  protected ColumnDefinition columnDefinition(
+      ResultSet resultSet,
+      ColumnId id,
+      int jdbcType,
+      String typeName,
+      String classNameForType,
+      Nullability nullability,
+      Mutability mutability,
+      int precision,
+      int scale,
+      Boolean signedNumbers,
+      Integer displaySize,
+      Boolean autoIncremented,
+      Boolean caseSensitive,
+      Boolean searchable,
+      Boolean currency,
+      Boolean isPrimaryKey
+  ) {
+    try {
+      String isAutoIncremented = resultSet.getString(22);
+
+      if ("yes".equalsIgnoreCase(isAutoIncremented)) {
+        autoIncremented = Boolean.TRUE;
+      } else if ("no".equalsIgnoreCase(isAutoIncremented)) {
+        autoIncremented = Boolean.FALSE;
+      }
+    } catch (SQLException e) {
+      log.warn("Unable to get auto incrementing column information", e);
+    }
+
+    return super.columnDefinition(
+      resultSet,
+      id,
+      jdbcType,
+      typeName,
+      classNameForType,
+      nullability,
+      mutability,
+      precision,
+      scale,
+      signedNumbers,
+      displaySize,
+      autoIncremented,
+      caseSensitive,
+      searchable,
+      currency,
+      isPrimaryKey
+    );
+  }
+
   private void transformAs(ExpressionBuilder builder, ColumnId col) {
     builder.append("target.")
-           .appendIdentifierQuoted(col.name())
+           .appendColumnName(col.name())
            .append("=incoming.")
-           .appendIdentifierQuoted(col.name());
+           .appendColumnName(col.name());
   }
 
   private void transformUpdate(ExpressionBuilder builder, ColumnId col) {
-    builder.appendIdentifierQuoted(col.name())
+    builder.appendColumnName(col.name())
            .append("=incoming.")
-           .appendIdentifierQuoted(col.name());
+           .appendColumnName(col.name());
   }
 
   @Override

@@ -21,6 +21,8 @@ https://github.com/confluentinc/kafka-connect-jdbc/wiki/FAQ
 
 # Contribute
 
+Contributions can only be accepted if they contain appropriate testing. For example, adding a new dialect of JDBC will require an integration test.
+
 - Source Code: https://github.com/confluentinc/kafka-connect-jdbc
 - Issue Tracker: https://github.com/confluentinc/kafka-connect-jdbc/issues
 
@@ -30,7 +32,7 @@ For more information, check the documentation for the JDBC connector on the [con
 
 # License
 
-The project is licensed under the Apache 2 license.
+This project is licensed under the [Confluent Community License](LICENSE).
 
 
 [![FOSSA Status](https://app.fossa.io/api/projects/git%2Bhttps%3A%2F%2Fgithub.com%2Fconfluentinc%2Fkafka-connect-jdbc.svg?type=large)](https://app.fossa.io/projects/git%2Bhttps%3A%2F%2Fgithub.com%2Fconfluentinc%2Fkafka-connect-jdbc?ref=badge_large)

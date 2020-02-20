@@ -1,17 +1,16 @@
 /*
- * Copyright 2016 Confluent Inc.
+ * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
  */
 
 package io.confluent.connect.jdbc.sink;
@@ -29,6 +28,8 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialect.StatementBinder;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
+
+import static java.util.Objects.isNull;
 
 public class PreparedStatementBinder implements StatementBinder {
 
@@ -58,27 +59,33 @@ public class PreparedStatementBinder implements StatementBinder {
   @Override
   public void bindRecord(SinkRecord record) throws SQLException {
     final Struct valueStruct = (Struct) record.value();
-
+    final boolean isDelete = isNull(valueStruct);
     // Assumption: the relevant SQL has placeholders for keyFieldNames first followed by
     //             nonKeyFieldNames, in iteration order for all INSERT/ UPSERT queries
+    //             the relevant SQL has placeholders for keyFieldNames,
+    //             in iteration order for all DELETE queries
     //             the relevant SQL has placeholders for nonKeyFieldNames first followed by
     //             keyFieldNames, in iteration order for all UPDATE queries
 
     int index = 1;
-    switch (insertMode) {
-      case INSERT:
-      case UPSERT:
-        index = bindKeyFields(record, index);
-        bindNonKeyFields(record, valueStruct, index);
-        break;
+    if (isDelete) {
+      bindKeyFields(record, index);
+    } else {
+      switch (insertMode) {
+        case INSERT:
+        case UPSERT:
+          index = bindKeyFields(record, index);
+          bindNonKeyFields(record, valueStruct, index);
+          break;
 
-      case UPDATE:
-        index = bindNonKeyFields(record, valueStruct, index);
-        bindKeyFields(record, index);
-        break;
-      default:
-        throw new AssertionError();
+        case UPDATE:
+          index = bindNonKeyFields(record, valueStruct, index);
+          bindKeyFields(record, index);
+          break;
+        default:
+          throw new AssertionError();
 
+      }
     }
     statement.addBatch();
   }

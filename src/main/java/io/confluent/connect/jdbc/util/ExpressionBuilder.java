@@ -1,18 +1,17 @@
-/**
+/*
  * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- **/
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
 
 package io.confluent.connect.jdbc.util;
 
@@ -68,6 +67,27 @@ public class ExpressionBuilder {
         ExpressionBuilder builder,
         boolean useQuotes
     );
+
+    /**
+     * Append this object to the specified builder.
+     *
+     * @param builder the builder to use; may not be null
+     * @param useQuotes whether quotes should be used for this object
+     */
+    default void appendTo(
+        ExpressionBuilder builder,
+        QuoteMethod useQuotes
+    ) {
+      switch (useQuotes) {
+        case ALWAYS:
+          appendTo(builder, true);
+          break;
+        case NEVER:
+        default:
+          // do nothing
+          break;
+      }
+    }
   }
 
   /**
@@ -158,7 +178,7 @@ public class ExpressionBuilder {
    * @return the transform; never null
    */
   public static Transform<String> quote() {
-    return (builder, input) -> builder.appendIdentifierQuoted(input);
+    return (builder, input) -> builder.appendColumnName(input);
   }
 
   /**
@@ -167,7 +187,7 @@ public class ExpressionBuilder {
    * @return the transform; never null
    */
   public static Transform<ColumnId> columnNames() {
-    return (builder, input) -> builder.appendIdentifierQuoted(input.name());
+    return (builder, input) -> builder.appendColumnName(input.name());
   }
 
   /**
@@ -178,7 +198,7 @@ public class ExpressionBuilder {
    */
   public static Transform<ColumnId> columnNamesWith(final String appended) {
     return (builder, input) -> {
-      builder.appendIdentifierQuoted(input.name());
+      builder.appendColumnName(input.name());
       builder.append(appended);
     };
   }
@@ -202,7 +222,7 @@ public class ExpressionBuilder {
   public static Transform<ColumnId> columnNamesWithPrefix(final String prefix) {
     return (builder, input) -> {
       builder.append(prefix);
-      builder.appendIdentifierQuoted(input.name());
+      builder.appendColumnName(input.name());
     };
   }
 
@@ -215,8 +235,11 @@ public class ExpressionBuilder {
     return new ExpressionBuilder();
   }
 
+  protected static final QuoteMethod DEFAULT_QUOTE_METHOD = QuoteMethod.ALWAYS;
+
   private final IdentifierRules rules;
   private final StringBuilder sb = new StringBuilder();
+  private QuoteMethod quoteSqlIdentifiers = DEFAULT_QUOTE_METHOD;
 
   /**
    * Create a new expression builder with the default {@link IdentifierRules}.
@@ -232,6 +255,18 @@ public class ExpressionBuilder {
    */
   public ExpressionBuilder(IdentifierRules rules) {
     this.rules = rules != null ? rules : IdentifierRules.DEFAULT;
+  }
+
+  /**
+   * Set when this expression builder should quote identifiers, such as table and column names.
+   *
+   * @param method the quoting method; may be null if the default method
+   *               ({@link QuoteMethod#ALWAYS always}) should be used
+   * @return this expression builder; never null
+   */
+  public ExpressionBuilder setQuoteIdentifiers(QuoteMethod method) {
+    this.quoteSqlIdentifiers = method != null ? method : DEFAULT_QUOTE_METHOD;
+    return this;
   }
 
   /**
@@ -260,24 +295,47 @@ public class ExpressionBuilder {
   }
 
   /**
-   * Append to this builder's expression the leading quote character(s) defined by this builder's
-   * {@link IdentifierRules}.
+   * Always append to this builder's expression the leading quote character(s) defined by this
+   * builder's {@link IdentifierRules}.
    *
    * @return this builder to enable methods to be chained; never null
    */
   public ExpressionBuilder appendLeadingQuote() {
-    sb.append(rules.leadingQuoteString());
+    return appendLeadingQuote(QuoteMethod.ALWAYS);
+  }
+
+
+  protected ExpressionBuilder appendLeadingQuote(QuoteMethod method) {
+    switch (method) {
+      case ALWAYS:
+        sb.append(rules.leadingQuoteString());
+        break;
+      case NEVER:
+      default:
+        break;
+    }
     return this;
   }
 
   /**
-   * Append to this builder's expression the trailing quote character(s) defined by this builder's
-   * {@link IdentifierRules}.
+   * Always append to this builder's expression the trailing quote character(s) defined by this
+   * builder's {@link IdentifierRules}.
    *
    * @return this builder to enable methods to be chained; never null
    */
   public ExpressionBuilder appendTrailingQuote() {
-    sb.append(rules.trailingQuoteString());
+    return appendTrailingQuote(QuoteMethod.ALWAYS);
+  }
+
+  protected ExpressionBuilder appendTrailingQuote(QuoteMethod method) {
+    switch (method) {
+      case ALWAYS:
+        sb.append(rules.trailingQuoteString());
+        break;
+      case NEVER:
+      default:
+        break;
+    }
     return this;
   }
 
@@ -293,6 +351,9 @@ public class ExpressionBuilder {
 
   /**
    * Append to this builder's expression a string surrounded by single quote characters ({@code '}).
+   * Use {@link #appendIdentifier(String, QuoteMethod)} for identifiers,
+   * {@link #appendColumnName(String, QuoteMethod)} for column names, or
+   * {@link #appendTableName(String, QuoteMethod)} for table names.
    *
    * @param name the object whose string representation is to be appended
    * @return this builder to enable methods to be chained; never null
@@ -310,18 +371,81 @@ public class ExpressionBuilder {
    * @param name the name to be appended
    * @param quoted true if the name should be quoted, or false otherwise
    * @return this builder to enable methods to be chained; never null
+   * @deprecated use {@link #appendIdentifier(String, QuoteMethod)} instead
    */
+  @Deprecated
   public ExpressionBuilder appendIdentifier(
       String name,
       boolean quoted
   ) {
-    if (quoted) {
-      appendLeadingQuote();
-    }
+    return appendIdentifier(name, quoted ? QuoteMethod.ALWAYS : QuoteMethod.NEVER);
+  }
+
+  /**
+   * Append to this builder's expression the identifier.
+   *
+   * @param name the name to be appended
+   * @param quoted true if the name should be quoted, or false otherwise
+   * @return this builder to enable methods to be chained; never null
+   */
+  public ExpressionBuilder appendIdentifier(
+      String name,
+      QuoteMethod quoted
+  ) {
+    appendLeadingQuote(quoted);
     sb.append(name);
-    if (quoted) {
-      appendTrailingQuote();
-    }
+    appendTrailingQuote(quoted);
+    return this;
+  }
+
+  /**
+   * Append to this builder's expression the specified Column identifier, possibly surrounded by
+   * the leading and trailing quotes based upon {@link #setQuoteIdentifiers(QuoteMethod)}.
+   *
+   * @param name the name to be appended
+   * @return this builder to enable methods to be chained; never null
+   */
+  public ExpressionBuilder appendTableName(String name) {
+    return appendTableName(name, quoteSqlIdentifiers);
+  }
+
+  /**
+   * Append to this builder's expression the specified Column identifier, possibly surrounded by
+   * the leading and trailing quotes based upon {@link #setQuoteIdentifiers(QuoteMethod)}.
+   *
+   * @param name the name to be appended
+   * @return this builder to enable methods to be chained; never null
+   */
+  public ExpressionBuilder appendTableName(String name, QuoteMethod quote) {
+    appendLeadingQuote(quote);
+    sb.append(name);
+    appendTrailingQuote(quote);
+    return this;
+  }
+
+  /**
+   * Append to this builder's expression the specified Column identifier, possibly surrounded by
+   * the leading and trailing quotes based upon {@link #setQuoteIdentifiers(QuoteMethod)}.
+   *
+   * @param name the name to be appended
+   * @return this builder to enable methods to be chained; never null
+   */
+  public ExpressionBuilder appendColumnName(String name) {
+    return appendColumnName(name, quoteSqlIdentifiers);
+  }
+
+  /**
+   * Append to this builder's expression the specified Column identifier, possibly surrounded by
+   * the leading and trailing quotes based upon {@link #setQuoteIdentifiers(QuoteMethod)}.
+   *
+   * @param name the name to be appended
+   * @param quote whether to quote the column name; may not be null
+   * @return this builder to enable methods to be chained; never null
+   */
+  public ExpressionBuilder appendColumnName(String name, QuoteMethod quote) {
+    appendLeadingQuote(quote);
+    sb.append(name);
+    appendTrailingQuote(quote);
     return this;
   }
 
@@ -369,10 +493,29 @@ public class ExpressionBuilder {
    * @param obj the object to be appended
    * @param useQuotes true if the object should be surrounded by quotes, or false otherwise
    * @return this builder to enable methods to be chained; never null
+   * @deprecated use {@link #append(Object, QuoteMethod)} instead
    */
+  @Deprecated
   public ExpressionBuilder append(
       Object obj,
       boolean useQuotes
+  ) {
+    return append(obj, useQuotes ? QuoteMethod.ALWAYS : QuoteMethod.NEVER);
+  }
+
+  /**
+   * Append to this builder's expression the specified object. If the object is {@link Expressable},
+   * then this builder delegates to the object's
+   * {@link Expressable#appendTo(ExpressionBuilder, boolean)} method. Otherwise, the string
+   * representation of the object is appended to the expression.
+   *
+   * @param obj the object to be appended
+   * @param useQuotes true if the object should be surrounded by quotes, or false otherwise
+   * @return this builder to enable methods to be chained; never null
+   */
+  public ExpressionBuilder append(
+      Object obj,
+      QuoteMethod useQuotes
   ) {
     if (obj instanceof Expressable) {
       ((Expressable) obj).appendTo(this, useQuotes);
@@ -392,7 +535,7 @@ public class ExpressionBuilder {
    * @return this builder to enable methods to be chained; never null
    */
   public ExpressionBuilder append(Object obj) {
-    return append(obj, true);
+    return append(obj, quoteSqlIdentifiers);
   }
 
   /**

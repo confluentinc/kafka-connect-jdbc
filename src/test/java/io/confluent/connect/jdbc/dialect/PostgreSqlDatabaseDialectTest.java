@@ -1,19 +1,21 @@
-/**
- * Copyright 2017 Confluent Inc.
+/*
+ * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
- * in compliance with the License. You may obtain a copy of the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
- * Unless required by applicable law or agreed to in writing, software distributed under the License
- * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
- * or implied. See the License for the specific language governing permissions and limitations under
- * the License.
- **/
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
 
 package io.confluent.connect.jdbc.dialect;
 
+import java.sql.Types;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -22,8 +24,9 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
-import java.util.List;
+import java.util.Arrays;
 
+import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
@@ -44,7 +47,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     assertPrimitiveMapping(Type.FLOAT32, "REAL");
     assertPrimitiveMapping(Type.FLOAT64, "DOUBLE PRECISION");
     assertPrimitiveMapping(Type.BOOLEAN, "BOOLEAN");
-    assertPrimitiveMapping(Type.BYTES, "BLOB");
+    assertPrimitiveMapping(Type.BYTES, "BYTEA");
     assertPrimitiveMapping(Type.STRING, "TEXT");
   }
 
@@ -57,6 +60,12 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
+  public void testCustomColumnConverters() {
+    assertColumnConverter(Types.OTHER, PostgreSqlDatabaseDialect.JSON_TYPE_NAME, Schema.STRING_SCHEMA, String.class);
+    assertColumnConverter(Types.OTHER, PostgreSqlDatabaseDialect.JSONB_TYPE_NAME, Schema.STRING_SCHEMA, String.class);
+  }
+
+  @Test
   public void shouldMapDataTypes() {
     verifyDataTypeMapping("SMALLINT", Schema.INT8_SCHEMA);
     verifyDataTypeMapping("SMALLINT", Schema.INT16_SCHEMA);
@@ -66,7 +75,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     verifyDataTypeMapping("DOUBLE PRECISION", Schema.FLOAT64_SCHEMA);
     verifyDataTypeMapping("BOOLEAN", Schema.BOOLEAN_SCHEMA);
     verifyDataTypeMapping("TEXT", Schema.STRING_SCHEMA);
-    verifyDataTypeMapping("BLOB", Schema.BYTES_SCHEMA);
+    verifyDataTypeMapping("BYTEA", Schema.BYTES_SCHEMA);
     verifyDataTypeMapping("DECIMAL", Decimal.schema(0));
     verifyDataTypeMapping("DATE", Date.SCHEMA);
     verifyDataTypeMapping("TIME", Time.SCHEMA);
@@ -90,37 +99,100 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
   @Test
   public void shouldBuildCreateQueryStatement() {
-    String expected =
-        "CREATE TABLE \"myTable\" (\n" + "\"c1\" INT NOT NULL,\n" + "\"c2\" BIGINT NOT NULL,\n" +
-        "\"c3\" TEXT NOT NULL,\n" + "\"c4\" TEXT NULL,\n" + "\"c5\" DATE DEFAULT '2001-03-15',\n" +
-        "\"c6\" TIME DEFAULT '00:00:00.000',\n" +
-        "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" + "\"c8\" DECIMAL NULL,\n" +
-        "PRIMARY KEY(\"c1\"))";
-    String sql = dialect.buildCreateTableStatement(tableId, sinkRecordFields);
-    assertEquals(expected, sql);
+    assertEquals(
+        "CREATE TABLE \"myTable\" (\n"
+        + "\"c1\" INT NOT NULL,\n"
+        + "\"c2\" BIGINT NOT NULL,\n"
+        + "\"c3\" TEXT NOT NULL,\n"
+        + "\"c4\" TEXT NULL,\n"
+        + "\"c5\" DATE DEFAULT '2001-03-15',\n"
+        + "\"c6\" TIME DEFAULT '00:00:00.000',\n"
+        + "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
+        + "\"c8\" DECIMAL NULL,\n"
+        + "\"c9\" BOOLEAN DEFAULT TRUE,\n"
+        + "PRIMARY KEY(\"c1\"))",
+        dialect.buildCreateTableStatement(tableId, sinkRecordFields)
+    );
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+
+    assertEquals(
+        "CREATE TABLE myTable (\n"
+        + "c1 INT NOT NULL,\n"
+        + "c2 BIGINT NOT NULL,\n"
+        + "c3 TEXT NOT NULL,\n"
+        + "c4 TEXT NULL,\n"
+        + "c5 DATE DEFAULT '2001-03-15',\n"
+        + "c6 TIME DEFAULT '00:00:00.000',\n"
+        + "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
+        + "c8 DECIMAL NULL,\n"
+        + "c9 BOOLEAN DEFAULT TRUE,\n"
+        + "PRIMARY KEY(c1))",
+        dialect.buildCreateTableStatement(tableId, sinkRecordFields)
+    );
   }
 
   @Test
   public void shouldBuildAlterTableStatement() {
-    List<String> statements = dialect.buildAlterTable(tableId, sinkRecordFields);
-    String[] sql = {"ALTER TABLE \"myTable\" \n" + "ADD \"c1\" INT NOT NULL,\n" +
-                    "ADD \"c2\" BIGINT NOT NULL,\n" + "ADD \"c3\" TEXT NOT NULL,\n" +
-                    "ADD \"c4\" TEXT NULL,\n" + "ADD \"c5\" DATE DEFAULT '2001-03-15',\n" +
-                    "ADD \"c6\" TIME DEFAULT '00:00:00.000',\n" +
-                    "ADD \"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" +
-                    "ADD \"c8\" DECIMAL NULL"};
-    assertStatements(sql, statements);
+    assertEquals(
+        Arrays.asList(
+            "ALTER TABLE \"myTable\" \n"
+            + "ADD \"c1\" INT NOT NULL,\n"
+            + "ADD \"c2\" BIGINT NOT NULL,\n"
+            + "ADD \"c3\" TEXT NOT NULL,\n"
+            + "ADD \"c4\" TEXT NULL,\n"
+            + "ADD \"c5\" DATE DEFAULT '2001-03-15',\n"
+            + "ADD \"c6\" TIME DEFAULT '00:00:00.000',\n"
+            + "ADD \"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
+            + "ADD \"c8\" DECIMAL NULL,\n"
+            + "ADD \"c9\" BOOLEAN DEFAULT TRUE"
+        ),
+        dialect.buildAlterTable(tableId, sinkRecordFields)
+    );
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+
+    assertEquals(
+        Arrays.asList(
+            "ALTER TABLE myTable \n"
+            + "ADD c1 INT NOT NULL,\n"
+            + "ADD c2 BIGINT NOT NULL,\n"
+            + "ADD c3 TEXT NOT NULL,\n"
+            + "ADD c4 TEXT NULL,\n"
+            + "ADD c5 DATE DEFAULT '2001-03-15',\n"
+            + "ADD c6 TIME DEFAULT '00:00:00.000',\n"
+            + "ADD c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
+            + "ADD c8 DECIMAL NULL,\n"
+            + "ADD c9 BOOLEAN DEFAULT TRUE"
+        ),
+        dialect.buildAlterTable(tableId, sinkRecordFields)
+    );
   }
 
   @Test
   public void shouldBuildUpsertStatement() {
-    String expected = "INSERT INTO \"myTable\" (\"id1\",\"id2\",\"columnA\",\"columnB\"," +
-                      "\"columnC\",\"columnD\") VALUES (?,?,?,?,?,?) ON CONFLICT (\"id1\"," +
-                      "\"id2\") DO UPDATE SET \"columnA\"=EXCLUDED" +
-                      ".\"columnA\",\"columnB\"=EXCLUDED.\"columnB\",\"columnC\"=EXCLUDED" +
-                      ".\"columnC\",\"columnD\"=EXCLUDED.\"columnD\"";
-    String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD);
-    assertEquals(expected, sql);
+    assertEquals(
+        "INSERT INTO \"myTable\" (\"id1\",\"id2\",\"columnA\",\"columnB\"," +
+        "\"columnC\",\"columnD\") VALUES (?,?,?,?,?,?) ON CONFLICT (\"id1\"," +
+        "\"id2\") DO UPDATE SET \"columnA\"=EXCLUDED" +
+        ".\"columnA\",\"columnB\"=EXCLUDED.\"columnB\",\"columnC\"=EXCLUDED" +
+        ".\"columnC\",\"columnD\"=EXCLUDED.\"columnD\"",
+        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
+    );
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+
+    assertEquals(
+        "INSERT INTO myTable (id1,id2,columnA,columnB," +
+        "columnC,columnD) VALUES (?,?,?,?,?,?) ON CONFLICT (id1," +
+        "id2) DO UPDATE SET columnA=EXCLUDED" +
+        ".columnA,columnB=EXCLUDED.columnB,columnC=EXCLUDED" +
+        ".columnC,columnD=EXCLUDED.columnD",
+        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
+    );
   }
 
   @Test
@@ -142,6 +214,14 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "\"pk1\" INT NOT NULL," +
         System.lineSeparator() + "\"pk2\" INT NOT NULL," + System.lineSeparator() +
         "\"col1\" INT NOT NULL," + System.lineSeparator() + "PRIMARY KEY(\"pk1\",\"pk2\"))");
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+
+    verifyCreateThreeColTwoPk(
+        "CREATE TABLE myTable (" + System.lineSeparator() + "pk1 INT NOT NULL," +
+        System.lineSeparator() + "pk2 INT NOT NULL," + System.lineSeparator() +
+        "col1 INT NOT NULL," + System.lineSeparator() + "PRIMARY KEY(pk1,pk2))");
   }
 
   @Test
@@ -159,11 +239,50 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   @Test
   public void upsert() {
     TableId customer = tableId("Customer");
-    assertEquals("INSERT INTO \"Customer\" (\"id\",\"name\",\"salary\",\"address\") " +
-                 "VALUES (?,?,?,?) ON CONFLICT (\"id\") DO UPDATE SET \"name\"=EXCLUDED.\"name\"," +
-                 "\"salary\"=EXCLUDED.\"salary\",\"address\"=EXCLUDED.\"address\"", dialect
-                     .buildUpsertQueryStatement(customer, columns(customer, "id"),
-                                                columns(customer, "name", "salary", "address")));
+    assertEquals(
+        "INSERT INTO \"Customer\" (\"id\",\"name\",\"salary\",\"address\") " +
+         "VALUES (?,?,?,?) ON CONFLICT (\"id\") DO UPDATE SET \"name\"=EXCLUDED.\"name\"," +
+         "\"salary\"=EXCLUDED.\"salary\",\"address\"=EXCLUDED.\"address\"",
+        dialect.buildUpsertQueryStatement(
+            customer,
+            columns(customer, "id"),
+            columns(customer, "name", "salary", "address")
+        )
+    );
+
+    assertEquals(
+            "INSERT INTO \"Customer\" (\"id\",\"name\",\"salary\",\"address\") " +
+                    "VALUES (?,?,?,?) ON CONFLICT (\"id\",\"name\",\"salary\",\"address\") DO NOTHING",
+            dialect.buildUpsertQueryStatement(
+                    customer,
+                    columns(customer, "id", "name", "salary", "address"),
+                    columns(customer)
+            )
+    );
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+
+    assertEquals(
+        "INSERT INTO Customer (id,name,salary,address) " +
+        "VALUES (?,?,?,?) ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name," +
+        "salary=EXCLUDED.salary,address=EXCLUDED.address",
+        dialect.buildUpsertQueryStatement(
+            customer,
+            columns(customer, "id"),
+            columns(customer, "name", "salary", "address")
+        )
+    );
+
+    assertEquals(
+            "INSERT INTO Customer (id,name,salary,address) " +
+                    "VALUES (?,?,?,?) ON CONFLICT (id,name,salary,address) DO NOTHING",
+            dialect.buildUpsertQueryStatement(
+                    customer,
+                    columns(customer, "id", "name", "salary", "address"),
+                    columns(customer)
+            )
+    );
   }
 
   @Test

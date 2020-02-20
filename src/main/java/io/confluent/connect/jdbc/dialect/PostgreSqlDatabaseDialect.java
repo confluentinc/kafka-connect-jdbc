@@ -1,25 +1,26 @@
 /*
  * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
  */
 
 package io.confluent.connect.jdbc.dialect;
 
+import java.util.Map;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
@@ -60,8 +61,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     }
   }
 
-  private static final String JSON_TYPE_NAME = "json";
-  private static final String JSONB_TYPE_NAME = "jsonb";
+  static final String JSON_TYPE_NAME = "json";
+  static final String JSONB_TYPE_NAME = "jsonb";
 
   /**
    * Create a new dialect instance with the given connector configuration.
@@ -86,6 +87,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    */
   @Override
   protected void initializePreparedStatement(PreparedStatement stmt) throws SQLException {
+    super.initializePreparedStatement(stmt);
+
     log.trace("Initializing PreparedStatement fetch direction to FETCH_FORWARD for '{}'", stmt);
     stmt.setFetchDirection(ResultSet.FETCH_FORWARD);
   }
@@ -138,12 +141,14 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   @Override
-  public ColumnConverter createColumnConverter(
-      ColumnMapping mapping
+  protected ColumnConverter columnConverterFor(
+      ColumnMapping mapping,
+      ColumnDefinition defn,
+      int col,
+      boolean isJdbc4
   ) {
     // First handle any PostgreSQL-specific types
     ColumnDefinition columnDefn = mapping.columnDefn();
-    int col = mapping.columnNumber();
     switch (columnDefn.type()) {
       case Types.BIT: {
         // PostgreSQL allows variable length bit strings, but when length is 1 then the driver
@@ -169,7 +174,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     }
 
     // Delegate for the remaining logic
-    return super.createColumnConverter(mapping);
+    return super.columnConverterFor(mapping, defn, col, isJdbc4);
   }
 
   protected boolean isJsonType(ColumnDefinition columnDefn) {
@@ -211,7 +216,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       case STRING:
         return "TEXT";
       case BYTES:
-        return "BLOB";
+        return "BYTEA";
       default:
         return super.getSqlType(field);
     }
@@ -224,9 +229,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       Collection<ColumnId> nonKeyColumns
   ) {
     final Transform<ColumnId> transform = (builder, col) -> {
-      builder.appendIdentifierQuoted(col.name())
+      builder.appendColumnName(col.name())
              .append("=EXCLUDED.")
-             .appendIdentifierQuoted(col.name());
+             .appendColumnName(col.name());
     };
 
     ExpressionBuilder builder = expressionBuilder();
@@ -244,12 +249,31 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
            .delimitedBy(",")
            .transformedBy(ExpressionBuilder.columnNames())
            .of(keyColumns);
-    builder.append(") DO UPDATE SET ");
-    builder.appendList()
-           .delimitedBy(",")
-           .transformedBy(transform)
-           .of(nonKeyColumns);
+    if (nonKeyColumns.isEmpty()) {
+      builder.append(") DO NOTHING");
+    } else {
+      builder.append(") DO UPDATE SET ");
+      builder.appendList()
+              .delimitedBy(",")
+              .transformedBy(transform)
+              .of(nonKeyColumns);
+    }
     return builder.toString();
+  }
+
+  @Override
+  protected void formatColumnValue(
+      ExpressionBuilder builder,
+      String schemaName,
+      Map<String, String> schemaParameters,
+      Schema.Type type,
+      Object value
+  ) {
+    if (schemaName == null && Type.BOOLEAN.equals(type)) {
+      builder.append((Boolean) value ? "TRUE" : "FALSE");
+    } else {
+      super.formatColumnValue(builder, schemaName, schemaParameters, type, value);
+    }
   }
 
 }

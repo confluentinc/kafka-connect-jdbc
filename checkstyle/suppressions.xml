@@ -13,7 +13,7 @@
               files="(DbDialect|JdbcSourceTask|GenericDatabaseDialect).java"/>
 
     <suppress checks="NPathComplexity"
-              files="(DataConverter|FieldsMetadata|JdbcSourceTask|GenericDatabaseDialect).java"/>
+              files="(BufferedRecords|DataConverter|FieldsMetadata|JdbcSourceTask|GenericDatabaseDialect).java"/>
 
     <suppress checks="JavaNCSS"
               files="(DataConverter|FieldsMetadata|JdbcSourceTask|GenericDatabaseDialect).java"/>
@@ -22,5 +22,5 @@
               files="(DataConverter|GenericDatabaseDialect|JdbcSourceTask).java"/>
 
     <suppress checks="ParameterNumber"
-              files="(ColumnDefinition|GenericDatabaseDialect).java"/>
+              files="(ColumnDefinition|GenericDatabaseDialect|SqlServerDatabaseDialect).java"/>
 </suppressions>

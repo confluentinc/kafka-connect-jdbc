@@ -1,17 +1,16 @@
 /*
- * Copyright 2016 Confluent Inc.
+ * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
  */
 
 package io.confluent.connect.jdbc.sink;
@@ -44,9 +43,7 @@ import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static junit.framework.TestCase.assertTrue;
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.*;
 
 public class JdbcDbWriterTest {
 
@@ -194,6 +191,144 @@ public class JdbcDbWriterTest {
     SinkRecord record = new SinkRecord(topic, partition, keySchema, keyStruct, valueSchema, valueStruct, offset);
 
     writer.write(Collections.nCopies(2, record));
+
+    assertEquals(
+        1,
+        sqliteHelper.select("select count(*) from books", new SqliteHelper.ResultSetReadCallback() {
+          @Override
+          public void read(ResultSet rs) throws SQLException {
+            assertEquals(1, rs.getInt(1));
+          }
+        })
+    );
+  }
+
+  @Test
+  public void idempotentDeletes() throws SQLException {
+    String topic = "books";
+    int partition = 7;
+    long offset = 42;
+
+    Map<String, String> props = new HashMap<>();
+    props.put("connection.url", sqliteHelper.sqliteUri());
+    props.put("auto.create", "true");
+    props.put("delete.enabled", "true");
+    props.put("pk.mode", "record_key");
+    props.put("insert.mode", "upsert");
+
+    writer = newWriter(props);
+
+    Schema keySchema = SchemaBuilder.struct()
+        .field("id", SchemaBuilder.INT64_SCHEMA);
+
+    Struct keyStruct = new Struct(keySchema).put("id", 0L);
+
+    Schema valueSchema = SchemaBuilder.struct()
+        .field("author", Schema.STRING_SCHEMA)
+        .field("title", Schema.STRING_SCHEMA)
+        .build();
+
+    Struct valueStruct = new Struct(valueSchema)
+        .put("author", "Tom Robbins")
+        .put("title", "Villa Incognito");
+
+    SinkRecord record = new SinkRecord(topic, partition, keySchema, keyStruct, valueSchema, valueStruct, offset);
+
+    writer.write(Collections.nCopies(2, record));
+
+    SinkRecord deleteRecord = new SinkRecord(topic, partition, keySchema, keyStruct, null, null, offset);
+    writer.write(Collections.nCopies(2, deleteRecord));
+
+    assertEquals(
+        1,
+        sqliteHelper.select("select count(*) from books", new SqliteHelper.ResultSetReadCallback() {
+          @Override
+          public void read(ResultSet rs) throws SQLException {
+            assertEquals(0, rs.getInt(1));
+          }
+        })
+    );
+  }
+
+  @Test
+  public void insertDeleteSameRecord() throws SQLException {
+    String topic = "books";
+    int partition = 7;
+    long offset = 42;
+
+    Map<String, String> props = new HashMap<>();
+    props.put("connection.url", sqliteHelper.sqliteUri());
+    props.put("auto.create", "true");
+    props.put("delete.enabled", "true");
+    props.put("pk.mode", "record_key");
+    props.put("insert.mode", "upsert");
+
+    writer = newWriter(props);
+
+    Schema keySchema = SchemaBuilder.struct()
+        .field("id", SchemaBuilder.INT64_SCHEMA);
+
+    Struct keyStruct = new Struct(keySchema).put("id", 0L);
+
+    Schema valueSchema = SchemaBuilder.struct()
+        .field("author", Schema.STRING_SCHEMA)
+        .field("title", Schema.STRING_SCHEMA)
+        .build();
+
+    Struct valueStruct = new Struct(valueSchema)
+        .put("author", "Tom Robbins")
+        .put("title", "Villa Incognito");
+
+    SinkRecord record = new SinkRecord(topic, partition, keySchema, keyStruct, valueSchema, valueStruct, offset);
+    SinkRecord deleteRecord = new SinkRecord(topic, partition, keySchema, keyStruct, null, null, offset);
+    writer.write(Collections.singletonList(record));
+    writer.write(Collections.singletonList(deleteRecord));
+
+    assertEquals(
+        1,
+        sqliteHelper.select("select count(*) from books", new SqliteHelper.ResultSetReadCallback() {
+          @Override
+          public void read(ResultSet rs) throws SQLException {
+            assertEquals(0, rs.getInt(1));
+          }
+        })
+    );
+  }
+
+  @Test
+  public void insertDeleteInsertSameRecord() throws SQLException {
+    String topic = "books";
+    int partition = 7;
+    long offset = 42;
+
+    Map<String, String> props = new HashMap<>();
+    props.put("connection.url", sqliteHelper.sqliteUri());
+    props.put("auto.create", "true");
+    props.put("delete.enabled", "true");
+    props.put("pk.mode", "record_key");
+    props.put("insert.mode", "upsert");
+
+    writer = newWriter(props);
+
+    Schema keySchema = SchemaBuilder.struct()
+        .field("id", SchemaBuilder.INT64_SCHEMA);
+
+    Struct keyStruct = new Struct(keySchema).put("id", 0L);
+
+    Schema valueSchema = SchemaBuilder.struct()
+        .field("author", Schema.STRING_SCHEMA)
+        .field("title", Schema.STRING_SCHEMA)
+        .build();
+
+    Struct valueStruct = new Struct(valueSchema)
+        .put("author", "Tom Robbins")
+        .put("title", "Villa Incognito");
+
+    SinkRecord record = new SinkRecord(topic, partition, keySchema, keyStruct, valueSchema, valueStruct, offset);
+    SinkRecord deleteRecord = new SinkRecord(topic, partition, keySchema, keyStruct, null, null, offset);
+    writer.write(Collections.singletonList(record));
+    writer.write(Collections.singletonList(deleteRecord));
+    writer.write(Collections.singletonList(record));
 
     assertEquals(
         1,

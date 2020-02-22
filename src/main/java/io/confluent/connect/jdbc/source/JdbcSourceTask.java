@@ -15,15 +15,7 @@
 
 package io.confluent.connect.jdbc.source;
 
-import io.confluent.connect.jdbc.dialect.DatabaseDialect;
-import io.confluent.connect.jdbc.dialect.DatabaseDialects;
-import io.confluent.connect.jdbc.util.CachedConnectionProvider;
-import io.confluent.connect.jdbc.util.ColumnDefinition;
-import io.confluent.connect.jdbc.util.ColumnId;
-import io.confluent.connect.jdbc.util.Version;
-
-import java.util.*;
-
+import java.util.TimeZone;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.common.utils.Time;
@@ -35,6 +27,17 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Calendar;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.PriorityQueue;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
@@ -146,8 +149,6 @@ public class JdbcSourceTask extends SourceTask {
         = config.getLong(JdbcSourceTaskConfig.TIMESTAMP_DELAY_INTERVAL_MS_CONFIG);
     boolean validateNonNulls
         = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
-    Long timestampInitial
-        = config.getLong(JdbcSourceConnectorConfig.TIMESTAMP_INITIAL_CONFIG);
     TimeZone timeZone = config.timeZone();
     String suffix = config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG).trim();
 
@@ -290,7 +291,8 @@ public class JdbcSourceTask extends SourceTask {
         // start at the specified timestamp
         if (timestampInitial == JdbcSourceConnectorConfig.TIMESTAMP_INITIAL_CURRENT) {
           // use the current time
-          try (Connection con = cachedConnectionProvider.getConnection()) {
+          try {
+            final Connection con = cachedConnectionProvider.getConnection();
             Calendar cal = Calendar.getInstance(timezone);
             timestampInitial = dialect.currentTimeOnDB(con, cal).getTime();
           } catch (SQLException e) {
@@ -299,7 +301,8 @@ public class JdbcSourceTask extends SourceTask {
         }
         initialPartitionOffset = new HashMap<String, Object>();
         initialPartitionOffset.put(TimestampIncrementingOffset.TIMESTAMP_FIELD, timestampInitial);
-        log.info("No offsets found for '{}', so using configured timestamp {}", tableOrQuery, timestampInitial);
+        log.info("No offsets found for '{}', so using configured timestamp {}", tableOrQuery,
+                timestampInitial);
       }
       return initialPartitionOffset;
     }

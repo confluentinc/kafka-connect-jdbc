@@ -29,6 +29,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -190,6 +191,7 @@ public class JdbcSourceTask extends SourceTask {
           }
         }
       }
+      offset = computeInitialOffset(tableOrQuery, offset, timeZone);
 
       String topicPrefix = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
 
@@ -273,6 +275,37 @@ public class JdbcSourceTask extends SourceTask {
         OffsetProtocols.sourcePartitionForProtocolV1(tableId),
         OffsetProtocols.sourcePartitionForProtocolV0(tableId)
     );
+  }
+
+  protected Map<String, Object> computeInitialOffset(
+          String tableOrQuery,
+          Map<String, Object> partitionOffset,
+          TimeZone timezone) {
+    if (!(partitionOffset == null)) {
+      return partitionOffset;
+    } else {
+      Map<String, Object> initialPartitionOffset = null;
+      // no offsets found
+      Long timestampInitial = config.getLong(JdbcSourceConnectorConfig.TIMESTAMP_INITIAL_CONFIG);
+      if (timestampInitial != null) {
+        // start at the specified timestamp
+        if (timestampInitial == JdbcSourceConnectorConfig.TIMESTAMP_INITIAL_CURRENT) {
+          // use the current time
+          try {
+            final Connection con = cachedConnectionProvider.getConnection();
+            Calendar cal = Calendar.getInstance(timezone);
+            timestampInitial = dialect.currentTimeOnDB(con, cal).getTime();
+          } catch (SQLException e) {
+            throw new ConnectException("Error while getting initial timestamp from database", e);
+          }
+        }
+        initialPartitionOffset = new HashMap<String, Object>();
+        initialPartitionOffset.put(TimestampIncrementingOffset.TIMESTAMP_FIELD, timestampInitial);
+        log.info("No offsets found for '{}', so using configured timestamp {}", tableOrQuery,
+                timestampInitial);
+      }
+      return initialPartitionOffset;
+    }
   }
 
   @Override

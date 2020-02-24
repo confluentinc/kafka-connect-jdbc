@@ -171,6 +171,14 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String TIMESTAMP_COLUMN_NAME_DEFAULT = "";
   private static final String TIMESTAMP_COLUMN_NAME_DISPLAY = "Timestamp Column Name";
 
+  public static final String TIMESTAMP_INITIAL_CONFIG = "timestamp.initial";
+  public static final Long TIMESTAMP_INITIAL_DEFAULT = null;
+  public static final Long TIMESTAMP_INITIAL_CURRENT = Long.valueOf(-1);
+  public static final String TIMESTAMP_INITIAL_DOC =
+      "The epoch timestamp used for initial queries that use timestamp criteria. "
+      + "Use -1 to use the current time. If not specified, all data will be retrieved.";
+  public static final String TIMESTAMP_INITIAL_DISPLAY = "Unix time value of initial timestamp";
+
   public static final String TABLE_POLL_INTERVAL_MS_CONFIG = "table.poll.interval.ms";
   private static final String TABLE_POLL_INTERVAL_MS_DOC =
       "Frequency in ms to poll for new or removed tables, which may result in updated task "
@@ -482,6 +490,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.MEDIUM,
         TIMESTAMP_COLUMN_NAME_DISPLAY,
+        MODE_DEPENDENTS_RECOMMENDER
+    ).define(
+        TIMESTAMP_INITIAL_CONFIG,
+        Type.LONG,
+        TIMESTAMP_INITIAL_DEFAULT,
+        Importance.LOW,
+        TIMESTAMP_INITIAL_DOC,
+        MODE_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        TIMESTAMP_INITIAL_DISPLAY,
         MODE_DEPENDENTS_RECOMMENDER
     ).define(
         VALIDATE_NON_NULL_CONFIG,

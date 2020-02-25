@@ -161,7 +161,10 @@ public class JdbcSourceConnector extends SourceConnector {
           taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, builder.toString());
           taskConfigs.add(taskProps);
         }
-        log.trace("Producing task configs with no custom query for tables: {}", currentTables.toArray());
+        log.trace(
+            "Producing task configs with no custom query for tables: {}",
+            currentTables.toArray()
+        );
       }
     }
     return taskConfigs;

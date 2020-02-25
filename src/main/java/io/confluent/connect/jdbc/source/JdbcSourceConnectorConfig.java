@@ -70,7 +70,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public static final String CONNECTION_ATTEMPTS_CONFIG = "connection.attempts";
   private static final String CONNECTION_ATTEMPTS_DOC
-      = "Maximum number of attempts to retrieve a valid JDBC connection.";
+      = "Maximum number of attempts to retrieve a valid JDBC connection. "
+          + "Must be a positive integer.";
   private static final String CONNECTION_ATTEMPTS_DISPLAY = "JDBC connection attempts";
   public static final int CONNECTION_ATTEMPTS_DEFAULT = 3;
 
@@ -337,6 +338,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         CONNECTION_ATTEMPTS_CONFIG,
         Type.INT,
         CONNECTION_ATTEMPTS_DEFAULT,
+        ConfigDef.Range.atLeast(1),
         Importance.LOW,
         CONNECTION_ATTEMPTS_DOC,
         DATABASE_GROUP,

@@ -38,6 +38,8 @@ import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CachedRecommen
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CachingRecommender;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -78,6 +80,17 @@ public class JdbcSourceConnectorConfigTest {
   public void cleanup() throws Exception {
     db.close();
     db.dropDatabase();
+  }
+
+  @Test
+  public void testConnectionAttemptsAtLeastOne() {
+    props.put(JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_CONFIG, "0");
+    Map<String, ConfigValue> validatedConfig =
+        JdbcSourceConnectorConfig.baseConfigDef().validateAll(props);
+    ConfigValue connectionAttemptsConfig =
+        validatedConfig.get(JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_CONFIG);
+    assertNotNull(connectionAttemptsConfig);
+    assertFalse(connectionAttemptsConfig.errorMessages().isEmpty());
   }
 
   @Test

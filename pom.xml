@@ -55,7 +55,7 @@
         <junit.version>4.12</junit.version>
         <easymock.version>3.0</easymock.version>
         <powermock.version>1.6.2</powermock.version>
-        <derby.version>10.11.1.1</derby.version>
+        <derby.version>10.12.1.1</derby.version>
         <commons-io.version>2.4</commons-io.version>
         <mockito.version>1.10.19</mockito.version>
         <slf4j.version>1.7.5</slf4j.version>

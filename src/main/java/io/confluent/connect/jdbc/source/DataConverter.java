@@ -298,9 +298,15 @@ public class DataConverter {
         break;
       }
 
+      case Types.OTHER: {
+        if (metadata.getColumnTypeName(col).equals("jsonb")) {
+          builder.field(fieldName, Schema.STRING_SCHEMA);
+          break;
+        }
+      }
+
       case Types.ARRAY:
       case Types.JAVA_OBJECT:
-      case Types.OTHER:
       case Types.DISTINCT:
       case Types.STRUCT:
       case Types.REF:
@@ -496,9 +502,15 @@ public class DataConverter {
         break;
       }
 
+      case Types.OTHER: {
+        if (resultSet.getMetaData().getColumnTypeName(col).equals("jsonb")) {
+          colValue = resultSet.getString(col);
+          break;
+        }
+      }
+
       case Types.ARRAY:
       case Types.JAVA_OBJECT:
-      case Types.OTHER:
       case Types.DISTINCT:
       case Types.STRUCT:
       case Types.REF:

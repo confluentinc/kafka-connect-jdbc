@@ -15,21 +15,26 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.sql.Types;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.concurrent.ThreadLocalRandom;
 
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.mock;
 
 public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDatabaseDialect> {
 
@@ -299,5 +304,19 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         "jdbc:postgresql://localhost/test?user=fred&password=secret&ssl=true",
         "jdbc:postgresql://localhost/test?user=fred&password=****&ssl=true"
     );
+  }
+
+  @Test
+  @Override
+  public void bindFieldArrayUnsupported() throws SQLException {
+      // Overridden simply to dummy out the test.
+  }
+
+  @Test
+  public void bindFieldPrimitiveValues() throws SQLException {
+    PreparedStatement statement = mock(PreparedStatement.class);
+    int index = ThreadLocalRandom.current().nextInt();
+
+    super.verifyBindField(++index, SchemaBuilder.array(Schema.INT8_SCHEMA), new int[] { 42 }).setObject(index, new int[] { 42 }, Types.ARRAY);
   }
 }

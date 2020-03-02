@@ -276,4 +276,22 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     }
   }
 
+  @Override
+  protected boolean maybeBindPrimitive(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
+      Object value
+  ) throws SQLException {
+
+    switch (schema.type()) {
+      case ARRAY:
+        statement.setObject(index, value, Types.ARRAY);
+        return true;
+      default:
+        break;
+    }
+    return super.maybeBindPrimitive(statement, index, schema, value);
+  }
+
 }

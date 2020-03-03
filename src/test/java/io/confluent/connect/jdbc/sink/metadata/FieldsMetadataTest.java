@@ -20,6 +20,7 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -256,6 +257,54 @@ public class FieldsMetadataTest {
 
     assertEquals(Collections.singleton("field1"), metadata.keyFieldNames);
     assertEquals(new HashSet<>(Arrays.asList("field2", "field4")), metadata.nonKeyFieldNames);
+  }
+
+  @Test
+  public void recordValuePkModeWithFieldsRetainOriginalOrdering() {
+    final Schema valueSchema =
+            SchemaBuilder.struct()
+                    .field("field4", Schema.INT64_SCHEMA)
+                    .field("field2", Schema.INT64_SCHEMA)
+                    .field("field1", Schema.INT64_SCHEMA)
+                    .field("field3", Schema.INT64_SCHEMA)
+                    .build();
+
+    FieldsMetadata metadata = extract(
+            JdbcSinkConfig.PrimaryKeyMode.RECORD_VALUE,
+            Collections.singletonList("field4"),
+            new HashSet<>(Arrays.asList("field3", "field1", "field2")),
+            null,
+            valueSchema
+    );
+
+    assertEquals(Arrays.asList("field4", "field2", "field1", "field3"), new ArrayList<>(metadata.allFields.keySet()));
+
+    metadata = extract(
+            JdbcSinkConfig.PrimaryKeyMode.RECORD_VALUE,
+            Collections.singletonList("field1"),
+            new HashSet<>(Arrays.asList("field4", "field3")),
+            null,
+            valueSchema
+    );
+
+    assertEquals(Arrays.asList("field4", "field1", "field3"), new ArrayList<>(metadata.allFields.keySet()));
+
+    final Schema keySchema =
+            SchemaBuilder.struct()
+                    .field("field1", Schema.INT64_SCHEMA)
+                    .field("field3", Schema.INT64_SCHEMA)
+                    .field("field2", Schema.INT64_SCHEMA)
+                    .build();
+
+    metadata = extract(
+            JdbcSinkConfig.PrimaryKeyMode.RECORD_KEY,
+            Arrays.asList("field2", "field3", "field1"),
+            new HashSet<>(Arrays.asList("field3", "field1")),
+            keySchema,
+            null
+    );
+
+    assertEquals(Arrays.asList("field1", "field2", "field3"), new ArrayList<>(metadata.allFields.keySet()));
   }
 
   private static FieldsMetadata extract(JdbcSinkConfig.PrimaryKeyMode pkMode, List<String> pkFields, Schema keySchema, Schema valueSchema) {

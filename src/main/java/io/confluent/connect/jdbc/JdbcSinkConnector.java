@@ -30,7 +30,7 @@ import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.JdbcSinkTask;
 import io.confluent.connect.jdbc.util.Version;
 
-public final class JdbcSinkConnector extends SinkConnector {
+public class JdbcSinkConnector extends SinkConnector {
   private static final Logger log = LoggerFactory.getLogger(JdbcSinkConnector.class);
 
   private Map<String, String> configProps;

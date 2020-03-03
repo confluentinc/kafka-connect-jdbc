@@ -46,6 +46,7 @@ import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 @RunWith(PowerMockRunner.class)
 @PrepareForTest({JdbcSourceConnector.class, DatabaseDialect.class})
@@ -103,13 +104,15 @@ public class JdbcSourceConnectorTest {
   @Test
   public void testStartStop() throws Exception {
     CachedConnectionProvider mockCachedConnectionProvider = PowerMock.createMock(CachedConnectionProvider.class);
-    PowerMock.expectNew(
-        CachedConnectionProvider.class,
-        EasyMock.anyObject(DatabaseDialect.class),
-        EasyMock.eq(JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_DEFAULT),
-        EasyMock.eq(JdbcSourceConnectorConfig.CONNECTION_BACKOFF_DEFAULT))
-             .andReturn(mockCachedConnectionProvider);
-
+    connector = new JdbcSourceConnector() {
+        @Override
+        protected CachedConnectionProvider connectionProvider(
+            int maxConnAttempts,
+            long retryBackoff
+        ) {
+            return mockCachedConnectionProvider;
+        }
+    };
     // Should request a connection, then should close it on stop(). The background thread may also
     // request connections any time it performs updates.
     Connection conn = PowerMock.createMock(Connection.class);
@@ -128,6 +131,16 @@ public class JdbcSourceConnectorTest {
     connector.stop();
 
     PowerMock.verifyAll();
+  }
+
+  @Test
+  public void testNoTablesNoTasks() throws Exception {
+    // Tests case where there are no readable tables and ensures that no tasks
+    // are returned to be run
+    connector.start(connProps);
+    List<Map<String, String>> configs = connector.taskConfigs(3);
+    assertTrue(configs.isEmpty());
+    connector.stop();
   }
 
   @Test

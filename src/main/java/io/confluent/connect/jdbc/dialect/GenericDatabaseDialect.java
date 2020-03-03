@@ -130,11 +130,13 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   protected final String schemaPattern;
   protected final Set<String> tableTypes;
   protected final String jdbcUrl;
+  protected final DatabaseDialectProvider.JdbcUrlInfo jdbcUrlInfo;
   private final QuoteMethod quoteSqlIdentifiers;
   private final IdentifierRules defaultIdentifierRules;
   private final AtomicReference<IdentifierRules> identifierRules = new AtomicReference<>();
   private final Queue<Connection> connections = new ConcurrentLinkedQueue<>();
   private volatile JdbcDriverInfo jdbcDriverInfo;
+  private final int batchMaxRows;
   private final TimeZone timeZone;
 
   /**
@@ -160,6 +162,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     this.config = config;
     this.defaultIdentifierRules = defaultIdentifierRules;
     this.jdbcUrl = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
+    this.jdbcUrlInfo = DatabaseDialects.extractJdbcUrlInfo(jdbcUrl);
     if (config instanceof JdbcSinkConfig) {
       catalogPattern = JdbcSourceTaskConfig.CATALOG_PATTERN_DEFAULT;
       schemaPattern = JdbcSourceTaskConfig.SCHEMA_PATTERN_DEFAULT;
@@ -177,8 +180,10 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     }
     if (config instanceof JdbcSourceConnectorConfig) {
       mapNumerics = ((JdbcSourceConnectorConfig)config).numericMapping();
+      batchMaxRows = config.getInt(JdbcSourceConnectorConfig.BATCH_MAX_ROWS_CONFIG);
     } else {
       mapNumerics = NumericMapping.NONE;
+      batchMaxRows = 0;
     }
 
     if (config instanceof JdbcSourceConnectorConfig) {
@@ -195,6 +200,10 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     return getClass().getSimpleName().replace("DatabaseDialect", "");
   }
 
+  protected TimeZone timeZone() {
+    return timeZone;
+  }
+
   @Override
   public Connection getConnection() throws SQLException {
     // These config names are the same for both source and sink configs ...
@@ -208,6 +217,10 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       properties.setProperty("password", dbPassword.value());
     }
     properties = addConnectionProperties(properties);
+    // Timeout is 40 seconds to be as long as possible for customer to have a long connection
+    // handshake, while still giving enough time to validate once in the follower worker,
+    // and again in the leader worker and still be under 90s REST serving timeout
+    DriverManager.setLoginTimeout(40);
     Connection connection = DriverManager.getConnection(jdbcUrl, properties);
     if (jdbcDriverInfo == null) {
       jdbcDriverInfo = createJdbcDriverInfo(connection);
@@ -241,8 +254,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     if (query != null) {
       try (Statement statement = connection.createStatement()) {
         if (statement.execute(query)) {
-          try (ResultSet rs = statement.getResultSet()) {
+          ResultSet rs = null;
+          try {
             // do nothing with the result set
+            rs = statement.getResultSet();
+          } finally {
+            if (rs != null) {
+              rs.close();
+            }
           }
         }
       }
@@ -316,13 +335,19 @@ public class GenericDatabaseDialect implements DatabaseDialect {
    * the {@link #createPreparedStatement(Connection, String)} method after the statement is
    * created but before it is returned/used.
    *
-   * <p>By default this method does nothing.
+   * <p>By default this method sets the {@link PreparedStatement#setFetchSize(int) fetch size} to
+   * the {@link JdbcSourceConnectorConfig#BATCH_MAX_ROWS_CONFIG batch size} of the connector.
+   * This will provide a hint to the JDBC driver as to the number of rows to fetch from the database
+   * in an attempt to limit memory usage when reading from large tables. Driver implementations
+   * often require further configuration to make use of the fetch size.
    *
    * @param stmt the prepared statement; never null
    * @throws SQLException the error that might result from initialization
    */
   protected void initializePreparedStatement(PreparedStatement stmt) throws SQLException {
-    // do nothing
+    if (batchMaxRows > 0) {
+      stmt.setFetchSize(batchMaxRows);
+    }
   }
 
   @Override
@@ -867,6 +892,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
    * @param optional   true if the field is to be optional as obtained from the column definition
    * @return the name of the field, or null if no field was added
    */
+  @SuppressWarnings("fallthrough")
   protected String addFieldToSchema(
       final ColumnDefinition columnDefn,
       final SchemaBuilder builder,
@@ -1087,7 +1113,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     );
   }
 
-  @SuppressWarnings("deprecation")
+  @SuppressWarnings({"deprecation", "fallthrough"})
   protected ColumnConverter columnConverterFor(
       final ColumnMapping mapping,
       final ColumnDefinition defn,
@@ -1398,6 +1424,24 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       Collection<ColumnId> nonKeyColumns
   ) {
     throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public final String buildDeleteStatement(
+      TableId table,
+      Collection<ColumnId> keyColumns
+  ) {
+    ExpressionBuilder builder = expressionBuilder();
+    builder.append("DELETE FROM ");
+    builder.append(table);
+    if (!keyColumns.isEmpty()) {
+      builder.append(" WHERE ");
+      builder.appendList()
+          .delimitedBy(" AND ")
+          .transformedBy(ExpressionBuilder.columnNamesWith(" = ?"))
+          .of(keyColumns);
+    }
+    return builder.toString();
   }
 
   @Override

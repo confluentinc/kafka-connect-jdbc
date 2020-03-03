@@ -15,10 +15,12 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import java.util.Map;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
@@ -59,8 +61,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     }
   }
 
-  private static final String JSON_TYPE_NAME = "json";
-  private static final String JSONB_TYPE_NAME = "jsonb";
+  static final String JSON_TYPE_NAME = "json";
+  static final String JSONB_TYPE_NAME = "jsonb";
 
   /**
    * Create a new dialect instance with the given connector configuration.
@@ -85,6 +87,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    */
   @Override
   protected void initializePreparedStatement(PreparedStatement stmt) throws SQLException {
+    super.initializePreparedStatement(stmt);
+
     log.trace("Initializing PreparedStatement fetch direction to FETCH_FORWARD for '{}'", stmt);
     stmt.setFetchDirection(ResultSet.FETCH_FORWARD);
   }
@@ -137,12 +141,14 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   @Override
-  public ColumnConverter createColumnConverter(
-      ColumnMapping mapping
+  protected ColumnConverter columnConverterFor(
+      ColumnMapping mapping,
+      ColumnDefinition defn,
+      int col,
+      boolean isJdbc4
   ) {
     // First handle any PostgreSQL-specific types
     ColumnDefinition columnDefn = mapping.columnDefn();
-    int col = mapping.columnNumber();
     switch (columnDefn.type()) {
       case Types.BIT: {
         // PostgreSQL allows variable length bit strings, but when length is 1 then the driver
@@ -168,7 +174,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     }
 
     // Delegate for the remaining logic
-    return super.createColumnConverter(mapping);
+    return super.columnConverterFor(mapping, defn, col, isJdbc4);
   }
 
   protected boolean isJsonType(ColumnDefinition columnDefn) {
@@ -243,12 +249,31 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
            .delimitedBy(",")
            .transformedBy(ExpressionBuilder.columnNames())
            .of(keyColumns);
-    builder.append(") DO UPDATE SET ");
-    builder.appendList()
-           .delimitedBy(",")
-           .transformedBy(transform)
-           .of(nonKeyColumns);
+    if (nonKeyColumns.isEmpty()) {
+      builder.append(") DO NOTHING");
+    } else {
+      builder.append(") DO UPDATE SET ");
+      builder.appendList()
+              .delimitedBy(",")
+              .transformedBy(transform)
+              .of(nonKeyColumns);
+    }
     return builder.toString();
+  }
+
+  @Override
+  protected void formatColumnValue(
+      ExpressionBuilder builder,
+      String schemaName,
+      Map<String, String> schemaParameters,
+      Schema.Type type,
+      Object value
+  ) {
+    if (schemaName == null && Type.BOOLEAN.equals(type)) {
+      builder.append((Boolean) value ? "TRUE" : "FALSE");
+    } else {
+      super.formatColumnValue(builder, schemaName, schemaParameters, type, value);
+    }
   }
 
 }

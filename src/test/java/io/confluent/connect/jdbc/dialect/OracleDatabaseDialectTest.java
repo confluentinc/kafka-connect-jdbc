@@ -96,7 +96,9 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
                       "\"c4\" CLOB NULL,\n" + "\"c5\" DATE DEFAULT '2001-03-15',\n" +
                       "\"c6\" DATE DEFAULT '00:00:00.000',\n" +
                       "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" +
-                      "\"c8\" NUMBER(*,4) NULL,\n" + "PRIMARY KEY(\"c1\"))";
+                      "\"c8\" NUMBER(*,4) NULL,\n" +
+                      "\"c9\" NUMBER(1,0) DEFAULT 1,\n" +
+                      "PRIMARY KEY(\"c1\"))";
     String sql = dialect.buildCreateTableStatement(tableId, sinkRecordFields);
     assertEquals(expected, sql);
   }
@@ -113,7 +115,8 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
             "\"c5\" DATE DEFAULT '2001-03-15',\n" +
             "\"c6\" DATE DEFAULT '00:00:00.000',\n" +
             "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" +
-            "\"c8\" NUMBER(*,4) NULL)"
+            "\"c8\" NUMBER(*,4) NULL,\n" +
+            "\"c9\" NUMBER(1,0) DEFAULT 1)"
         },
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );
@@ -131,7 +134,8 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
             "c5 DATE DEFAULT '2001-03-15',\n" +
             "c6 DATE DEFAULT '00:00:00.000',\n" +
             "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" +
-            "c8 NUMBER(*,4) NULL)"
+            "c8 NUMBER(*,4) NULL,\n" +
+            "c9 NUMBER(1,0) DEFAULT 1)"
         },
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );

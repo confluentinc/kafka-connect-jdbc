@@ -18,6 +18,7 @@ package io.confluent.connect.jdbc.source;
 import java.util.TimeZone;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -77,8 +78,8 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
                                            List<String> timestampColumnNames,
                                            String incrementingColumnName,
                                            Map<String, Object> offsetMap, Long timestampDelay,
-                                           TimeZone timeZone) {
-    super(dialect, mode, name, topicPrefix);
+                                           TimeZone timeZone, String suffix) {
+    super(dialect, mode, name, topicPrefix, suffix);
     this.incrementingColumnName = incrementingColumnName;
     this.timestampColumnNames = timestampColumnNames != null
                                 ? timestampColumnNames : Collections.<String>emptyList();
@@ -136,6 +137,8 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     criteria = dialect.criteriaFor(incrementingColumn, timestampColumns);
     criteria.whereClause(builder);
 
+    addSuffixIfPresent(builder);
+    
     String queryString = builder.toString();
     recordQuery(queryString);
     log.debug("{} prepared SQL query: {}", this, queryString);
@@ -174,6 +177,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   @Override
   protected ResultSet executeQuery() throws SQLException {
     criteria.setQueryParameters(stmt, this);
+    log.trace("Statement to execute: {}", stmt.toString());
     return stmt.executeQuery();
   }
 
@@ -184,9 +188,11 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
       try {
         setter.setField(record, resultSet);
       } catch (IOException e) {
-        log.warn("Ignoring record because processing failed:", e);
+        log.warn("Error mapping fields into Connect record", e);
+        throw new ConnectException(e);
       } catch (SQLException e) {
-        log.warn("Ignoring record due to SQL error:", e);
+        log.warn("SQL error mapping fields into Connect record", e);
+        throw new DataException(e);
       }
     }
     offset = criteria.extractValues(schemaMapping.schema(), record, offset);

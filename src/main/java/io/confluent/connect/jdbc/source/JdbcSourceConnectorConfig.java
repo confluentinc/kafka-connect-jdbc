@@ -52,7 +52,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final Logger LOG = LoggerFactory.getLogger(JdbcSourceConnectorConfig.class);
 
   public static final String CONNECTION_URL_CONFIG = "connection.url";
-  private static final String CONNECTION_URL_DOC = "JDBC connection URL.";
+  private static final String CONNECTION_URL_DOC =
+      "JDBC connection URL.\n"
+          + "For example: ``jdbc:oracle:thin:@localhost:1521:orclpdb1``, "
+          + "``jdbc:mysql://localhost/db_name``, "
+          + "``jdbc:sqlserver://localhost;instance=SQLEXPRESS;"
+          + "databaseName=db_name``";
   private static final String CONNECTION_URL_DISPLAY = "JDBC URL";
 
   public static final String CONNECTION_USER_CONFIG = "connection.user";
@@ -65,7 +70,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public static final String CONNECTION_ATTEMPTS_CONFIG = "connection.attempts";
   private static final String CONNECTION_ATTEMPTS_DOC
-      = "Maximum number of attempts to retrieve a valid JDBC connection.";
+      = "Maximum number of attempts to retrieve a valid JDBC connection. "
+          + "Must be a positive integer.";
   private static final String CONNECTION_ATTEMPTS_DISPLAY = "JDBC connection attempts";
   public static final int CONNECTION_ATTEMPTS_DEFAULT = 3;
 
@@ -166,6 +172,14 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String TIMESTAMP_COLUMN_NAME_DEFAULT = "";
   private static final String TIMESTAMP_COLUMN_NAME_DISPLAY = "Timestamp Column Name";
 
+  public static final String TIMESTAMP_INITIAL_CONFIG = "timestamp.initial";
+  public static final Long TIMESTAMP_INITIAL_DEFAULT = null;
+  public static final Long TIMESTAMP_INITIAL_CURRENT = Long.valueOf(-1);
+  public static final String TIMESTAMP_INITIAL_DOC =
+      "The epoch timestamp used for initial queries that use timestamp criteria. "
+      + "Use -1 to use the current time. If not specified, all data will be retrieved.";
+  public static final String TIMESTAMP_INITIAL_DISPLAY = "Unix time value of initial timestamp";
+
   public static final String TABLE_POLL_INTERVAL_MS_CONFIG = "table.poll.interval.ms";
   private static final String TABLE_POLL_INTERVAL_MS_DOC =
       "Frequency in ms to poll for new or removed tables, which may result in updated task "
@@ -255,6 +269,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "For backward compatibility, the default is 'always'.";
   public static final String QUOTE_SQL_IDENTIFIERS_DISPLAY = "Quote Identifiers";
 
+  public static final String QUERY_SUFFIX_CONFIG = "query.suffix";
+  public static final String QUERY_SUFFIX_DEFAULT = "";
+  public static final String QUERY_SUFFIX_DOC = 
+      "Suffix to append at the end of the generated query.";
+  public static final String QUERY_SUFFIX_DISPLAY = "Query suffix";
+
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
 
@@ -332,6 +352,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         CONNECTION_ATTEMPTS_CONFIG,
         Type.INT,
         CONNECTION_ATTEMPTS_DEFAULT,
+        ConfigDef.Range.atLeast(1),
         Importance.LOW,
         CONNECTION_ATTEMPTS_DOC,
         DATABASE_GROUP,
@@ -473,6 +494,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         TIMESTAMP_COLUMN_NAME_DISPLAY,
         MODE_DEPENDENTS_RECOMMENDER
     ).define(
+        TIMESTAMP_INITIAL_CONFIG,
+        Type.LONG,
+        TIMESTAMP_INITIAL_DEFAULT,
+        Importance.LOW,
+        TIMESTAMP_INITIAL_DOC,
+        MODE_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        TIMESTAMP_INITIAL_DISPLAY,
+        MODE_DEPENDENTS_RECOMMENDER
+    ).define(
         VALIDATE_NON_NULL_CONFIG,
         Type.BOOLEAN,
         VALIDATE_NON_NULL_DEFAULT,
@@ -503,7 +535,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.MEDIUM,
         QUOTE_SQL_IDENTIFIERS_DISPLAY,
-        QUOTE_METHOD_RECOMMENDER);
+        QUOTE_METHOD_RECOMMENDER
+    ).define(
+        QUERY_SUFFIX_CONFIG,
+        Type.STRING,
+        QUERY_SUFFIX_DEFAULT,
+        Importance.LOW,
+        QUERY_SUFFIX_DOC,
+        MODE_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        QUERY_SUFFIX_DISPLAY);
   }
 
   private static final void addConnectorOptions(ConfigDef config) {

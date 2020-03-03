@@ -29,6 +29,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -96,7 +97,7 @@ public class JdbcSourceTask extends SourceTask {
     }
     log.info("Using JDBC dialect {}", dialect.name());
 
-    cachedConnectionProvider = new CachedConnectionProvider(dialect, maxConnAttempts, retryBackoff);
+    cachedConnectionProvider = connectionProvider(maxConnAttempts, retryBackoff);
 
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
     String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
@@ -149,6 +150,7 @@ public class JdbcSourceTask extends SourceTask {
     boolean validateNonNulls
         = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
     TimeZone timeZone = config.timeZone();
+    String suffix = config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG).trim();
 
     for (String tableOrQuery : tablesOrQuery) {
       final List<Map<String, String>> tablePartitionsToCheck;
@@ -189,12 +191,19 @@ public class JdbcSourceTask extends SourceTask {
           }
         }
       }
+      offset = computeInitialOffset(tableOrQuery, offset, timeZone);
 
       String topicPrefix = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
 
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(
-            new BulkTableQuerier(dialect, queryMode, tableOrQuery, topicPrefix)
+            new BulkTableQuerier(
+                dialect, 
+                queryMode, 
+                tableOrQuery, 
+                topicPrefix, 
+                suffix
+            )
         );
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)) {
         tableQueue.add(
@@ -207,7 +216,8 @@ public class JdbcSourceTask extends SourceTask {
                 incrementingColumn,
                 offset,
                 timestampDelayInterval,
-                timeZone
+                timeZone,
+                suffix
             )
         );
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
@@ -221,7 +231,8 @@ public class JdbcSourceTask extends SourceTask {
                 null,
                 offset,
                 timestampDelayInterval,
-                timeZone
+                timeZone,
+                suffix
             )
         );
       } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
@@ -235,7 +246,8 @@ public class JdbcSourceTask extends SourceTask {
                 incrementingColumn,
                 offset,
                 timestampDelayInterval,
-                timeZone
+                timeZone,
+                suffix
             )
         );
       }
@@ -243,6 +255,16 @@ public class JdbcSourceTask extends SourceTask {
 
     running.set(true);
     log.info("Started JDBC source task");
+  }
+
+  protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
+    return new CachedConnectionProvider(dialect, maxConnAttempts, retryBackoff) {
+      @Override
+      protected void onConnect(final Connection connection) throws SQLException {
+        super.onConnect(connection);
+        connection.setAutoCommit(false);
+      }
+    };
   }
 
   //This method returns a list of possible partition maps for different offset protocols
@@ -253,6 +275,37 @@ public class JdbcSourceTask extends SourceTask {
         OffsetProtocols.sourcePartitionForProtocolV1(tableId),
         OffsetProtocols.sourcePartitionForProtocolV0(tableId)
     );
+  }
+
+  protected Map<String, Object> computeInitialOffset(
+          String tableOrQuery,
+          Map<String, Object> partitionOffset,
+          TimeZone timezone) {
+    if (!(partitionOffset == null)) {
+      return partitionOffset;
+    } else {
+      Map<String, Object> initialPartitionOffset = null;
+      // no offsets found
+      Long timestampInitial = config.getLong(JdbcSourceConnectorConfig.TIMESTAMP_INITIAL_CONFIG);
+      if (timestampInitial != null) {
+        // start at the specified timestamp
+        if (timestampInitial == JdbcSourceConnectorConfig.TIMESTAMP_INITIAL_CURRENT) {
+          // use the current time
+          try {
+            final Connection con = cachedConnectionProvider.getConnection();
+            Calendar cal = Calendar.getInstance(timezone);
+            timestampInitial = dialect.currentTimeOnDB(con, cal).getTime();
+          } catch (SQLException e) {
+            throw new ConnectException("Error while getting initial timestamp from database", e);
+          }
+        }
+        initialPartitionOffset = new HashMap<String, Object>();
+        initialPartitionOffset.put(TimestampIncrementingOffset.TIMESTAMP_FIELD, timestampInitial);
+        log.info("No offsets found for '{}', so using configured timestamp {}", tableOrQuery,
+                timestampInitial);
+      }
+      return initialPartitionOffset;
+    }
   }
 
   @Override
@@ -295,11 +348,12 @@ public class JdbcSourceTask extends SourceTask {
       if (!querier.querying()) {
         // If not in the middle of an update, wait for next update time
         final long nextUpdate = querier.getLastUpdate()
-                                + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
-        final long untilNext = nextUpdate - time.milliseconds();
-        if (untilNext > 0) {
-          log.trace("Waiting {} ms to poll {} next", untilNext, querier.toString());
-          time.sleep(untilNext);
+            + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
+        final long now = time.milliseconds();
+        final long sleepMs = Math.min(nextUpdate - now, 100);
+        if (sleepMs > 0) {
+          log.trace("Waiting {} ms to poll {} next", nextUpdate - now, querier.toString());
+          time.sleep(sleepMs);
           continue; // Re-check stop flag before continuing
         }
       }
@@ -372,16 +426,22 @@ public class JdbcSourceTask extends SourceTask {
       boolean incrementingOptional = false;
       boolean atLeastOneTimestampNotOptional = false;
       final Connection conn = cachedConnectionProvider.getConnection();
-      Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, table, null);
-      for (ColumnDefinition defn : defnsById.values()) {
-        String columnName = defn.id().name();
-        if (columnName.equalsIgnoreCase(incrementingColumn)) {
-          incrementingOptional = defn.isOptional();
-        } else if (lowercaseTsColumns.contains(columnName.toLowerCase(Locale.getDefault()))) {
-          if (!defn.isOptional()) {
-            atLeastOneTimestampNotOptional = true;
+      boolean autoCommit = conn.getAutoCommit();
+      try {
+        conn.setAutoCommit(true);
+        Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, table, null);
+        for (ColumnDefinition defn : defnsById.values()) {
+          String columnName = defn.id().name();
+          if (columnName.equalsIgnoreCase(incrementingColumn)) {
+            incrementingOptional = defn.isOptional();
+          } else if (lowercaseTsColumns.contains(columnName.toLowerCase(Locale.getDefault()))) {
+            if (!defn.isOptional()) {
+              atLeastOneTimestampNotOptional = true;
+            }
           }
         }
+      } finally {
+        conn.setAutoCommit(autoCommit);
       }
 
       // Validate that requested columns for offsets are NOT NULL. Currently this is only performed

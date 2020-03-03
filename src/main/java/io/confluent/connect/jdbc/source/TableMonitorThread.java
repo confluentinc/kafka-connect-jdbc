@@ -26,7 +26,6 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -140,7 +139,7 @@ public class TableMonitorThread extends Thread {
     final List<TableId> tables;
     try {
       tables = dialect.tableIds(connectionProvider.getConnection());
-      log.debug("Got the following tables: " + Arrays.toString(tables.toArray()));
+      log.debug("Got the following tables: {}", tables);
     } catch (SQLException e) {
       log.error(
           "Error while trying to get updated table list, ignoring and waiting for next table poll"
@@ -175,21 +174,29 @@ public class TableMonitorThread extends Thread {
     }
 
     if (!filteredTables.equals(this.tables)) {
-      log.info(
-          "After filtering the tables are: {}",
-          dialect.expressionBuilder()
-                 .appendList()
-                 .delimitedBy(",")
-                 .of(filteredTables)
-      );
       Map<String, List<TableId>> duplicates = filteredTables.stream()
           .collect(Collectors.groupingBy(TableId::tableName))
           .entrySet().stream()
           .filter(entry -> entry.getValue().size() > 1)
           .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
       this.duplicates = duplicates;
-      List<TableId> previousTables = this.tables;
+      final List<TableId> previousTables = this.tables;
       this.tables = filteredTables;
+
+      if (filteredTables.isEmpty()) {
+        log.debug(
+            "Based on the supplied filtering rules, there are no matching tables to read from"
+        );
+      } else {
+        log.debug(
+            "Based on the supplied filtering rules, the tables available to read from include: {}",
+            dialect.expressionBuilder()
+                .appendList()
+                .delimitedBy(",")
+                .of(filteredTables)
+        );
+      }
+
       notifyAll();
       // Only return true if the table list wasn't previously null, i.e. if this was not the
       // first table lookup

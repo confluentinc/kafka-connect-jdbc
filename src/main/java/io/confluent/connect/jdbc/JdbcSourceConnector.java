@@ -86,11 +86,7 @@ public class JdbcSourceConnector extends SourceConnector {
         dbUrl,
         config
     );
-    cachedConnectionProvider = new CachedConnectionProvider(
-        dialect,
-        maxConnectionAttempts,
-        connectionRetryBackoff
-    );
+    cachedConnectionProvider = connectionProvider(maxConnectionAttempts, connectionRetryBackoff);
 
     // Initial connection attempt
     cachedConnectionProvider.getConnection();
@@ -128,6 +124,10 @@ public class JdbcSourceConnector extends SourceConnector {
     tableMonitorThread.start();
   }
 
+  protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
+    return new CachedConnectionProvider(dialect, maxConnAttempts, retryBackoff);
+  }
+
   @Override
   public Class<? extends Task> taskClass() {
     return JdbcSourceTask.class;
@@ -136,28 +136,37 @@ public class JdbcSourceConnector extends SourceConnector {
   @Override
   public List<Map<String, String>> taskConfigs(int maxTasks) {
     String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
+    List<Map<String, String>> taskConfigs;
     if (!query.isEmpty()) {
-      List<Map<String, String>> taskConfigs = new ArrayList<>(1);
       Map<String, String> taskProps = new HashMap<>(configProperties);
       taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
-      taskConfigs.add(taskProps);
-      log.trace("Task configs with no query");
+      taskConfigs = Collections.singletonList(taskProps);
+      log.trace("Producing task configs with custom query");
       return taskConfigs;
     } else {
       List<TableId> currentTables = tableMonitorThread.tables();
-      int numGroups = Math.min(currentTables.size(), maxTasks);
-      List<List<TableId>> tablesGrouped = ConnectorUtils.groupPartitions(currentTables, numGroups);
-      List<Map<String, String>> taskConfigs = new ArrayList<>(tablesGrouped.size());
-      for (List<TableId> taskTables : tablesGrouped) {
-        Map<String, String> taskProps = new HashMap<>(configProperties);
-        ExpressionBuilder builder = dialect.expressionBuilder();
-        builder.appendList().delimitedBy(",").of(taskTables);
-        taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, builder.toString());
-        taskConfigs.add(taskProps);
+      if (currentTables.isEmpty()) {
+        taskConfigs = Collections.emptyList();
+        log.warn("No tasks will be run because no tables were found");
+      } else {
+        int numGroups = Math.min(currentTables.size(), maxTasks);
+        List<List<TableId>> tablesGrouped =
+            ConnectorUtils.groupPartitions(currentTables, numGroups);
+        taskConfigs = new ArrayList<>(tablesGrouped.size());
+        for (List<TableId> taskTables : tablesGrouped) {
+          Map<String, String> taskProps = new HashMap<>(configProperties);
+          ExpressionBuilder builder = dialect.expressionBuilder();
+          builder.appendList().delimitedBy(",").of(taskTables);
+          taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, builder.toString());
+          taskConfigs.add(taskProps);
+        }
+        log.trace(
+            "Producing task configs with no custom query for tables: {}",
+            currentTables.toArray()
+        );
       }
-      log.trace("Task configs with query: {}, tables: {}", taskConfigs, currentTables.toArray());
-      return taskConfigs;
     }
+    return taskConfigs;
   }
 
   @Override

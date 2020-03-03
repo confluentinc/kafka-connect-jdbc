@@ -36,7 +36,6 @@ import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import static org.junit.Assert.assertEquals;
 
 @RunWith(PowerMockRunner.class)
-@PrepareForTest({JdbcSourceTask.class})
 @PowerMockIgnore("javax.management.*")
 public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
 
@@ -61,14 +60,17 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
   }
 
   @Test
-  public void testStartStop() throws Exception {
+  public void testStartStop() {
     // Minimal start/stop functionality
-    PowerMock.expectNew(
-        CachedConnectionProvider.class,
-        EasyMock.anyObject(DatabaseDialect.class),
-        EasyMock.eq(JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_DEFAULT),
-        EasyMock.eq(JdbcSourceConnectorConfig.CONNECTION_BACKOFF_DEFAULT))
-             .andReturn(mockCachedConnectionProvider);
+    task = new JdbcSourceTask(time) {
+      @Override
+      protected CachedConnectionProvider connectionProvider(
+          int maxConnAttempts,
+          long retryBackoff
+      ) {
+        return mockCachedConnectionProvider;
+      }
+    };
 
     // Should request a connection, then should close it on stop()
     EasyMock.expect(mockCachedConnectionProvider.getConnection()).andReturn(db.getConnection());

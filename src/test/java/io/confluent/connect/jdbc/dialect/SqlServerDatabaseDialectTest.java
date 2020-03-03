@@ -15,6 +15,10 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.util.TimeZone;
+
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -32,9 +36,38 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
 
   @Override
   protected SqlServerDatabaseDialect createDialect() {
-    return new SqlServerDatabaseDialect(sourceConfigWithUrl("jdbc:sqlsserver://something"));
+    return new SqlServerDatabaseDialect(sourceConfigWithUrl("jdbc:jtds:sqlsserver://something"));
   }
 
+  @Test
+  public void shouldConvertFromDateTimeOffset() {
+    ZoneId utc = ZoneId.of("UTC");
+    TimeZone timeZone = TimeZone.getTimeZone(utc.getId());
+
+    String value = "2016-12-08 12:34:56.7850000 -07:00";
+    java.sql.Timestamp ts = SqlServerDatabaseDialect.dateTimeOffsetFrom(value, timeZone);
+    assertTimestamp(ZonedDateTime.of(2016, 12, 8, 19, 34, 56, 785000000, utc), ts);
+
+    value = "2019-12-08 12:34:56.7850200 -00:00";
+    ts = SqlServerDatabaseDialect.dateTimeOffsetFrom(value, timeZone);
+    assertTimestamp(ZonedDateTime.of(2019, 12, 8, 12, 34, 56, 785020000, utc), ts);
+  }
+
+  @Test
+  public void testCustomColumnConverters() {
+    assertColumnConverter(SqlServerDatabaseDialect.DATETIMEOFFSET, null, Timestamp.SCHEMA, Timestamp.class);
+  }
+
+  protected void assertTimestamp(ZonedDateTime expected, java.sql.Timestamp actual) {
+    ZonedDateTime zdt = ZonedDateTime.ofInstant(actual.toInstant(), ZoneId.of("UTC"));
+    assertEquals(expected.getYear(), zdt.getYear());
+    assertEquals(expected.getMonthValue(), zdt.getMonthValue());
+    assertEquals(expected.getDayOfMonth(), zdt.getDayOfMonth());
+    assertEquals(expected.getHour(), zdt.getHour());
+    assertEquals(expected.getMinute(), zdt.getMinute());
+    assertEquals(expected.getSecond(), zdt.getSecond());
+    assertEquals(expected.getNano(), zdt.getNano());
+  }
 
   @Test
   public void shouldMapPrimitiveSchemaTypeToSqlTypes() {
@@ -101,7 +134,8 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
         + "[c5] date DEFAULT '2001-03-15',\n"
         + "[c6] time DEFAULT '00:00:00.000',\n"
         + "[c7] datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "[c8] decimal(38,4) NULL,\n" +
+        + "[c8] decimal(38,4) NULL,\n"
+        + "[c9] bit DEFAULT 1,\n" +
         "PRIMARY KEY([c1]))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
@@ -117,7 +151,8 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
         + "c5 date DEFAULT '2001-03-15',\n"
         + "c6 time DEFAULT '00:00:00.000',\n"
         + "c7 datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "c8 decimal(38,4) NULL,\n" +
+        + "c8 decimal(38,4) NULL,\n"
+        + "c9 bit DEFAULT 1,\n" +
         "PRIMARY KEY(c1))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
@@ -135,7 +170,8 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
             + "[c5] date DEFAULT '2001-03-15',\n"
             + "[c6] time DEFAULT '00:00:00.000',\n"
             + "[c7] datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
-            + "[c8] decimal(38,4) NULL"
+            + "[c8] decimal(38,4) NULL,\n"
+            + "[c9] bit DEFAULT 1"
         },
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );
@@ -152,7 +188,8 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
             + "c5 date DEFAULT '2001-03-15',\n"
             + "c6 time DEFAULT '00:00:00.000',\n"
             + "c7 datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
-            + "c8 decimal(38,4) NULL"
+            + "c8 decimal(38,4) NULL,\n"
+            + "c9 bit DEFAULT 1"
         },
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );
@@ -200,6 +237,13 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
     verifyCreateOneColOnePk(
         "CREATE TABLE [myTable] (" + System.lineSeparator() + "[pk1] int NOT NULL," +
         System.lineSeparator() + "PRIMARY KEY([pk1]))");
+  }
+
+  @Test
+  public void createOneColOnePkInString() {
+    verifyCreateOneColOnePkAsString(
+        "CREATE TABLE [myTable] (" + System.lineSeparator() + "[pk1] varchar(900) NOT NULL," +
+          System.lineSeparator() + "PRIMARY KEY([pk1]))");
   }
 
   @Test

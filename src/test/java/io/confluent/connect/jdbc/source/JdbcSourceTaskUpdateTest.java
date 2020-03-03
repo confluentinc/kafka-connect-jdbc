@@ -48,7 +48,6 @@ import io.confluent.connect.jdbc.util.DateTimeUtils;
 // Tests of polling that return data updates, i.e. verifies the different behaviors for getting
 // incremental data updates from the database
 @RunWith(PowerMockRunner.class)
-@PrepareForTest({JdbcSourceTask.class})
 @PowerMockIgnore("javax.management.*")
 public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   private static final Map<String, String> QUERY_SOURCE_PARTITION
@@ -293,6 +292,156 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     PowerMock.verifyAll();
   }
 
+
+  @Test
+  public void testComputeInitialOffsetWithTime() throws Exception{
+    expectInitializeNoOffsets(Arrays.asList(
+            SINGLE_TABLE_PARTITION_WITH_VERSION,
+            SINGLE_TABLE_PARTITION)
+    );
+    PowerMock.replayAll();
+    db.createTable(SINGLE_TABLE_NAME,
+            "modified", "TIMESTAMP NOT NULL",
+            "id", "INT");
+    startTask("modified", null, null, 4L, TimeZone.getDefault().getID(), 100L);
+
+    Map<String, Object> result = task.computeInitialOffset("table", null, TimeZone.getDefault());
+    Map<String, Object> expect = new HashMap<String, Object>();
+    expect.put(TimestampIncrementingOffset.TIMESTAMP_FIELD, 100L);
+    assertEquals(expect , result);
+    PowerMock.verifyAll();
+  }
+
+  @Test
+  public void testComputeInitialOffsetWithNull() throws Exception{
+    expectInitializeNoOffsets(Arrays.asList(
+            SINGLE_TABLE_PARTITION_WITH_VERSION,
+            SINGLE_TABLE_PARTITION)
+    );
+    PowerMock.replayAll();
+    db.createTable(SINGLE_TABLE_NAME,
+            "modified", "TIMESTAMP NOT NULL",
+            "id", "INT");
+    startTask("modified", null, null, 4L, TimeZone.getDefault().getID(), null);
+
+    Map<String, Object> result = task.computeInitialOffset("table", null, TimeZone.getDefault());
+    Map<String, Object> expect = null;
+    assertEquals(expect , result);
+    PowerMock.verifyAll();
+  }
+
+  @Test
+  public void testComputeInitialOffsetWithCurrent() throws Exception{
+    expectInitializeNoOffsets(Arrays.asList(
+            SINGLE_TABLE_PARTITION_WITH_VERSION,
+            SINGLE_TABLE_PARTITION)
+    );
+    PowerMock.replayAll();
+    db.createTable(SINGLE_TABLE_NAME,
+            "modified", "TIMESTAMP NOT NULL",
+            "id", "INT");
+    startTask("modified", null, null, 4L, TimeZone.getDefault().getID(), -1L);
+
+    Map<String, Object> result = task.computeInitialOffset("table", null, TimeZone.getDefault());
+    Map<String, Object> expect = new HashMap<String, Object>();
+    assertTrue(result.containsKey(TimestampIncrementingOffset.TIMESTAMP_FIELD));
+    long gapWithIn = 1000L;
+    long gap =new Date().getTime() - Long.valueOf(result.get(TimestampIncrementingOffset.TIMESTAMP_FIELD).toString());
+    assertTrue(gapWithIn > gap);
+    PowerMock.verifyAll();
+  }
+
+
+  @Test
+  public void testTimestampWithTimestampInitialCurrent() throws Exception {
+    expectInitializeNoOffsets(Arrays.asList(
+            SINGLE_TABLE_PARTITION_WITH_VERSION,
+            SINGLE_TABLE_PARTITION)
+    );
+
+    PowerMock.replayAll();
+
+    // Manage these manually so we can verify the emitted values
+    db.createTable(SINGLE_TABLE_NAME,
+            "modified", "TIMESTAMP NOT NULL",
+            "id", "INT");
+
+    Long currentTime = new Date().getTime();
+    // Derby DB start with default Timezone
+    TimeZone tz = TimeZone.getDefault();
+
+    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), tz), "id", 1);
+    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(currentTime+1000L), tz), "id", 2);
+    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(currentTime+1000L), tz), "id", 3);
+
+    startTask("modified", null, null, 4L, tz.getID(), -1L);
+
+    // expect records those timestamp is newer than current time.
+    verifyPoll(2, "id", Arrays.asList(2, 3), true,false, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
+
+    PowerMock.verifyAll();
+  }
+
+  @Test
+  public void testTimestampWithTimestampInitialDefault() throws Exception {
+    expectInitializeNoOffsets(Arrays.asList(
+            SINGLE_TABLE_PARTITION_WITH_VERSION,
+            SINGLE_TABLE_PARTITION)
+    );
+
+    PowerMock.replayAll();
+
+    // Manage these manually so we can verify the emitted values
+    db.createTable(SINGLE_TABLE_NAME,
+            "modified", "TIMESTAMP NOT NULL",
+            "id", "INT");
+
+    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_TIME_ZONE), "id", 1);
+
+    startTask("modified", null, null, 4L, "UTC", 0L);
+
+    verifyTimestampFirstPoll(TOPIC_PREFIX + SINGLE_TABLE_NAME);
+
+    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(11L), UTC_TIME_ZONE), "id", 2);
+    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(12L), UTC_TIME_ZONE), "id", 3);
+
+    verifyPoll(2, "id", Arrays.asList(2, 3), true,false, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
+
+    PowerMock.verifyAll();
+  }
+
+  @Test
+  public void testTimestampWithTimestampInitial() throws Exception {
+    expectInitializeNoOffsets(Arrays.asList(
+            SINGLE_TABLE_PARTITION_WITH_VERSION,
+            SINGLE_TABLE_PARTITION)
+    );
+
+    PowerMock.replayAll();
+
+    // Manage these manually so we can verify the emitted values
+    db.createTable(SINGLE_TABLE_NAME,
+            "modified", "TIMESTAMP NOT NULL",
+            "id", "INT");
+
+    Long currentTime = new Date().getTime();
+
+    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_TIME_ZONE), "id", 1);
+    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(100L), UTC_TIME_ZONE), "id", 2);
+    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(110L), UTC_TIME_ZONE), "id", 3);
+
+    startTask("modified", null, null, 4L, "UTC" , 100L);
+
+    // except a record its timestamp is newer than 100L
+    verifyPoll(1, "id", Arrays.asList(3), true,false, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
+
+    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(120L), UTC_TIME_ZONE), "id", 4);
+
+    // except a record its timestamp is newer than previous offset
+    verifyPoll(1, "id", Arrays.asList(4), true,false, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
+
+    PowerMock.verifyAll();
+  }
 
   @Test
   public void testTimestampAndIncrementing() throws Exception {
@@ -718,8 +867,11 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     startTask(timestampColumn, incrementingColumn, query, 0L, "UTC");
   }
 
-  private void startTask(String timestampColumn, String incrementingColumn,
-                         String query, Long delay, String timeZone) {
+  private void startTask(String timestampColumn, String incrementingColumn, String query, Long delay, String timeZone) {
+    startTask(timestampColumn, incrementingColumn, query, delay, timeZone, null);
+  }
+
+  private void startTask(String timestampColumn, String incrementingColumn, String query, Long delay, String timeZone, Long timestampInitial) {
     String mode = null;
     if (timestampColumn != null && incrementingColumn != null) {
       mode = JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING;
@@ -744,6 +896,11 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
       taskConfig.put(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG, incrementingColumn);
     }
     taskConfig.put(JdbcSourceConnectorConfig.TIMESTAMP_DELAY_INTERVAL_MS_CONFIG, delay == null ? "0" : delay.toString());
+
+    if (timestampInitial != null) {
+      taskConfig.put(JdbcSourceConnectorConfig.TIMESTAMP_INITIAL_CONFIG, timestampInitial.toString());
+    }
+
     if (timeZone != null) {
       taskConfig.put(JdbcSourceConnectorConfig.DB_TIMEZONE_CONFIG, timeZone);
     }

@@ -88,6 +88,7 @@ import io.confluent.connect.jdbc.util.JdbcDriverInfo;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.data.ConnectDecimal;
 
 /**
  * A {@link DatabaseDialect} implementation that provides functionality based upon JDBC and SQL.
@@ -1013,7 +1014,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       case Types.DECIMAL: {
         log.debug("DECIMAL with precision: '{}' and scale: '{}'", precision, scale);
         scale = decimalScale(columnDefn);
-        SchemaBuilder fieldBuilder = Decimal.builder(scale);
+        SchemaBuilder fieldBuilder = ConnectDecimal.builder(precision, scale);
         if (optional) {
           fieldBuilder.optional();
         }

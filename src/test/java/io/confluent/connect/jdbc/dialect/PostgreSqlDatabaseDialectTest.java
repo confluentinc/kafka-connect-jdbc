@@ -317,6 +317,14 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     PreparedStatement statement = mock(PreparedStatement.class);
     int index = ThreadLocalRandom.current().nextInt();
 
-    super.verifyBindField(++index, SchemaBuilder.array(Schema.INT8_SCHEMA), new int[] { 42 }).setObject(index, new int[] { 42 }, Types.ARRAY);
+    super.verifyBindField(++index, SchemaBuilder.array(Schema.INT32_SCHEMA), new int[] { 42 }).setObject(index, new int[] { 42 }, Types.ARRAY);
+    super.verifyBindField(++index, SchemaBuilder.array(Schema.INT8_SCHEMA), Arrays.asList( (byte) 42, (byte) 12)).setObject(index, new short[] { 42, 12 }, Types.ARRAY);
+    super.verifyBindField(++index, SchemaBuilder.array(Schema.INT16_SCHEMA), Arrays.asList( (short) 42, (short) 12)).setObject(index, new short[] { 42, 12 }, Types.ARRAY);
+    super.verifyBindField(++index, SchemaBuilder.array(Schema.INT32_SCHEMA), Arrays.asList(42, 16 )).setObject(index, new int[] { 42, 16 }, Types.ARRAY);
+    super.verifyBindField(++index, SchemaBuilder.array(Schema.INT64_SCHEMA), Arrays.asList(42L, 16L )).setObject(index, new long[] { 42, 16 }, Types.ARRAY);
+    super.verifyBindField(++index, SchemaBuilder.array(Schema.FLOAT32_SCHEMA), Arrays.asList(42.5F, 16.2F )).setObject(index, new float[] { 42.5F, 16.2F }, Types.ARRAY);
+    super.verifyBindField(++index, SchemaBuilder.array(Schema.FLOAT64_SCHEMA), Arrays.asList(42.5D, 16.2D )).setObject(index, new double[] { 42.5D, 16.2D }, Types.ARRAY);
+    super.verifyBindField(++index, SchemaBuilder.array(Schema.STRING_SCHEMA), Arrays.asList("42", "16" )).setObject(index, new String[] { "42", "16" }, Types.ARRAY);
+    super.verifyBindField(++index, SchemaBuilder.array(Schema.BOOLEAN_SCHEMA), Arrays.asList(true, false, true )).setObject(index, new boolean[] { true, false, true }, Types.ARRAY);
   }
 }

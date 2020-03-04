@@ -47,7 +47,7 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
     assertPrimitiveMapping(Type.FLOAT64, "DOUBLE");
     assertPrimitiveMapping(Type.BOOLEAN, "TINYINT");
     assertPrimitiveMapping(Type.BYTES, "VARBINARY(1024)");
-    assertPrimitiveMapping(Type.STRING, "VARCHAR(256)");
+    assertPrimitiveMapping(Type.STRING, "TEXT");
   }
 
   @Test
@@ -67,7 +67,7 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
     verifyDataTypeMapping("FLOAT", Schema.FLOAT32_SCHEMA);
     verifyDataTypeMapping("DOUBLE", Schema.FLOAT64_SCHEMA);
     verifyDataTypeMapping("TINYINT", Schema.BOOLEAN_SCHEMA);
-    verifyDataTypeMapping("VARCHAR(256)", Schema.STRING_SCHEMA);
+    verifyDataTypeMapping("TEXT", Schema.STRING_SCHEMA);
     verifyDataTypeMapping("VARBINARY(1024)", Schema.BYTES_SCHEMA);
     verifyDataTypeMapping("DECIMAL(65,0)", Decimal.schema(0));
     verifyDataTypeMapping("DECIMAL(65,2)", Decimal.schema(2));
@@ -95,7 +95,7 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
   public void shouldBuildCreateQueryStatement() {
     String expected =
         "CREATE TABLE `myTable` (\n" + "`c1` INT NOT NULL,\n" + "`c2` BIGINT NOT NULL,\n" +
-        "`c3` VARCHAR(256) NOT NULL,\n" + "`c4` VARCHAR(256) NULL,\n" +
+        "`c3` TEXT NOT NULL,\n" + "`c4` TEXT NULL,\n" +
         "`c5` DATE DEFAULT '2001-03-15',\n" + "`c6` TIME(3) DEFAULT '00:00:00.000',\n" +
         "`c7` DATETIME(3) DEFAULT '2001-03-15 00:00:00.000',\n" + "`c8` DECIMAL(65,4) NULL,\n" +
         "`c9` TINYINT DEFAULT 1,\n" +
@@ -109,7 +109,7 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
     List<String> statements = dialect.buildAlterTable(tableId, sinkRecordFields);
     String[] sql = {
         "ALTER TABLE `myTable` \n" + "ADD `c1` INT NOT NULL,\n" + "ADD `c2` BIGINT NOT NULL,\n" +
-        "ADD `c3` VARCHAR(256) NOT NULL,\n" + "ADD `c4` VARCHAR(256) NULL,\n" +
+        "ADD `c3` TEXT NOT NULL,\n" + "ADD `c4` TEXT NULL,\n" +
         "ADD `c5` DATE DEFAULT '2001-03-15',\n" + "ADD `c6` TIME(3) DEFAULT '00:00:00.000',\n" +
         "ADD `c7` DATETIME(3) DEFAULT '2001-03-15 00:00:00.000',\n" +
         "ADD `c8` DECIMAL(65,4) NULL,\n" +

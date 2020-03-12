@@ -118,17 +118,17 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
   @Test
   public void shouldBuildCreateQueryStatement() {
     assertEquals(
-        "CREATE TABLE `myTable` (\n"
-        + "`c1` INTEGER NOT NULL,\n"
-        + "`c2` INTEGER NOT NULL,\n"
-        + "`c3` TEXT NOT NULL,\n"
-        + "`c4` TEXT NULL,\n"
-        + "`c5` NUMERIC DEFAULT '2001-03-15',\n"
-        + "`c6` NUMERIC DEFAULT '00:00:00.000',\n"
-        + "`c7` NUMERIC DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "`c8` NUMERIC NULL,\n"
-        + "`c9` INTEGER DEFAULT 1,\n"
-        + "PRIMARY KEY(`c1`))",
+        "CREATE TABLE \"myTable\" (\n"
+        + "\"c1\" INTEGER NOT NULL,\n"
+        + "\"c2\" INTEGER NOT NULL,\n"
+        + "\"c3\" TEXT NOT NULL,\n"
+        + "\"c4\" TEXT NULL,\n"
+        + "\"c5\" NUMERIC DEFAULT '2001-03-15',\n"
+        + "\"c6\" NUMERIC DEFAULT '00:00:00.000',\n"
+        + "\"c7\" NUMERIC DEFAULT '2001-03-15 00:00:00.000',\n"
+        + "\"c8\" NUMERIC NULL,\n"
+        + "\"c9\" INTEGER DEFAULT 1,\n"
+        + "PRIMARY KEY(\"c1\"))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
 
@@ -154,15 +154,15 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
   public void shouldBuildAlterTableStatement() {
     assertStatements(
         new String[]{
-            "ALTER TABLE `myTable` ADD `c1` INTEGER NOT NULL",
-            "ALTER TABLE `myTable` ADD `c2` INTEGER NOT NULL",
-            "ALTER TABLE `myTable` ADD `c3` TEXT NOT NULL",
-            "ALTER TABLE `myTable` ADD `c4` TEXT NULL",
-            "ALTER TABLE `myTable` ADD `c5` NUMERIC DEFAULT '2001-03-15'",
-            "ALTER TABLE `myTable` ADD `c6` NUMERIC DEFAULT '00:00:00.000'",
-            "ALTER TABLE `myTable` ADD `c7` NUMERIC DEFAULT '2001-03-15 00:00:00.000'",
-            "ALTER TABLE `myTable` ADD `c8` NUMERIC NULL",
-            "ALTER TABLE `myTable` ADD `c9` INTEGER DEFAULT 1"
+            "ALTER TABLE \"myTable\" ADD \"c1\" INTEGER NOT NULL",
+            "ALTER TABLE \"myTable\" ADD \"c2\" INTEGER NOT NULL",
+            "ALTER TABLE \"myTable\" ADD \"c3\" TEXT NOT NULL",
+            "ALTER TABLE \"myTable\" ADD \"c4\" TEXT NULL",
+            "ALTER TABLE \"myTable\" ADD \"c5\" NUMERIC DEFAULT '2001-03-15'",
+            "ALTER TABLE \"myTable\" ADD \"c6\" NUMERIC DEFAULT '00:00:00.000'",
+            "ALTER TABLE \"myTable\" ADD \"c7\" NUMERIC DEFAULT '2001-03-15 00:00:00.000'",
+            "ALTER TABLE \"myTable\" ADD \"c8\" NUMERIC NULL",
+            "ALTER TABLE \"myTable\" ADD \"c9\" INTEGER DEFAULT 1"
         },
         dialect.buildAlterTable(tableId, sinkRecordFields)
     );
@@ -187,8 +187,8 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
 
   @Test
   public void shouldBuildUpsertStatement() {
-    String expected = "INSERT OR REPLACE INTO `myTable`(`id1`,`id2`,`columnA`,`columnB`," +
-                      "`columnC`,`columnD`) VALUES(?,?,?,?,?,?)";
+    String expected = "INSERT OR REPLACE INTO \"myTable\"(\"id1\",\"id2\",\"columnA\",\"columnB\"," +
+                      "\"columnC\",\"columnD\") VALUES(?,?,?,?,?,?)";
     String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD);
     assertEquals(expected, sql);
   }
@@ -196,22 +196,22 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
   @Test
   public void createOneColNoPk() {
     verifyCreateOneColNoPk(
-        "CREATE TABLE `myTable` (" + System.lineSeparator() + "`col1` INTEGER NOT NULL)");
+        "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "\"col1\" INTEGER NOT NULL)");
   }
 
   @Test
   public void createOneColOnePk() {
     verifyCreateOneColOnePk(
-        "CREATE TABLE `myTable` (" + System.lineSeparator() + "`pk1` INTEGER NOT NULL," +
-        System.lineSeparator() + "PRIMARY KEY(`pk1`))");
+        "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "\"pk1\" INTEGER NOT NULL," +
+        System.lineSeparator() + "PRIMARY KEY(\"pk1\"))");
   }
 
   @Test
   public void createThreeColTwoPk() {
     verifyCreateThreeColTwoPk(
-        "CREATE TABLE `myTable` (" + System.lineSeparator() + "`pk1` INTEGER NOT NULL," +
-        System.lineSeparator() + "`pk2` INTEGER NOT NULL," + System.lineSeparator() +
-        "`col1` INTEGER NOT NULL," + System.lineSeparator() + "PRIMARY KEY(`pk1`,`pk2`))");
+        "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "\"pk1\" INTEGER NOT NULL," +
+        System.lineSeparator() + "\"pk2\" INTEGER NOT NULL," + System.lineSeparator() +
+        "\"col1\" INTEGER NOT NULL," + System.lineSeparator() + "PRIMARY KEY(\"pk1\",\"pk2\"))");
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
@@ -223,20 +223,20 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
 
   @Test
   public void alterAddOneCol() {
-    verifyAlterAddOneCol("ALTER TABLE `myTable` ADD `newcol1` INTEGER NULL");
+    verifyAlterAddOneCol("ALTER TABLE \"myTable\" ADD \"newcol1\" INTEGER NULL");
   }
 
   @Test
   public void alterAddTwoCol() {
-    verifyAlterAddTwoCols("ALTER TABLE `myTable` ADD `newcol1` INTEGER NULL",
-                          "ALTER TABLE `myTable` ADD `newcol2` INTEGER DEFAULT 42");
+    verifyAlterAddTwoCols("ALTER TABLE \"myTable\" ADD \"newcol1\" INTEGER NULL",
+                          "ALTER TABLE \"myTable\" ADD \"newcol2\" INTEGER DEFAULT 42");
   }
 
   @Test
   public void upsert() {
     TableId book = new TableId(null, null, "Book");
     assertEquals(
-        "INSERT OR REPLACE INTO `Book`(`author`,`title`,`ISBN`,`year`,`pages`) VALUES(?,?,?,?,?)",
+        "INSERT OR REPLACE INTO \"Book\"(\"author\",\"title\",\"ISBN\",\"year\",\"pages\") VALUES(?,?,?,?,?)",
         dialect.buildUpsertQueryStatement(
             book,
             columns(book, "author", "title"),

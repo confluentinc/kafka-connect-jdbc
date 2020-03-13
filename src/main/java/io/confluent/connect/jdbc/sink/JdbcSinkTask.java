@@ -86,7 +86,11 @@ public class JdbcSinkTask extends SinkTask {
       SQLException sqlAllMessagesException = new SQLException(sqleAllMessages);
       sqlAllMessagesException.setNextException(sqle);
       if (remainingRetries == 0) {
-        throw new ConnectException(sqlAllMessagesException);
+        if (config.maxRetryThrowFailure) {
+          throw new ConnectException(sqlAllMessagesException);
+        } else {
+          throw new RetriableException(sqlAllMessagesException);
+        }
       } else {
         writer.closeQuietly();
         initWriter();

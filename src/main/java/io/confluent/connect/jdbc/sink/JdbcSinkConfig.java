@@ -106,6 +106,12 @@ public class JdbcSinkConfig extends AbstractConfig {
       "The time in milliseconds to wait following an error before a retry attempt is made.";
   private static final String RETRY_BACKOFF_MS_DISPLAY = "Retry Backoff (millis)";
 
+  public static final String MAX_RETRY_THROW_FAILURE = "max.retries.throw.failure";
+  private static final boolean MAX_RETRY_THROW_FAILURE_DEFAULT = true;
+  private static final String MAX_RETRY_THROW_FAILURE_DOC =
+      "Whether a connect exception should be thrown after max retries is reached.";
+  private static final String MAX_RETRY_THROW_FAILURE_DISPLAY = "Throw ConnectException on failure";
+
   public static final String BATCH_SIZE = "batch.size";
   private static final int BATCH_SIZE_DEFAULT = 3000;
   private static final String BATCH_SIZE_DOC =
@@ -450,6 +456,17 @@ public class JdbcSinkConfig extends AbstractConfig {
             2,
             ConfigDef.Width.SHORT,
             RETRY_BACKOFF_MS_DISPLAY
+        )
+        .define(
+            MAX_RETRY_THROW_FAILURE,
+            ConfigDef.Type.BOOLEAN,
+            MAX_RETRY_THROW_FAILURE_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            MAX_RETRY_THROW_FAILURE_DOC,
+            RETRIES_GROUP,
+            3,
+            ConfigDef.Width.SHORT,
+            MAX_RETRY_THROW_FAILURE_DISPLAY
         );
 
   public final String connectorName;
@@ -461,6 +478,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final boolean deleteEnabled;
   public final int maxRetries;
   public final int retryBackoffMs;
+  public final boolean maxRetryThrowFailure;
   public final boolean autoCreate;
   public final boolean autoEvolve;
   public final InsertMode insertMode;
@@ -482,6 +500,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     deleteEnabled = getBoolean(DELETE_ENABLED);
     maxRetries = getInt(MAX_RETRIES);
     retryBackoffMs = getInt(RETRY_BACKOFF_MS);
+    maxRetryThrowFailure = getBoolean(MAX_RETRY_THROW_FAILURE);
     autoCreate = getBoolean(AUTO_CREATE);
     autoEvolve = getBoolean(AUTO_EVOLVE);
     insertMode = InsertMode.valueOf(getString(INSERT_MODE).toUpperCase());

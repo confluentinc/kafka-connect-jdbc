@@ -222,6 +222,10 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     // handshake, while still giving enough time to validate once in the follower worker,
     // and again in the leader worker and still be under 90s REST serving timeout
     DriverManager.setLoginTimeout(40);
+
+    // some drivers i.e oracle11g do not recognize timezones if this is not set
+    TimeZone.setDefault(timeZone);
+
     Connection connection = DriverManager.getConnection(jdbcUrl, properties);
     if (jdbcDriverInfo == null) {
       jdbcDriverInfo = createJdbcDriverInfo(connection);

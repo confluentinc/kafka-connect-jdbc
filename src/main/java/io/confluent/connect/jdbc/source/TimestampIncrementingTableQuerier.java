@@ -196,7 +196,8 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
       }
     }
     offset = criteria.extractValues(schemaMapping.schema(), record, offset);
-    return new SourceRecord(partition, offset.toMap(), topic, record.schema(), record);
+    return new SourceRecord(partition, offset.toMap(), topic, null,null,null,
+            record.schema(), record,System.currentTimeMillis());
   }
 
   @Override

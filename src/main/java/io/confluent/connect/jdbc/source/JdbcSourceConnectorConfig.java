@@ -109,8 +109,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   private static final String NUMERIC_MAPPING_DOC =
       "Map NUMERIC values by precision and optionally scale to integral or decimal types.\n"
-      + "  * Use ``none`` if all NUMERIC columns are to be represented by Connect's DECIMAL logical "
-      + "type.\n"
+      + "  * Use ``none`` if all NUMERIC columns are to be represented by Connect's DECIMAL "
+      + "logical type.\n"
       + "  * Use ``best_fit`` if NUMERIC columns should be cast to Connect's INT8, INT16, "
       + "INT32, INT64, or FLOAT64 based upon the column's precision and scale.\n"
       + "  * Use ``precision_only`` to map NUMERIC columns based only on the column's precision "
@@ -193,7 +193,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public static final String TABLE_BLACKLIST_CONFIG = "table.blacklist";
   private static final String TABLE_BLACKLIST_DOC =
-    "List of tables to exclude from copying. If specified, ``table.whitelist`` may not be set. "
+      "List of tables to exclude from copying. If specified, ``table.whitelist`` may not be set. "
       + "Use a comma-separated list to specify multiple tables "
       + "(for example, ``table.blacklist: \"User, Address, Email\"``).";
   public static final String TABLE_BLACKLIST_DEFAULT = "";

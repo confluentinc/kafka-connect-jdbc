@@ -192,7 +192,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String CONNECTION_GROUP = "Connection";
   private static final String WRITES_GROUP = "Writes";
   private static final String DATAMAPPING_GROUP = "Data Mapping";
-  private static final String DDL_GROUP = "SQL/DDL Support";
+  private static final String DDL_GROUP = "DDL Support";
   private static final String RETRIES_GROUP = "Retries";
 
   public static final String DIALECT_NAME_CONFIG = "dialect.name";

@@ -230,9 +230,10 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String TABLE_TYPES_DOC =
       "The comma-separated types of database tables to which the sink connector can write. "
       + "By default this is ``" + TableType.TABLE + "``, but any combination of ``"
-      + TableType.TABLE + "`` and ``" + TableType.VIEW + "`` is allowed. Note that when "
-      + "views are included, the sink connector will fail if the view definition does not match "
-      + "the records' schemas.";
+      + TableType.TABLE + "`` and ``" + TableType.VIEW + "`` is allowed. Not all databases "
+      + "support writing to views, and when they do the the sink connector will fail if the "
+      + "view definition does not match the records' schemas (regardless of ``"
+      + AUTO_EVOLVE + "``).";
 
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());

@@ -62,6 +62,7 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.FixedScoreProvider;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
@@ -88,6 +89,7 @@ import io.confluent.connect.jdbc.util.JdbcDriverInfo;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.util.TableType;
 
 /**
  * A {@link DatabaseDialect} implementation that provides functionality based upon JDBC and SQL.
@@ -533,7 +535,10 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       Connection connection,
       TableId tableId
   ) throws SQLException {
-    log.info("Checking {} dialect for existence of table {}", this, tableId);
+    DatabaseMetaData metadata = connection.getMetaData();
+    String[] tableTypes = tableTypes(metadata, this.tableTypes);
+    String tableTypeDisplay = displayableTableTypes(tableTypes, "/");
+    log.info("Checking {} dialect for existence of {} {}", this, tableTypeDisplay, tableId);
     try (ResultSet rs = connection.getMetaData().getTables(
         tableId.catalogName(),
         tableId.schemaName(),
@@ -541,9 +546,19 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         new String[]{"TABLE"}
     )) {
       final boolean exists = rs.next();
-      log.info("Using {} dialect table {} {}", this, tableId, exists ? "present" : "absent");
+      log.info(
+          "Using {} dialect {} {} {}",
+          this,
+          tableTypeDisplay,
+          tableId,
+          exists ? "present" : "absent"
+      );
       return exists;
     }
+  }
+
+  protected String displayableTableTypes(String[] types, String delim) {
+    return Arrays.stream(types).sorted().collect(Collectors.joining(delim));
   }
 
   @Override
@@ -782,7 +797,50 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     if (columnDefns.isEmpty()) {
       return null;
     }
-    return new TableDefinition(tableId, columnDefns.values());
+    TableType tableType = tableTypeFor(connection, tableId);
+    return new TableDefinition(tableId, columnDefns.values(), tableType);
+  }
+
+  protected TableType tableTypeFor(
+      Connection connection,
+      TableId tableId
+  ) throws SQLException {
+    DatabaseMetaData metadata = connection.getMetaData();
+    String[] tableTypes = tableTypes(metadata, this.tableTypes);
+    String tableTypeDisplay = displayableTableTypes(tableTypes, "/");
+    log.info("Checking {} dialect for type of {} {}", this, tableTypeDisplay, tableId);
+    try (ResultSet rs = connection.getMetaData().getTables(
+        tableId.catalogName(),
+        tableId.schemaName(),
+        tableId.tableName(),
+        tableTypes
+    )) {
+      if (rs.next()) {
+        //final String catalogName = rs.getString(1);
+        //final String schemaName = rs.getString(2);
+        //final String tableName = rs.getString(3);
+        final String tableType = rs.getString(4);
+        try {
+          return TableType.get(tableType);
+        } catch (IllegalArgumentException e) {
+          log.warn(
+              "{} dialect found unknown type '{}' for {} {}; using TABLE",
+              this,
+              tableType,
+              tableTypeDisplay,
+              tableId
+          );
+          return TableType.TABLE;
+        }
+      }
+    }
+    log.warn(
+        "{} dialect did not find type for {} {}; using TABLE",
+        this,
+        tableTypeDisplay,
+        tableId
+    );
+    return TableType.TABLE;
   }
 
   /**

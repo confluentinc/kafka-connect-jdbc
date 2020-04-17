@@ -192,20 +192,30 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
     db.createTable("test", "id", "INT");
     db.createTable("foo", "id", "INT", "bar", "VARCHAR(20)");
     db.createTable("zab", "id", "INT");
+    db.createView("fooview", "foo", "id", "bar");
     TableId test = new TableId(null, "APP", "test");
     TableId foo = new TableId(null, "APP", "foo");
     TableId zab = new TableId(null, "APP", "zab");
+    TableId vfoo = new TableId(null, "APP", "fooview");
+
+    // Does not contain views
     assertEquals(new HashSet<>(Arrays.asList(test, foo, zab)),
-                 new HashSet<>(dialect.tableIds(conn)));
+        new HashSet<>(dialect.tableIds(conn)));
+
+    newDialectFor(ALL_TABLE_TYPES, null);
+    assertEquals(new HashSet<>(Arrays.asList(test, foo, zab, vfoo)),
+        new HashSet<>(dialect.tableIds(conn)));
   }
 
   @Test
   public void testGetTablesNarrowedToSchemas() throws Exception {
+    newDialectFor(TABLE_TYPES, null);
     db.createTable("some_table", "id", "INT");
 
     db.execute("CREATE SCHEMA PUBLIC_SCHEMA");
     db.execute("SET SCHEMA PUBLIC_SCHEMA");
     db.createTable("public_table", "id", "INT");
+    db.createView("public_view", "public_table", "id");
 
     db.execute("CREATE SCHEMA PRIVATE_SCHEMA");
     db.execute("SET SCHEMA PRIVATE_SCHEMA");
@@ -216,6 +226,7 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
     TableId publicTable = new TableId(null, "PUBLIC_SCHEMA", "public_table");
     TableId privateTable = new TableId(null, "PRIVATE_SCHEMA", "private_table");
     TableId anotherPrivateTable = new TableId(null, "PRIVATE_SCHEMA", "another_private_table");
+    TableId publicView = new TableId(null, "PUBLIC_SCHEMA", "public_view");
 
     assertTableNames(TABLE_TYPES, "PUBLIC_SCHEMA", publicTable);
     assertTableNames(TABLE_TYPES, "PRIVATE_SCHEMA", privateTable, anotherPrivateTable);
@@ -243,6 +254,13 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
     defn = dialect.describeTable(db.getConnection(), anotherPrivateTable);
     assertEquals(anotherPrivateTable, defn.id());
     assertEquals(TableType.TABLE, defn.type());
+    assertEquals("INTEGER", defn.definitionForColumn("id").typeName());
+
+    // Create a new dialect that uses views, and describe the view
+    newDialectFor(ALL_TABLE_TYPES, null);
+    defn = dialect.describeTable(db.getConnection(), publicView);
+    assertEquals(publicView, defn.id());
+    assertEquals(TableType.VIEW, defn.type());
     assertEquals("INTEGER", defn.definitionForColumn("id").typeName());
   }
 

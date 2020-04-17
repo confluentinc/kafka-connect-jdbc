@@ -166,9 +166,10 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     this.jdbcUrl = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
     this.jdbcUrlInfo = DatabaseDialects.extractJdbcUrlInfo(jdbcUrl);
     if (config instanceof JdbcSinkConfig) {
+      JdbcSinkConfig sinkConfig = (JdbcSinkConfig) config;
       catalogPattern = JdbcSourceTaskConfig.CATALOG_PATTERN_DEFAULT;
       schemaPattern = JdbcSourceTaskConfig.SCHEMA_PATTERN_DEFAULT;
-      tableTypes = new HashSet<>(Arrays.asList(JdbcSourceTaskConfig.TABLE_TYPE_DEFAULT));
+      tableTypes = sinkConfig.tableTypeNames();
       quoteSqlIdentifiers = QuoteMethod.get(
           config.getString(JdbcSinkConfig.QUOTE_SQL_IDENTIFIERS_CONFIG)
       );
@@ -384,6 +385,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   public List<TableId> tableIds(Connection conn) throws SQLException {
     DatabaseMetaData metadata = conn.getMetaData();
     String[] tableTypes = tableTypes(metadata, this.tableTypes);
+    String tableTypeDisplay = displayableTableTypes(tableTypes, ", ");
+    log.debug("Using {} dialect to get {}", this, tableTypeDisplay);
 
     try (ResultSet rs = metadata.getTables(catalogPattern(), schemaPattern(), "%", tableTypes)) {
       List<TableId> tableIds = new ArrayList<>();
@@ -396,6 +399,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           tableIds.add(tableId);
         }
       }
+      log.debug("Used {} dialect to find {} {}", this, tableIds.size(), tableTypeDisplay);
       return tableIds;
     }
   }
@@ -433,6 +437,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       DatabaseMetaData metadata,
       Set<String> types
   ) throws SQLException {
+    log.debug("Using {} dialect to check support for {}", this, types);
     // Compute the uppercase form of the desired types ...
     Set<String> uppercaseTypes = new HashSet<>();
     for (String type : types) {
@@ -450,7 +455,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         }
       }
     }
-    return matchingTableTypes.toArray(new String[matchingTableTypes.size()]);
+    String[] result = matchingTableTypes.toArray(new String[matchingTableTypes.size()]);
+    log.debug("Used {} dialect to find table types: {}", this, result);
+    return result;
   }
 
   @Override

@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 
@@ -500,6 +501,14 @@ public class JdbcSinkConfig extends AbstractConfig {
       return password.value();
     }
     return null;
+  }
+
+  public EnumSet<TableType> tableTypes() {
+    return tableTypes;
+  }
+
+  public Set<String> tableTypeNames() {
+    return tableTypes().stream().map(TableType::toString).collect(Collectors.toSet());
   }
 
   private static class EnumValidator implements ConfigDef.Validator {

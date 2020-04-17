@@ -14,9 +14,9 @@
 
 package io.confluent.connect.jdbc.sink;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -27,10 +27,10 @@ import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
 import io.confluent.connect.jdbc.util.EnumRecommender;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.StringUtils;
+import io.confluent.connect.jdbc.util.TableType;
 
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
-import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 
 public class JdbcSinkConfig extends AbstractConfig {
@@ -196,8 +196,21 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String QUOTE_SQL_IDENTIFIERS_DISPLAY =
       JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_DISPLAY;
 
+  public static final String TABLE_TYPES_CONFIG = "table.types";
+  private static final String TABLE_TYPES_DISPLAY = "Table Types";
+  public static final String TABLE_TYPES_DEFAULT = TableType.TABLE.toString();
+  private static final String TABLE_TYPES_DOC =
+      "The comma-separated types of database tables to which the sink connector can write. "
+      + "By default this is ``" + TableType.TABLE + "``, but any combination of ``"
+      + TableType.TABLE + "`` and ``" + TableType.VIEW + "`` is allowed. Note that when "
+      + "views are included, the sink connector will fail if the view definition does not match "
+      + "the records' schemas.";
+
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
+
+  private static final EnumRecommender TABLE_TYPES_RECOMMENDER =
+      EnumRecommender.in(TableType.values());
 
   public static final ConfigDef CONFIG_DEF = new ConfigDef()
         // Connection
@@ -252,7 +265,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             INSERT_MODE,
             ConfigDef.Type.STRING,
             INSERT_MODE_DEFAULT,
-            EnumValidator.in(InsertMode.values()),
+            EnumRecommender.in(InsertMode.values()),
             ConfigDef.Importance.HIGH,
             INSERT_MODE_DOC,
             WRITES_GROUP,
@@ -271,6 +284,18 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Width.SHORT,
             BATCH_SIZE_DISPLAY
         )
+        .define(
+            TABLE_TYPES_CONFIG,
+            ConfigDef.Type.LIST,
+            TABLE_TYPES_DEFAULT,
+            EnumRecommender.in(TableType.values()),
+            ConfigDef.Importance.LOW,
+            TABLE_TYPES_DOC,
+            WRITES_GROUP,
+            3,
+            ConfigDef.Width.MEDIUM,
+            TABLE_TYPES_DISPLAY
+        )
         // Data Mapping
         .define(
             TABLE_NAME_FORMAT,
@@ -287,7 +312,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             PK_MODE,
             ConfigDef.Type.STRING,
             PK_MODE_DEFAULT,
-            EnumValidator.in(PrimaryKeyMode.values()),
+            EnumRecommender.in(PrimaryKeyMode.values()),
             ConfigDef.Importance.HIGH,
             PK_MODE_DOC,
             DATAMAPPING_GROUP,
@@ -388,6 +413,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final List<String> pkFields;
   public final Set<String> fieldsWhitelist;
   public final String dialectName;
+  public final EnumSet<TableType> tableTypes;
 
   public JdbcSinkConfig(Map<?, ?> props) {
     super(CONFIG_DEF, props);
@@ -405,6 +431,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     pkFields = getList(PK_FIELDS);
     dialectName = getString(DIALECT_NAME_CONFIG);
     fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
+    tableTypes = TableType.parse(getList(TABLE_TYPES_CONFIG));
   }
 
   private String getPasswordValue(String key) {
@@ -415,37 +442,12 @@ public class JdbcSinkConfig extends AbstractConfig {
     return null;
   }
 
-  private static class EnumValidator implements ConfigDef.Validator {
-    private final List<String> canonicalValues;
-    private final Set<String> validValues;
+  public boolean includesTables() {
+    return tableTypes.contains(TableType.TABLE);
+  }
 
-    private EnumValidator(List<String> canonicalValues, Set<String> validValues) {
-      this.canonicalValues = canonicalValues;
-      this.validValues = validValues;
-    }
-
-    public static <E> EnumValidator in(E[] enumerators) {
-      final List<String> canonicalValues = new ArrayList<>(enumerators.length);
-      final Set<String> validValues = new HashSet<>(enumerators.length * 2);
-      for (E e : enumerators) {
-        canonicalValues.add(e.toString().toLowerCase());
-        validValues.add(e.toString().toUpperCase());
-        validValues.add(e.toString().toLowerCase());
-      }
-      return new EnumValidator(canonicalValues, validValues);
-    }
-
-    @Override
-    public void ensureValid(String key, Object value) {
-      if (!validValues.contains(value)) {
-        throw new ConfigException(key, value, "Invalid enumerator");
-      }
-    }
-
-    @Override
-    public String toString() {
-      return canonicalValues.toString();
-    }
+  public boolean includesViews() {
+    return tableTypes.contains(TableType.VIEW);
   }
 
   public static void main(String... args) {

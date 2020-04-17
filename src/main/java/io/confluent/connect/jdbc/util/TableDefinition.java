@@ -26,12 +26,23 @@ public class TableDefinition {
   private final TableId id;
   private final Map<String, ColumnDefinition> columnsByName = new LinkedHashMap<>();
   private final Map<String, String> pkColumnNames = new LinkedHashMap<>();
+  private final TableType type;
+
 
   public TableDefinition(
       TableId id,
       Iterable<ColumnDefinition> columns
   ) {
+    this(id, columns, TableType.TABLE);
+  }
+
+  public TableDefinition(
+      TableId id,
+      Iterable<ColumnDefinition> columns,
+      TableType type
+  ) {
     this.id = id;
+    this.type = type;
     for (ColumnDefinition defn : columns) {
       String columnName = defn.id().name();
       columnsByName.put(
@@ -49,6 +60,10 @@ public class TableDefinition {
 
   public TableId id() {
     return id;
+  }
+
+  public TableType type() {
+    return type;
   }
 
   public int columnCount() {

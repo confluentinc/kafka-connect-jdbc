@@ -29,6 +29,7 @@ import java.util.Map;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
+import io.confluent.connect.jdbc.util.TableDefinitions;
 
 public class JdbcSinkTask extends SinkTask {
   private static final Logger log = LoggerFactory.getLogger(JdbcSinkTask.class);
@@ -52,7 +53,8 @@ public class JdbcSinkTask extends SinkTask {
     } else {
       dialect = DatabaseDialects.findBestFor(config.connectionUrl, config);
     }
-    final DbStructure dbStructure = new DbStructure(dialect);
+    TableDefinitions tableDefns = new TableDefinitions(dialect, config.tableTypes);
+    final DbStructure dbStructure = new DbStructure(tableDefns);
     log.info("Initializing writer using SQL dialect: {}", dialect.getClass().getSimpleName());
     writer = new JdbcDbWriter(config, dialect, dbStructure);
   }

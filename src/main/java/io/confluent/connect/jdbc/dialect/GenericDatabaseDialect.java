@@ -48,6 +48,7 @@ import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -85,6 +86,7 @@ import io.confluent.connect.jdbc.util.JdbcDriverInfo;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.util.TableType;
 
 /**
  * A {@link DatabaseDialect} implementation that provides functionality based upon JDBC and SQL.
@@ -229,8 +231,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     if (query != null) {
       try (Statement statement = connection.createStatement()) {
         if (statement.execute(query)) {
-          try (ResultSet rs = statement.getResultSet()) {
+          ResultSet rs = null;
+          try {
             // do nothing with the result set
+            rs = statement.getResultSet();
+          } finally {
+            if (rs != null) {
+              rs.close();
+            }
           }
         }
       }
@@ -491,22 +499,85 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     return "SELECT CURRENT_TIMESTAMP";
   }
 
+  /**
+   * Determine if the specified tables or views exists in the database.
+   *
+   * <p>Unlike the default method of {@link DatabaseDialect}, this method will efficiently
+   * make one call to the database regardless of the number of table types. However, this
+   * may mean that specialized dialects need to override this method.
+   *
+   * @param connection the database connection; may not be null
+   * @param tableId    the identifier of the table; may not be null
+   * @param tableTypes the table types to find; may not be null
+   * @return true if the table exists, or false otherwise
+   * @throws SQLException if there is an error accessing the metadata
+   */
+  @Override
+  public boolean tableExists(
+      Connection connection,
+      TableId tableId,
+      EnumSet<TableType> tableTypes
+  ) throws SQLException {
+    if (tableTypes.isEmpty()) {
+      throw new IllegalArgumentException("At least one table type must be specified");
+    }
+    String[] jdbcTypes = TableType.asJdbcTableTypeArray(tableTypes);
+    String jdbcTypeNames = TableType.asJdbcTableTypeNames(tableTypes, "/");
+    log.info("Checking {} dialect for existence of {} {}", this, jdbcTypeNames, tableId);
+    try (ResultSet rs = connection.getMetaData().getTables(
+        tableId.catalogName(),
+        tableId.schemaName(),
+        tableId.tableName(),
+        jdbcTypes
+    )) {
+      final boolean exists = rs.next();
+      log.info(
+          "Using {} dialect {} {} {}",
+          this,
+          jdbcTypeNames,
+          tableId,
+          exists ? "present" : "absent"
+      );
+      return exists;
+    }
+  }
+
+  /**
+   * Determine if the specified table exists in the database.
+   *
+   * <p>By default this method simply calls {@link #tableExists(Connection, TableId, EnumSet)}
+   * with {@link TableType#TABLE}.
+   *
+   * @param connection the database connection; may not be null
+   * @param tableId    the identifier of the table; may not be null
+   * @return true if the table exists, or false otherwise
+   * @throws SQLException if there is an error accessing the metadata
+   */
   @Override
   public boolean tableExists(
       Connection connection,
       TableId tableId
   ) throws SQLException {
-    log.info("Checking {} dialect for existence of table {}", this, tableId);
-    try (ResultSet rs = connection.getMetaData().getTables(
-        tableId.catalogName(),
-        tableId.schemaName(),
-        tableId.tableName(),
-        new String[]{"TABLE"}
-    )) {
-      final boolean exists = rs.next();
-      log.info("Using {} dialect table {} {}", this, tableId, exists ? "present" : "absent");
-      return exists;
-    }
+    return tableExists(connection, tableId, EnumSet.of(TableType.TABLE));
+  }
+
+  /**
+   * Determine if the specified view exists in the database.
+   *
+   * <p>By default this method simply calls {@link #tableExists(Connection, TableId, EnumSet)}
+   * with {@link TableType#VIEW}.
+   *
+   * @param connection the database connection; may not be null
+   * @param tableId    the identifier of the table; may not be null
+   * @return true if the table exists, or false otherwise
+   * @throws SQLException if there is an error accessing the metadata
+   */
+  @Override
+  public boolean viewExists(
+      Connection connection,
+      TableId tableId
+  ) throws SQLException {
+    return tableExists(connection, tableId, EnumSet.of(TableType.VIEW));
   }
 
   @Override
@@ -738,14 +809,66 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       Connection connection,
       TableId tableId
   ) throws SQLException {
+    return describeTable(connection, tableId, EnumSet.of(TableType.TABLE));
+  }
+
+  @Override
+  public TableDefinition describeTable(
+      Connection connection,
+      TableId tableId,
+      EnumSet<TableType> tableTypes
+  ) throws SQLException {
     Map<ColumnId, ColumnDefinition> columnDefns = describeColumns(connection, tableId.catalogName(),
-                                                                  tableId.schemaName(),
-                                                                  tableId.tableName(), null
+        tableId.schemaName(),
+        tableId.tableName(), null
     );
     if (columnDefns.isEmpty()) {
       return null;
     }
-    return new TableDefinition(tableId, columnDefns.values());
+    // Get the type of table
+    TableType type = tableTypeFor(connection, tableId, tableTypes);
+    if (type == null) {
+      log.debug("{} dialect unable to determine the table type for {}; using TABLE", this, tableId);
+      type = TableType.TABLE;
+    }
+    return new TableDefinition(tableId, columnDefns.values(), type);
+  }
+
+  protected TableType tableTypeFor(
+      Connection connection,
+      TableId tableId,
+      EnumSet<TableType> tableTypes
+  ) throws SQLException {
+    String[] jdbcTypes = TableType.asJdbcTableTypeArray(tableTypes);
+    String jdbcTypeNames = TableType.asJdbcTableTypeNames(tableTypes, "/");
+    log.info("Checking {} dialect for existence of {} {}", this, jdbcTypeNames, tableId);
+    try (ResultSet rs = connection.getMetaData().getTables(
+        tableId.catalogName(),
+        tableId.schemaName(),
+        tableId.tableName(),
+        jdbcTypes
+    )) {
+      if (rs.next()) {
+        //final String catalogName = rs.getString(1);
+        //final String schemaName = rs.getString(2);
+        //final String tableName = rs.getString(3);
+        final String tableType = rs.getString(4);
+        try {
+          return TableType.get(tableType);
+        } catch (IllegalArgumentException e) {
+          log.warn(
+              "{} dialect found unknown type '{}' for {} {}; using TABLE",
+              this,
+              tableType,
+              jdbcTypeNames,
+              tableId
+          );
+          return TableType.TABLE;
+        }
+      }
+    }
+    log.warn("{} dialect did not find type for {} {}; using TABLE", this, jdbcTypeNames, tableId);
+    return TableType.TABLE;
   }
 
   /**

@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -33,6 +34,7 @@ public class TableDefinitions {
 
   private final Map<TableId, TableDefinition> cache = new HashMap<>();
   private final DatabaseDialect dialect;
+  private final EnumSet<TableType> allowedTypes;
 
   /**
    * Create an instance that uses the specified database dialect.
@@ -40,7 +42,22 @@ public class TableDefinitions {
    * @param dialect the database dialect; may not be null
    */
   public TableDefinitions(DatabaseDialect dialect) {
+    this(dialect, EnumSet.of(TableType.TABLE));
+  }
+
+  /**
+   * Create an instance that uses the specified database dialect.
+   *
+   * @param dialect      the database dialect; may not be null
+   * @param allowedTypes the allowed table types to discover; may not be null or empty
+   */
+  public TableDefinitions(DatabaseDialect dialect, EnumSet<TableType> allowedTypes) {
     this.dialect = dialect;
+    this.allowedTypes = allowedTypes;
+  }
+
+  public DatabaseDialect dialect() {
+    return dialect;
   }
 
   /**
@@ -58,7 +75,7 @@ public class TableDefinitions {
     TableDefinition dbTable = cache.get(tableId);
     if (dbTable == null) {
       if (dialect.tableExists(connection, tableId)) {
-        dbTable = dialect.describeTable(connection, tableId);
+        dbTable = dialect.describeTable(connection, tableId, allowedTypes);
         if (dbTable != null) {
           log.info("Setting metadata for table {} to {}", tableId, dbTable);
           cache.put(tableId, dbTable);

@@ -10,6 +10,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 
 import static org.junit.Assert.assertEquals;
@@ -17,7 +18,7 @@ import static org.junit.Assert.assertTrue;
 
 public class DbStructureTest {
 
-  DbStructure structure = new DbStructure(null);
+  DbStructure structure = new DbStructure((DatabaseDialect) null);
 
   @Test
   public void testNoMissingFields() {

@@ -23,6 +23,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Calendar;
 import java.util.Collection;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 
@@ -39,6 +40,7 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.util.TableType;
 
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
@@ -192,6 +194,34 @@ public interface DatabaseDialect extends ConnectionProvider {
   List<TableId> tableIds(Connection connection) throws SQLException;
 
   /**
+   * Determine if the specified tables or views exists in the database.
+   *
+   * <p>By default this method uses the {@link #tableExists(Connection, TableId)} and
+   * {@link #viewExists(Connection, TableId)} methods. This maintains backward compatibility,
+   * but is not the most efficient solution when {@code tableTypes} contains multiple types.
+   *
+   * @param connection the database connection; may not be null
+   * @param tableId    the identifier of the table; may not be null
+   * @param tableTypes the table types to find; may not be null
+   * @return true if the table exists, or false otherwise
+   * @throws SQLException if there is an error accessing the metadata
+   */
+  default boolean tableExists(
+      Connection connection,
+      TableId tableId,
+      EnumSet<TableType> tableTypes
+  ) throws SQLException {
+    boolean found = false;
+    if (tableTypes.contains(TableType.TABLE)) {
+      found = tableExists(connection, tableId);
+    }
+    if (!found && tableTypes.contains(TableType.VIEW)) {
+      found = viewExists(connection, tableId);
+    }
+    return found;
+  }
+
+  /**
    * Determine if the specified table exists in the database.
    *
    * @param connection the database connection; may not be null
@@ -200,6 +230,20 @@ public interface DatabaseDialect extends ConnectionProvider {
    * @throws SQLException if there is an error accessing the metadata
    */
   boolean tableExists(Connection connection, TableId tableId) throws SQLException;
+
+  /**
+   * Determine if the specified view exists in the database.
+   *
+   * <p>By default this method returns {@code false} for backward compatibility.
+   *
+   * @param connection the database connection; may not be null
+   * @param tableId    the identifier of the table; may not be null
+   * @return true if the table exists, or false otherwise
+   * @throws SQLException if there is an error accessing the metadata
+   */
+  default boolean viewExists(Connection connection, TableId tableId) throws SQLException {
+    return false;
+  }
 
   /**
    * Create the definition for the columns described by the database metadata using the current
@@ -257,6 +301,25 @@ public interface DatabaseDialect extends ConnectionProvider {
    * @throws SQLException if there is an error accessing the metadata
    */
   TableDefinition describeTable(Connection connection, TableId tableId) throws SQLException;
+
+  /**
+   * Get the definition of the specified table.
+   *
+   * @param connection the database connection; may not be null
+   * @param tableId    the identifier of the table; may not be null
+   * @return the table definition; null if the table does not exist
+   * @throws SQLException if there is an error accessing the metadata
+   */
+  default TableDefinition describeTable(
+      Connection connection,
+      TableId tableId,
+      EnumSet<TableType> tableTypes
+  ) throws SQLException {
+    if (tableTypes.contains(TableType.TABLE)) {
+      return describeTable(connection, tableId);
+    }
+    throw new SQLException("Only tables are supported with this dialect");
+  }
 
   /**
    * Create the definition for the columns in the result set returned when querying the table. This

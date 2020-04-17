@@ -25,11 +25,9 @@ public enum TableType {
 
   private final String value;
   private final String capitalCase;
-  private final String jdbcCase;
 
   TableType(String value, String capitalCase) {
-    this.value = value.toLowerCase();
-    this.jdbcCase = value.toUpperCase();
+    this.value = value.toUpperCase();
     this.capitalCase = capitalCase;
   }
 
@@ -38,7 +36,7 @@ public enum TableType {
   }
 
   public String jdbcName() {
-    return jdbcCase;
+    return value;
   }
 
   @Override

@@ -65,6 +65,12 @@ public class TableTypeTest {
     assertEquals("TABLE/VIEW", TableType.asJdbcTableTypeNames(TABLE_AND_VIEW, "/"));
   }
 
+  @Test
+  public void shouldHaveUpperCaseToString() {
+    assertEquals("TABLE", TableType.TABLE.toString());
+    assertEquals("VIEW", TableType.VIEW.toString());
+  }
+
   protected static EnumSet<TableType> types(TableType...types) {
     return EnumSet.copyOf(Arrays.asList(types));
   }

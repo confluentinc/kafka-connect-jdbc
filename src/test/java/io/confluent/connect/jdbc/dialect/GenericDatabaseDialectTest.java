@@ -39,6 +39,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.SqliteHelper;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.EmbeddedDerby;
@@ -52,6 +53,7 @@ import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.StringUtils;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.util.TableType;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -61,10 +63,15 @@ import static org.junit.Assert.assertTrue;
 public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseDialect> {
 
   public static final Set<String> TABLE_TYPES = Collections.singleton("TABLE");
+  public static final Set<String> VIEW_TYPES = Collections.singleton("VIEW");
+  public static final Set<String> ALL_TABLE_TYPES = Collections.unmodifiableSet(
+      new HashSet<>(Arrays.asList("TABLE", "VIEW"))
+  );
 
   private final SqliteHelper sqliteHelper = new SqliteHelper(getClass().getSimpleName());
   private Map<String, String> connProps;
   private JdbcSourceConnectorConfig config;
+  private JdbcSinkConfig sinkConfig;
   private EmbeddedDerby db;
   private ConnectionProvider connectionProvider;
   private Connection conn;
@@ -116,6 +123,37 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
     config = new JdbcSourceConnectorConfig(connProps);
     dialect = createDialect(config);
     return dialect;
+  }
+
+
+  protected GenericDatabaseDialect newSinkDialectFor(Set<String> tableTypes) {
+    if (tableTypes != null) {
+      connProps.put(JdbcSinkConfig.TABLE_TYPES_CONFIG, StringUtils.join(tableTypes, ","));
+    } else {
+      connProps.remove(JdbcSinkConfig.TABLE_TYPES_CONFIG);
+    }
+    sinkConfig = new JdbcSinkConfig(connProps);
+    dialect = createDialect(sinkConfig);
+    assertTrue(dialect.tableTypes.containsAll(tableTypes));
+    return dialect;
+  }
+
+  @Test
+  public void testDialectForSinkConnectorWithTablesOnly() throws Exception {
+    newSinkDialectFor(TABLE_TYPES);
+    assertEquals(Collections.emptyList(), dialect.tableIds(conn));
+  }
+
+  @Test
+  public void testDialectForSinkConnectorWithViewsOnly() throws Exception {
+    newSinkDialectFor(VIEW_TYPES);
+    assertEquals(Collections.emptyList(), dialect.tableIds(conn));
+  }
+
+  @Test
+  public void testDialectForSinkConnectorWithTablesAndViews() throws Exception {
+    newSinkDialectFor(ALL_TABLE_TYPES);
+    assertEquals(Collections.emptyList(), dialect.tableIds(conn));
   }
 
   @Test
@@ -189,18 +227,22 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
 
     TableDefinition defn = dialect.describeTable(db.getConnection(), someTable);
     assertEquals(someTable, defn.id());
+    assertEquals(TableType.TABLE, defn.type());
     assertEquals("INTEGER", defn.definitionForColumn("id").typeName());
 
     defn = dialect.describeTable(db.getConnection(), publicTable);
     assertEquals(publicTable, defn.id());
+    assertEquals(TableType.TABLE, defn.type());
     assertEquals("INTEGER", defn.definitionForColumn("id").typeName());
 
     defn = dialect.describeTable(db.getConnection(), privateTable);
     assertEquals(privateTable, defn.id());
+    assertEquals(TableType.TABLE, defn.type());
     assertEquals("INTEGER", defn.definitionForColumn("id").typeName());
 
     defn = dialect.describeTable(db.getConnection(), anotherPrivateTable);
     assertEquals(anotherPrivateTable, defn.id());
+    assertEquals(TableType.TABLE, defn.type());
     assertEquals("INTEGER", defn.definitionForColumn("id").typeName());
   }
 

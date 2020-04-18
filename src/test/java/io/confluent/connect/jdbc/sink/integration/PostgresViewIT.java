@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.sink.integration;
 
 import static junit.framework.TestCase.assertTrue;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
 
 import io.confluent.common.utils.IntegrationTest;
@@ -87,8 +88,8 @@ public class PostgresViewIT {
   }
 
   @Test
-  public void testRecordSchemaDoesNotMatchView() throws SQLException {
-    createTestTableAndView();
+  public void testRecordSchemaMoreFieldsThanViewFails() throws SQLException {
+    createTestTableAndView("firstName");
     startTask();
     final Schema schema = SchemaBuilder.struct().name("com.example.Person")
         .field("firstname", Schema.STRING_SCHEMA)
@@ -108,8 +109,29 @@ public class PostgresViewIT {
   }
 
   @Test
+  public void testRecordSchemaLessFieldsThanView() throws SQLException {
+    createTestTableAndView("firstName, lastName");
+    startTask();
+    final Schema schema = SchemaBuilder.struct().name("com.example.Person")
+        .field("firstname", Schema.STRING_SCHEMA)
+        .build();
+    final Struct struct = new Struct(schema)
+        .put("firstname", "Christina");
+    task.put(Collections.singleton(new SinkRecord(topic, 1, null, null, schema, struct, 1)));
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
+      try (Statement s = c.createStatement()) {
+        try (ResultSet rs = s.executeQuery("SELECT * FROM " + topic)) {
+          assertTrue(rs.next());
+          assertEquals(struct.getString("firstname"), rs.getString("firstname"));
+          assertNull(rs.getString("lastname"));
+        }
+      }
+    }
+  }
+
+  @Test
   public void testWriteToView() throws SQLException {
-    createTestTableAndView();
+    createTestTableAndView("firstName, lastName");
     startTask();
     final Schema schema = SchemaBuilder.struct().name("com.example.Person")
         .field("firstname", Schema.STRING_SCHEMA)
@@ -130,15 +152,17 @@ public class PostgresViewIT {
     }
   }
 
-  private void createTestTableAndView() throws SQLException {
-    log.info("Creating test table");
+  private void createTestTableAndView(String viewFields) throws SQLException {
+    log.info("Creating test table and view");
     try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
+      c.setAutoCommit(false);
       try (Statement s = c.createStatement()) {
         s.execute("CREATE TABLE " + tableName + "(firstName TEXT, lastName TEXT, age INTEGER)");
-        s.execute("CREATE VIEW " + topic + " AS SELECT firstName, lastName FROM " + tableName);
+        s.execute("CREATE VIEW " + topic + " AS SELECT " + viewFields + " FROM " + tableName);
+        c.commit();
       }
     }
-    log.info("Created table");
+    log.info("Created table and view");
   }
 
   private void startTask() {

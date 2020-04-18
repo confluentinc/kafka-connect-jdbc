@@ -550,7 +550,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         tableId.catalogName(),
         tableId.schemaName(),
         tableId.tableName(),
-        new String[]{"TABLE"}
+        tableTypes
     )) {
       final boolean exists = rs.next();
       log.info(

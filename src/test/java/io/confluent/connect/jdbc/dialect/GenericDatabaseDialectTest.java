@@ -57,6 +57,7 @@ import io.confluent.connect.jdbc.util.TableType;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -127,11 +128,9 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
 
 
   protected GenericDatabaseDialect newSinkDialectFor(Set<String> tableTypes) {
-    if (tableTypes != null) {
-      connProps.put(JdbcSinkConfig.TABLE_TYPES_CONFIG, StringUtils.join(tableTypes, ","));
-    } else {
-      connProps.remove(JdbcSinkConfig.TABLE_TYPES_CONFIG);
-    }
+    assertNotNull(tableTypes);
+    assertFalse(tableTypes.isEmpty());
+    connProps.put(JdbcSinkConfig.TABLE_TYPES_CONFIG, StringUtils.join(tableTypes, ","));
     sinkConfig = new JdbcSinkConfig(connProps);
     dialect = createDialect(sinkConfig);
     assertTrue(dialect.tableTypes.containsAll(tableTypes));

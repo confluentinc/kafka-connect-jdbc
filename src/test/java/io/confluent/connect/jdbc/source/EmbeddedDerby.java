@@ -31,7 +31,6 @@ import java.util.Arrays;
 import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.util.BytesUtil;
-import io.confluent.connect.jdbc.util.TableType;
 
 /**
  * Embedded Derby server useful for testing against a real JDBC database.
@@ -148,8 +147,8 @@ public class EmbeddedDerby {
 
   /**
    * Shorthand for creating a view over a different table
-   * @param name      name of the table
-   * @param tableName the name of the table over which the view should select
+   * @param name        name of the table
+   * @param tableName   the name of the table over which the view should select
    * @param columnNames the names of the columns in the table that should be included in the view
    */
   public void createView(String name, String tableName, String... columnNames) throws SQLException {
@@ -171,15 +170,6 @@ public class EmbeddedDerby {
     String statementStr = statement.toString();
     log.debug("Creating view {} in {} with statement {}", name, this.name, statementStr);
     stmt.execute(statementStr);
-  }
-
-  /**
-   * Drop a view.
-   * @param name
-   */
-  public void dropView(String name) throws SQLException {
-    Statement stmt = conn.createStatement();
-    stmt.execute("DROP VIEW \"" + name + "\"");
   }
 
   public void close() throws SQLException {

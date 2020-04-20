@@ -171,7 +171,7 @@ public class DbStructure {
 
     final List<String> amendTableQueries = dbDialect.buildAlterTable(tableId, missingFields);
     log.info(
-        "Amending %s to add missing fields:{} maxRetries:{} with SQL: {}",
+        "Amending {} to add missing fields:{} maxRetries:{} with SQL: {}",
         type,
         missingFields,
         maxRetries,

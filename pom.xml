@@ -62,10 +62,10 @@
         <postgresql.version>42.2.10</postgresql.version>
         <jtds.driver.version>1.3.1</jtds.driver.version>
         <licenses.name>Confluent Community License</licenses.name>
-        <licenses.version>${project.version}</licenses.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.package.home>target/${project.artifactId}-${project.version}-package</project.package.home>
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
+        <io.confluent.license-file-generator.version>[6.0.0-1, 6.0.1-0)</io.confluent.license-file-generator.version>
     </properties>
 
     <repositories>
@@ -411,7 +411,7 @@
                                         <argument>-l ${project.build.directory}/${project.build.finalName}-package/share/doc/kafka-connect-jdbc/licenses</argument>
                                         <argument>-n ${project.build.directory}/${project.build.finalName}-package/share/doc/kafka-connect-jdbc/notices</argument>
                                         <argument>-t ${project.name}</argument>
-                                        <argument>-x licenses-${licenses.version}.jar</argument>
+                                        <argument>-x licenses-${io.confluent.license-file-generator.version}.jar</argument>
                                     </arguments>
                                 </configuration>
                                 <phase>package</phase>
@@ -432,7 +432,7 @@
                             <dependency>
                                 <groupId>io.confluent</groupId>
                                 <artifactId>licenses</artifactId>
-                                <version>${licenses.version}</version>
+                                <version>${io.confluent.license-file-generator.version}</version>
                             </dependency>
                         </dependencies>
                     </plugin>
@@ -461,7 +461,7 @@
                                         <argument>-l ${project.basedir}/licenses</argument>
                                         <argument>-n ${project.basedir}/notices</argument>
                                         <argument>-t ${project.name}</argument>
-                                        <argument>-x licenses-${licenses.version}.jar</argument>
+                                        <argument>-x licenses-${io.confluent.license-file-generator.version}.jar</argument>
                                     </arguments>
                                 </configuration>
                                 <phase>package</phase>
@@ -482,7 +482,7 @@
                             <dependency>
                                 <groupId>io.confluent</groupId>
                                 <artifactId>licenses</artifactId>
-                                <version>${licenses.version}</version>
+                                <version>${io.confluent.license-file-generator.version}</version>
                             </dependency>
                         </dependencies>
                     </plugin>

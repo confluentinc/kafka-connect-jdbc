@@ -224,6 +224,13 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
 
+  public static final String DROP_INVALID_BATCH_CONFIG = "drop.invalid.batch";
+  private static final String DROP_INVALID_BATCH_DEFAULT = "false";
+  private static final String DROP_INVALID_BATCH_DOC =
+          "Whether to drop a message batch that fails beyond maximum retries "
+          + "rather than stopping the connector.";
+  private static final String DROP_INVALID_BATCH_DISPLAY = "Drop Invalid Batch";
+
   public static final ConfigDef CONFIG_DEF = new ConfigDef()
         // Connection
         .define(
@@ -420,6 +427,17 @@ public class JdbcSinkConfig extends AbstractConfig {
             2,
             ConfigDef.Width.SHORT,
             RETRY_BACKOFF_MS_DISPLAY
+        )
+        .define(
+            DROP_INVALID_BATCH_CONFIG,
+            ConfigDef.Type.BOOLEAN,
+            DROP_INVALID_BATCH_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            DROP_INVALID_BATCH_DOC,
+            RETRIES_GROUP,
+            3,
+            ConfigDef.Width.SHORT,
+            DROP_INVALID_BATCH_DISPLAY
         );
 
   public final String connectionUrl;
@@ -438,6 +456,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final Set<String> fieldsWhitelist;
   public final String dialectName;
   public final TimeZone timeZone;
+  public final boolean dropInvalidBatch;
 
   public JdbcSinkConfig(Map<?, ?> props) {
     super(CONFIG_DEF, props);
@@ -458,6 +477,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
     String dbTimeZone = getString(DB_TIMEZONE_CONFIG);
     timeZone = TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
+    dropInvalidBatch = getBoolean(DROP_INVALID_BATCH_CONFIG);
 
     if (deleteEnabled && pkMode != PrimaryKeyMode.RECORD_KEY) {
       throw new ConfigException(

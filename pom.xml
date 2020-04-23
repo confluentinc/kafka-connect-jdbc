@@ -29,6 +29,7 @@
     <artifactId>kafka-connect-jdbc</artifactId>
     <packaging>jar</packaging>
     <name>kafka-connect-jdbc</name>
+    <version>6.0.0-0</version>
     <organization>
         <name>Confluent, Inc.</name>
         <url>http://confluent.io</url>

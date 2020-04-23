@@ -41,6 +41,7 @@ import java.util.TimeZone;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import io.confluent.connect.jdbc.data.ConnectDecimal;
 
 // Tests conversion of data types and schemas. These use the types supported by Derby, which
 // might not cover everything in the SQL standards and definitely doesn't cover any non-standard
@@ -221,16 +222,16 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
   public void testDecimal() throws Exception {
     typeConversion("DECIMAL(5,2)", false,
                    new EmbeddedDerby.Literal("CAST (123.45 AS DECIMAL(5,2))"),
-                   Decimal.schema(2),new BigDecimal(new BigInteger("12345"), 2));
+                   ConnectDecimal.schema(5, 2), new BigDecimal(new BigInteger("12345"), 2));
   }
 
   @Test
   public void testNullableDecimal() throws Exception {
     typeConversion("DECIMAL(5,2)", true,
                    new EmbeddedDerby.Literal("CAST(123.45 AS DECIMAL(5,2))"),
-                   Decimal.builder(2).optional().build(),
+                   ConnectDecimal.builder(5, 2).optional().parameter("connect.decimal.precision", "5").build(),
                    new BigDecimal(new BigInteger("12345"), 2));
-    typeConversion("DECIMAL(5,2)", true, null, Decimal.builder(2).optional().build(),
+    typeConversion("DECIMAL(5,2)", true, null, ConnectDecimal.builder(5,2).optional().build(),
                    null);
   }
 

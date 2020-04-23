@@ -62,6 +62,7 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.FixedScoreProvider;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
@@ -88,6 +89,7 @@ import io.confluent.connect.jdbc.util.JdbcDriverInfo;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.util.TableType;
 
 /**
  * A {@link DatabaseDialect} implementation that provides functionality based upon JDBC and SQL.
@@ -164,9 +166,10 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     this.jdbcUrl = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
     this.jdbcUrlInfo = DatabaseDialects.extractJdbcUrlInfo(jdbcUrl);
     if (config instanceof JdbcSinkConfig) {
+      JdbcSinkConfig sinkConfig = (JdbcSinkConfig) config;
       catalogPattern = JdbcSourceTaskConfig.CATALOG_PATTERN_DEFAULT;
       schemaPattern = JdbcSourceTaskConfig.SCHEMA_PATTERN_DEFAULT;
-      tableTypes = new HashSet<>(Arrays.asList(JdbcSourceTaskConfig.TABLE_TYPE_DEFAULT));
+      tableTypes = sinkConfig.tableTypeNames();
       quoteSqlIdentifiers = QuoteMethod.get(
           config.getString(JdbcSinkConfig.QUOTE_SQL_IDENTIFIERS_CONFIG)
       );
@@ -382,6 +385,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   public List<TableId> tableIds(Connection conn) throws SQLException {
     DatabaseMetaData metadata = conn.getMetaData();
     String[] tableTypes = tableTypes(metadata, this.tableTypes);
+    String tableTypeDisplay = displayableTableTypes(tableTypes, ", ");
+    log.debug("Using {} dialect to get {}", this, tableTypeDisplay);
 
     try (ResultSet rs = metadata.getTables(catalogPattern(), schemaPattern(), "%", tableTypes)) {
       List<TableId> tableIds = new ArrayList<>();
@@ -394,6 +399,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           tableIds.add(tableId);
         }
       }
+      log.debug("Used {} dialect to find {} {}", this, tableIds.size(), tableTypeDisplay);
       return tableIds;
     }
   }
@@ -431,6 +437,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       DatabaseMetaData metadata,
       Set<String> types
   ) throws SQLException {
+    log.debug("Using {} dialect to check support for {}", this, types);
     // Compute the uppercase form of the desired types ...
     Set<String> uppercaseTypes = new HashSet<>();
     for (String type : types) {
@@ -448,7 +455,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         }
       }
     }
-    return matchingTableTypes.toArray(new String[matchingTableTypes.size()]);
+    String[] result = matchingTableTypes.toArray(new String[matchingTableTypes.size()]);
+    log.debug("Used {} dialect to find table types: {}", this, result);
+    return result;
   }
 
   @Override
@@ -533,17 +542,30 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       Connection connection,
       TableId tableId
   ) throws SQLException {
-    log.info("Checking {} dialect for existence of table {}", this, tableId);
+    DatabaseMetaData metadata = connection.getMetaData();
+    String[] tableTypes = tableTypes(metadata, this.tableTypes);
+    String tableTypeDisplay = displayableTableTypes(tableTypes, "/");
+    log.info("Checking {} dialect for existence of {} {}", this, tableTypeDisplay, tableId);
     try (ResultSet rs = connection.getMetaData().getTables(
         tableId.catalogName(),
         tableId.schemaName(),
         tableId.tableName(),
-        new String[]{"TABLE"}
+        tableTypes
     )) {
       final boolean exists = rs.next();
-      log.info("Using {} dialect table {} {}", this, tableId, exists ? "present" : "absent");
+      log.info(
+          "Using {} dialect {} {} {}",
+          this,
+          tableTypeDisplay,
+          tableId,
+          exists ? "present" : "absent"
+      );
       return exists;
     }
+  }
+
+  protected String displayableTableTypes(String[] types, String delim) {
+    return Arrays.stream(types).sorted().collect(Collectors.joining(delim));
   }
 
   @Override
@@ -782,7 +804,50 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     if (columnDefns.isEmpty()) {
       return null;
     }
-    return new TableDefinition(tableId, columnDefns.values());
+    TableType tableType = tableTypeFor(connection, tableId);
+    return new TableDefinition(tableId, columnDefns.values(), tableType);
+  }
+
+  protected TableType tableTypeFor(
+      Connection connection,
+      TableId tableId
+  ) throws SQLException {
+    DatabaseMetaData metadata = connection.getMetaData();
+    String[] tableTypes = tableTypes(metadata, this.tableTypes);
+    String tableTypeDisplay = displayableTableTypes(tableTypes, "/");
+    log.info("Checking {} dialect for type of {} {}", this, tableTypeDisplay, tableId);
+    try (ResultSet rs = connection.getMetaData().getTables(
+        tableId.catalogName(),
+        tableId.schemaName(),
+        tableId.tableName(),
+        tableTypes
+    )) {
+      if (rs.next()) {
+        //final String catalogName = rs.getString(1);
+        //final String schemaName = rs.getString(2);
+        //final String tableName = rs.getString(3);
+        final String tableType = rs.getString(4);
+        try {
+          return TableType.get(tableType);
+        } catch (IllegalArgumentException e) {
+          log.warn(
+              "{} dialect found unknown type '{}' for {} {}; using TABLE",
+              this,
+              tableType,
+              tableTypeDisplay,
+              tableId
+          );
+          return TableType.TABLE;
+        }
+      }
+    }
+    log.warn(
+        "{} dialect did not find type for {} {}; using TABLE",
+        this,
+        tableTypeDisplay,
+        tableId
+    );
+    return TableType.TABLE;
   }
 
   /**

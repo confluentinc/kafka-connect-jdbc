@@ -40,6 +40,7 @@ import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode.INSERT;
+import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode.UPDATE;
 import static java.util.Objects.isNull;
 import static java.util.Objects.nonNull;
 
@@ -187,7 +188,7 @@ public class BufferedRecords {
         config.insertMode, records.size(), totalUpdateCount, totalDeleteCount
     );
     if (totalUpdateCount.filter(total -> total != expectedCount).isPresent()
-        && config.insertMode == INSERT) {
+        && (config.insertMode == INSERT || (config.insertMode == UPDATE && config.mustUpdateAll))) {
       throw new ConnectException(String.format(
           "Update count (%d) did not sum up to total number of records inserted (%d)",
           totalUpdateCount.get(),

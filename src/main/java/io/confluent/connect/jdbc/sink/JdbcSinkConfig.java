@@ -147,6 +147,12 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "the connector, e.g. ``UPDATE``.";
   private static final String INSERT_MODE_DISPLAY = "Insert Mode";
 
+  public static final String MUST_UPDATE_ALL = "must.update.all";
+  private static final String MUST_UPDATE_ALL_DEFAULT = "false";
+  private static final String MUST_UPDATE_ALL_DOC =
+          "When the insertion mode is set to UPDATE all records must be updated.";
+  private static final String MUST_UPDATE_ALL_DISPLAY = "Must-Update-All";
+
   public static final String PK_FIELDS = "pk.fields";
   private static final String PK_FIELDS_DEFAULT = "";
   private static final String PK_FIELDS_DOC =
@@ -301,6 +307,17 @@ public class JdbcSinkConfig extends AbstractConfig {
             1,
             ConfigDef.Width.MEDIUM,
             INSERT_MODE_DISPLAY
+        )
+        .define(
+            MUST_UPDATE_ALL,
+            ConfigDef.Type.BOOLEAN,
+            MUST_UPDATE_ALL_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            MUST_UPDATE_ALL_DOC,
+            WRITES_GROUP,
+            1,
+            ConfigDef.Width.SHORT,
+            MUST_UPDATE_ALL_DISPLAY
         )
         .define(
             BATCH_SIZE,
@@ -462,6 +479,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final boolean autoCreate;
   public final boolean autoEvolve;
   public final InsertMode insertMode;
+  public final boolean mustUpdateAll;
   public final PrimaryKeyMode pkMode;
   public final List<String> pkFields;
   public final Set<String> fieldsWhitelist;
@@ -482,6 +500,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     autoCreate = getBoolean(AUTO_CREATE);
     autoEvolve = getBoolean(AUTO_EVOLVE);
     insertMode = InsertMode.valueOf(getString(INSERT_MODE).toUpperCase());
+    mustUpdateAll = getBoolean(MUST_UPDATE_ALL);
     pkMode = PrimaryKeyMode.valueOf(getString(PK_MODE).toUpperCase());
     pkFields = getList(PK_FIELDS);
     dialectName = getString(DIALECT_NAME_CONFIG);

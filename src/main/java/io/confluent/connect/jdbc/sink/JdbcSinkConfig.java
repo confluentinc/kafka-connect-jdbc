@@ -85,6 +85,22 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String CONNECTION_PASSWORD_DOC = "JDBC connection password.";
   private static final String CONNECTION_PASSWORD_DISPLAY = "JDBC Password";
 
+  public static final String CONNECTION_ATTEMPTS =
+          JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_CONFIG;
+  private static final String CONNECTION_ATTEMPTS_DOC
+          = "Maximum number of attempts to retrieve a valid JDBC connection. "
+          + "Must be a positive integer.";
+  private static final String CONNECTION_ATTEMPTS_DISPLAY = "JDBC connection attempts";
+  public static final int CONNECTION_ATTEMPTS_DEFAULT = 3;
+
+  public static final String CONNECTION_BACKOFF =
+          JdbcSourceConnectorConfig.CONNECTION_BACKOFF_CONFIG;
+  private static final String CONNECTION_BACKOFF_DOC
+          = "Backoff time in milliseconds between connection attempts.";
+  private static final String CONNECTION_BACKOFF_DISPLAY
+          = "JDBC connection backoff in milliseconds";
+  public static final long CONNECTION_BACKOFF_DEFAULT = 10000L;
+
   public static final String TABLE_NAME_FORMAT = "table.name.format";
   private static final String TABLE_NAME_FORMAT_DEFAULT = "${topic}";
   private static final String TABLE_NAME_FORMAT_DOC =
@@ -290,6 +306,28 @@ public class JdbcSinkConfig extends AbstractConfig {
             DIALECT_NAME_DISPLAY,
             DatabaseDialectRecommender.INSTANCE
         )
+        .define(
+            CONNECTION_ATTEMPTS,
+            ConfigDef.Type.INT,
+            CONNECTION_ATTEMPTS_DEFAULT,
+            ConfigDef.Range.atLeast(1),
+            ConfigDef.Importance.LOW,
+            CONNECTION_ATTEMPTS_DOC,
+            CONNECTION_GROUP,
+            5,
+            ConfigDef.Width.SHORT,
+            CONNECTION_ATTEMPTS_DISPLAY
+        ).define(
+            CONNECTION_BACKOFF,
+            ConfigDef.Type.LONG,
+            CONNECTION_BACKOFF_DEFAULT,
+            ConfigDef.Importance.LOW,
+            CONNECTION_BACKOFF_DOC,
+            CONNECTION_GROUP,
+            6,
+            ConfigDef.Width.SHORT,
+            CONNECTION_BACKOFF_DISPLAY
+        )
         // Writes
         .define(
             INSERT_MODE,
@@ -456,6 +494,8 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final String connectionUrl;
   public final String connectionUser;
   public final String connectionPassword;
+  public final int connectionAttempts;
+  public final long connectionBackoffMs;
   public final String tableNameFormat;
   public final int batchSize;
   public final boolean deleteEnabled;
@@ -477,6 +517,8 @@ public class JdbcSinkConfig extends AbstractConfig {
     connectionUrl = getString(CONNECTION_URL);
     connectionUser = getString(CONNECTION_USER);
     connectionPassword = getPasswordValue(CONNECTION_PASSWORD);
+    connectionAttempts = getInt(CONNECTION_ATTEMPTS);
+    connectionBackoffMs = getLong(CONNECTION_BACKOFF);
     tableNameFormat = getString(TABLE_NAME_FORMAT).trim();
     batchSize = getInt(BATCH_SIZE);
     deleteEnabled = getBoolean(DELETE_ENABLED);

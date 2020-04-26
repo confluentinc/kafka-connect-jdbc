@@ -22,8 +22,6 @@ import org.slf4j.LoggerFactory;
 import java.sql.Connection;
 import java.sql.SQLException;
 
-import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
-
 public class CachedConnectionProvider implements ConnectionProvider {
 
   private static final Logger log = LoggerFactory.getLogger(CachedConnectionProvider.class);
@@ -36,14 +34,6 @@ public class CachedConnectionProvider implements ConnectionProvider {
 
   private int count = 0;
   private Connection connection;
-
-  public CachedConnectionProvider(
-      ConnectionProvider provider
-  ) {
-    this(provider, JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_DEFAULT,
-         JdbcSourceConnectorConfig.CONNECTION_BACKOFF_DEFAULT
-    );
-  }
 
   public CachedConnectionProvider(
       ConnectionProvider provider,

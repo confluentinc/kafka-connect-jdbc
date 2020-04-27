@@ -2,5 +2,5 @@
 common {
   slackChannel = ''
   upstreamProjects = 'confluentinc/common'
-  pintMerge = true
+  pintMerge = false
 }

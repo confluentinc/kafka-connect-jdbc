@@ -1,6 +1,6 @@
 #!/usr/bin/env groovy
 common {
-  slackChannel = '#connect-warn'
+  slackChannel = ''
   upstreamProjects = 'confluentinc/common'
   pintMerge = true
 }

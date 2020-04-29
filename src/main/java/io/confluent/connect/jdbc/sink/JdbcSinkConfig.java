@@ -473,7 +473,7 @@ public class JdbcSinkConfig extends AbstractConfig {
 
   public JdbcSinkConfig(Map<?, ?> props) {
     super(CONFIG_DEF, props);
-    connectorName = ConfigUtils.connectorName(this);
+    connectorName = ConfigUtils.connectorName(props);
     connectionUrl = getString(CONNECTION_URL);
     connectionUser = getString(CONNECTION_USER);
     connectionPassword = getPasswordValue(CONNECTION_PASSWORD);

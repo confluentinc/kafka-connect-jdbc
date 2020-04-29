@@ -542,10 +542,10 @@ public class BufferedRecordsTest {
     assertInvalidRecord(true, false, false, false, "with a null value and null value schema");
     assertInvalidRecord(false, true, false, false, "with a null value and null value schema");
     assertInvalidRecord(true, true, false, false, "with a null value and null value schema");
-    assertInvalidRecord(false, false, true, false, "with a null value and STRUCT value schema");
-    assertInvalidRecord(true, false, true, false, "with a null value and STRUCT value schema");
-    assertInvalidRecord(false, true, true, false, "with a null value and STRUCT value schema");
-    assertInvalidRecord(true, true, true, false, "with a null value and STRUCT value schema");
+    assertInvalidRecord(false, false, true, false, "with a null value and Struct value schema");
+    assertInvalidRecord(true, false, true, false, "with a null value and Struct value schema");
+    assertInvalidRecord(false, true, true, false, "with a null value and Struct value schema");
+    assertInvalidRecord(true, true, true, false, "with a null value and Struct value schema");
 
     // Fail when null value schema but non-null value
     assertInvalidRecord(false, false, false, true, "with a Struct value and null value schema");
@@ -572,9 +572,9 @@ public class BufferedRecordsTest {
     assertInvalidRecord(false, false, false, false, "with a null key and null key schema");
 
     // Fail when null key and non-null key schema
-    assertInvalidRecord(true, false, true, true, "with a null key and STRUCT key schema");
-    assertInvalidRecord(true, false, false, true, "with a null key and STRUCT key schema");
-    assertInvalidRecord(true, false, false, false, "with a null key and STRUCT key schema");
+    assertInvalidRecord(true, false, true, true, "with a null key and Struct key schema");
+    assertInvalidRecord(true, false, false, true, "with a null key and Struct key schema");
+    assertInvalidRecord(true, false, false, false, "with a null key and Struct key schema");
 
     // Fail when non-null key and null key schema
     assertInvalidRecord(false, true, true, true, "with a Struct key and null key schema");
@@ -601,10 +601,10 @@ public class BufferedRecordsTest {
     assertInvalidRecord(false, false, false, false, "with a null value and null value schema");
 
     // Fail when null value and non-null value schema
-    assertInvalidRecord(true, true, true, false, "with a null value and STRUCT value schema");
-    assertInvalidRecord(true, false, true, false, "with a null value and STRUCT value schema");
-    assertInvalidRecord(false, true, true, false, "with a null value and STRUCT value schema");
-    assertInvalidRecord(false, false, true, false, "with a null value and STRUCT value schema");
+    assertInvalidRecord(true, true, true, false, "with a null value and Struct value schema");
+    assertInvalidRecord(true, false, true, false, "with a null value and Struct value schema");
+    assertInvalidRecord(false, true, true, false, "with a null value and Struct value schema");
+    assertInvalidRecord(false, false, true, false, "with a null value and Struct value schema");
 
     // Fail when non-null value and null value schema
     assertInvalidRecord(true, true, false, true, "with a Struct value and null value schema");

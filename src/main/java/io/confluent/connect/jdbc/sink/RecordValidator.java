@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Confluent Inc.
+ * Copyright 2020 Confluent Inc.
  *
  * Licensed under the Confluent Community License (the "License"); you may not use
  * this file except in compliance with the License.  You may obtain a copy of the
@@ -73,141 +73,61 @@ public interface RecordValidator {
 
   static RecordValidator requiresValue(JdbcSinkConfig config) {
     return record -> {
-      if (record.value() == null) {
-        throw new ConnectException(
-            String.format(
-                "The JDBC sink connector '%s' is configured with '%s=%s' and '%s=%s' "
-                + "and therefore requires non-null record values that are structs, "
-                + "but found record at (topic='%s',partition=%d,offset=%d,timestamp=%d) "
-                + "with a %s value and %s value schema.",
-                config.connectorName(),
-                JdbcSinkConfig.DELETE_ENABLED,
-                config.deleteEnabled,
-                JdbcSinkConfig.PK_MODE,
-                config.pkMode.toString().toLowerCase(),
-                record.topic(),
-                record.kafkaPartition(),
-                record.kafkaOffset(),
-                record.timestamp(),
-                StringUtils.valueTypeOrNull(record.value()),
-                StringUtils.schemaTypeOrNull(record.valueSchema())
-            )
-        );
-      }
       Schema valueSchema = record.valueSchema();
-      if (valueSchema == null) {
-        throw new ConnectException(
-            String.format(
-                "The JDBC sink connector '%s' is configured with '%s=%s' and '%s=%s' "
-                + "and therefore requires non-null record values that are structs, "
-                + "but found record at (topic='%s',partition=%d,offset=%d,timestamp=%d) "
-                + "with a %s value and %s value schema.",
-                config.connectorName(),
-                JdbcSinkConfig.DELETE_ENABLED,
-                config.deleteEnabled,
-                JdbcSinkConfig.PK_MODE,
-                config.pkMode.toString().toLowerCase(),
-                record.topic(),
-                record.kafkaPartition(),
-                record.kafkaOffset(),
-                record.timestamp(),
-                StringUtils.valueTypeOrNull(record.value()),
-                StringUtils.schemaTypeOrNull(record.valueSchema())
-            )
-        );
+      if (record.value() != null
+          && valueSchema != null
+          && valueSchema.type() == Schema.Type.STRUCT) {
+        return;
       }
-      if (valueSchema.type() != Schema.Type.STRUCT) {
-        throw new ConnectException(
-            String.format(
-                "The JDBC sink connector '%s' is configured with '%s=%s' and '%s=%s' "
-                + "and therefore requires record values to be structs, "
-                + "but found record at (topic='%s',partition=%d,offset=%d,timestamp=%d) "
-                + "with a %s value and %s value schema.",
-                config.connectorName(),
-                JdbcSinkConfig.DELETE_ENABLED,
-                config.deleteEnabled,
-                JdbcSinkConfig.PK_MODE,
-                config.pkMode.toString().toLowerCase(),
-                record.topic(),
-                record.kafkaPartition(),
-                record.kafkaOffset(),
-                record.timestamp(),
-                StringUtils.valueTypeOrNull(record.value()),
-                StringUtils.schemaTypeOrNull(record.valueSchema())
-            )
-        );
-      }
+      throw new ConnectException(
+          String.format(
+              "Sink connector '%s' is configured with '%s=%s' and '%s=%s' and therefore requires "
+              + "records with a non-null Struct value and non-null Struct schema, "
+              + "but found record at (topic='%s',partition=%d,offset=%d,timestamp=%d) "
+              + "with a %s value and %s value schema.",
+              config.connectorName(),
+              JdbcSinkConfig.DELETE_ENABLED,
+              config.deleteEnabled,
+              JdbcSinkConfig.PK_MODE,
+              config.pkMode.toString().toLowerCase(),
+              record.topic(),
+              record.kafkaPartition(),
+              record.kafkaOffset(),
+              record.timestamp(),
+              StringUtils.valueTypeOrNull(record.value()),
+              StringUtils.schemaTypeOrNull(record.valueSchema())
+          )
+      );
     };
   }
 
   static RecordValidator requiresKey(JdbcSinkConfig config) {
     return record -> {
-      if (record.key() == null) {
-        throw new ConnectException(
-            String.format(
-                "The JDBC sink connector '%s' is configured with '%s=%s' and '%s=%s' "
-                + "and therefore requires non-null record keys, "
-                + "but found record at (topic='%s',partition=%d,offset=%d,timestamp=%d) "
-                + "with a %s key and %s key schema.",
-                config.connectorName(),
-                JdbcSinkConfig.DELETE_ENABLED,
-                config.deleteEnabled,
-                JdbcSinkConfig.PK_MODE,
-                config.pkMode.toString().toLowerCase(),
-                record.topic(),
-                record.kafkaPartition(),
-                record.kafkaOffset(),
-                record.timestamp(),
-                StringUtils.valueTypeOrNull(record.key()),
-                StringUtils.schemaTypeOrNull(record.keySchema())
-            )
-        );
-      }
       Schema keySchema = record.keySchema();
-      if (keySchema == null) {
-        throw new ConnectException(
-            String.format(
-                "The JDBC sink connector '%s' is configured with '%s=%s' and '%s=%s' "
-                + "and therefore requires non-null record keys with schemas, "
-                + "but found record at (topic='%s',partition=%d,offset=%d,timestamp=%d) "
-                + "with a %s key and %s key schema.",
-                config.connectorName(),
-                JdbcSinkConfig.DELETE_ENABLED,
-                config.deleteEnabled,
-                JdbcSinkConfig.PK_MODE,
-                config.pkMode.toString().toLowerCase(),
-                record.topic(),
-                record.kafkaPartition(),
-                record.kafkaOffset(),
-                record.timestamp(),
-                StringUtils.valueTypeOrNull(record.key()),
-                StringUtils.schemaTypeOrNull(record.keySchema())
-            )
-        );
+      if (record.key() != null
+          && keySchema != null
+          && (keySchema.type() == Schema.Type.STRUCT || keySchema.type().isPrimitive())) {
+        return;
       }
-      Schema.Type keySchemaType = keySchema.type();
-      if (keySchemaType != Schema.Type.STRUCT && !keySchemaType.isPrimitive()) {
-        throw new ConnectException(
-            String.format(
-                "The JDBC sink connector '%s' is configured with '%s=%s' and '%s=%s' "
-                + "and therefore requires non-null record keys that "
-                + "are either structs or a single primitive value, "
-                + "but found record at (topic='%s',partition=%d,offset=%d,timestamp=%d) "
-                + "with a %s key and %s key schema.",
-                config.connectorName(),
-                JdbcSinkConfig.DELETE_ENABLED,
-                config.deleteEnabled,
-                JdbcSinkConfig.PK_MODE,
-                config.pkMode.toString().toLowerCase(),
-                record.topic(),
-                record.kafkaPartition(),
-                record.kafkaOffset(),
-                record.timestamp(),
-                StringUtils.valueTypeOrNull(record.key()),
-                StringUtils.schemaTypeOrNull(record.keySchema())
-            )
-        );
-      }
+      throw new ConnectException(
+          String.format(
+              "Sink connector '%s' is configured with '%s=%s' and '%s=%s' and therefore requires "
+              + "records with a non-null key and non-null Struct or primitive key schema, "
+              + "but found record at (topic='%s',partition=%d,offset=%d,timestamp=%d) "
+              + "with a %s key and %s key schema.",
+              config.connectorName(),
+              JdbcSinkConfig.DELETE_ENABLED,
+              config.deleteEnabled,
+              JdbcSinkConfig.PK_MODE,
+              config.pkMode.toString().toLowerCase(),
+              record.topic(),
+              record.kafkaPartition(),
+              record.kafkaOffset(),
+              record.timestamp(),
+              StringUtils.valueTypeOrNull(record.key()),
+              StringUtils.schemaTypeOrNull(record.keySchema())
+          )
+      );
     };
   }
 }

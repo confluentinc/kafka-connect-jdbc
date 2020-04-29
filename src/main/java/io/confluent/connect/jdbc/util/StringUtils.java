@@ -61,6 +61,14 @@ public class StringUtils {
    * @return the loggable string representation
    */
   public static String schemaTypeOrNull(Schema schema) {
-    return schema == null ? null : schema.type().toString();
+    if (schema == null) {
+      return null;
+    }
+    switch (schema.type()) {
+      case STRUCT:
+        return "Struct";
+      default:
+        return schema.type().getName();
+    }
   }
 }

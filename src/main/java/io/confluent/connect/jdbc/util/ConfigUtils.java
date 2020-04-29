@@ -15,7 +15,7 @@
 
 package io.confluent.connect.jdbc.util;
 
-import org.apache.kafka.common.config.AbstractConfig;
+import java.util.Map;
 
 /**
  * Utilities for configuration properties.
@@ -25,11 +25,11 @@ public class ConfigUtils {
   /**
    * Get the connector's name from the configuration.
    *
-   * @param connectorConfig the connector configuration
+   * @param connectorProps the connector properties
    * @return the concatenated string with delimiters
    */
-  public static String connectorName(AbstractConfig connectorConfig) {
-    Object nameValue = connectorConfig.originals().get("name");
+  public static String connectorName(Map<?, ?> connectorProps) {
+    Object nameValue = connectorProps.get("name");
     return nameValue != null ? nameValue.toString() : null;
   }
 }

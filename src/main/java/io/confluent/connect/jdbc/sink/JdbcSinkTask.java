@@ -79,18 +79,20 @@ public class JdbcSinkTask extends SinkTask {
           remainingRetries,
           sqle
       );
-      String sqleAllMessages = "";
+      String sqleAllMessages = "Exception chain:" + System.lineSeparator();
       for (Throwable e : sqle) {
         sqleAllMessages += e + System.lineSeparator();
       }
+      SQLException sqlAllMessagesException = new SQLException(sqleAllMessages);
+      sqlAllMessagesException.setNextException(sqle);
       if (remainingRetries == 0) {
-        throw new ConnectException(new SQLException(sqleAllMessages));
+        throw new ConnectException(sqlAllMessagesException);
       } else {
         writer.closeQuietly();
         initWriter();
         remainingRetries--;
         context.timeout(config.retryBackoffMs);
-        throw new RetriableException(new SQLException(sqleAllMessages));
+        throw new RetriableException(sqlAllMessagesException);
       }
     }
     remainingRetries = config.maxRetries;

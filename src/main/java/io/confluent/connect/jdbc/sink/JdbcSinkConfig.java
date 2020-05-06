@@ -29,6 +29,7 @@ import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 
+import io.confluent.connect.jdbc.util.ConfigUtils;
 import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
 import io.confluent.connect.jdbc.util.DeleteEnabledRecommender;
 import io.confluent.connect.jdbc.util.EnumRecommender;
@@ -451,6 +452,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             RETRY_BACKOFF_MS_DISPLAY
         );
 
+  public final String connectorName;
   public final String connectionUrl;
   public final String connectionUser;
   public final String connectionPassword;
@@ -471,6 +473,7 @@ public class JdbcSinkConfig extends AbstractConfig {
 
   public JdbcSinkConfig(Map<?, ?> props) {
     super(CONFIG_DEF, props);
+    connectorName = ConfigUtils.connectorName(props);
     connectionUrl = getString(CONNECTION_URL);
     connectionUser = getString(CONNECTION_USER);
     connectionPassword = getPasswordValue(CONNECTION_PASSWORD);
@@ -502,6 +505,10 @@ public class JdbcSinkConfig extends AbstractConfig {
       return password.value();
     }
     return null;
+  }
+
+  public String connectorName() {
+    return connectorName;
   }
 
   public EnumSet<TableType> tableTypes() {

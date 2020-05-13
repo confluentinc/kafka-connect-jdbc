@@ -3,4 +3,5 @@ common {
   slackChannel = ''
   upstreamProjects = 'confluentinc/common'
   pintMerge = false
+  testbreakReporting = false
 }

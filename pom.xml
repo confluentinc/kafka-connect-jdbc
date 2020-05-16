@@ -66,7 +66,6 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.package.home>target/${project.artifactId}-${project.version}-package</project.package.home>
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
-        <io.confluent.license-file-generator.version>[6.0.0-0, 6.0.1-0)</io.confluent.license-file-generator.version>
     </properties>
 
     <repositories>

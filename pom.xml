@@ -22,14 +22,14 @@
     <parent>
         <groupId>io.confluent</groupId>
         <artifactId>common</artifactId>
-        <version>[6.0.0-0, 6.0.1-0)</version>
+        <version>6.0.0-1</version>
     </parent>
 
     <groupId>io.confluent</groupId>
     <artifactId>kafka-connect-jdbc</artifactId>
     <packaging>jar</packaging>
     <name>kafka-connect-jdbc</name>
-    <version>6.0.0-0</version>
+    <version>6.0.0-1</version>
     <organization>
         <name>Confluent, Inc.</name>
         <url>http://confluent.io</url>

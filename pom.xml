@@ -66,6 +66,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.package.home>target/${project.artifactId}-${project.version}-package</project.package.home>
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
+        <io.confluent.kafka-connect-jdbc.version>6.0.0-0</io.confluent.kafka-connect-jdbc.version>
     </properties>
 
     <repositories>
@@ -339,7 +340,7 @@
                             <needarch>noarch</needarch>
                             <targetOS>linux</targetOS>
                             <requires>
-                                <require>confluent-common = ${project.parent.version}</require>
+                                <require>confluent-common = ${io.confluent.common.version}</require>
                             </requires>
                             <mappings>
                                 <mapping>

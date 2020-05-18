@@ -353,8 +353,12 @@ public class JdbcSourceTask extends SourceTask {
         final long sleepMs = Math.min(nextUpdate - now, 100);
         if (sleepMs > 0) {
           log.trace("Waiting {} ms to poll {} next", nextUpdate - now, querier.toString());
-          time.sleep(sleepMs);
-          break; // Re-check stop flag before continuing
+          if (running.get()) {
+            time.sleep(sleepMs);
+            continue; // Re-check stop flag before continuing
+          } else {
+            break;
+          }
         }
       }
 

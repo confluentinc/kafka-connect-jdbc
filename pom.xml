@@ -339,7 +339,7 @@
                             <needarch>noarch</needarch>
                             <targetOS>linux</targetOS>
                             <requires>
-                                <require>confluent-common = ${parent.project.version}</require>
+                                <require>confluent-common = ${project.parent.version}</require>
                             </requires>
                             <mappings>
                                 <mapping>

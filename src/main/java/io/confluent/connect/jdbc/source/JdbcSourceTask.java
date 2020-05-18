@@ -354,10 +354,10 @@ public class JdbcSourceTask extends SourceTask {
         if (sleepMs > 0) {
           log.trace("Waiting {} ms to poll {} next", nextUpdate - now, querier.toString());
           time.sleep(sleepMs); //Here the sleep don't get the Stop signal for the thread.
-          if (running.get()) { // Re-check stop flag before continuing
-            continue;  //If the task is still running no problem with it it can continue
+          if (running.get()) {
+            continue;  // Re-check stop flag before continuing
           } else {
-            break; //else before we were waiting the end of the poll (so they were some leak) now we exit if we need to stop before pull any data.
+            break;
           }
         }
       }

@@ -55,7 +55,6 @@
     </scm>
 
     <properties>
-        <confluent.version>${project.version}</confluent.version>
         <derby.version>10.14.2.0</derby.version>
         <commons-io.version>2.4</commons-io.version>
         <kafka.connect.maven.plugin.version>0.11.1</kafka.connect.maven.plugin.version>

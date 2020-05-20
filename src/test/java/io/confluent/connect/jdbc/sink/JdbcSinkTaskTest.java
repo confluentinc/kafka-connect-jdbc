@@ -67,11 +67,13 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
   @Before
   public void setUp() throws IOException, SQLException {
     sqliteHelper.setUp();
+    //mySqlHelper.setUp();
   }
 
   @After
   public void tearDown() throws IOException, SQLException {
     sqliteHelper.tearDown();
+    //mySqlHelper.close();
   }
 
   @Test
@@ -136,6 +138,76 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
             }
         )
     );
+  }
+
+//  @Test
+//  public void putRecordsToMysqlWithRetryTest() {
+//    Map<String, String> props = new HashMap<>();
+//    props.put("connection.url", mySqlHelper.mySqlUri());
+//    props.put("auto.create", "true");
+//    props.put("pk.mode", "kafka");
+//    props.put("pk.fields", "kafka_topic,kafka_partition,kafka_offset");
+//    String timeZoneID = "America/Los_Angeles";
+//    TimeZone timeZone = TimeZone.getTimeZone(timeZoneID);
+//    props.put("db.timezone", timeZoneID);
+//
+//    JdbcSinkTask task = new JdbcSinkTask();
+//    task.initialize(mock(SinkTaskContext.class));
+//    task.start(props);
+//
+//    final Struct struct = new Struct(SCHEMA)
+//        .put("firstName", "Alex")
+//        .put("lastName", "Smith")
+//        .put("bool", true)
+//        .put("short", (short) 1234)
+//        .put("byte", (byte) -32)
+//        .put("long", 12425436L)
+//        .put("float", (float) 2356.3)
+//        .put("double", -2436546.56457)
+//        .put("age", 21)
+//        .put("modified", new Date(1474661402123L));
+//
+//    final String topic = "atopic";
+//
+//    task.put(Collections.singleton(
+//        new SinkRecord(topic, 1, null, null, SCHEMA, struct, 42)
+//    ));
+//
+//    assertEquals(1, mySqlHelper.numOfRecordsInDb("db"));
+//  }
+
+  @Test
+  public void putRecordsToMysqlDBwithRetry() {
+    Map<String, String> props = new HashMap<>();
+    props.put("connection.url", "jdbc:mysql://localhost:3306/db");
+    props.put("auto.create", "true");
+    props.put("pk.mode", "kafka");
+    props.put("pk.fields", "kafka_topic,kafka_partition,kafka_offset");
+    String timeZoneID = "America/Los_Angeles";
+    TimeZone timeZone = TimeZone.getTimeZone(timeZoneID);
+    props.put("db.timezone", timeZoneID);
+
+    JdbcSinkTask task = new JdbcSinkTask();
+    task.initialize(mock(SinkTaskContext.class));
+    task.start(props);
+
+    final Struct struct = new Struct(SCHEMA)
+        .put("firstName", "Alex")
+        .put("lastName", "Smith")
+        .put("bool", true)
+        .put("short", (short) 1234)
+        .put("byte", (byte) -32)
+        .put("long", 12425436L)
+        .put("float", (float) 2356.3)
+        .put("double", -2436546.56457)
+        .put("age", 21)
+        .put("modified", new Date(1474661402123L));
+
+    final String topic = "atopic";
+
+    task.put(Collections.singleton(
+        new SinkRecord(topic, 1, null, null, SCHEMA, struct, 42)
+    ));
   }
 
   @Test

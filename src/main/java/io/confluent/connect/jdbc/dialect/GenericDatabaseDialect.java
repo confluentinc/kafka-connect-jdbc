@@ -1036,7 +1036,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       case Types.NUMERIC:
         if (mapNumerics == NumericMapping.PRECISION_ONLY) {
           log.debug("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
-          if (scale == 0 && precision < 19) { // integer
+          if (scale == 0) { // integer
             Schema schema;
             if (precision > 9) {
               schema = (optional) ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA;
@@ -1052,25 +1052,23 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           }
         } else if (mapNumerics == NumericMapping.BEST_FIT) {
           log.debug("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
-          if (precision < 19) { // fits in primitive data types.
-            if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
-              Schema schema;
-              if (precision > 9) {
-                schema = (optional) ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA;
-              } else if (precision > 4) {
-                schema = (optional) ? Schema.OPTIONAL_INT32_SCHEMA : Schema.INT32_SCHEMA;
-              } else if (precision > 2) {
-                schema = (optional) ? Schema.OPTIONAL_INT16_SCHEMA : Schema.INT16_SCHEMA;
-              } else {
-                schema = (optional) ? Schema.OPTIONAL_INT8_SCHEMA : Schema.INT8_SCHEMA;
-              }
-              builder.field(fieldName, schema);
-              break;
-            } else if (scale > 0) { // floating point - use double in all cases
-              Schema schema = (optional) ? Schema.OPTIONAL_FLOAT64_SCHEMA : Schema.FLOAT64_SCHEMA;
-              builder.field(fieldName, schema);
-              break;
+          if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
+            Schema schema;
+            if (precision > 9) {
+              schema = (optional) ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA;
+            } else if (precision > 4) {
+              schema = (optional) ? Schema.OPTIONAL_INT32_SCHEMA : Schema.INT32_SCHEMA;
+            } else if (precision > 2) {
+              schema = (optional) ? Schema.OPTIONAL_INT16_SCHEMA : Schema.INT16_SCHEMA;
+            } else {
+              schema = (optional) ? Schema.OPTIONAL_INT8_SCHEMA : Schema.INT8_SCHEMA;
             }
+            builder.field(fieldName, schema);
+            break;
+          } else if (scale > 0) { // floating point - use double in all cases
+            Schema schema = (optional) ? Schema.OPTIONAL_FLOAT64_SCHEMA : Schema.FLOAT64_SCHEMA;
+            builder.field(fieldName, schema);
+            break;
           }
         }
         // fallthrough
@@ -1249,7 +1247,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           int precision = defn.precision();
           int scale = defn.scale();
           log.trace("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
-          if (scale == 0 && precision < 19) { // integer
+          if (scale == 0) { // integer
             if (precision > 9) {
               return rs -> rs.getLong(col);
             } else if (precision > 4) {
@@ -1264,20 +1262,19 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           int precision = defn.precision();
           int scale = defn.scale();
           log.trace("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
-          if (precision < 19) { // fits in primitive data types.
-            if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
-              if (precision > 9) {
-                return rs -> rs.getLong(col);
-              } else if (precision > 4) {
-                return rs -> rs.getInt(col);
-              } else if (precision > 2) {
-                return rs -> rs.getShort(col);
-              } else {
-                return rs -> rs.getByte(col);
-              }
-            } else if (scale > 0) { // floating point - use double in all cases
-              return rs -> rs.getDouble(col);
+          // fits in primitive data types.
+          if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
+            if (precision > 9) {
+              return rs -> rs.getLong(col);
+            } else if (precision > 4) {
+              return rs -> rs.getInt(col);
+            } else if (precision > 2) {
+              return rs -> rs.getShort(col);
+            } else {
+              return rs -> rs.getByte(col);
             }
+          } else if (scale > 0) { // floating point - use double in all cases
+            return rs -> rs.getDouble(col);
           }
         }
         // fallthrough

@@ -13,10 +13,10 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package io.confluent.connect.jdbc.sink.integration;
+package io.confluent.connect.jdbc.source.integration;
 
 import io.confluent.connect.jdbc.JdbcSinkConnector;
-import org.apache.kafka.connect.errors.ConnectException;
+import io.confluent.connect.jdbc.JdbcSourceConnector;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.runtime.AbstractStatus;
 import org.apache.kafka.connect.runtime.SinkConnectorConfig;
@@ -31,15 +31,10 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
 @Category(IntegrationTest.class)
@@ -47,10 +42,10 @@ public class BaseConnectorIT {
 
   private static final Logger log = LoggerFactory.getLogger(BaseConnectorIT.class);
 
-  protected static final long CONSUME_MAX_DURATION_MS = TimeUnit.SECONDS.toMillis(300);
-  protected static final long CONNECTOR_STARTUP_DURATION_MS = TimeUnit.SECONDS.toMillis(300);
+  protected static final long CONSUME_MAX_DURATION_MS = TimeUnit.SECONDS.toMillis(100);
+  protected static final long CONNECTOR_STARTUP_DURATION_MS = TimeUnit.SECONDS.toMillis(100);
   protected static final String CONNECTOR_NAME = "mysql-jdbc-sink";
-  protected static final String KAFKA_TOPIC = "mysqlTable";
+  protected static final String KAFKA_TOPIC = "tablesql-mysqlTable";
   protected static final int NUM_RECORDS = 1000;
 
   protected static final String MAX_TASKS = "1";
@@ -112,8 +107,8 @@ public class BaseConnectorIT {
   public Map<String, String> getCommonProps() {
 
     Map<String, String> props = new HashMap<>();
-    props.put(SinkConnectorConfig.TOPICS_CONFIG, KAFKA_TOPIC);
-    props.put("connector.class", JdbcSinkConnector.class.getName());
+//    props.put(SinkConnectorConfig.TOPICS_CONFIG, KAFKA_TOPIC);
+    props.put("connector.class", JdbcSourceConnector.class.getName());
     props.put("connection.password", "password");
     props.put("connection.user", "user");
 
@@ -122,7 +117,10 @@ public class BaseConnectorIT {
     props.put("connection.url", "jdbc:mysql://localhost:3306/db");
     props.put("dialect.name", "MySqlDatabaseDialect");
     props.put("value.converter", JsonConverter.class.getName());
-    props.put("auto.create", "true");
+    props.put("mode", "incrementing");
+    props.put("incrementing.column.name",  "id");
+    props.put("topic.prefix",  "tablesql-");
+
     // license properties
     props.put("confluent.topic.replication.factor", "1");
     props.put("confluent.topic.bootstrap.servers", connect.kafka().bootstrapServers());

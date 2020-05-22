@@ -54,14 +54,18 @@ import java.util.concurrent.TimeUnit;
 public class JdbcSinkConnectorIT extends BaseConnectorIT {
 
   private static final Logger log = LoggerFactory.getLogger(JdbcSinkConnectorIT.class);
-
-
   private Map<String, String> props;
   private static Connection connection;
+  public static DockerComposeContainer compose;
 
 //  @ClassRule
 //  public static DockerComposeContainer compose =
 //      new DockerComposeContainer(new File("src/test/docker/configA/docker-compose.yml"));
+
+  public static void dockerContainer() {
+     compose =
+        new DockerComposeContainer(new File("src/test/docker/configA/docker-compose.yml"));
+  }
 
   @Before
   public void setup() throws Exception {
@@ -74,6 +78,15 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
           "Failed to start the container.");
     }
   }
+
+  public void reConnect() throws InterruptedException {
+    if (connection == null) {
+      TestUtils.waitForCondition(() -> assertConnection().orElse(false),
+          TimeUnit.SECONDS.toMillis(30),
+          "Failed to start the container.");
+    }
+  }
+
 
   private Optional<Boolean> assertConnection() {
     try {
@@ -98,20 +111,23 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
 
   @AfterClass
   public static void closeConnection() throws SQLException {
-    //compose.close();
+    compose.close();
   }
 
   @Test
   public void testWithAutoCreateEnabled() throws Exception {
 
-    dropTableIfExists(KAFKA_TOPIC);
+    //dropTableIfExists(KAFKA_TOPIC);
     sendTestDataToKafka(SCHEMA);
     // Start Connector and wait some specific time to start the connector.
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
-
     Thread.sleep(3000);
-    //Wait Connector to write data into vertica
+    dockerContainer();
+    Thread.sleep(3000);
+    connection = null;
+    reConnect();
+    waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
 
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
         NUM_RECORDS,
@@ -122,6 +138,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
 
     int count = loadFromSQL("VERTICA_TABLE");
     Assert.assertEquals(NUM_RECORDS, count);
+    dropTableIfExists(KAFKA_TOPIC);
   }
 
   private void dropTableIfExists(String kafkaTopic) throws SQLException {
@@ -149,8 +166,6 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
       .field("modified", Timestamp.SCHEMA)
       .build();
 
-  private String TOPIC = "mysqlTopic";
-
   private void sendTestDataToKafka(Schema SCHEMA) throws InterruptedException {
     for (int i = 0; i < NUM_RECORDS; i++) {
       String value = asJson(KAFKA_TOPIC, SCHEMA, i);
@@ -159,6 +174,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
       Thread.sleep(10);
     }
   }
+
   private String asJson(String topic, Schema schema, int i) throws InterruptedException {
       final Struct struct = new Struct(schema)
           .put("firstName", "Alex")

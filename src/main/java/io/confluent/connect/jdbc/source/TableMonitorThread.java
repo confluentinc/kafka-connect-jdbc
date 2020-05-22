@@ -1,23 +1,23 @@
-/**
- * Copyright 2015 Confluent Inc.
+/*
+ * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- **/
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
 
 package io.confluent.connect.jdbc.source;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.util.ConnectionProvider;
+import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 import org.apache.kafka.connect.connector.ConnectorContext;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -26,7 +26,6 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -71,6 +70,7 @@ public class TableMonitorThread extends Thread {
 
   @Override
   public void run() {
+    log.info("Starting thread to monitor tables.");
     while (shutdownLatch.getCount() > 0) {
       try {
         if (updateTables()) {
@@ -82,6 +82,7 @@ public class TableMonitorThread extends Thread {
       }
 
       try {
+        log.debug("Waiting {} ms to check for changed.", pollMs);
         boolean shuttingDown = shutdownLatch.await(pollMs, TimeUnit.MILLISECONDS);
         if (shuttingDown) {
           return;
@@ -130,6 +131,7 @@ public class TableMonitorThread extends Thread {
   }
 
   public void shutdown() {
+    log.info("Shutting down thread monitoring tables.");
     shutdownLatch.countDown();
   }
 
@@ -137,7 +139,7 @@ public class TableMonitorThread extends Thread {
     final List<TableId> tables;
     try {
       tables = dialect.tableIds(connectionProvider.getConnection());
-      log.debug("Got the following tables: " + Arrays.toString(tables.toArray()));
+      log.debug("Got the following tables: {}", tables);
     } catch (SQLException e) {
       log.error(
           "Error while trying to get updated table list, ignoring and waiting for next table poll"
@@ -151,8 +153,8 @@ public class TableMonitorThread extends Thread {
     final List<TableId> filteredTables = new ArrayList<>(tables.size());
     if (whitelist != null) {
       for (TableId table : tables) {
-        String fqn1 = dialect.expressionBuilder().append(table, false).toString();
-        String fqn2 = dialect.expressionBuilder().append(table, true).toString();
+        String fqn1 = dialect.expressionBuilder().append(table, QuoteMethod.NEVER).toString();
+        String fqn2 = dialect.expressionBuilder().append(table, QuoteMethod.ALWAYS).toString();
         if (whitelist.contains(fqn1) || whitelist.contains(fqn2)
             || whitelist.contains(table.tableName())) {
           filteredTables.add(table);
@@ -160,8 +162,8 @@ public class TableMonitorThread extends Thread {
       }
     } else if (blacklist != null) {
       for (TableId table : tables) {
-        String fqn1 = dialect.expressionBuilder().append(table, false).toString();
-        String fqn2 = dialect.expressionBuilder().append(table, true).toString();
+        String fqn1 = dialect.expressionBuilder().append(table, QuoteMethod.NEVER).toString();
+        String fqn2 = dialect.expressionBuilder().append(table, QuoteMethod.ALWAYS).toString();
         if (!(blacklist.contains(fqn1) || blacklist.contains(fqn2)
               || blacklist.contains(table.tableName()))) {
           filteredTables.add(table);
@@ -172,21 +174,29 @@ public class TableMonitorThread extends Thread {
     }
 
     if (!filteredTables.equals(this.tables)) {
-      log.info(
-          "After filtering the tables are: {}",
-          dialect.expressionBuilder()
-                 .appendList()
-                 .delimitedBy(",")
-                 .of(filteredTables)
-      );
       Map<String, List<TableId>> duplicates = filteredTables.stream()
           .collect(Collectors.groupingBy(TableId::tableName))
           .entrySet().stream()
           .filter(entry -> entry.getValue().size() > 1)
           .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
       this.duplicates = duplicates;
-      List<TableId> previousTables = this.tables;
+      final List<TableId> previousTables = this.tables;
       this.tables = filteredTables;
+
+      if (filteredTables.isEmpty()) {
+        log.debug(
+            "Based on the supplied filtering rules, there are no matching tables to read from"
+        );
+      } else {
+        log.debug(
+            "Based on the supplied filtering rules, the tables available to read from include: {}",
+            dialect.expressionBuilder()
+                .appendList()
+                .delimitedBy(",")
+                .of(filteredTables)
+        );
+      }
+
       notifyAll();
       // Only return true if the table list wasn't previously null, i.e. if this was not the
       // first table lookup

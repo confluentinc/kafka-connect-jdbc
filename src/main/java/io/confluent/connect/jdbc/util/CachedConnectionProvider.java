@@ -1,17 +1,16 @@
 /*
- * Copyright 2016 Confluent Inc.
+ * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
  */
 
 package io.confluent.connect.jdbc.util;
@@ -35,6 +34,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
   private final int maxConnectionAttempts;
   private final long connectionRetryBackoff;
 
+  private int count = 0;
   private Connection connection;
 
   public CachedConnectionProvider(
@@ -76,14 +76,20 @@ public class CachedConnectionProvider implements ConnectionProvider {
       Connection connection,
       int timeout
   ) throws SQLException {
-    return provider.isConnectionValid(connection, timeout);
+    try {
+      return provider.isConnectionValid(connection, timeout);
+    } catch (SQLException sqle) {
+      log.debug("Unable to check if the underlying connection is valid", sqle);
+      return false;
+    }
   }
 
   private void newConnection() throws SQLException {
     int attempts = 0;
     while (attempts < maxConnectionAttempts) {
       try {
-        log.debug("Attempting to connect to {}", provider);
+        ++count;
+        log.info("Attempting to open connection #{} to {}", count, provider);
         connection = provider.getConnection();
         onConnect(connection);
         return;
@@ -109,6 +115,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
   public synchronized void close() {
     if (connection != null) {
       try {
+        log.info("Closing connection #{} to {}", count, provider);
         connection.close();
       } catch (SQLException sqle) {
         log.warn("Ignoring error closing connection", sqle);
@@ -117,6 +124,11 @@ public class CachedConnectionProvider implements ConnectionProvider {
         provider.close();
       }
     }
+  }
+
+  @Override
+  public String identifier() {
+    return provider.identifier();
   }
 
   protected void onConnect(Connection connection) throws SQLException {

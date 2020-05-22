@@ -1,17 +1,16 @@
 /*
- * Copyright 2016 Confluent Inc.
+ * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
  */
 
 package io.confluent.connect.jdbc.sink;
@@ -28,8 +27,11 @@ import java.util.Map;
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.TableId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class JdbcDbWriter {
+  private static final Logger log = LoggerFactory.getLogger(JdbcDbWriter.class);
 
   private final JdbcSinkConfig config;
   private final DatabaseDialect dbDialect;
@@ -44,6 +46,7 @@ public class JdbcDbWriter {
     this.cachedConnectionProvider = new CachedConnectionProvider(this.dbDialect) {
       @Override
       protected void onConnect(Connection connection) throws SQLException {
+        log.info("JdbcDbWriter Connected");
         connection.setAutoCommit(false);
       }
     };
@@ -62,7 +65,10 @@ public class JdbcDbWriter {
       }
       buffer.add(record);
     }
-    for (BufferedRecords buffer : bufferByTable.values()) {
+    for (Map.Entry<TableId, BufferedRecords> entry : bufferByTable.entrySet()) {
+      TableId tableId = entry.getKey();
+      BufferedRecords buffer = entry.getValue();
+      log.debug("Flushing records in JDBC Writer for table ID: {}", tableId);
       buffer.flush();
       buffer.close();
     }

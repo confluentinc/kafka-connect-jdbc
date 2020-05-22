@@ -1,17 +1,16 @@
 /*
- * Copyright 2016 Confluent Inc.
+ * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
  */
 
 package io.confluent.connect.jdbc.sink;
@@ -42,7 +41,7 @@ public class JdbcSinkTask extends SinkTask {
 
   @Override
   public void start(final Map<String, String> props) {
-    log.info("Starting task");
+    log.info("Starting JDBC Sink task");
     config = new JdbcSinkConfig(props);
     initWriter();
     remainingRetries = config.maxRetries;
@@ -66,7 +65,7 @@ public class JdbcSinkTask extends SinkTask {
     }
     final SinkRecord first = records.iterator().next();
     final int recordsCount = records.size();
-    log.trace(
+    log.debug(
         "Received {} records. First record kafka coordinates:({}-{}-{}). Writing them to the "
         + "database...",
         recordsCount, first.topic(), first.kafkaPartition(), first.kafkaOffset()
@@ -80,18 +79,20 @@ public class JdbcSinkTask extends SinkTask {
           remainingRetries,
           sqle
       );
-      String sqleAllMessages = "";
+      String sqleAllMessages = "Exception chain:" + System.lineSeparator();
       for (Throwable e : sqle) {
         sqleAllMessages += e + System.lineSeparator();
       }
+      SQLException sqlAllMessagesException = new SQLException(sqleAllMessages);
+      sqlAllMessagesException.setNextException(sqle);
       if (remainingRetries == 0) {
-        throw new ConnectException(new SQLException(sqleAllMessages));
+        throw new ConnectException(sqlAllMessagesException);
       } else {
         writer.closeQuietly();
         initWriter();
         remainingRetries--;
         context.timeout(config.retryBackoffMs);
-        throw new RetriableException(new SQLException(sqleAllMessages));
+        throw new RetriableException(sqlAllMessagesException);
       }
     }
     remainingRetries = config.maxRetries;
@@ -112,7 +113,7 @@ public class JdbcSinkTask extends SinkTask {
           dialect.close();
         }
       } catch (Throwable t) {
-        log.warn("Error while closing the {} dialect: ", dialect, t);
+        log.warn("Error while closing the {} dialect: ", dialect.name(), t);
       } finally {
         dialect = null;
       }

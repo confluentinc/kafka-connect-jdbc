@@ -1,18 +1,17 @@
-/**
- * Copyright 2015 Confluent Inc.
+/*
+ * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- **/
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
 
 package io.confluent.connect.jdbc.source;
 
@@ -28,6 +27,8 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Arrays;
+import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.util.BytesUtil;
 
@@ -142,6 +143,33 @@ public class EmbeddedDerby {
   public void dropTable(String name) throws SQLException {
     Statement stmt = conn.createStatement();
     stmt.execute("DROP TABLE \"" + name + "\"");
+  }
+
+  /**
+   * Shorthand for creating a view over a different table
+   * @param name        name of the table
+   * @param tableName   the name of the table over which the view should select
+   * @param columnNames the names of the columns in the table that should be included in the view
+   */
+  public void createView(String name, String tableName, String... columnNames) throws SQLException {
+    if (columnNames.length == 0) {
+      throw new IllegalArgumentException("Must specify at least one column when creating a view");
+    }
+
+    StringBuilder statement = new StringBuilder();
+    statement.append("CREATE VIEW ");
+    statement.append(quoteCaseSensitive(name));
+    statement.append(" (");
+    statement.append(Arrays.stream(columnNames).collect(Collectors.joining("\", \"", "\"", "\"")));
+    statement.append(") AS SELECT ");
+    statement.append(Arrays.stream(columnNames).collect(Collectors.joining("\", \"", "\"", "\"")));
+    statement.append(" FROM ");
+    statement.append(quoteCaseSensitive(tableName));
+
+    Statement stmt = conn.createStatement();
+    String statementStr = statement.toString();
+    log.debug("Creating view {} in {} with statement {}", name, this.name, statementStr);
+    stmt.execute(statementStr);
   }
 
   public void close() throws SQLException {

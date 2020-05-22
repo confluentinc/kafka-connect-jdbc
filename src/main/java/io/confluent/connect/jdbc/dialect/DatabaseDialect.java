@@ -1,17 +1,16 @@
 /*
  * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
  */
 
 package io.confluent.connect.jdbc.dialect;
@@ -360,6 +359,23 @@ public interface DatabaseDialect extends ConnectionProvider {
       Collection<ColumnId> keyColumns,
       Collection<ColumnId> nonKeyColumns
   );
+
+  /**
+   * Build the DELETE prepared statement expression for the given table and its columns. Variables
+   * for each key column should also appear in the WHERE clause of the statement.
+   *
+   * @param table         the identifier of the table; may not be null
+   * @param keyColumns    the identifiers of the columns in the primary/unique key; may not be null
+   *                      but may be empty
+   * @return the delete statement; may not be null
+   * @throws UnsupportedOperationException if the dialect does not support deletes
+   */
+  default String buildDeleteStatement(
+      TableId table,
+      Collection<ColumnId> keyColumns
+  ) {
+    throw new UnsupportedOperationException();
+  }
 
   /**
    * Build the DROP TABLE statement expression for the given table.

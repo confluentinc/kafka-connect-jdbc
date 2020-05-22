@@ -1,32 +1,42 @@
-/**
- * Copyright 2017 Confluent Inc.
+/*
+ * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
- * in compliance with the License. You may obtain a copy of the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
- * Unless required by applicable law or agreed to in writing, software distributed under the License
- * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
- * or implied. See the License for the specific language governing permissions and limitations under
- * the License.
- **/
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.source.ColumnMapping;
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.ColumnDefinition.Mutability;
+import io.confluent.connect.jdbc.util.ColumnDefinition.Nullability;
+import java.sql.Types;
+import java.time.ZoneOffset;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
+import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -42,13 +52,14 @@ import java.util.TimeZone;
 import java.util.concurrent.ThreadLocalRandom;
 
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
-import io.confluent.connect.jdbc.sink.PreparedStatementBinder;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
+import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
+import static junit.framework.TestCase.assertNotNull;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
@@ -74,6 +85,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     MARCH_15_2001_MIDNIGHT.setTimeZone(TimeZone.getTimeZone("UTC"));
   }
 
+  protected QuoteMethod quoteIdentfiiers;
   protected TableId tableId;
   protected ColumnId columnPK1;
   protected ColumnId columnPK2;
@@ -85,10 +97,12 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
   protected List<ColumnId> columnsAtoD;
   protected List<SinkRecordField> sinkRecordFields;
   protected T dialect;
+  protected int defaultLoginTimeout;
 
   @Before
   public void setup() throws Exception {
-    dialect = createDialect();
+    defaultLoginTimeout = DriverManager.getLoginTimeout();
+    DriverManager.setLoginTimeout(1);
 
     // Set up some data ...
     Schema optionalDateWithDefault = Date.builder().defaultValue(MARCH_15_2001_MIDNIGHT.getTime())
@@ -100,6 +114,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
                                             .optional().build();
     Schema optionalDecimal = Decimal.builder(4).optional().parameter("p1", "v1")
                                     .parameter("p2", "v2").build();
+    Schema booleanWithDefault = SchemaBuilder.bool().defaultValue(true);
     tableId = new TableId(null, null, "myTable");
     columnPK1 = new ColumnId(tableId, "id1");
     columnPK2 = new ColumnId(tableId, "id2");
@@ -118,7 +133,15 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     SinkRecordField f6 = new SinkRecordField(optionalTimeWithDefault, "c6", false);
     SinkRecordField f7 = new SinkRecordField(optionalTsWithDefault, "c7", false);
     SinkRecordField f8 = new SinkRecordField(optionalDecimal, "c8", false);
-    sinkRecordFields = Arrays.asList(f1, f2, f3, f4, f5, f6, f7, f8);
+    SinkRecordField f9 = new SinkRecordField(booleanWithDefault, "c9", false);
+    sinkRecordFields = Arrays.asList(f1, f2, f3, f4, f5, f6, f7, f8, f9);
+
+    dialect = createDialect();
+  }
+
+  @After
+  public void teardown() throws Exception {
+    DriverManager.setLoginTimeout(defaultLoginTimeout);
   }
 
   /**
@@ -144,6 +167,9 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     connProps.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, "test-");
     connProps.putAll(propertiesFromPairs(propertyPairs));
     connProps.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, url);
+    if (quoteIdentfiiers != null) {
+      connProps.put("quote.sql.identifiers", quoteIdentfiiers.toString());
+    }
     return new JdbcSourceConnectorConfig(connProps);
   }
 
@@ -224,6 +250,83 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     assertMapping(expectedSqlType, type, schemaName, schemaProps);
   }
 
+  /**
+   * Verify that column converters are defined and return non-null converter objects.
+   * These are inherited by most dialects from {@link GenericDatabaseDialect}, but cannot live
+   * inside {@link GenericDatabaseDialectTest} because specific dialect tests don't inherit from
+   * the generic test class.
+   */
+  @Test
+  public void testGenericColumnConverters() {
+    assertColumnConverter(Types.BOOLEAN, null, Schema.BOOLEAN_SCHEMA, Boolean.class);
+    assertColumnConverter(Types.BIT, null, Schema.INT8_SCHEMA, Byte.class);
+    assertColumnConverter(Types.TINYINT, null, Schema.INT8_SCHEMA, Byte.class);
+    assertColumnConverter(Types.SMALLINT, null, Schema.INT16_SCHEMA, Short.class);
+    assertColumnConverter(Types.INTEGER, null, Schema.INT32_SCHEMA, Integer.class);
+    assertColumnConverter(Types.BIGINT, null, Schema.INT64_SCHEMA, Long.class);
+    assertColumnConverter(Types.REAL, null, Schema.FLOAT32_SCHEMA, Float.class);
+    assertColumnConverter(Types.FLOAT, null, Schema.FLOAT64_SCHEMA, Double.class);
+    assertColumnConverter(Types.DOUBLE, null, Schema.FLOAT64_SCHEMA, Double.class);
+    assertColumnConverter(Types.NUMERIC, null, Schema.INT8_SCHEMA, Integer.class); // assume 0 precision and 0 scale
+    assertColumnConverter(Types.DECIMAL, null, Decimal.schema(0), Decimal.class);
+    assertColumnConverter(Types.CHAR, null, Schema.STRING_SCHEMA, String.class);
+    assertColumnConverter(Types.VARCHAR, null, Schema.STRING_SCHEMA, String.class);
+    assertColumnConverter(Types.LONGVARCHAR, null, Schema.STRING_SCHEMA, String.class);
+    assertColumnConverter(Types.NCHAR, null, Schema.STRING_SCHEMA, String.class);
+    assertColumnConverter(Types.NVARCHAR, null, Schema.STRING_SCHEMA, String.class);
+    assertColumnConverter(Types.LONGNVARCHAR, null, Schema.STRING_SCHEMA, String.class);
+    assertColumnConverter(Types.CLOB, null, Schema.STRING_SCHEMA, String.class);
+    assertColumnConverter(Types.NCLOB, null, Schema.STRING_SCHEMA, String.class);
+    assertColumnConverter(Types.DATALINK, null, Schema.STRING_SCHEMA, String.class);
+    assertColumnConverter(Types.SQLXML, null, Schema.STRING_SCHEMA, String.class);
+    assertColumnConverter(Types.BINARY, null, Schema.BYTES_SCHEMA, byte[].class);
+    assertColumnConverter(Types.BLOB, null, Schema.BYTES_SCHEMA, byte[].class);
+    assertColumnConverter(Types.VARBINARY, null, Schema.BYTES_SCHEMA, byte[].class);
+    assertColumnConverter(Types.LONGVARBINARY, null, Schema.BYTES_SCHEMA, byte[].class);
+    assertColumnConverter(Types.DATE, null, Date.SCHEMA, java.sql.Date.class);
+    assertColumnConverter(Types.TIME, null, Time.SCHEMA, java.sql.Time.class);
+    assertColumnConverter(Types.TIMESTAMP, null, Timestamp.SCHEMA, java.sql.Timestamp.class);
+  }
+
+
+  protected void assertColumnConverter(
+      int jdbcType,
+      String typeName,
+      Schema schema,
+      Class<?> clazz) {
+    ColumnMapping mapping = new ColumnMapping(
+        new ColumnDefinition(
+            columnA,
+            jdbcType,
+            typeName,
+            clazz.getCanonicalName(),
+            Nullability.NOT_NULL,
+            Mutability.UNKNOWN,
+            0,
+            0,
+            false,
+            1,
+            false,
+            false,
+            false,
+            false,
+            false
+        ),
+        1,
+        new Field(
+            "b",
+            1,
+            schema
+        )
+    );
+    assertNotNull(dialect.columnConverterFor(
+        mapping,
+        mapping.columnDefn(),
+        mapping.columnNumber(),
+        true
+    ));
+  }
+
 
   protected Map<String, String> propertiesFromPairs(String... pairs) {
     Map<String, String> props = new HashMap<>();
@@ -242,7 +345,6 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
       List<String> actual
   ) {
     // TODO: Remove
-    System.out.println(actual);
     assertEquals(expected.length, actual.size());
     for (int i = 0; i != expected.length; ++i) {
       assertEquals(expected[i], actual.get(i));
@@ -275,6 +377,12 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
   protected void verifyCreateOneColOnePk(String expected) {
     assertEquals(expected, dialect.buildCreateTableStatement(tableId, Arrays.asList(
         new SinkRecordField(Schema.INT32_SCHEMA, "pk1", true)
+    )));
+  }
+
+  protected void verifyCreateOneColOnePkAsString(String expected) {
+    assertEquals(expected, dialect.buildCreateTableStatement(tableId, Arrays.asList(
+            new SinkRecordField(Schema.STRING_SCHEMA, "pk1", true)
     )));
   }
 
@@ -313,11 +421,27 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     verifyBindField(++index, Schema.BYTES_SCHEMA, new byte[]{42}).setBytes(index, new byte[]{42});
     verifyBindField(++index, Schema.BYTES_SCHEMA, ByteBuffer.wrap(new byte[]{42})).setBytes(index, new byte[]{42});
     verifyBindField(++index, Schema.STRING_SCHEMA, "yep").setString(index, "yep");
-    verifyBindField(++index, Decimal.schema(0), new BigDecimal("1.5").setScale(0, BigDecimal.ROUND_HALF_EVEN)).setBigDecimal(index, new BigDecimal(2));
-    verifyBindField(++index, Date.SCHEMA, new java.util.Date(0)).setDate(index, new java.sql.Date
-        (0), DateTimeUtils.UTC_CALENDAR.get());
-    verifyBindField(++index, Time.SCHEMA, new java.util.Date(1000)).setTime(index, new java.sql.Time(1000), DateTimeUtils.UTC_CALENDAR.get());
-    verifyBindField(++index, Timestamp.SCHEMA, new java.util.Date(100)).setTimestamp(index, new java.sql.Timestamp(100), DateTimeUtils.UTC_CALENDAR.get());
+    verifyBindField(
+        ++index,
+        Decimal.schema(0),
+        new BigDecimal("1.5").setScale(0, BigDecimal.ROUND_HALF_EVEN)
+    ).setBigDecimal(index, new BigDecimal(2));
+    Calendar utcCalendar = DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone(ZoneOffset.UTC));
+    verifyBindField(
+      ++index,
+      Date.SCHEMA,
+      new java.util.Date(0)
+    ).setDate(index, new java.sql.Date(0), utcCalendar);
+    verifyBindField(
+      ++index,
+      Time.SCHEMA,
+      new java.util.Date(1000)
+    ).setTime(index, new java.sql.Time(1000), utcCalendar);
+    verifyBindField(
+      ++index,
+      Timestamp.SCHEMA,
+      new java.util.Date(100)
+    ).setTimestamp(index, new java.sql.Timestamp(100), utcCalendar);
   }
 
   @Test
@@ -359,6 +483,10 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
   public void bindFieldMapUnsupported() throws SQLException {
     Schema mapSchema = SchemaBuilder.map(Schema.INT8_SCHEMA, Schema.INT8_SCHEMA);
     dialect.bindField(mock(PreparedStatement.class), 1, mapSchema, Collections.emptyMap());
+  }
+
+  protected void assertSanitizedUrl(String url, String expectedSanitizedUrl) {
+    assertEquals(expectedSanitizedUrl, dialect.sanitizedUrl(url));
   }
 
   protected PreparedStatement verifyBindField(int index, Schema schema, Object value)

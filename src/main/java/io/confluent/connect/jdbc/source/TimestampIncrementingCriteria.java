@@ -1,23 +1,27 @@
-/**
+/*
  * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
- * in compliance with the License. You may obtain a copy of the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
- * Unless required by applicable law or agreed to in writing, software distributed under the License
- * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
- * or implied. See the License for the specific language governing permissions and limitations under
- * the License.
- **/
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
 
 package io.confluent.connect.jdbc.source;
 
+import java.util.TimeZone;
 import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.errors.DataException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,6 +31,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
@@ -69,15 +74,18 @@ public class TimestampIncrementingCriteria {
   protected final Logger log = LoggerFactory.getLogger(getClass());
   protected final List<ColumnId> timestampColumns;
   protected final ColumnId incrementingColumn;
+  protected final TimeZone timeZone;
 
 
   public TimestampIncrementingCriteria(
       ColumnId incrementingColumn,
-      List<ColumnId> timestampColumns
+      List<ColumnId> timestampColumns,
+      TimeZone timeZone
   ) {
     this.timestampColumns =
         timestampColumns != null ? timestampColumns : Collections.<ColumnId>emptyList();
     this.incrementingColumn = incrementingColumn;
+    this.timeZone = timeZone;
   }
 
   protected boolean hasTimestampColumns() {
@@ -131,14 +139,14 @@ public class TimestampIncrementingCriteria {
     Timestamp beginTime = values.beginTimetampValue();
     Timestamp endTime = values.endTimetampValue();
     Long incOffset = values.lastIncrementedValue();
-    stmt.setTimestamp(1, endTime, DateTimeUtils.UTC_CALENDAR.get());
-    stmt.setTimestamp(2, beginTime, DateTimeUtils.UTC_CALENDAR.get());
+    stmt.setTimestamp(1, endTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
+    stmt.setTimestamp(2, beginTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
     stmt.setLong(3, incOffset);
-    stmt.setTimestamp(4, beginTime, DateTimeUtils.UTC_CALENDAR.get());
+    stmt.setTimestamp(4, beginTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
     log.debug(
         "Executing prepared statement with start time value = {} end time = {} and incrementing"
-        + " value = {}", DateTimeUtils.formatUtcTimestamp(beginTime),
-        DateTimeUtils.formatUtcTimestamp(endTime), incOffset
+        + " value = {}", DateTimeUtils.formatTimestamp(beginTime, timeZone),
+        DateTimeUtils.formatTimestamp(endTime, timeZone), incOffset
     );
   }
 
@@ -157,10 +165,11 @@ public class TimestampIncrementingCriteria {
   ) throws SQLException {
     Timestamp beginTime = values.beginTimetampValue();
     Timestamp endTime = values.endTimetampValue();
-    stmt.setTimestamp(1, beginTime, DateTimeUtils.UTC_CALENDAR.get());
-    stmt.setTimestamp(2, endTime, DateTimeUtils.UTC_CALENDAR.get());
+    stmt.setTimestamp(1, beginTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
+    stmt.setTimestamp(2, endTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
     log.debug("Executing prepared statement with timestamp value = {} end time = {}",
-              DateTimeUtils.formatUtcTimestamp(beginTime), DateTimeUtils.formatUtcTimestamp(endTime)
+        DateTimeUtils.formatTimestamp(beginTime, timeZone),
+        DateTimeUtils.formatTimestamp(endTime, timeZone)
     );
   }
 
@@ -228,7 +237,13 @@ public class TimestampIncrementingCriteria {
       Struct record
   ) {
     final Long extractedId;
-    final Schema incrementingColumnSchema = schema.field(incrementingColumn.name()).schema();
+    final Field field = schema.field(incrementingColumn.name());
+    if (field == null) {
+      throw new DataException("Incrementing column " + incrementingColumn.name() + " not found in "
+              + schema.fields().stream().map(f -> f.name()).collect(Collectors.joining(",")));
+    }
+
+    final Schema incrementingColumnSchema = field.schema();
     final Object incrementingColumnValue = record.get(incrementingColumn.name());
     if (incrementingColumnValue == null) {
       throw new ConnectException(
@@ -242,6 +257,7 @@ public class TimestampIncrementingCriteria {
       throw new ConnectException(
           "Invalid type for incrementing column: " + incrementingColumnSchema.type());
     }
+    log.trace("Extracted incrementing column value: {}", extractedId);
     return extractedId;
   }
 

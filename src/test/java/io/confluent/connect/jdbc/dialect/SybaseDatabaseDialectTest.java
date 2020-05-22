@@ -1,18 +1,34 @@
-/**
- * Copyright 2017 Confluent Inc.
+/*
+ * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
- * in compliance with the License. You may obtain a copy of the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
- * Unless required by applicable law or agreed to in writing, software distributed under the License
- * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
- * or implied. See the License for the specific language governing permissions and limitations under
- * the License.
- **/
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
 
 package io.confluent.connect.jdbc.dialect;
+
+import static org.junit.Assert.assertEquals;
+
+import java.math.BigDecimal;
+import java.nio.ByteBuffer;
+import java.sql.SQLException;
+import java.time.ZoneOffset;
+import java.util.Calendar;
+import java.util.List;
+import java.util.TimeZone;
+import java.util.concurrent.ThreadLocalRandom;
+
+import io.confluent.connect.jdbc.util.DateTimeUtils;
+import io.confluent.connect.jdbc.util.QuoteMethod;
+import io.confluent.connect.jdbc.util.TableId;
 
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -21,17 +37,6 @@ import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
-
-import java.math.BigDecimal;
-import java.nio.ByteBuffer;
-import java.sql.SQLException;
-import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
-
-import io.confluent.connect.jdbc.util.DateTimeUtils;
-import io.confluent.connect.jdbc.util.TableId;
-
-import static org.junit.Assert.assertEquals;
 
 public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDialect> {
 
@@ -97,14 +102,37 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
 
   @Test
   public void shouldBuildCreateTableStatement() {
-    String expected =
-        "CREATE TABLE \"myTable\" (\n" + "\"c1\" int NOT NULL,\n" + "\"c2\" bigint NOT NULL,\n" +
-        "\"c3\" text NOT NULL,\n" + "\"c4\" text NULL,\n" +
-        "\"c5\" date DEFAULT '2001-03-15',\n" + "\"c6\" time DEFAULT '00:00:00.000',\n" +
-        "\"c7\" datetime DEFAULT '2001-03-15 00:00:00.000',\n" + "\"c8\" decimal(38,4) NULL,\n" +
-        "PRIMARY KEY(\"c1\"))";
-    String sql = dialect.buildCreateTableStatement(tableId, sinkRecordFields);
-    assertEquals(expected, sql);
+    assertEquals(
+        "CREATE TABLE \"myTable\" (\n"
+        + "\"c1\" int NOT NULL,\n"
+        + "\"c2\" bigint NOT NULL,\n"
+        +"\"c3\" text NOT NULL,\n"
+        + "\"c4\" text NULL,\n"
+        + "\"c5\" date DEFAULT '2001-03-15',\n"
+        + "\"c6\" time DEFAULT '00:00:00.000',\n"
+        + "\"c7\" datetime DEFAULT '2001-03-15 00:00:00.000',\n"
+        + "\"c8\" decimal(38,4) NULL,\n"
+        + "\"c9\" bit DEFAULT 1,\n" +
+        "PRIMARY KEY(\"c1\"))",
+        dialect.buildCreateTableStatement(tableId, sinkRecordFields)
+    );
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertEquals(
+        "CREATE TABLE myTable (\n"
+        + "c1 int NOT NULL,\n"
+        + "c2 bigint NOT NULL,\n"
+        + "c3 text NOT NULL,\n"
+        + "c4 text NULL,\n"
+        + "c5 date DEFAULT '2001-03-15',\n"
+        + "c6 time DEFAULT '00:00:00.000',\n"
+        + "c7 datetime DEFAULT '2001-03-15 00:00:00.000',\n"
+        + "c8 decimal(38,4) NULL,\n"
+        + "c9 bit DEFAULT 1,\n" +
+        "PRIMARY KEY(c1))",
+        dialect.buildCreateTableStatement(tableId, sinkRecordFields)
+    );
   }
 
   @Test
@@ -125,11 +153,21 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
   @Test
   public void shouldBuildDropTableStatementWithIfExistsClauseAndSchemaNameInTableId() {
     tableId = new TableId("dbName","dbo", "myTable");
-    String expected = "IF EXISTS (SELECT 1 FROM sysobjects INNER JOIN sysusers ON sysobjects.uid"
-                      + "=sysusers.uid WHERE sysusers.name='dbo' AND sysobjects.name='myTable'"
-                      + " AND type='U') DROP TABLE \"dbName\".\"dbo\".\"myTable\"";
-    String sql = dialect.buildDropTableStatement(tableId, new DropOptions().setIfExists(true));
-    assertEquals(expected, sql);
+    assertEquals(
+        "IF EXISTS (SELECT 1 FROM sysobjects INNER JOIN sysusers ON sysobjects.uid"
+        + "=sysusers.uid WHERE sysusers.name='dbo' AND sysobjects.name='myTable'"
+        + " AND type='U') DROP TABLE \"dbName\".\"dbo\".\"myTable\"",
+        dialect.buildDropTableStatement(tableId, new DropOptions().setIfExists(true))
+    );
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertEquals(
+        "IF EXISTS (SELECT 1 FROM sysobjects INNER JOIN sysusers ON sysobjects.uid"
+        + "=sysusers.uid WHERE sysusers.name='dbo' AND sysobjects.name='myTable'"
+        + " AND type='U') DROP TABLE dbName.dbo.myTable",
+        dialect.buildDropTableStatement(tableId, new DropOptions().setIfExists(true))
+    );
   }
 
   @Test
@@ -139,23 +177,40 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
         "ALTER TABLE \"myTable\" ADD\n" + "\"c1\" int NOT NULL,\n" + "\"c2\" bigint NOT NULL,\n" +
         "\"c3\" text NOT NULL,\n" + "\"c4\" text NULL,\n" +
         "\"c5\" date DEFAULT '2001-03-15',\n" + "\"c6\" time DEFAULT '00:00:00.000',\n" +
-        "\"c7\" datetime DEFAULT '2001-03-15 00:00:00.000',\n" + "\"c8\" decimal(38,4) NULL"};
+        "\"c7\" datetime DEFAULT '2001-03-15 00:00:00.000',\n" + "\"c8\" decimal(38,4) NULL,\n" +
+        "\"c9\" bit DEFAULT 1"};
     assertStatements(sql, statements);
   }
 
   @Test
   public void shouldBuildUpsertStatement() {
-    String expected = "merge into \"myTable\" with (HOLDLOCK) AS target using (select ? AS \"id1\", ?" +
-                      " AS \"id2\", ? AS \"columnA\", ? AS \"columnB\", ? AS \"columnC\", ? AS \"columnD\")" +
-                      " AS incoming on (target.\"id1\"=incoming.\"id1\" and target.\"id2\"=incoming" +
-                      ".\"id2\") when matched then update set \"columnA\"=incoming.\"columnA\"," +
-                      "\"columnB\"=incoming.\"columnB\",\"columnC\"=incoming.\"columnC\"," +
-                      "\"columnD\"=incoming.\"columnD\" when not matched then insert (\"columnA\", " +
-                      "\"columnB\", \"columnC\", \"columnD\", \"id1\", \"id2\") values (incoming.\"columnA\"," +
-                      "incoming.\"columnB\",incoming.\"columnC\",incoming.\"columnD\",incoming.\"id1\"," +
-                      "incoming.\"id2\");";
-    String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD);
-    assertEquals(expected, sql);
+    assertEquals(
+        "merge into \"myTable\" with (HOLDLOCK) AS target using (select ? AS \"id1\", ?" +
+        " AS \"id2\", ? AS \"columnA\", ? AS \"columnB\", ? AS \"columnC\", ? AS \"columnD\")" +
+        " AS incoming on (target.\"id1\"=incoming.\"id1\" and target.\"id2\"=incoming" +
+        ".\"id2\") when matched then update set \"columnA\"=incoming.\"columnA\"," +
+        "\"columnB\"=incoming.\"columnB\",\"columnC\"=incoming.\"columnC\"," +
+        "\"columnD\"=incoming.\"columnD\" when not matched then insert (\"columnA\", " +
+        "\"columnB\", \"columnC\", \"columnD\", \"id1\", \"id2\") values (incoming.\"columnA\"," +
+        "incoming.\"columnB\",incoming.\"columnC\",incoming.\"columnD\",incoming.\"id1\"," +
+        "incoming.\"id2\");",
+        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
+    );
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertEquals(
+        "merge into myTable with (HOLDLOCK) AS target using (select ? AS id1, ?" +
+        " AS id2, ? AS columnA, ? AS columnB, ? AS columnC, ? AS columnD)" +
+        " AS incoming on (target.id1=incoming.id1 and target.id2=incoming" +
+        ".id2) when matched then update set columnA=incoming.columnA," +
+        "columnB=incoming.columnB,columnC=incoming.columnC," +
+        "columnD=incoming.columnD when not matched then insert (columnA, " +
+        "columnB, columnC, columnD, id1, id2) values (incoming.columnA," +
+        "incoming.columnB,incoming.columnC,incoming.columnD,incoming.id1," +
+        "incoming.id2);",
+        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
+    );
   }
 
   @Test
@@ -177,6 +232,13 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
         "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "\"pk1\" int NOT NULL," +
         System.lineSeparator() + "\"pk2\" int NOT NULL," + System.lineSeparator() +
         "\"col1\" int NOT NULL," + System.lineSeparator() + "PRIMARY KEY(\"pk1\",\"pk2\"))");
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+    verifyCreateThreeColTwoPk(
+        "CREATE TABLE myTable (" + System.lineSeparator() + "pk1 int NOT NULL," +
+        System.lineSeparator() + "pk2 int NOT NULL," + System.lineSeparator() +
+        "col1 int NOT NULL," + System.lineSeparator() + "PRIMARY KEY(pk1,pk2))");
   }
 
   @Test
@@ -202,8 +264,28 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
         ".\"address\" when not matched then insert " +
         "(\"name\", \"salary\", \"address\", \"id\") values (incoming.\"name\",incoming" +
         ".\"salary\",incoming.\"address\",incoming.\"id\");",
-        dialect.buildUpsertQueryStatement(customer, columns(customer, "id"),
-                                          columns(customer, "name", "salary", "address")));
+        dialect.buildUpsertQueryStatement(
+            customer,
+            columns(customer, "id"),
+            columns(customer, "name", "salary", "address")
+        )
+    );
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertEquals(
+        "merge into Customer with (HOLDLOCK) AS target using (select ? AS id, ? AS name, ? " +
+        "AS salary, ? AS address) AS incoming on (target.id=incoming.id) when matched then update set " +
+        "name=incoming.name,salary=incoming.salary,address=incoming" +
+        ".address when not matched then insert " +
+        "(name, salary, address, id) values (incoming.name,incoming" +
+        ".salary,incoming.address,incoming.id);",
+        dialect.buildUpsertQueryStatement(
+            customer,
+            columns(customer, "id"),
+            columns(customer, "name", "salary", "address")
+        )
+    );
   }
 
   @Test
@@ -217,8 +299,29 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
         "\"pages\"=incoming.\"pages\" when not " +
         "matched then insert (\"ISBN\", \"year\", \"pages\", \"author\", \"title\") values (incoming" +
         ".\"ISBN\",incoming.\"year\"," + "incoming.\"pages\",incoming.\"author\",incoming.\"title\");",
-        dialect.buildUpsertQueryStatement(book, columns(book, "author", "title"),
-                                          columns(book, "ISBN", "year", "pages")));
+        dialect.buildUpsertQueryStatement(
+            book,
+            columns(book, "author", "title"),
+            columns(book, "ISBN", "year", "pages")
+        )
+    );
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertEquals(
+        "merge into Book with (HOLDLOCK) AS target using (select ? AS author, ? AS title, ?" +
+        " AS ISBN, ? AS year, ? AS pages)" +
+        " AS incoming on (target.author=incoming.author and target.title=incoming.title)" +
+        " when matched then update set ISBN=incoming.ISBN,year=incoming.year," +
+        "pages=incoming.pages when not " +
+        "matched then insert (ISBN, year, pages, author, title) values (incoming" +
+        ".ISBN,incoming.year," + "incoming.pages,incoming.author,incoming.title);",
+        dialect.buildUpsertQueryStatement(
+            book,
+            columns(book, "author", "title"),
+            columns(book, "ISBN", "year", "pages")
+        )
+    );
   }
 
   @Test
@@ -237,9 +340,40 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
     verifyBindField(++index, Schema.BYTES_SCHEMA, ByteBuffer.wrap(new byte[]{42})).setBytes(index, new byte[]{42});
     verifyBindField(++index, Schema.STRING_SCHEMA, "yep").setString(index, "yep");
     verifyBindField(++index, Decimal.schema(0), new BigDecimal("1.5").setScale(0, BigDecimal.ROUND_HALF_EVEN)).setBigDecimal(index, new BigDecimal(2));
-    verifyBindField(++index, Date.SCHEMA, new java.util.Date(0)).setDate(index, new java.sql.Date
-        (0), DateTimeUtils.UTC_CALENDAR.get());
-    verifyBindField(++index, Time.SCHEMA, new java.util.Date(1000)).setTime(index, new java.sql.Time(1000), DateTimeUtils.UTC_CALENDAR.get());
-    verifyBindField(++index, Timestamp.SCHEMA, new java.util.Date(100)).setTimestamp(index, new java.sql.Timestamp(100), DateTimeUtils.UTC_CALENDAR.get());
+    Calendar utcCalendar = DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone(ZoneOffset.UTC));
+    verifyBindField(
+      ++index,
+      Date.SCHEMA,
+      new java.util.Date(0)
+    ).setDate(index, new java.sql.Date(0), utcCalendar);
+    verifyBindField(
+      ++index,
+      Time.SCHEMA,
+      new java.util.Date(1000)
+    ).setTime(index, new java.sql.Time(1000), utcCalendar);
+    verifyBindField(
+      ++index,
+      Timestamp.SCHEMA,
+      new java.util.Date(100)
+    ).setTimestamp(index, new java.sql.Timestamp(100), utcCalendar);
+  }
+
+  @Test
+  public void shouldSanitizeUrlWithoutCredentialsInProperties() {
+    assertSanitizedUrl(
+        "jdbc:jtds:sybase://something?key1=value1&key2=value2&key3=value3&&other=value",
+        "jdbc:jtds:sybase://something?key1=value1&key2=value2&key3=value3&&other=value"
+
+    );
+  }
+
+  @Test
+  public void shouldSanitizeUrlWithCredentialsInUrlProperties() {
+    assertSanitizedUrl(
+        "jdbc:jtds:sybase://something?password=secret&key1=value1&key2=value2&key3=value3&"
+        + "user=smith&password=secret&other=value",
+        "jdbc:jtds:sybase://something?password=****&key1=value1&key2=value2&key3=value3&"
+        + "user=smith&password=****&other=value"
+    );
   }
 }

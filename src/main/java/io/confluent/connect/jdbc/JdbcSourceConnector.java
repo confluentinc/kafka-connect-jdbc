@@ -1,18 +1,17 @@
-/**
- * Copyright 2015 Confluent Inc.
+/*
+ * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- **/
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
 
 package io.confluent.connect.jdbc;
 
@@ -67,6 +66,7 @@ public class JdbcSourceConnector extends SourceConnector {
 
   @Override
   public void start(Map<String, String> properties) throws ConnectException {
+    log.info("Starting JDBC Source Connector");
     try {
       configProperties = properties;
       config = new JdbcSourceConnectorConfig(configProperties);
@@ -86,11 +86,7 @@ public class JdbcSourceConnector extends SourceConnector {
         dbUrl,
         config
     );
-    cachedConnectionProvider = new CachedConnectionProvider(
-        dialect,
-        maxConnectionAttempts,
-        connectionRetryBackoff
-    );
+    cachedConnectionProvider = connectionProvider(maxConnectionAttempts, connectionRetryBackoff);
 
     // Initial connection attempt
     cachedConnectionProvider.getConnection();
@@ -128,6 +124,10 @@ public class JdbcSourceConnector extends SourceConnector {
     tableMonitorThread.start();
   }
 
+  protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
+    return new CachedConnectionProvider(dialect, maxConnAttempts, retryBackoff);
+  }
+
   @Override
   public Class<? extends Task> taskClass() {
     return JdbcSourceTask.class;
@@ -136,26 +136,37 @@ public class JdbcSourceConnector extends SourceConnector {
   @Override
   public List<Map<String, String>> taskConfigs(int maxTasks) {
     String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
+    List<Map<String, String>> taskConfigs;
     if (!query.isEmpty()) {
-      List<Map<String, String>> taskConfigs = new ArrayList<>(1);
       Map<String, String> taskProps = new HashMap<>(configProperties);
       taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
-      taskConfigs.add(taskProps);
+      taskConfigs = Collections.singletonList(taskProps);
+      log.trace("Producing task configs with custom query");
       return taskConfigs;
     } else {
       List<TableId> currentTables = tableMonitorThread.tables();
-      int numGroups = Math.min(currentTables.size(), maxTasks);
-      List<List<TableId>> tablesGrouped = ConnectorUtils.groupPartitions(currentTables, numGroups);
-      List<Map<String, String>> taskConfigs = new ArrayList<>(tablesGrouped.size());
-      for (List<TableId> taskTables : tablesGrouped) {
-        Map<String, String> taskProps = new HashMap<>(configProperties);
-        ExpressionBuilder builder = dialect.expressionBuilder();
-        builder.appendList().delimitedBy(",").of(taskTables);
-        taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, builder.toString());
-        taskConfigs.add(taskProps);
+      if (currentTables.isEmpty()) {
+        taskConfigs = Collections.emptyList();
+        log.warn("No tasks will be run because no tables were found");
+      } else {
+        int numGroups = Math.min(currentTables.size(), maxTasks);
+        List<List<TableId>> tablesGrouped =
+            ConnectorUtils.groupPartitions(currentTables, numGroups);
+        taskConfigs = new ArrayList<>(tablesGrouped.size());
+        for (List<TableId> taskTables : tablesGrouped) {
+          Map<String, String> taskProps = new HashMap<>(configProperties);
+          ExpressionBuilder builder = dialect.expressionBuilder();
+          builder.appendList().delimitedBy(",").of(taskTables);
+          taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, builder.toString());
+          taskConfigs.add(taskProps);
+        }
+        log.trace(
+            "Producing task configs with no custom query for tables: {}",
+            currentTables.toArray()
+        );
       }
-      return taskConfigs;
     }
+    return taskConfigs;
   }
 
   @Override

@@ -1,17 +1,16 @@
 /*
  * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
  */
 
 package io.confluent.connect.jdbc.dialect;
@@ -169,9 +168,9 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     final Transform<ColumnId> transform = (builder, col) -> {
       builder.append(table)
              .append(".")
-             .appendIdentifierQuoted(col.name())
+             .appendColumnName(col.name())
              .append("=incoming.")
-             .appendIdentifierQuoted(col.name());
+             .appendColumnName(col.name());
     };
 
     ExpressionBuilder builder = expressionBuilder();
@@ -209,4 +208,11 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     return builder.toString();
   }
 
+  @Override
+  protected String sanitizedUrl(String url) {
+    // Oracle can also have ":username/password@" after the driver type
+    return super.sanitizedUrl(url)
+                .replaceAll("(:thin:[^/]*)/([^@]*)@", "$1/****@")
+                .replaceAll("(:oci[^:]*:[^/]*)/([^@]*)@", "$1/****@");
+  }
 }

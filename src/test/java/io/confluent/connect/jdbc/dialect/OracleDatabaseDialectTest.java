@@ -1,16 +1,17 @@
-/**
- * Copyright 2017 Confluent Inc.
+/*
+ * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
- * in compliance with the License. You may obtain a copy of the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
- * Unless required by applicable law or agreed to in writing, software distributed under the License
- * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
- * or implied. See the License for the specific language governing permissions and limitations under
- * the License.
- **/
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
 
 package io.confluent.connect.jdbc.dialect;
 
@@ -22,8 +23,7 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
-import java.util.List;
-
+import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
@@ -96,21 +96,49 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
                       "\"c4\" CLOB NULL,\n" + "\"c5\" DATE DEFAULT '2001-03-15',\n" +
                       "\"c6\" DATE DEFAULT '00:00:00.000',\n" +
                       "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" +
-                      "\"c8\" NUMBER(*,4) NULL,\n" + "PRIMARY KEY(\"c1\"))";
+                      "\"c8\" NUMBER(*,4) NULL,\n" +
+                      "\"c9\" NUMBER(1,0) DEFAULT 1,\n" +
+                      "PRIMARY KEY(\"c1\"))";
     String sql = dialect.buildCreateTableStatement(tableId, sinkRecordFields);
     assertEquals(expected, sql);
   }
 
   @Test
   public void shouldBuildAlterTableStatement() {
-    List<String> statements = dialect.buildAlterTable(tableId, sinkRecordFields);
-    String[] sql = {"ALTER TABLE \"myTable\" ADD(\n" + "\"c1\" NUMBER(10,0) NOT NULL,\n" +
-                    "\"c2\" NUMBER(19,0) NOT NULL,\n" + "\"c3\" CLOB NOT NULL,\n" +
-                    "\"c4\" CLOB NULL,\n" + "\"c5\" DATE DEFAULT '2001-03-15',\n" +
-                    "\"c6\" DATE DEFAULT '00:00:00.000',\n" +
-                    "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" +
-                    "\"c8\" NUMBER(*,4) NULL)"};
-    assertStatements(sql, statements);
+    assertStatements(
+        new String[]{
+            "ALTER TABLE \"myTable\" ADD(\n" +
+            "\"c1\" NUMBER(10,0) NOT NULL,\n" +
+            "\"c2\" NUMBER(19,0) NOT NULL,\n" +
+            "\"c3\" CLOB NOT NULL,\n" +
+            "\"c4\" CLOB NULL,\n" +
+            "\"c5\" DATE DEFAULT '2001-03-15',\n" +
+            "\"c6\" DATE DEFAULT '00:00:00.000',\n" +
+            "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" +
+            "\"c8\" NUMBER(*,4) NULL,\n" +
+            "\"c9\" NUMBER(1,0) DEFAULT 1)"
+        },
+        dialect.buildAlterTable(tableId, sinkRecordFields)
+    );
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+
+    assertStatements(
+        new String[]{
+            "ALTER TABLE myTable ADD(\n" +
+            "c1 NUMBER(10,0) NOT NULL,\n" +
+            "c2 NUMBER(19,0) NOT NULL,\n" +
+            "c3 CLOB NOT NULL,\n" +
+            "c4 CLOB NULL,\n" +
+            "c5 DATE DEFAULT '2001-03-15',\n" +
+            "c6 DATE DEFAULT '00:00:00.000',\n" +
+            "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" +
+            "c8 NUMBER(*,4) NULL,\n" +
+            "c9 NUMBER(1,0) DEFAULT 1)"
+        },
+        dialect.buildAlterTable(tableId, sinkRecordFields)
+    );
   }
 
   @Test
@@ -150,6 +178,15 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
         System.lineSeparator() + "\"pk2\" NUMBER(10,0) NOT NULL," + System.lineSeparator() +
         "\"col1\" NUMBER(10,0) NOT NULL," + System.lineSeparator() +
         "PRIMARY KEY(\"pk1\",\"pk2\"))");
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+
+    verifyCreateThreeColTwoPk(
+        "CREATE TABLE myTable (" + System.lineSeparator() + "pk1 NUMBER(10,0) NOT NULL," +
+        System.lineSeparator() + "pk2 NUMBER(10,0) NOT NULL," + System.lineSeparator() +
+        "col1 NUMBER(10,0) NOT NULL," + System.lineSeparator() +
+        "PRIMARY KEY(pk1,pk2))");
   }
 
   @Test
@@ -182,4 +219,25 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
     assertEquals(expected, actual);
   }
 
+  @Test
+  public void shouldSanitizeUrlWithCredentialsInHosts() {
+    assertSanitizedUrl(
+        "jdbc:oracle:thin:sandy/secret@myhost:1111/db?key1=value1",
+        "jdbc:oracle:thin:sandy/****@myhost:1111/db?key1=value1"
+    );
+    assertSanitizedUrl(
+        "jdbc:oracle:oci8:sandy/secret@host=myhost1,port=1111/db?key1=value1",
+        "jdbc:oracle:oci8:sandy/****@host=myhost1,port=1111/db?key1=value1"
+    );
+  }
+
+  @Test
+  public void shouldSanitizeUrlWithCredentialsInUrlProperties() {
+    assertSanitizedUrl(
+        "jdbc:oracle:thin:@myhost:1111/db?password=secret&key1=value1&"
+        + "key2=value2&key3=value3&user=smith&password=secret&other=value",
+        "jdbc:oracle:thin:@myhost:1111/db?password=****&key1=value1&"
+        + "key2=value2&key3=value3&user=smith&password=****&other=value"
+    );
+  }
 }

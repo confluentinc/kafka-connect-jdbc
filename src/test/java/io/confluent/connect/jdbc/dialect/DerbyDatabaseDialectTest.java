@@ -1,16 +1,17 @@
-/**
- * Copyright 2017 Confluent Inc.
+/*
+ * Copyright 2018 Confluent Inc.
  *
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
- * in compliance with the License. You may obtain a copy of the License at
+ * Licensed under the Confluent Community License (the "License"); you may not use
+ * this file except in compliance with the License.  You may obtain a copy of the
+ * License at
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.confluent.io/confluent-community-license
  *
- * Unless required by applicable law or agreed to in writing, software distributed under the License
- * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
- * or implied. See the License for the specific language governing permissions and limitations under
- * the License.
- **/
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations under the License.
+ */
 
 package io.confluent.connect.jdbc.dialect;
 
@@ -25,6 +26,7 @@ import org.junit.Test;
 
 import java.util.List;
 
+import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
@@ -95,7 +97,24 @@ public class DerbyDatabaseDialectTest extends BaseDialectTest<DerbyDatabaseDiale
         + "\"c3\" VARCHAR(32672) NOT NULL,\n" + "\"c4\" VARCHAR(32672) NULL,\n"
         + "\"c5\" DATE DEFAULT '2001-03-15',\n" + "\"c6\" TIME DEFAULT '00:00:00.000',\n"
         + "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" + "\"c8\" DECIMAL(31,4) NULL,\n"
+        + "\"c9\" SMALLINT DEFAULT 1,\n"
         + "PRIMARY KEY(\"c1\"))";
+    String sql = dialect.buildCreateTableStatement(tableId, sinkRecordFields);
+    assertEquals(expected, sql);
+  }
+
+  @Test
+  public void shouldBuildCreateQueryStatementWithNoIdentifierQuoting() {
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+
+    String expected =
+        "CREATE TABLE myTable (\nc1 INTEGER NOT NULL,\nc2 BIGINT NOT NULL,\n"
+        + "c3 VARCHAR(32672) NOT NULL,\nc4 VARCHAR(32672) NULL,\n"
+        + "c5 DATE DEFAULT '2001-03-15',\nc6 TIME DEFAULT '00:00:00.000',\n"
+        + "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\nc8 DECIMAL(31,4) NULL,\n"
+        + "c9 SMALLINT DEFAULT 1,\n"
+        + "PRIMARY KEY(c1))";
     String sql = dialect.buildCreateTableStatement(tableId, sinkRecordFields);
     assertEquals(expected, sql);
   }
@@ -109,7 +128,27 @@ public class DerbyDatabaseDialectTest extends BaseDialectTest<DerbyDatabaseDiale
                     + "ADD \"c5\" DATE DEFAULT '2001-03-15',\n"
                     + "ADD \"c6\" TIME DEFAULT '00:00:00.000',\n"
                     + "ADD \"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
-                    + "ADD \"c8\" DECIMAL(31,4) NULL"};
+                    + "ADD \"c8\" DECIMAL(31,4) NULL,\n"
+                    + "ADD \"c9\" SMALLINT DEFAULT 1"};
+    assertStatements(sql, statements);
+  }
+
+  @Test
+  public void shouldBuildAlterTableStatementWithNoIdentifierQuoting() {
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+
+    List<String> statements = dialect.buildAlterTable(tableId, sinkRecordFields);
+    String[] sql = {"ALTER TABLE myTable \n"
+                    + "ADD c1 INTEGER NOT NULL,\n"
+                    + "ADD c2 BIGINT NOT NULL,\n"
+                    + "ADD c3 VARCHAR(32672) NOT NULL,\n"
+                    + "ADD c4 VARCHAR(32672) NULL,\n"
+                    + "ADD c5 DATE DEFAULT '2001-03-15',\n"
+                    + "ADD c6 TIME DEFAULT '00:00:00.000',\n"
+                    + "ADD c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
+                    + "ADD c8 DECIMAL(31,4) NULL,\n"
+                    + "ADD c9 SMALLINT DEFAULT 1"};
     assertStatements(sql, statements);
   }
 
@@ -175,11 +214,11 @@ public class DerbyDatabaseDialectTest extends BaseDialectTest<DerbyDatabaseDiale
         "merge into \"myTable\" using (values(?, ?, ?, ?, ?, ?)) "
         + "as DAT(\"id1\", \"id2\", \"columnA\", \"columnB\", \"columnC\", \"columnD\") "
         + "on \"myTable\".\"id1\"=DAT.\"id1\" and \"myTable\".\"id2\"=DAT.\"id2\" "
-        + "when matched then update "
-        + "set \"myTable\".\"columnA\"=DAT.\"columnA\", "
-        + "set \"myTable\".\"columnB\"=DAT.\"columnB\", "
-        + "set \"myTable\".\"columnC\"=DAT.\"columnC\", "
-        + "set \"myTable\".\"columnD\"=DAT.\"columnD\" "
+        + "when matched then update set "
+        + "\"myTable\".\"columnA\"=DAT.\"columnA\", "
+        + "\"myTable\".\"columnB\"=DAT.\"columnB\", "
+        + "\"myTable\".\"columnC\"=DAT.\"columnC\", "
+        + "\"myTable\".\"columnD\"=DAT.\"columnD\" "
         + "when not matched then "
         + "insert(\"myTable\".\"columnA\",\"myTable\".\"columnB\",\"myTable\".\"columnC\","
         + "\"myTable\".\"columnD\",\"myTable\".\"id1\",\"myTable\""
@@ -197,7 +236,7 @@ public class DerbyDatabaseDialectTest extends BaseDialectTest<DerbyDatabaseDiale
     String expected = "merge into \"actor\" using (values(?, ?, ?, ?)) as DAT(\"actor_id\", "
                       + "\"first_name\", \"last_name\", \"score\") on \"actor\".\"actor_id\"=DAT"
                       + ".\"actor_id\" when matched then update set \"actor\".\"first_name\"=DAT"
-                      + ".\"first_name\", set \"actor\".\"last_name\"=DAT.\"last_name\", set "
+                      + ".\"first_name\", \"actor\".\"last_name\"=DAT.\"last_name\", "
                       + "\"actor\".\"score\"=DAT.\"score\" when not matched then insert(\"actor\""
                       + ".\"first_name\",\"actor\".\"last_name\",\"actor\".\"score\",\"actor\""
                       + ".\"actor_id\") values(DAT.\"first_name\",DAT.\"last_name\",DAT"
@@ -219,5 +258,39 @@ public class DerbyDatabaseDialectTest extends BaseDialectTest<DerbyDatabaseDiale
     String sql = dialect.buildUpsertQueryStatement(
         actor, columns(actor, "actor_id"), columns(actor));
     assertEquals(expected, sql);
+  }
+
+  @Test
+  public void upsertOnlyKeyColsWithNoIdentifiernQuoting() {
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+
+    TableId actor = tableId("actor");
+    String expected = "merge into actor using (values(?)) as DAT(actor_id) on actor"
+                      + ".actor_id=DAT.actor_id when not matched then insert(actor"
+                      + ".actor_id) values(DAT.actor_id)";
+    String sql = dialect.buildUpsertQueryStatement(
+        actor, columns(actor, "actor_id"), columns(actor));
+    assertEquals(expected, sql);
+  }
+
+  @Test
+  public void shouldSanitizeUrlWithoutCredentialsInProperties() {
+    assertSanitizedUrl(
+        "jdbc:derby:sample;user=jill;other=toFetchAPail",
+        "jdbc:derby:sample;user=jill;other=toFetchAPail"
+    );
+  }
+
+  @Test
+  public void shouldSanitizeUrlWithCredentialsInUrlProperties() {
+    assertSanitizedUrl(
+        "jdbc:derby:sample;user=jill;password=toFetchAPail",
+        "jdbc:derby:sample;user=jill;password=****"
+    );
+    assertSanitizedUrl(
+        "jdbc:derby:sample;password=toFetchAPail;user=jill",
+        "jdbc:derby:sample;password=****;user=jill"
+    );
   }
 }

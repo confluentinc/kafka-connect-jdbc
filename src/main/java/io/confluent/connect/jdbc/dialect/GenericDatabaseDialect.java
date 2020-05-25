@@ -1279,8 +1279,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
             }
           } else if (scale > 0) { // floating point - use double in all cases
             return rs -> rs.getBigDecimal(col);
-          }
-          else{
+          } else {
             return rs -> rs.getBigDecimal(col);
           }
         }

@@ -15,12 +15,15 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import java.math.BigDecimal;
 import java.sql.Types;
 import java.util.Arrays;
 
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 
+import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
+import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
@@ -40,10 +43,12 @@ public class GenericDatabaseDialectTypeTest extends BaseDialectTypeTest<GenericD
 
             // integers - non optional
             // Parameter range 5-8
+
             {Schema.Type.INT64, LONG, JdbcSourceConnectorConfig.NumericMapping.PRECISION_ONLY, NOT_NULLABLE, Types.NUMERIC, 18, 0 },
             {Schema.Type.INT32, INT, JdbcSourceConnectorConfig.NumericMapping.PRECISION_ONLY, NOT_NULLABLE, Types.NUMERIC, 8, 0,},
             {Schema.Type.INT16, SHORT, JdbcSourceConnectorConfig.NumericMapping.PRECISION_ONLY, NOT_NULLABLE, Types.NUMERIC, 3, 0,},
             {Schema.Type.INT8, BYTE, JdbcSourceConnectorConfig.NumericMapping.PRECISION_ONLY, NOT_NULLABLE, Types.NUMERIC, 1, 0,},
+            {Schema.Type.INT64, LONG, JdbcSourceConnectorConfig.NumericMapping.PRECISION_ONLY, NOT_NULLABLE, Types.NUMERIC, 20, 0 },
 
             // integers - optional
             // Parameter range 9-12
@@ -94,6 +99,7 @@ public class GenericDatabaseDialectTypeTest extends BaseDialectTypeTest<GenericD
             }
     );
   }
+
 
   @Override
   protected GenericDatabaseDialect createDialect() {

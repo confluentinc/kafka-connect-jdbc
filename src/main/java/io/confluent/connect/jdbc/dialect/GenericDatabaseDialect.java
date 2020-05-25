@@ -1066,12 +1066,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
             builder.field(fieldName, schema);
             break;
           } else if (scale > 0) { // floating point - use double in all cases
-            Schema schema = (optional) ? Schema.OPTIONAL_FLOAT64_SCHEMA : Schema.FLOAT64_SCHEMA;
+            Schema schema = (optional) ? Decimal.schema(scale) : Decimal.schema(scale);
             builder.field(fieldName, schema);
             break;
           }
         }
-        // fallthrough
 
       case Types.DECIMAL: {
         log.debug("DECIMAL with precision: '{}' and scale: '{}'", precision, scale);
@@ -1274,7 +1273,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
               return rs -> rs.getByte(col);
             }
           } else if (scale > 0) { // floating point - use double in all cases
-            return rs -> rs.getDouble(col);
+            return rs -> rs.getBigDecimal(col);
           }
         }
         // fallthrough

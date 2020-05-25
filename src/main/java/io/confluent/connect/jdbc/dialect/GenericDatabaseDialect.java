@@ -1036,7 +1036,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       case Types.NUMERIC:
         if (mapNumerics == NumericMapping.PRECISION_ONLY) {
           log.debug("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
-          if (scale == 0) { // integer
+          if (scale == 0 && precision < 19) { // integer
             Schema schema;
             if (precision > 9) {
               schema = (optional) ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA;
@@ -1052,7 +1052,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           }
         } else if (mapNumerics == NumericMapping.BEST_FIT) {
           log.debug("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
-          if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
+          if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW && precision < 19) { // integer
             Schema schema;
             if (precision > 9) {
               schema = (optional) ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA;
@@ -1069,8 +1069,13 @@ public class GenericDatabaseDialect implements DatabaseDialect {
             Schema schema = (optional) ? Decimal.schema(scale) : Decimal.schema(scale);
             builder.field(fieldName, schema);
             break;
+          } else {
+            Schema schema = (optional) ? Decimal.schema(scale) : Decimal.schema(scale);
+            builder.field(fieldName, schema);
+            break;
           }
         }
+        //fallthrough
 
       case Types.DECIMAL: {
         log.debug("DECIMAL with precision: '{}' and scale: '{}'", precision, scale);
@@ -1246,7 +1251,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           int precision = defn.precision();
           int scale = defn.scale();
           log.trace("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
-          if (scale == 0) { // integer
+          if (scale == 0 && precision < 19) { // integer
             if (precision > 9) {
               return rs -> rs.getLong(col);
             } else if (precision > 4) {
@@ -1262,7 +1267,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           int scale = defn.scale();
           log.trace("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
           // fits in primitive data types.
-          if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
+          if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW && precision < 19) { // integer
             if (precision > 9) {
               return rs -> rs.getLong(col);
             } else if (precision > 4) {
@@ -1273,6 +1278,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
               return rs -> rs.getByte(col);
             }
           } else if (scale > 0) { // floating point - use double in all cases
+            return rs -> rs.getBigDecimal(col);
+          }
+          else{
             return rs -> rs.getBigDecimal(col);
           }
         }

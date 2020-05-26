@@ -17,9 +17,7 @@ package io.confluent.connect.jdbc.sink.integration;
 
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
-import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.json.JsonConverterConfig;
 import org.apache.kafka.connect.storage.ConverterConfig;
@@ -56,16 +54,11 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
   private static final Logger log = LoggerFactory.getLogger(JdbcSinkConnectorIT.class);
   private Map<String, String> props;
   private static Connection connection;
-  public static DockerComposeContainer compose;
 
-//  @ClassRule
-//  public static DockerComposeContainer compose =
-//      new DockerComposeContainer(new File("src/test/docker/configA/docker-compose.yml"));
+  @ClassRule
+  public static DockerComposeContainer compose =
+      new DockerComposeContainer(new File("src/test/docker/configA/docker-compose.yml"));
 
-  public static void dockerContainer() {
-     compose =
-        new DockerComposeContainer(new File("src/test/docker/configA/docker-compose.yml"));
-  }
 
   @Before
   public void setup() throws Exception {
@@ -103,42 +96,43 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
   }
 
   @After
-  public void close() throws SQLException, IOException {
+  public void close() {
     // delete connector
     connect.deleteConnector(CONNECTOR_NAME);
     connect.stop();
   }
 
   @AfterClass
-  public static void closeConnection() throws SQLException {
+  public static void closeConnection() {
     compose.close();
   }
 
   @Test
   public void testWithAutoCreateEnabled() throws Exception {
 
-    //dropTableIfExists(KAFKA_TOPIC);
+    dropTableIfExists(KAFKA_TOPIC);
     sendTestDataToKafka(SCHEMA);
+
+    // Add mysql dialect related configurations.
+    props.put("connection.url", "jdbc:mysql://localhost:3306/db");
+    props.put("connection.user", "user");
+    props.put("connection.password", "password");
+    props.put("dialect.name", "MySqlDatabaseDialect");
+    props.put("auto.create", "true");
+    props.put("value.converter", JsonConverter.class.getName());
+
     // Start Connector and wait some specific time to start the connector.
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
     Thread.sleep(3000);
-    dockerContainer();
-    Thread.sleep(3000);
-    connection = null;
-    reConnect();
-    waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
-
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
         NUM_RECORDS,
         CONSUME_MAX_DURATION_MS,
         KAFKA_TOPIC);
 
     log.info("Number of records added in kafka {}", totalRecords.count());
-
-    int count = loadFromSQL("VERTICA_TABLE");
+    int count = loadFromSQL(KAFKA_TOPIC);
     Assert.assertEquals(NUM_RECORDS, count);
-    dropTableIfExists(KAFKA_TOPIC);
   }
 
   private void dropTableIfExists(String kafkaTopic) throws SQLException {
@@ -148,23 +142,10 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
 
   private int loadFromSQL(String vertica_table) throws SQLException {
     Statement st = connection.createStatement();
-    ResultSet rs = st.executeQuery("SELECT COUNT(*) AS rowcount FROM " + "mysqlTable");
+    ResultSet rs = st.executeQuery("SELECT COUNT(*) AS rowcount FROM " + vertica_table);
     rs.next();
     return rs.getInt("rowcount");
   }
-
-  private static final Schema SCHEMA = SchemaBuilder.struct().name("com.example.Person")
-      .field("firstName", Schema.STRING_SCHEMA)
-      .field("lastName", Schema.STRING_SCHEMA)
-      .field("age", Schema.OPTIONAL_INT32_SCHEMA)
-      .field("bool", Schema.OPTIONAL_BOOLEAN_SCHEMA)
-      .field("short", Schema.OPTIONAL_INT16_SCHEMA)
-      .field("byte", Schema.OPTIONAL_INT8_SCHEMA)
-      .field("long", Schema.OPTIONAL_INT64_SCHEMA)
-      .field("float", Schema.OPTIONAL_FLOAT32_SCHEMA)
-      .field("double", Schema.OPTIONAL_FLOAT64_SCHEMA)
-      .field("modified", Timestamp.SCHEMA)
-      .build();
 
   private void sendTestDataToKafka(Schema SCHEMA) throws InterruptedException {
     for (int i = 0; i < NUM_RECORDS; i++) {
@@ -175,7 +156,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     }
   }
 
-  private String asJson(String topic, Schema schema, int i) throws InterruptedException {
+  private String asJson(String topic, Schema schema, int i) {
       final Struct struct = new Struct(schema)
           .put("firstName", "Alex")
           .put("lastName", "Smith")
@@ -195,7 +176,6 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
       jsonConverter.configure(config);
       byte[] raw = jsonConverter.fromConnectData(topic, schema, struct);
       return new String(raw, StandardCharsets.UTF_8);
-    //return struct.toString();
     }
 
 }

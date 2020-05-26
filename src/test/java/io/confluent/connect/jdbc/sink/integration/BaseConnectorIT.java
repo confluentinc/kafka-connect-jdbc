@@ -16,6 +16,9 @@
 package io.confluent.connect.jdbc.sink.integration;
 
 import io.confluent.connect.jdbc.JdbcSinkConnector;
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.SchemaBuilder;
+import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.runtime.AbstractStatus;
@@ -54,6 +57,19 @@ public class BaseConnectorIT {
   protected static final int NUM_RECORDS = 1000;
 
   protected static final String MAX_TASKS = "1";
+
+  protected static final Schema SCHEMA = SchemaBuilder.struct().name("com.example.Person")
+      .field("firstName", Schema.STRING_SCHEMA)
+      .field("lastName", Schema.STRING_SCHEMA)
+      .field("age", Schema.OPTIONAL_INT32_SCHEMA)
+      .field("bool", Schema.OPTIONAL_BOOLEAN_SCHEMA)
+      .field("short", Schema.OPTIONAL_INT16_SCHEMA)
+      .field("byte", Schema.OPTIONAL_INT8_SCHEMA)
+      .field("long", Schema.OPTIONAL_INT64_SCHEMA)
+      .field("float", Schema.OPTIONAL_FLOAT32_SCHEMA)
+      .field("double", Schema.OPTIONAL_FLOAT64_SCHEMA)
+      .field("modified", Timestamp.SCHEMA)
+      .build();
 
   protected EmbeddedConnectCluster connect;
 
@@ -114,15 +130,7 @@ public class BaseConnectorIT {
     Map<String, String> props = new HashMap<>();
     props.put(SinkConnectorConfig.TOPICS_CONFIG, KAFKA_TOPIC);
     props.put("connector.class", JdbcSinkConnector.class.getName());
-    props.put("connection.password", "password");
-    props.put("connection.user", "user");
-
     props.put("tasks.max", MAX_TASKS);
-
-    props.put("connection.url", "jdbc:mysql://localhost:3306/db");
-    props.put("dialect.name", "MySqlDatabaseDialect");
-    props.put("value.converter", JsonConverter.class.getName());
-    props.put("auto.create", "true");
     // license properties
     props.put("confluent.topic.replication.factor", "1");
     props.put("confluent.topic.bootstrap.servers", connect.kafka().bootstrapServers());

@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.source.integration;
 
 import io.confluent.connect.jdbc.sink.integration.JdbcSinkConnectorIT;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.test.IntegrationTest;
 import org.apache.kafka.test.TestUtils;
 import org.junit.After;
@@ -31,11 +32,8 @@ import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.DockerComposeContainer;
 
 import java.io.File;
-import java.io.IOException;
 import java.sql.Connection;
-import java.sql.Date;
 import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Map;
@@ -66,14 +64,14 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
   }
 
   @After
-  public void close() throws SQLException, IOException {
+  public void close() {
     // delete connector
     connect.deleteConnector(CONNECTOR_NAME);
     connect.stop();
   }
 
   @AfterClass
-  public static void closeConnection() throws SQLException {
+  public static void closeConnection() {
     compose.close();
   }
 
@@ -86,16 +84,27 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
       //Delay to avoid frequent connection requests.
       TimeUnit.MILLISECONDS.sleep(100);
       return Optional.empty();
-    } catch (ClassNotFoundException | SQLException | InterruptedException e) {
+    } catch (SQLException | InterruptedException e) {
       return Optional.empty();
     }
   }
 
   @Test
   public void testWithAutoCreateEnabled() throws Exception {
-    //connect.kafka().createTopic(KAFKA_TOPIC);
+
+    connect.kafka().createTopic("sql-" + KAFKA_TOPIC);
     dropTableIfExists(KAFKA_TOPIC);
     sendTestDataToMysql();
+
+    // Add mysql dialect related configurations.
+    props.put("connection.password", "password");
+    props.put("connection.user", "user");
+    props.put("connection.url", "jdbc:mysql://localhost:3306/db");
+    props.put("dialect.name", "MySqlDatabaseDialect");
+    props.put("value.converter", JsonConverter.class.getName());
+    props.put("mode", "incrementing");
+    props.put("incrementing.column.name",  "id");
+    props.put("topic.prefix",  "sql-");
 
     // start a source connector
     connect.configureConnector(CONNECTOR_NAME, props);
@@ -108,21 +117,20 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
 
     log.info("Waiting for records in destination topic ...");
     ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(
-        1,
+        NUM_RECORDS,
         CONSUME_MAX_DURATION_MS,
-        KAFKA_TOPIC
-    );
-    Assert.assertEquals(1, records.count());
+        "sql-mysqlTable");
+    Assert.assertEquals(NUM_RECORDS, records.count());
   }
 
   private void dropTableIfExists(String kafkaTopic) throws SQLException {
     Statement st = connection.createStatement();
-    st.executeQuery("drop table if exists " + "mysqlTable");
+    st.executeQuery("drop table if exists " + kafkaTopic);
   }
 
   private void sendTestDataToMysql() throws SQLException {
     Statement st = connection.createStatement();
-    String sql = "CREATE TABLE mysqlTable " +
+    String sql = "CREATE TABLE " + KAFKA_TOPIC +
         "(id INTEGER not NULL, " +
         " first_name VARCHAR(255), " +
         " last_name VARCHAR(255), " +
@@ -132,11 +140,13 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
     sql = "INSERT INTO mysqlTable(id,first_name,last_name,age) "
         + "VALUES(?,?,?,?)";
     PreparedStatement pstmt = connection.prepareStatement(sql);
-    pstmt.setLong(1, 1);
-    pstmt.setString(2, "FirstName");
-    pstmt.setString(3, "LastName");
-    pstmt.setLong(4, 20);
-    pstmt.executeUpdate();
+    for (int i=0; i<NUM_RECORDS; i++) {
+      pstmt.setLong(1, i);
+      pstmt.setString(2, "FirstName");
+      pstmt.setString(3, "LastName");
+      pstmt.setLong(4, 20);
+      pstmt.executeUpdate();
+    }
     pstmt.close();
   }
 }

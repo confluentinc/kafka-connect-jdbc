@@ -15,11 +15,8 @@
 
 package io.confluent.connect.jdbc.source.integration;
 
-import io.confluent.connect.jdbc.JdbcSinkConnector;
 import io.confluent.connect.jdbc.JdbcSourceConnector;
-import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.runtime.AbstractStatus;
-import org.apache.kafka.connect.runtime.SinkConnectorConfig;
 import org.apache.kafka.connect.runtime.rest.entities.ConnectorStateInfo;
 import org.apache.kafka.connect.util.clusters.EmbeddedConnectCluster;
 import org.apache.kafka.test.IntegrationTest;
@@ -28,7 +25,6 @@ import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -45,14 +41,14 @@ public class BaseConnectorIT {
   protected static final long CONSUME_MAX_DURATION_MS = TimeUnit.SECONDS.toMillis(100);
   protected static final long CONNECTOR_STARTUP_DURATION_MS = TimeUnit.SECONDS.toMillis(100);
   protected static final String CONNECTOR_NAME = "mysql-jdbc-sink";
-  protected static final String KAFKA_TOPIC = "tablesql-mysqlTable";
-  protected static final int NUM_RECORDS = 1000;
+  protected static final String KAFKA_TOPIC = "mysqlTable";
+  protected static final int NUM_RECORDS = 25;
 
   protected static final String MAX_TASKS = "1";
 
   protected EmbeddedConnectCluster connect;
 
-  protected void startConnect() throws IOException {
+  protected void startConnect() {
     connect = new EmbeddedConnectCluster.Builder()
         .name(CONNECTOR_NAME)
         .build();
@@ -109,18 +105,7 @@ public class BaseConnectorIT {
     Map<String, String> props = new HashMap<>();
 //    props.put(SinkConnectorConfig.TOPICS_CONFIG, KAFKA_TOPIC);
     props.put("connector.class", JdbcSourceConnector.class.getName());
-    props.put("connection.password", "password");
-    props.put("connection.user", "user");
-
     props.put("tasks.max", MAX_TASKS);
-
-    props.put("connection.url", "jdbc:mysql://localhost:3306/db");
-    props.put("dialect.name", "MySqlDatabaseDialect");
-    props.put("value.converter", JsonConverter.class.getName());
-    props.put("mode", "incrementing");
-    props.put("incrementing.column.name",  "id");
-    props.put("topic.prefix",  "tablesql-");
-
     // license properties
     props.put("confluent.topic.replication.factor", "1");
     props.put("confluent.topic.bootstrap.servers", connect.kafka().bootstrapServers());
@@ -129,7 +114,7 @@ public class BaseConnectorIT {
     return props;
   }
 
-  protected Connection getConnection() throws ClassNotFoundException, SQLException {
+  protected Connection getConnection() throws SQLException {
     //Class.forName("com.mysql.jdbc.Driver");
     return DriverManager.getConnection("jdbc:mysql://localhost:3306/db" , "user", "password");
   }

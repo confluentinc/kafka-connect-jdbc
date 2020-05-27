@@ -65,6 +65,11 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
   protected String checkConnectionQuery() {
     return "SELECT DATABASE_NAME FROM SYS.M_DATABASES";
   }
+  
+  @Override
+  protected String currentTimestampDatabaseQuery() {
+    return "SELECT CURRENT_TIMESTAMP FROM DUMMY";
+  }
 
   @Override
   protected String getSqlType(SinkRecordField field) {

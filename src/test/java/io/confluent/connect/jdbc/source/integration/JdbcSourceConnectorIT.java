@@ -32,19 +32,19 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.mockito.Mock;
+import org.rnorth.visibleassertions.VisibleAssertions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.ConnectException;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 @Category(IntegrationTest.class)
@@ -104,9 +104,8 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
     // Start Connector and wait some specific time to start the connector.
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
-
     Thread.sleep(3000);
-    //Wait Connector to write data into vertica
+    String url = connect.endpointForResource(String.format("connectors/%s/status", CONNECTOR_NAME));
 
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
         NUM_RECORDS,
@@ -168,5 +167,4 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
 //      return new String(raw, StandardCharsets.UTF_8);
 //    //return struct.toString();
 //    }
-
 }

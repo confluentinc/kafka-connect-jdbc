@@ -57,8 +57,11 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
 
   @ClassRule
   public static DockerComposeContainer compose =
-      new DockerComposeContainer(new File("src/test/docker/configA/docker-compose.yml"));
+      new DockerComposeContainer(new File("src/test/docker/configA/mysql-docker-compose.yml"));
 
+  @ClassRule
+  public static DockerComposeContainer compose1 =
+      new DockerComposeContainer(new File("src/test/docker/configB/pumba-docker-compose.yml"));
 
   @Before
   public void setup() throws Exception {
@@ -111,7 +114,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
   public void testWithAutoCreateEnabled() throws Exception {
 
     dropTableIfExists(KAFKA_TOPIC);
-    sendTestDataToKafka(SCHEMA);
+    sendTestDataToKafka(SCHEMA, 0);
 
     // Add mysql dialect related configurations.
     props.put("connection.url", "jdbc:mysql://localhost:3306/db");
@@ -133,6 +136,14 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     log.info("Number of records added in kafka {}", totalRecords.count());
     int count = loadFromSQL(KAFKA_TOPIC);
     Assert.assertEquals(NUM_RECORDS, count);
+    sendTestDataToKafka(SCHEMA, 1);
+    totalRecords = connect.kafka().consume(
+        NUM_RECORDS * 2,
+        CONSUME_MAX_DURATION_MS,
+        KAFKA_TOPIC);
+    count = loadFromSQL(KAFKA_TOPIC);
+    Assert.assertEquals(totalRecords.count(), NUM_RECORDS * 2);
+    Assert.assertEquals(NUM_RECORDS * 2, count);
   }
 
   private void dropTableIfExists(String kafkaTopic) throws SQLException {
@@ -147,8 +158,8 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     return rs.getInt("rowcount");
   }
 
-  private void sendTestDataToKafka(Schema SCHEMA) throws InterruptedException {
-    for (int i = 0; i < NUM_RECORDS; i++) {
+  private void sendTestDataToKafka(Schema SCHEMA, int count) throws InterruptedException {
+    for (int i = NUM_RECORDS * count; i < NUM_RECORDS * count + NUM_RECORDS; i++) {
       String value = asJson(KAFKA_TOPIC, SCHEMA, i);
       connect.kafka().produce(KAFKA_TOPIC, null, value);
       //A minor delay is added so that record produced will have different time stamp.

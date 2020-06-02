@@ -16,6 +16,7 @@
 package io.confluent.connect.jdbc.source.integration;
 
 import io.confluent.connect.jdbc.sink.integration.JdbcSinkConnectorIT;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.test.IntegrationTest;
@@ -34,6 +35,7 @@ import org.testcontainers.containers.DockerComposeContainer;
 import java.io.File;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Map;
@@ -49,7 +51,11 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
 
   @ClassRule
   public static DockerComposeContainer compose =
-      new DockerComposeContainer(new File("src/test/docker/configA/docker-compose.yml"));
+      new DockerComposeContainer(new File("src/test/docker/configA/mysql-docker-compose.yml"));
+
+  @ClassRule
+  public static DockerComposeContainer compose1 =
+      new DockerComposeContainer(new File("src/test/docker/configB/pumba-docker-compose.yml"));
 
   @Before
   public void setup() throws Exception {
@@ -94,7 +100,7 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
 
     connect.kafka().createTopic("sql-" + KAFKA_TOPIC);
     dropTableIfExists(KAFKA_TOPIC);
-    sendTestDataToMysql();
+    sendTestDataToMysql(0);
 
     // Add mysql dialect related configurations.
     props.put("connection.password", "password");
@@ -121,6 +127,14 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
         CONSUME_MAX_DURATION_MS,
         "sql-mysqlTable");
     Assert.assertEquals(NUM_RECORDS, records.count());
+    //compose1.start();
+    sendTestDataToMysql(1);
+    Thread.sleep(10000);
+    records = connect.kafka().consume(
+        NUM_RECORDS * 2,
+        CONSUME_MAX_DURATION_MS,
+        "sql-mysqlTable");
+    Assert.assertEquals(NUM_RECORDS * 2, records.count());
   }
 
   private void dropTableIfExists(String kafkaTopic) throws SQLException {
@@ -128,19 +142,36 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
     st.executeQuery("drop table if exists " + kafkaTopic);
   }
 
-  private void sendTestDataToMysql() throws SQLException {
+  public static boolean tableExist(Connection conn, String tableName) throws SQLException {
+    boolean tExists = false;
+    try (ResultSet rs = conn.getMetaData().getTables(null, null, tableName, null)) {
+      while (rs.next()) {
+        String tName = rs.getString("TABLE_NAME");
+        if (tName != null && tName.equals(tableName)) {
+          tExists = true;
+          break;
+        }
+      }
+    }
+    return tExists;
+  }
+
+  private void sendTestDataToMysql(int count) throws SQLException {
     Statement st = connection.createStatement();
-    String sql = "CREATE TABLE " + KAFKA_TOPIC +
-        "(id INTEGER not NULL, " +
-        " first_name VARCHAR(255), " +
-        " last_name VARCHAR(255), " +
-        " age INTEGER, " +
-        " PRIMARY KEY ( id ))";
-    st.executeQuery(sql);
+    String sql;
+    if (!tableExist(connection, KAFKA_TOPIC)) {
+      sql = "CREATE TABLE " + KAFKA_TOPIC +
+          "(id INTEGER not NULL, " +
+          " first_name VARCHAR(255), " +
+          " last_name VARCHAR(255), " +
+          " age INTEGER, " +
+          " PRIMARY KEY ( id ))";
+      st.executeQuery(sql);
+    }
     sql = "INSERT INTO mysqlTable(id,first_name,last_name,age) "
         + "VALUES(?,?,?,?)";
     PreparedStatement pstmt = connection.prepareStatement(sql);
-    for (int i=0; i<NUM_RECORDS; i++) {
+    for (int i = NUM_RECORDS * count; i<NUM_RECORDS * count + NUM_RECORDS; i++) {
       pstmt.setLong(1, i);
       pstmt.setString(2, "FirstName");
       pstmt.setString(3, "LastName");

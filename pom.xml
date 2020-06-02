@@ -211,19 +211,19 @@
             <scope>test</scope>
         </dependency>
         <!-- https://mvnrepository.com/artifact/org.testcontainers/mysql -->
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>mysql</artifactId>
-            <version>1.14.2</version>
-            <scope>test</scope>
-        </dependency>
-
-        <!--        <dependency>-->
+<!--        <dependency>-->
 <!--            <groupId>org.testcontainers</groupId>-->
-<!--            <artifactId>testcontainers</artifactId>-->
-<!--            <version>1.11.4</version>-->
+<!--            <artifactId>mysql</artifactId>-->
+<!--            <version>1.14.2</version>-->
 <!--            <scope>test</scope>-->
 <!--        </dependency>-->
+
+                <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
+            <version>1.11.4</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

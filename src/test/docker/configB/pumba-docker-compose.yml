@@ -1,0 +1,23 @@
+version: "2"
+services:
+  # chaos commands
+  chaos-pause:
+    image: gaiaadm/pumba
+    container_name: pumba
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    # interval should always be less than duration
+    command: "--log-level debug --interval 30s pause --duration 10s mysqlContainer"
+
+  #chaos-kill:
+  #  image: gaiaadm/pumba
+   # container_name: pumba
+    #volumes:
+     # - /var/run/docker.sock:/var/run/docker.sock
+    #command: "--log-level debug --interval 7s kill --limit 1 nginx-container"
+
+  #chaos-delay:
+   #   image: gaiaadm/pumba
+    #  volumes:
+     #   - /var/run/docker.sock:/var/run/docker.sock
+      #command: "--log-level debug --interval 30s netem --tc-image gaiadocker/iproute2 --duration 29s delay nginx-container"

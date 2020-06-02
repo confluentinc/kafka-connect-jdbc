@@ -1,7 +1,8 @@
-version: '3.3'
+version: '2'
 services:
   db:
     image: mysql:5.7
+    container_name: mysqlContainer
     restart: always
     environment:
       MYSQL_DATABASE: 'db'

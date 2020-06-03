@@ -31,6 +31,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Collection;
+import java.util.UUID;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
@@ -130,6 +131,18 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           );
           return fieldName;
         }
+
+        if (UUID.class.getName().equals(columnDefn.classNameForType())) {
+          builder.field(
+                  fieldName,
+                  columnDefn.isOptional()
+                          ?
+                          Schema.OPTIONAL_STRING_SCHEMA :
+                          Schema.STRING_SCHEMA
+          );
+          return fieldName;
+        }
+
         break;
       }
       default:
@@ -165,6 +178,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       }
       case Types.OTHER: {
         if (isJsonType(columnDefn)) {
+          return rs -> rs.getString(col);
+        }
+
+        if (UUID.class.getName().equals(columnDefn.classNameForType())) {
           return rs -> rs.getString(col);
         }
         break;

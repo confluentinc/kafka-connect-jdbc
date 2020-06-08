@@ -411,6 +411,7 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
         "jdbc:acme:db/foo:100?"
         + "javax.net.ssl.keyStorePassword=secret2&"
         + "password=secret&"
+        + "password&" // incorrect parameter before a non-secret
         + "key1=value1&"
         + "key2=value2&"
         + "key3=value3&"
@@ -423,6 +424,7 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
         "jdbc:acme:db/foo:100?"
         + "javax.net.ssl.keyStorePassword=****&"
         + "password=****&"
+        + "password&"
         + "key1=value1&"
         + "key2=value2&"
         + "key3=value3&"

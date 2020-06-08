@@ -1747,7 +1747,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
    */
   protected String sanitizedUrl(String url) {
     // Only replace standard URL-type properties ...
-    return url.replaceAll("(?i)([?&]password=)[^&]*", "$1****");
+    return url.replaceAll("(?i)([?&]([^=&]*)password([^=]*)=)[^&]*", "$1****");
   }
 
   @Override

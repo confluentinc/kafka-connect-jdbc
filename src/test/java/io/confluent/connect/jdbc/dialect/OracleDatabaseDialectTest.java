@@ -239,4 +239,42 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
         + "key2=value2&key3=value3&user=smith&password=****&other=value"
     );
   }
+
+  @Test
+  public void shouldSanitizeUrlWithKerberosCredentialsInUrlProperties() {
+    assertSanitizedUrl(
+        "jdbc:oracle:thin:@myhost:1111/db?"
+        + "password=secret&"
+        + "javax.net.ssl.keyStorePassword=secret2&"
+        + "key1=value1&"
+        + "key2=value2&"
+        + "key3=value3&"
+        + "user=smith&"
+        + "password=secret&"
+        + "passworNotSanitized=not-secret&"
+        + "passwordShouldBeSanitized=value3&"
+        + "javax.net.ssl.trustStorePassword=superSecret&"
+        + "OCINewPassword=secret2&"
+        + "oracle.net.wallet_password=secret3&"
+        + "proxy_password=secret4&"
+        + "PROXY_USER_PASSWORD=secret5&"
+        + "other=value",
+        "jdbc:oracle:thin:@myhost:1111/db?"
+        + "password=****&"
+        + "javax.net.ssl.keyStorePassword=****&"
+        + "key1=value1&"
+        + "key2=value2&"
+        + "key3=value3&"
+        + "user=smith&"
+        + "password=****&"
+        + "passworNotSanitized=not-secret&"
+        + "passwordShouldBeSanitized=****&"
+        + "javax.net.ssl.trustStorePassword=****&"
+        + "OCINewPassword=****&"
+        + "oracle.net.wallet_password=****&"
+        + "proxy_password=****&"
+        + "PROXY_USER_PASSWORD=****&"
+        + "other=value"
+    );
+  }
 }

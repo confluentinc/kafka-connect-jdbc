@@ -1439,6 +1439,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   @Override
+  @SuppressWarnings("deprecation")
   public String buildInsertStatement(
       TableId table,
       Collection<ColumnId> keyColumns,
@@ -1459,6 +1460,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   @Override
+  @SuppressWarnings("deprecation")
   public String buildUpdateStatement(
       TableId table,
       Collection<ColumnId> keyColumns,
@@ -1483,6 +1485,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   @Override
+  @SuppressWarnings("deprecation")
   public String buildUpsertQueryStatement(
       TableId table,
       Collection<ColumnId> keyColumns,

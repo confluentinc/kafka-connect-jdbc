@@ -76,6 +76,27 @@ public class DbStructure {
   }
 
   /**
+   * Get the definition for the table with the given ID. This returns a cached definition if
+   * there is one; otherwise, it reads the definition from the database
+   *
+   * @param connection the connection that may be used to fetch the table definition if not
+   *                   already known; may not be null
+   * @param tableId    the ID of the table; may not be null
+   * @return the table definition; or null if the table does not exist
+   * @throws SQLException if there is an error getting the definition from the database
+   */
+  public TableDefinition tableDefinition(
+      Connection connection,
+      TableId tableId
+  ) throws SQLException {
+    TableDefinition defn = tableDefns.get(connection, tableId);
+    if (defn != null) {
+      return defn;
+    }
+    return tableDefns.refresh(connection, tableId);
+  }
+
+  /**
    * @throws SQLException if CREATE failed
    */
   void create(

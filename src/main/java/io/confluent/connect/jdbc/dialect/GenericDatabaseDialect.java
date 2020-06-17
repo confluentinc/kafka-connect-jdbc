@@ -328,8 +328,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     // Get the set of config keys that are known to the connector
     Set<String> configKeys = config.values().keySet();
     // Add any configuration property that begins with 'connection.` and that is not known
-    config.originalsWithPrefix("connection.").forEach((k,v) -> {
-      if (!configKeys.contains("connection." + k)) {
+    config.originalsWithPrefix(JdbcSourceConnectorConfig.CONNECTION_PREFIX).forEach((k,v) -> {
+      if (!configKeys.contains(JdbcSourceConnectorConfig.CONNECTION_PREFIX + k)) {
         properties.put(k, v);
       }
     });

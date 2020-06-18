@@ -21,6 +21,7 @@ import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
+import org.postgresql.util.PGobject;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
@@ -64,6 +65,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
   static final String JSON_TYPE_NAME = "json";
   static final String JSONB_TYPE_NAME = "jsonb";
+
+  static final String PG_TYPE_PREFIX = PostgreSqlDatabaseDialect.class.getName() + ".pgtype=";
 
   /**
    * Create a new dialect instance with the given connector configuration.
@@ -293,4 +296,31 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     }
   }
 
+  protected static String getPgType(String name) {
+    if (name != null && name.startsWith(PG_TYPE_PREFIX)) {
+      return name.substring(PG_TYPE_PREFIX.length());
+    }
+
+    return null;
+  }
+
+  @Override
+  public void bindField(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
+      Object value
+  ) throws SQLException {
+    final String pgType = getPgType(schema.name());
+
+    if (pgType == null) {
+      super.bindField(statement, index, schema, value);
+      return;
+    }
+
+    final PGobject binding = new PGobject();
+    binding.setType(pgType);
+    binding.setValue(String.valueOf(value));
+    statement.setObject(index, binding);
+  }
 }

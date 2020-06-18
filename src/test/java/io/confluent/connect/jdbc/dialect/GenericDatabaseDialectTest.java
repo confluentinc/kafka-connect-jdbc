@@ -37,6 +37,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
@@ -59,6 +60,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseDialect> {
@@ -512,5 +514,39 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
         + "Password=****&"
         + "other=value"
     );
+  }
+
+  @Test
+  public void shouldAddExtraProperties() {
+    // When adding extra properties with the 'connection.' prefix
+    connProps.put("connection.oracle.something", "somethingValue");
+    connProps.put("connection.oracle.else", "elseValue");
+    connProps.put("connection.foo", "bar");
+    // and some other extra properties not prefixed with 'connection.'
+    connProps.put("foo2", "bar2");
+    config = new JdbcSourceConnectorConfig(connProps);
+    dialect = createDialect(config);
+    // and the dialect computes the connection properties
+    Properties props = new Properties();
+    Properties modified = dialect.addConnectionProperties(props);
+    // then the resulting properties
+    // should be the same properties object as what was passed in
+    assertSame(props, modified);
+    // should include props that began with 'connection.' but without prefix
+    assertEquals("somethingValue", modified.get("oracle.something"));
+    assertEquals("elseValue", modified.get("oracle.else"));
+    assertEquals("bar", modified.get("foo"));
+    // should not include any 'connection.*' properties defined by the connector
+    assertFalse(modified.containsKey("url"));
+    assertFalse(modified.containsKey("password"));
+    assertFalse(modified.containsKey("connection.url"));
+    assertFalse(modified.containsKey("connection.password"));
+    // should not include the prefixed props
+    assertFalse(modified.containsKey("connection.oracle.something"));
+    assertFalse(modified.containsKey("connection.oracle.else"));
+    assertFalse(modified.containsKey("connection.foo"));
+    // should not include props not prefixed with 'connection.'
+    assertFalse(modified.containsKey("foo2"));
+    assertFalse(modified.containsKey("connection.foo2"));
   }
 }

@@ -16,22 +16,22 @@ import org.junit.Before;
 import java.io.IOException;
 import java.net.URI;
 
-//public class Client implements AutoCloseable {
-//
-//    private CloseableHttpClient httpClient;
-//
-//    public Client() {
-//        httpClient = HttpClients.createDefault();
-//    }
-//
-//    public CloseableHttpClient getHttpClient() {
-//        return httpClient;
-//    }
-//
-//    @Override
-//    public void close() throws IOException {
-//        httpClient.close();
-//    }
-//
-//
-//}
+public class Client implements AutoCloseable {
+
+    private CloseableHttpClient httpClient;
+
+    public Client() {
+        httpClient = HttpClients.createDefault();
+    }
+
+    public CloseableHttpClient getHttpClient() {
+        return httpClient;
+    }
+
+    @Override
+    public void close() throws IOException {
+        httpClient.close();
+    }
+
+
+}

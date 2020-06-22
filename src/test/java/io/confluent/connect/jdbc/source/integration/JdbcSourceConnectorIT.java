@@ -15,7 +15,6 @@
 
 package io.confluent.connect.jdbc.source.integration;
 
-import io.confluent.connect.jdbc.sink.integration.JdbcSinkConnectorIT;
 import org.apache.http.HttpHeaders;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpPost;
@@ -48,7 +47,7 @@ import java.util.concurrent.TimeUnit;
 
 @Category(IntegrationTest.class)
 public class JdbcSourceConnectorIT extends BaseConnectorIT {
-  private static final Logger log = LoggerFactory.getLogger(JdbcSinkConnectorIT.class);
+  private static final Logger log = LoggerFactory.getLogger(JdbcSourceConnectorIT.class);
 
   private Map<String, String> props;
   private static Connection connection;
@@ -321,7 +320,6 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
   private void sendTestTimestampDataToMysql(int start) throws SQLException {
     java.util.Date date=new java.util.Date();
 
-    java.sql.Date sqlDate=new java.sql.Date(date.getTime());
     java.sql.Timestamp sqlTime=new java.sql.Timestamp(date.getTime());
 
     String sql = "INSERT INTO mysqlTable(id,first_name,last_name,timeof,age) "

@@ -70,7 +70,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     props = getCommonProps();
     if (connection == null) {
       TestUtils.waitForCondition(() -> assertConnection().orElse(false),
-          TimeUnit.SECONDS.toMillis(30),
+          TimeUnit.SECONDS.toMillis(50),
           "Failed to start the container.");
     }
   }
@@ -108,10 +108,48 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
   @AfterClass
   public static void closeConnection() {
     compose.close();
+    compose1.close();
   }
 
   @Test
-  public void testWithAutoCreateEnabled() throws Exception {
+  public void testWithJDBCMysqlDialectSuccess() throws Exception {
+
+    compose1.close();
+    dropTableIfExists(KAFKA_TOPIC);
+    sendTestDataToKafka(SCHEMA, 0);
+
+    // Add mysql dialect related configurations.
+    props.put("connection.url", "jdbc:mysql://localhost:3306/db");
+    props.put("connection.user", "user");
+    props.put("connection.password", "password");
+    props.put("dialect.name", "MySqlDatabaseDialect");
+    props.put("auto.create", "true");
+    props.put("value.converter", JsonConverter.class.getName());
+
+    // Start Connector and wait some specific time to start the connector.
+    connect.configureConnector(CONNECTOR_NAME, props);
+    waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
+    Thread.sleep(3000);
+    ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
+        NUM_RECORDS,
+        CONSUME_MAX_DURATION_MS,
+        KAFKA_TOPIC);
+
+    log.info("Number of records added in kafka {}", totalRecords.count());
+    int count = loadFromSQL(KAFKA_TOPIC);
+    Assert.assertEquals(NUM_RECORDS, count);
+    sendTestDataToKafka(SCHEMA, 1);
+    totalRecords = connect.kafka().consume(
+        NUM_RECORDS * 2,
+        CONSUME_MAX_DURATION_MS,
+        KAFKA_TOPIC);
+    count = loadFromSQL(KAFKA_TOPIC);
+    Assert.assertEquals(totalRecords.count(), NUM_RECORDS * 2);
+    Assert.assertEquals(NUM_RECORDS * 2, count);
+  }
+
+  @Test
+  public void testWithJDBCMysqlDialectUnavailable() throws Exception {
 
     dropTableIfExists(KAFKA_TOPIC);
     sendTestDataToKafka(SCHEMA, 0);
@@ -146,6 +184,52 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     Assert.assertEquals(NUM_RECORDS * 2, count);
   }
 
+  @Test
+  public void testWithChangeInServiceCredentials() throws Exception {
+    grantAllPrivileges();
+    dropTableIfExists(KAFKA_TOPIC);
+    sendTestDataToKafka(SCHEMA, 0);
+    // Add mysql dialect related configurations.
+    props.put("connection.url", "jdbc:mysql://localhost:3306/db");
+    props.put("connection.user", "user");
+    props.put("connection.password", "password");
+    props.put("dialect.name", "MySqlDatabaseDialect");
+    props.put("auto.create", "true");
+    props.put("value.converter", JsonConverter.class.getName());
+
+    // Start Connector and wait some specific time to start the connector.
+    connect.configureConnector(CONNECTOR_NAME, props);
+    waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
+    ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
+        NUM_RECORDS,
+        CONSUME_MAX_DURATION_MS,
+        KAFKA_TOPIC);
+
+    log.info("Number of records added in kafka {}", totalRecords.count());
+    int count = loadFromSQL(KAFKA_TOPIC);
+    Assert.assertEquals(NUM_RECORDS, count);
+    revokeWritePrivileges();
+    Thread.sleep(10000);
+    sendTestDataToKafka(SCHEMA, 1);
+    totalRecords = connect.kafka().consume(
+        NUM_RECORDS * 2,
+        CONSUME_MAX_DURATION_MS,
+        KAFKA_TOPIC);
+    count = loadFromSQL(KAFKA_TOPIC);
+    Assert.assertEquals(totalRecords.count(), NUM_RECORDS * 2);
+    Assert.assertEquals(NUM_RECORDS * 2, count);
+  }
+
+  private void grantAllPrivileges() throws SQLException {
+    Statement st = connection.createStatement();
+    st.executeQuery("grant all privileges ON db.* TO user@'%'");
+  }
+
+  private void revokeWritePrivileges() throws SQLException {
+    Statement st = connection.createStatement();
+    st.executeQuery("revoke insert on db.* from user@'%'");
+  }
+
   private void dropTableIfExists(String kafkaTopic) throws SQLException {
     Statement st = connection.createStatement();
     st.executeQuery("drop table if exists " + kafkaTopic);
@@ -159,6 +243,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
   }
 
   private void sendTestDataToKafka(Schema SCHEMA, int count) throws InterruptedException {
+    int temp = NUM_RECORDS;
     for (int i = NUM_RECORDS * count; i < NUM_RECORDS * count + NUM_RECORDS; i++) {
       String value = asJson(KAFKA_TOPIC, SCHEMA, i);
       connect.kafka().produce(KAFKA_TOPIC, null, value);

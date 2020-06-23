@@ -16,7 +16,6 @@
 package io.confluent.connect.jdbc.source.integration;
 
 import io.confluent.connect.jdbc.sink.integration.JdbcSinkConnectorIT;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.test.IntegrationTest;
@@ -96,8 +95,8 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
   }
 
   @Test
-  public void testWithAutoCreateEnabled() throws Exception {
-
+  public void testWithJDBCMysqlDialectSuccess() throws Exception {
+    compose1.close();
     connect.kafka().createTopic("sql-" + KAFKA_TOPIC);
     dropTableIfExists(KAFKA_TOPIC);
     sendTestDataToMysql(0);
@@ -127,7 +126,6 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
         CONSUME_MAX_DURATION_MS,
         "sql-mysqlTable");
     Assert.assertEquals(NUM_RECORDS, records.count());
-    //compose1.start();
     sendTestDataToMysql(1);
     Thread.sleep(10000);
     records = connect.kafka().consume(
@@ -135,6 +133,98 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
         CONSUME_MAX_DURATION_MS,
         "sql-mysqlTable");
     Assert.assertEquals(NUM_RECORDS * 2, records.count());
+  }
+
+  @Test
+  public void testWithJDBCMysqlDialectUnavailable() throws Exception {
+    connect.kafka().createTopic("sql-" + KAFKA_TOPIC);
+    dropTableIfExists(KAFKA_TOPIC);
+    sendTestDataToMysql(0);
+
+    // Add mysql dialect related configurations.
+    props.put("connection.password", "password");
+    props.put("connection.user", "user");
+    props.put("connection.url", "jdbc:mysql://localhost:3306/db");
+    props.put("dialect.name", "MySqlDatabaseDialect");
+    props.put("value.converter", JsonConverter.class.getName());
+    props.put("mode", "incrementing");
+    props.put("incrementing.column.name",  "id");
+    props.put("topic.prefix",  "sql-");
+
+    // start a source connector
+    connect.configureConnector(CONNECTOR_NAME, props);
+
+    // wait for tasks to spin up
+    int expectedNumTasks = Integer.valueOf(MAX_TASKS); // or set to actual number
+    waitForConnectorToStart(CONNECTOR_NAME, expectedNumTasks);
+
+    Thread.sleep(3000);
+
+    log.info("Waiting for records in destination topic ...");
+    ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(
+        NUM_RECORDS,
+        CONSUME_MAX_DURATION_MS,
+        "sql-mysqlTable");
+    Assert.assertEquals(NUM_RECORDS, records.count());
+    sendTestDataToMysql(1);
+    Thread.sleep(10000);
+    records = connect.kafka().consume(
+        NUM_RECORDS * 2,
+        CONSUME_MAX_DURATION_MS,
+        "sql-mysqlTable");
+    Assert.assertEquals(NUM_RECORDS * 2, records.count());
+  }
+
+  @Test
+  public void testWithChangeInServiceCredentials() throws Exception {
+    grantAllPrivileges();
+    connect.kafka().createTopic("sql-" + KAFKA_TOPIC);
+    dropTableIfExists(KAFKA_TOPIC);
+    sendTestDataToMysql(0);
+
+    // Add mysql dialect related configurations.
+    props.put("connection.password", "password");
+    props.put("connection.user", "user");
+    props.put("connection.url", "jdbc:mysql://localhost:3306/db");
+    props.put("dialect.name", "MySqlDatabaseDialect");
+    props.put("value.converter", JsonConverter.class.getName());
+    props.put("mode", "incrementing");
+    props.put("incrementing.column.name",  "id");
+    props.put("topic.prefix",  "sql-");
+
+    // start a source connector
+    connect.configureConnector(CONNECTOR_NAME, props);
+
+    // wait for tasks to spin up
+    int expectedNumTasks = Integer.valueOf(MAX_TASKS); // or set to actual number
+    waitForConnectorToStart(CONNECTOR_NAME, expectedNumTasks);
+
+    Thread.sleep(3000);
+
+    log.info("Waiting for records in destination topic ...");
+    ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(
+        NUM_RECORDS,
+        CONSUME_MAX_DURATION_MS,
+        "sql-mysqlTable");
+    Assert.assertEquals(NUM_RECORDS, records.count());
+    revokeReadPrivileges();
+    Thread.sleep(10000);
+    sendTestDataToMysql(1);
+    records = connect.kafka().consume(
+        NUM_RECORDS * 2,
+        CONSUME_MAX_DURATION_MS,
+        "sql-mysqlTable");
+    Assert.assertEquals(NUM_RECORDS * 2, records.count());
+  }
+
+  private void grantAllPrivileges() throws SQLException {
+    Statement st = connection.createStatement();
+    st.executeQuery("grant all privileges ON db.* TO user@'%'");
+  }
+
+  private void revokeReadPrivileges() throws SQLException {
+    Statement st = connection.createStatement();
+    st.executeQuery("revoke select on db.* from user@'%'");
   }
 
   private void dropTableIfExists(String kafkaTopic) throws SQLException {

@@ -116,6 +116,6 @@ public class BaseConnectorIT {
 
   protected Connection getConnection() throws SQLException {
     //Class.forName("com.mysql.jdbc.Driver");
-    return DriverManager.getConnection("jdbc:mysql://localhost:3306/db" , "user", "password");
+    return DriverManager.getConnection("jdbc:mysql://localhost:3306/db" , "root", "password");
   }
 }

@@ -15,17 +15,12 @@
 
 package io.confluent.connect.jdbc.source.integration;
 
-import org.apache.http.HttpHeaders;
-import org.apache.http.HttpResponse;
-import org.apache.http.client.methods.HttpPost;
+import org.apache.http.HttpStatus;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
-import org.apache.kafka.connect.json.JsonConverter;
-import org.apache.kafka.connect.runtime.rest.entities.ConnectorStateInfo;
 import org.apache.kafka.test.IntegrationTest;
 import org.apache.kafka.test.TestUtils;
 import org.junit.After;
 import org.junit.AfterClass;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.ClassRule;
 import org.junit.Test;
@@ -34,13 +29,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.DockerComposeContainer;
 
-import javax.ws.rs.core.MediaType;
 import java.io.File;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -96,22 +87,19 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
 
   @Test
   public void testTaskBounce() throws Exception {
-    int start = 0;
-    String url = connect.endpointForResource(String.format("connectors/%s/tasks", CONNECTOR_NAME));
+    int startIndex = 0;
+
+    dropTableIfExists(KAFKA_TOPIC, connection);
+    createTable(connection);
+    sendTestDataToMysql(startIndex, connection);
+
     connect.kafka().createTopic("sql-" + KAFKA_TOPIC);
-    dropTableIfExists(KAFKA_TOPIC);
-    createTable();
-    sendTestDataToMysql(start);
-    start += NUM_RECORDS;
+
     // Add mysql dialect related configurations.
-    props.put("connection.password", "password");
-    props.put("connection.user", "user");
-    props.put("connection.url", "jdbc:mysql://localhost:3307/db");
-    props.put("dialect.name", "MySqlDatabaseDialect");
-    props.put("value.converter", JsonConverter.class.getName());
+    addConnectionProperties(props);
+
     props.put("mode", "incrementing");
     props.put("incrementing.column.name",  "id");
-    props.put("topic.prefix",  "sql-");
 
     // start a source connector
     connect.configureConnector(CONNECTOR_NAME, props);
@@ -120,61 +108,53 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
     int expectedNumTasks = Integer.valueOf(MAX_TASKS); // or set to actual number
     waitForConnectorToStart(CONNECTOR_NAME, expectedNumTasks);
 
-    Thread.sleep(3000);
-
     log.info("Waiting for records in destination topic ...");
     ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(
-            NUM_RECORDS,
-            CONSUME_MAX_DURATION_MS,
-            "sql-mysqlTable");
-    Assert.assertEquals(NUM_RECORDS, records.count());
-    Client client = new Client();
-    List<ConnectorStateInfo.TaskState> list = connect.connectorStatus(CONNECTOR_NAME).tasks();
-    int id = list.get(0).id();
-    url = url + String.format("/%s/restart", String.valueOf(id));
-    HttpPost postRequest = new HttpPost(url);
-    postRequest.addHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON);
-    HttpResponse httpResponse = client.getHttpClient().execute(postRequest);
-    ConsumerRecords<byte[], byte[]> newRecords = connect.kafka().consume(
-            NUM_RECORDS,
-            CONSUME_MAX_DURATION_MS,
-            "sql-mysqlTable");
-    Assert.assertEquals(NUM_RECORDS, newRecords.count());
+        NUM_RECORDS,
+        CONSUME_MAX_DURATION_MS,
+        "sql-mysqlTable");
 
-    sendTestDataToMysql(start);
+    assertRecordOffset(startIndex, startIndex+NUM_RECORDS, records);
+
+    // restart Connector Task
+    if(restartConnectorTask() != HttpStatus.SC_NO_CONTENT){
+      throw new Exception("Unable to restart the task");
+    };
+
+    connect.kafka().consume(
+        NUM_RECORDS,
+        CONSUME_MAX_DURATION_MS,
+        "sql-mysqlTable");
+
+    sendTestDataToMysql(startIndex+NUM_RECORDS, connection);
 
     waitForConnectorToStart(CONNECTOR_NAME, expectedNumTasks);
 
-    Thread.sleep(1000);
-
     log.info("Waiting for records in destination topic ...");
-    ConsumerRecords<byte[], byte[]> newfRecords = connect.kafka().consume(
-            NUM_RECORDS*2,
-            CONSUME_MAX_DURATION_MS,
-            "sql-mysqlTable");
-    Assert.assertEquals(NUM_RECORDS*2, newfRecords.count());
+    records = connect.kafka().consume(
+        NUM_RECORDS*2,
+        CONSUME_MAX_DURATION_MS,
+        "sql-mysqlTable");
 
-//    client.getHttpClient().execute()
+    assertRecordOffset(startIndex, (startIndex+NUM_RECORDS*2), records);
+
   }
 
   @Test
-  public void testOffsetPickup() throws Exception {
-    int start = 0;
-    String url = connect.endpointForResource(String.format("connectors/%s/tasks", CONNECTOR_NAME));
+  public void testResumingOffsetsAfterConnectorRestart() throws Exception {
+    int startIndex = 0;
+
+    dropTableIfExists(KAFKA_TOPIC, connection);
+    createTable(connection);
+    sendTestDataToMysql(startIndex, connection);
+
     connect.kafka().createTopic("sql-" + KAFKA_TOPIC);
-    dropTableIfExists(KAFKA_TOPIC);
-    createTable();
-    sendTestDataToMysql(start);
-    start += NUM_RECORDS;
+
     // Add mysql dialect related configurations.
-    props.put("connection.password", "password");
-    props.put("connection.user", "user");
-    props.put("connection.url", "jdbc:mysql://localhost:3307/db");
-    props.put("dialect.name", "MySqlDatabaseDialect");
-    props.put("value.converter", JsonConverter.class.getName());
+    addConnectionProperties(props);
+
     props.put("mode", "incrementing");
     props.put("incrementing.column.name",  "id");
-    props.put("topic.prefix",  "sql-");
 
     // start a source connector
     connect.configureConnector(CONNECTOR_NAME, props);
@@ -183,78 +163,78 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
     int expectedNumTasks = Integer.valueOf(MAX_TASKS); // or set to actual number
     waitForConnectorToStart(CONNECTOR_NAME, expectedNumTasks);
 
-    Thread.sleep(3000);
-
     log.info("Waiting for records in destination topic ...");
     ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(
-            NUM_RECORDS,
-            CONSUME_MAX_DURATION_MS,
-            "sql-mysqlTable");
-    Assert.assertEquals(NUM_RECORDS, records.count());
+        NUM_RECORDS,
+        CONSUME_MAX_DURATION_MS,
+        "sql-mysqlTable");
+
+    assertRecordOffset(startIndex, startIndex+NUM_RECORDS, records);
+
+    // delete the connector
     connect.deleteConnector(CONNECTOR_NAME);
 
-// start a source connector
+    // start a source connector
     connect.configureConnector(CONNECTOR_NAME, props);
 
     // wait for tasks to spin up
     int expected = Integer.valueOf(MAX_TASKS); // or set to actual number
     waitForConnectorToStart(CONNECTOR_NAME, expected);
 
-    Thread.sleep(3000);
+    connect.kafka().consume(
+        NUM_RECORDS,
+        CONSUME_MAX_DURATION_MS,
+        "sql-mysqlTable");
 
-    ConsumerRecords<byte[], byte[]> newRecords = connect.kafka().consume(
-            NUM_RECORDS,
-            CONSUME_MAX_DURATION_MS,
-            "sql-mysqlTable");
-    Assert.assertEquals(NUM_RECORDS, newRecords.count());
-    sendTestDataToMysql(start);
-    Thread.sleep(TimeUnit.SECONDS.toMillis(3));
-    ConsumerRecords<byte[], byte[]> newestRecords = connect.kafka().consume(
-            NUM_RECORDS*2,
-            CONSUME_MAX_DURATION_MS,
-            "sql-mysqlTable");
+    sendTestDataToMysql(startIndex+NUM_RECORDS, connection);
+
+    records = connect.kafka().consume(
+    NUM_RECORDS*2,
+    CONSUME_MAX_DURATION_MS,
+    "sql-mysqlTable");
+
+    assertRecordOffset(startIndex, (startIndex+NUM_RECORDS*2), records);
+
   }
 
   @Test
-  public void testConfigUpdate() throws InterruptedException, SQLException {
-    int start = 0;
+  public void testConnectorModeChange() throws InterruptedException, SQLException {
+    int startIndex = 0;
+    dropTableIfExists(KAFKA_TOPIC, connection);
+    createTimestampTable(connection);
+    sendTestTimestampDataToMysql(startIndex, connection);
+
     connect.kafka().createTopic("sql-" + KAFKA_TOPIC);
-    dropTableIfExists(KAFKA_TOPIC);
-    createTimestampTable();
-    sendTestTimestampDataToMysql(start);
+
     // Add mysql dialect related configurations.
-    props.put("connection.password", "password");
-    props.put("connection.user", "user");
-    props.put("connection.url", "jdbc:mysql://localhost:3307/db");
-    props.put("dialect.name", "MySqlDatabaseDialect");
-    props.put("value.converter", JsonConverter.class.getName());
-    props.put("mode", "incrementing");
-    props.put("incrementing.column.name",  "id");
-    props.put("topic.prefix",  "sql-");
-
-    // start a source connector
-    connect.configureConnector(CONNECTOR_NAME, props);
-
-    // wait for tasks to spin up
-    int expectedNumTasks = Integer.valueOf(MAX_TASKS); // or set to actual number
-    waitForConnectorToStart(CONNECTOR_NAME, expectedNumTasks);
-
-    Thread.sleep(3000);
-
-    log.info("Waiting for records in destination topic ...");
-    ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(
-            NUM_RECORDS,
-            CONSUME_MAX_DURATION_MS,
-            "sql-mysqlTable");
-    Assert.assertEquals(NUM_RECORDS, records.count());
-    connect.deleteConnector(CONNECTOR_NAME);
-
+    addConnectionProperties(props);
     props.put("mode", "timestamp");
-    props.put("timestamp.column.name",  "timeof");
-    props.put("topic.prefix",  "sql-");
+    props.put("timestamp.column.name",  "time1");
 
-    sendTestTimestampDataToMysql(start+NUM_RECORDS);
+    // start a source connector
+    connect.configureConnector(CONNECTOR_NAME, props);
 
+    // wait for tasks to spin up
+    int expectedNumTasks = Integer.valueOf(MAX_TASKS); // or set to actual number
+    waitForConnectorToStart(CONNECTOR_NAME, expectedNumTasks);
+
+    log.info("Waiting for records in destination topic ...");
+    ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(
+        NUM_RECORDS,
+        5000,
+        "sql-mysqlTable");
+
+    assertRecordOffset(startIndex, NUM_RECORDS, records);
+
+    // delete the connector
+    connect.deleteConnector(CONNECTOR_NAME);
+
+    // change mode
+    props.replace("mode", "incrementing");
+    props.put("incrementing.column.name",  "id");
+    props.remove("timestamp.column.name");
+
+    sendTestTimestampDataToMysql(startIndex+NUM_RECORDS, connection);
 
     // start a source connector
     connect.configureConnector(CONNECTOR_NAME, props);
@@ -263,77 +243,12 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
     int expected = Integer.valueOf(MAX_TASKS); // or set to actual number
     waitForConnectorToStart(CONNECTOR_NAME, expected);
 
-    Thread.sleep(3000);
+    records = connect.kafka().consume(
+        NUM_RECORDS * 3,
+        CONSUME_MAX_DURATION_MS,
+        "sql-mysqlTable");
 
-    ConsumerRecords<byte[], byte[]> newRecords = connect.kafka().consume(
-            NUM_RECORDS,
-            CONSUME_MAX_DURATION_MS,
-            "sql-mysqlTable");
-
-    Assert.assertEquals(NUM_RECORDS*2, newRecords.count());
-
-  }
-
-
-  private void dropTableIfExists(String kafkaTopic) throws SQLException {
-    Statement st = connection.createStatement();
-    st.executeQuery("drop table if exists " + kafkaTopic);
-  }
-
-  private void createTable() throws SQLException {
-    Statement st = connection.createStatement();
-    String sql = "CREATE TABLE " + KAFKA_TOPIC +
-            "(id INTEGER not NULL, " +
-            " first_name VARCHAR(255), " +
-            " last_name VARCHAR(255), " +
-            " age INTEGER, " +
-            " PRIMARY KEY ( id ))";
-    st.executeQuery(sql);
-  }
-
-  private void createTimestampTable() throws SQLException {
-    Statement st = connection.createStatement();
-    String sql = "CREATE TABLE " + KAFKA_TOPIC +
-            "(id INTEGER not NULL, " +
-            " first_name VARCHAR(255), " +
-            " last_name VARCHAR(255), " +
-            " timeof TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, " +
-            " age INTEGER, " +
-            " PRIMARY KEY ( id ))";
-    st.executeQuery(sql);
-  }
-
-  private void sendTestDataToMysql(int start) throws SQLException {
-    String sql = "INSERT INTO mysqlTable(id,first_name,last_name,age) "
-            + "VALUES(?,?,?,?)";
-    PreparedStatement pstmt = connection.prepareStatement(sql);
-    for (int i=start; i<start+NUM_RECORDS; i++) {
-      pstmt.setLong(1, i);
-      pstmt.setString(2, "FirstName");
-      pstmt.setString(3, "LastName");
-      pstmt.setLong(4, 20);
-      pstmt.executeUpdate();
-    }
-    pstmt.close();
-  }
-
-  private void sendTestTimestampDataToMysql(int start) throws SQLException {
-    java.util.Date date=new java.util.Date();
-
-    java.sql.Timestamp sqlTime=new java.sql.Timestamp(date.getTime());
-
-    String sql = "INSERT INTO mysqlTable(id,first_name,last_name,timeof,age) "
-            + "VALUES(?,?,?,?,?)";
-    PreparedStatement pstmt = connection.prepareStatement(sql);
-    for (int i=start; i<start+NUM_RECORDS; i++) {
-      pstmt.setLong(1, i);
-      pstmt.setString(2, "FirstName");
-      pstmt.setString(3, "LastName");
-      pstmt.setTimestamp(4,sqlTime);
-      pstmt.setLong(5, 20);
-      pstmt.executeUpdate();
-    }
-    pstmt.close();
+    assertRecordOffset(startIndex, startIndex+NUM_RECORDS*3, records);
   }
 
 }

@@ -256,46 +256,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   @Override
-  protected ColumnDefinition columnDefinition(
-      ResultSet resultSet,
-      ColumnId id,
-      int jdbcType,
-      String typeName,
-      String classNameForType,
-      ColumnDefinition.Nullability nullability,
-      ColumnDefinition.Mutability mutability,
-      int precision,
-      int scale,
-      Boolean signedNumbers,
-      Integer displaySize,
-      Boolean autoIncremented,
-      Boolean caseSensitive,
-      Boolean searchable,
-      Boolean currency,
-      Boolean isPrimaryKey
-  ) {
-
-    return super.columnDefinition(
-        resultSet,
-        id,
-        jdbcType,
-        typeName,
-        classNameForType,
-        nullability,
-        mutability,
-        precision,
-        scale,
-        signedNumbers,
-        displaySize,
-        autoIncremented,
-        caseSensitive,
-        searchable,
-        currency,
-        isPrimaryKey
-    );
-  }
-
-  @Override
   public String buildInsertStatement(
       TableId table,
       Collection<ColumnId> keyColumns,

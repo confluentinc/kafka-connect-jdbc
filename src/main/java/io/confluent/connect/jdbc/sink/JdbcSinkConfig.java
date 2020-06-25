@@ -52,6 +52,13 @@ public class JdbcSinkConfig extends AbstractConfig {
 
   }
 
+  public enum UpsertStyle {
+    DEFAULT,
+    INSERT_OR_UPDATE,
+    INSERT_OR_IGNORE;
+
+  }
+
   public enum PrimaryKeyMode {
     NONE,
     KAFKA,
@@ -147,6 +154,20 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "    Use the appropriate update semantics for the target database if it is supported by "
       + "the connector, e.g. ``UPDATE``.";
   private static final String INSERT_MODE_DISPLAY = "Insert Mode";
+
+  public static final String UPSERT_STYLE = "upsert.style";
+  private static final String UPSERT_STYLE_DEFAULT = "default";
+  private static final String UPSERT_STYLE_DOC =
+      "The upsert style to use. Supported modes are:\n"
+      + "``default``\n"
+      + "    Use the default upsert semantics for the target database as defined the connector "
+      + "``insert_or_update``\n"
+      + "    Use the ``INSERT OR UPDATE`` semantics for the target database if it is supported by "
+      + "the connector.\n"
+      + "``insert_or_ignore``\n"
+      + "    Use the ``INSERT OR IGNORE`` semantics for the target database if it is supported by "
+      + "the connector.";
+  private static final String UPSERT_STYLE_DISPLAY = "Upsert Style";
 
   public static final String PK_FIELDS = "pk.fields";
   private static final String PK_FIELDS_DEFAULT = "";
@@ -304,13 +325,25 @@ public class JdbcSinkConfig extends AbstractConfig {
             INSERT_MODE_DISPLAY
         )
         .define(
+            UPSERT_STYLE,
+            ConfigDef.Type.STRING,
+            UPSERT_STYLE_DEFAULT,
+            EnumValidator.in(UpsertStyle.values()),
+            ConfigDef.Importance.LOW,
+            UPSERT_STYLE_DOC,
+            WRITES_GROUP,
+            2,
+            ConfigDef.Width.MEDIUM,
+            UPSERT_STYLE_DISPLAY
+        )
+        .define(
             BATCH_SIZE,
             ConfigDef.Type.INT,
             BATCH_SIZE_DEFAULT,
             NON_NEGATIVE_INT_VALIDATOR,
             ConfigDef.Importance.MEDIUM,
             BATCH_SIZE_DOC, WRITES_GROUP,
-            2,
+            3,
             ConfigDef.Width.SHORT,
             BATCH_SIZE_DISPLAY
         )
@@ -320,7 +353,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             DELETE_ENABLED_DEFAULT,
             ConfigDef.Importance.MEDIUM,
             DELETE_ENABLED_DOC, WRITES_GROUP,
-            3,
+            4,
             ConfigDef.Width.SHORT,
             DELETE_ENABLED_DISPLAY,
             DeleteEnabledRecommender.INSTANCE
@@ -333,10 +366,11 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Importance.LOW,
             TABLE_TYPES_DOC,
             WRITES_GROUP,
-            4,
+            5,
             ConfigDef.Width.MEDIUM,
             TABLE_TYPES_DISPLAY
         )
+
         // Data Mapping
         .define(
             TABLE_NAME_FORMAT,
@@ -464,6 +498,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final boolean autoCreate;
   public final boolean autoEvolve;
   public final InsertMode insertMode;
+  public final UpsertStyle upsertStyle;
   public final PrimaryKeyMode pkMode;
   public final List<String> pkFields;
   public final Set<String> fieldsWhitelist;
@@ -485,6 +520,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     autoCreate = getBoolean(AUTO_CREATE);
     autoEvolve = getBoolean(AUTO_EVOLVE);
     insertMode = InsertMode.valueOf(getString(INSERT_MODE).toUpperCase());
+    upsertStyle = UpsertStyle.valueOf(getString(UPSERT_STYLE).toUpperCase());
     pkMode = PrimaryKeyMode.valueOf(getString(PK_MODE).toUpperCase());
     pkFields = getList(PK_FIELDS);
     dialectName = getString(DIALECT_NAME_CONFIG);

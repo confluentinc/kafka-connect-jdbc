@@ -67,6 +67,19 @@ public class JdbcSinkConfigTest {
   }
 
   @Test
+  public void shouldCreateConfigWithDefaultUpsertStyle() {
+    createConfig();
+    assertEquals(config.upsertStyle, JdbcSinkConfig.UpsertStyle.DEFAULT);
+  }
+
+  @Test
+  public void shouldCreateConfigWithGivenUpsertStyle() {
+    props.put("upsert.style", "insert_or_ignore");
+    createConfig();
+    assertEquals(config.upsertStyle, JdbcSinkConfig.UpsertStyle.INSERT_OR_IGNORE);
+  }
+
+  @Test
   public void shouldCreateConfigWithViewOnly() {
     props.put("table.types", "view");
     createConfig();

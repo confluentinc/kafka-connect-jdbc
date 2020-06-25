@@ -38,6 +38,10 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
     return new Db2DatabaseDialect(sourceConfigWithUrl("jdbc:db2://something"));
   }
 
+  private Db2DatabaseDialect createDialectWithInsertOrIgnoreUpsertStyle() {
+    return new Db2DatabaseDialect(sinkConfigWithUrl("jdbc:db2://something","upsert.style","insert_or_ignore"));
+  }
+
   @Test
   public void shouldMapPrimitiveSchemaTypeToSqlTypes() {
     assertPrimitiveMapping(Type.INT8, "SMALLINT");
@@ -268,6 +272,24 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
   }
 
   @Test
+  public void shouldBuildUpsertStatementWithInsertOrIgnoreStyle() {
+    dialect = createDialectWithInsertOrIgnoreUpsertStyle();
+    String expected = "merge into \"myTable\" using (values(?, ?, ?, ?, ?, ?)) "
+                    + "as DAT(\"id1\", \"id2\", \"columnA\", \"columnB\", \"columnC\", "
+                    + "\"columnD\") "
+                    + "on \"myTable\".\"id1\"=DAT.\"id1\" and \"myTable\".\"id2\"=DAT.\"id2\" "
+                    + "when not matched then "
+                    + "insert(\"myTable\".\"columnA\",\"myTable\".\"columnB\",\"myTable\""
+                    + ".\"columnC\","
+                    + "\"myTable\".\"columnD\",\"myTable\".\"id1\",\"myTable\"" + ".\"id2\") "
+                    + "values(DAT.\"columnA\",DAT.\"columnB\",DAT.\"columnC\",DAT.\"columnD\","
+                    + "DAT.\"id1\","
+                    + "DAT.\"id2\")";
+    String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD);
+    assertEquals(expected, sql);
+  }
+
+  @Test
   public void shouldBuildUpsertStatementWithNoIdentifierQuoting() {
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
@@ -292,6 +314,26 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
   }
 
   @Test
+  public void shouldBuildUpsertStatementWithNoIdentifierQuotingWithInsertOrIgnoreStyle() {
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialectWithInsertOrIgnoreUpsertStyle();
+
+    String expected = "merge into myTable using (values(?, ?, ?, ?, ?, ?)) "
+                    + "as DAT(id1, id2, columnA, columnB, columnC, "
+                    + "columnD) "
+                    + "on myTable.id1=DAT.id1 and myTable.id2=DAT.id2 "
+                    + "when not matched then "
+                    + "insert(myTable.columnA,myTable.columnB,myTable"
+                    + ".columnC,"
+                    + "myTable.columnD,myTable.id1,myTable.id2) "
+                    + "values(DAT.columnA,DAT.columnB,DAT.columnC,DAT.columnD,"
+                    + "DAT.id1,"
+                    + "DAT.id2)";
+    String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD);
+    assertEquals(expected, sql);
+  }
+
+  @Test
   public void upsert() {
     TableId actor = tableId("actor");
     String expected = "merge into \"actor\" using (values(?, ?, ?, ?)) as DAT(\"actor_id\", "
@@ -306,6 +348,24 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
                                                    columns(actor, "first_name", "last_name",
                                                            "score"
                                                    )
+    );
+    assertEquals(expected, sql);
+  }
+
+  @Test
+  public void upsertWithInsertOrIgnoreStyle() {
+    dialect = createDialectWithInsertOrIgnoreUpsertStyle();
+    TableId actor = tableId("actor");
+    String expected = "merge into \"actor\" using (values(?, ?, ?, ?)) as DAT(\"actor_id\", "
+                    + "\"first_name\", \"last_name\", \"score\") on \"actor\".\"actor_id\"=DAT"
+                    + ".\"actor_id\" when not matched then insert(\"actor\""
+                    + ".\"first_name\",\"actor\".\"last_name\",\"actor\".\"score\",\"actor\""
+                    + ".\"actor_id\") values(DAT.\"first_name\",DAT.\"last_name\",DAT"
+                    + ".\"score\",DAT.\"actor_id\")";
+    String sql = dialect.buildUpsertQueryStatement(actor, columns(actor, "actor_id"),
+            columns(actor, "first_name", "last_name",
+                    "score"
+            )
     );
     assertEquals(expected, sql);
   }
@@ -328,6 +388,28 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
                + ".actor_id) values(DAT.actor_id)";
     sql = dialect.buildUpsertQueryStatement(
         actor, columns(actor, "actor_id"), columns(actor));
+    assertEquals(expected, sql);
+  }
+
+  @Test
+  public void upsertOnlyKeyColsWithInsertOrIgnoreStyle() {
+    dialect = createDialectWithInsertOrIgnoreUpsertStyle();
+    TableId actor = tableId("actor");
+    String expected = "merge into \"actor\" using (values(?)) as DAT(\"actor_id\") on \"actor\""
+                    + ".\"actor_id\"=DAT.\"actor_id\" when not matched then insert(\"actor\""
+                    + ".\"actor_id\") values(DAT.\"actor_id\")";
+    String sql = dialect.buildUpsertQueryStatement(
+            actor, columns(actor, "actor_id"), columns(actor));
+    assertEquals(expected, sql);
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialectWithInsertOrIgnoreUpsertStyle();
+
+    expected = "merge into actor using (values(?)) as DAT(actor_id) on actor"
+              + ".actor_id=DAT.actor_id when not matched then insert(actor"
+              + ".actor_id) values(DAT.actor_id)";
+    sql = dialect.buildUpsertQueryStatement(
+            actor, columns(actor, "actor_id"), columns(actor));
     assertEquals(expected, sql);
   }
 

@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -50,6 +51,8 @@ public class Db2DatabaseDialect extends GenericDatabaseDialect {
     }
   }
 
+  private final JdbcSinkConfig.UpsertStyle upsertStyle;
+
   /**
    * Create a new dialect instance with the given connector configuration.
    *
@@ -57,6 +60,12 @@ public class Db2DatabaseDialect extends GenericDatabaseDialect {
    */
   public Db2DatabaseDialect(AbstractConfig config) {
     super(config, new IdentifierRules(".", "\"", "\""));
+    if (config instanceof JdbcSinkConfig) {
+      JdbcSinkConfig sinkConfig = (JdbcSinkConfig) config;
+      upsertStyle = sinkConfig.upsertStyle;
+    } else {
+      upsertStyle = JdbcSinkConfig.UpsertStyle.DEFAULT;
+    }
   }
 
   @Override
@@ -142,12 +151,14 @@ public class Db2DatabaseDialect extends GenericDatabaseDialect {
            .delimitedBy(" and ")
            .transformedBy(transform)
            .of(keyColumns);
-    if (nonKeyColumns != null && !nonKeyColumns.isEmpty()) {
-      builder.append(" when matched then update set ");
-      builder.appendList()
-             .delimitedBy(", ")
-             .transformedBy(transform)
-             .of(nonKeyColumns);
+    if (upsertStyle != JdbcSinkConfig.UpsertStyle.INSERT_OR_IGNORE) {
+      if (nonKeyColumns != null && !nonKeyColumns.isEmpty()) {
+        builder.append(" when matched then update set ");
+        builder.appendList()
+                .delimitedBy(", ")
+                .transformedBy(transform)
+                .of(nonKeyColumns);
+      }
     }
 
     builder.append(" when not matched then insert(");

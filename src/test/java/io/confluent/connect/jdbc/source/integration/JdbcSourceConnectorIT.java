@@ -174,19 +174,14 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
     // delete the connector
     connect.deleteConnector(CONNECTOR_NAME);
 
+    sendTestDataToMysql(startIndex+NUM_RECORDS, connection);
+
     // start a source connector
     connect.configureConnector(CONNECTOR_NAME, props);
 
     // wait for tasks to spin up
     int expected = Integer.valueOf(MAX_TASKS); // or set to actual number
     waitForConnectorToStart(CONNECTOR_NAME, expected);
-
-    connect.kafka().consume(
-        NUM_RECORDS,
-        CONSUME_MAX_DURATION_MS,
-        "sql-mysqlTable");
-
-    sendTestDataToMysql(startIndex+NUM_RECORDS, connection);
 
     records = connect.kafka().consume(
     NUM_RECORDS*2,

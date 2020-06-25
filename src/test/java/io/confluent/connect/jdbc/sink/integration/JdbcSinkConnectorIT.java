@@ -36,7 +36,6 @@ import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.DockerComposeContainer;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -75,15 +74,6 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     }
   }
 
-  public void reConnect() throws InterruptedException {
-    if (connection == null) {
-      TestUtils.waitForCondition(() -> assertConnection().orElse(false),
-          TimeUnit.SECONDS.toMillis(30),
-          "Failed to start the container.");
-    }
-  }
-
-
   private Optional<Boolean> assertConnection() {
     try {
       connection = getConnection();
@@ -113,74 +103,72 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
 
   @Test
   public void testWithJDBCMysqlDialectSuccess() throws Exception {
-
     compose1.close();
     dropTableIfExists(KAFKA_TOPIC);
-    sendTestDataToKafka(SCHEMA, 0);
+    sendTestDataToKafka(SCHEMA);
 
     // Add mysql dialect related configurations.
-    props.put("connection.url", "jdbc:mysql://localhost:3306/db");
-    props.put("connection.user", "user");
-    props.put("connection.password", "password");
-    props.put("dialect.name", "MySqlDatabaseDialect");
-    props.put("auto.create", "true");
-    props.put("value.converter", JsonConverter.class.getName());
+    getConnectorConfigurations();
 
-    // Start Connector and wait some specific time to start the connector.
+    // Configure Connector and wait some specific time to start the connector.
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
-    Thread.sleep(3000);
+
+    //Wait Connector to write data into Mysql
+    waitConnectorToWriteDataIntoMysql(connection, CONNECTOR_NAME, Integer.valueOf(MAX_TASKS), KAFKA_TOPIC, NUM_RECORDS);
+
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
         NUM_RECORDS,
         CONSUME_MAX_DURATION_MS,
         KAFKA_TOPIC);
-
     log.info("Number of records added in kafka {}", totalRecords.count());
     int count = loadFromSQL(KAFKA_TOPIC);
     Assert.assertEquals(NUM_RECORDS, count);
-    sendTestDataToKafka(SCHEMA, 1);
+
+    sendTestDataToKafka(SCHEMA);
+    //Wait Connector to write data into Mysql
+    waitConnectorToWriteDataIntoMysql(connection, CONNECTOR_NAME, Integer.valueOf(MAX_TASKS), KAFKA_TOPIC, NUM_RECORDS * 2);
     totalRecords = connect.kafka().consume(
         NUM_RECORDS * 2,
         CONSUME_MAX_DURATION_MS,
         KAFKA_TOPIC);
+    log.info("Number of records added in kafka {}", totalRecords.count());
     count = loadFromSQL(KAFKA_TOPIC);
-    Assert.assertEquals(totalRecords.count(), NUM_RECORDS * 2);
     Assert.assertEquals(NUM_RECORDS * 2, count);
   }
 
   @Test
   public void testWithJDBCMysqlDialectUnavailable() throws Exception {
-
     dropTableIfExists(KAFKA_TOPIC);
-    sendTestDataToKafka(SCHEMA, 0);
+    sendTestDataToKafka(SCHEMA);
 
     // Add mysql dialect related configurations.
-    props.put("connection.url", "jdbc:mysql://localhost:3306/db");
-    props.put("connection.user", "user");
-    props.put("connection.password", "password");
-    props.put("dialect.name", "MySqlDatabaseDialect");
-    props.put("auto.create", "true");
-    props.put("value.converter", JsonConverter.class.getName());
+    getConnectorConfigurations();
 
-    // Start Connector and wait some specific time to start the connector.
+    // Configure Connector and wait some specific time to start the connector.
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
-    Thread.sleep(3000);
+
+    //Wait Connector to write data into Mysql
+    waitConnectorToWriteDataIntoMysql(connection, CONNECTOR_NAME, Integer.valueOf(MAX_TASKS), KAFKA_TOPIC, NUM_RECORDS);
+
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
         NUM_RECORDS,
         CONSUME_MAX_DURATION_MS,
         KAFKA_TOPIC);
-
     log.info("Number of records added in kafka {}", totalRecords.count());
     int count = loadFromSQL(KAFKA_TOPIC);
     Assert.assertEquals(NUM_RECORDS, count);
-    sendTestDataToKafka(SCHEMA, 1);
+
+    sendTestDataToKafka(SCHEMA);
+    //Wait Connector to write data into Mysql
+    waitConnectorToWriteDataIntoMysql(connection, CONNECTOR_NAME, Integer.valueOf(MAX_TASKS), KAFKA_TOPIC, NUM_RECORDS * 2);
     totalRecords = connect.kafka().consume(
         NUM_RECORDS * 2,
         CONSUME_MAX_DURATION_MS,
         KAFKA_TOPIC);
+    log.info("Number of records added in kafka {}", totalRecords.count());
     count = loadFromSQL(KAFKA_TOPIC);
-    Assert.assertEquals(totalRecords.count(), NUM_RECORDS * 2);
     Assert.assertEquals(NUM_RECORDS * 2, count);
   }
 
@@ -188,35 +176,36 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
   public void testWithChangeInServiceCredentials() throws Exception {
     grantAllPrivileges();
     dropTableIfExists(KAFKA_TOPIC);
-    sendTestDataToKafka(SCHEMA, 0);
-    // Add mysql dialect related configurations.
-    props.put("connection.url", "jdbc:mysql://localhost:3306/db");
-    props.put("connection.user", "user");
-    props.put("connection.password", "password");
-    props.put("dialect.name", "MySqlDatabaseDialect");
-    props.put("auto.create", "true");
-    props.put("value.converter", JsonConverter.class.getName());
+    sendTestDataToKafka(SCHEMA);
 
-    // Start Connector and wait some specific time to start the connector.
+    // Add mysql dialect related configurations.
+    getConnectorConfigurations();
+
+    // Configure Connector and wait some specific time to start the connector.
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
+
+    //Wait Connector to write data into Mysql
+    waitConnectorToWriteDataIntoMysql(connection, CONNECTOR_NAME, Integer.valueOf(MAX_TASKS), KAFKA_TOPIC, NUM_RECORDS);
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
         NUM_RECORDS,
         CONSUME_MAX_DURATION_MS,
         KAFKA_TOPIC);
-
     log.info("Number of records added in kafka {}", totalRecords.count());
     int count = loadFromSQL(KAFKA_TOPIC);
     Assert.assertEquals(NUM_RECORDS, count);
+
     revokeWritePrivileges();
-    Thread.sleep(10000);
-    sendTestDataToKafka(SCHEMA, 1);
+
+    sendTestDataToKafka(SCHEMA);
+    //Wait Connector to write data into Mysql
+    waitConnectorToWriteDataIntoMysql(connection, CONNECTOR_NAME, Integer.valueOf(MAX_TASKS), KAFKA_TOPIC, NUM_RECORDS * 2);
     totalRecords = connect.kafka().consume(
         NUM_RECORDS * 2,
         CONSUME_MAX_DURATION_MS,
         KAFKA_TOPIC);
+    log.info("Number of records added in kafka {}", totalRecords.count());
     count = loadFromSQL(KAFKA_TOPIC);
-    Assert.assertEquals(totalRecords.count(), NUM_RECORDS * 2);
     Assert.assertEquals(NUM_RECORDS * 2, count);
   }
 
@@ -235,21 +224,29 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     st.executeQuery("drop table if exists " + kafkaTopic);
   }
 
-  private int loadFromSQL(String vertica_table) throws SQLException {
+  private int loadFromSQL(String mySqlTable) throws SQLException {
     Statement st = connection.createStatement();
-    ResultSet rs = st.executeQuery("SELECT COUNT(*) AS rowcount FROM " + vertica_table);
+    ResultSet rs = st.executeQuery("SELECT COUNT(*) AS rowcount FROM " + mySqlTable);
     rs.next();
     return rs.getInt("rowcount");
   }
 
-  private void sendTestDataToKafka(Schema SCHEMA, int count) throws InterruptedException {
-    int temp = NUM_RECORDS;
-    for (int i = NUM_RECORDS * count; i < NUM_RECORDS * count + NUM_RECORDS; i++) {
+  private void sendTestDataToKafka(Schema SCHEMA) throws InterruptedException {
+    for (int i = 0; i < NUM_RECORDS; i++) {
       String value = asJson(KAFKA_TOPIC, SCHEMA, i);
       connect.kafka().produce(KAFKA_TOPIC, null, value);
       //A minor delay is added so that record produced will have different time stamp.
       Thread.sleep(10);
     }
+  }
+
+  private void getConnectorConfigurations() {
+    props.put("connection.url", "jdbc:mysql://localhost:3306/db");
+    props.put("connection.user", "user");
+    props.put("connection.password", "password");
+    props.put("dialect.name", "MySqlDatabaseDialect");
+    props.put("auto.create", "true");
+    props.put("value.converter", JsonConverter.class.getName());
   }
 
   private String asJson(String topic, Schema schema, int i) {
@@ -273,5 +270,4 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
       byte[] raw = jsonConverter.fromConnectData(topic, schema, struct);
       return new String(raw, StandardCharsets.UTF_8);
     }
-
 }

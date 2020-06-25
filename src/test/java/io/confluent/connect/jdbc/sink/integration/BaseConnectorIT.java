@@ -19,8 +19,6 @@ import io.confluent.connect.jdbc.JdbcSinkConnector;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Timestamp;
-import org.apache.kafka.connect.errors.ConnectException;
-import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.runtime.AbstractStatus;
 import org.apache.kafka.connect.runtime.SinkConnectorConfig;
 import org.apache.kafka.connect.runtime.rest.entities.ConnectorStateInfo;
@@ -37,12 +35,9 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
 @Category(IntegrationTest.class)
@@ -116,6 +111,40 @@ public class BaseConnectorIT {
       return Optional.of(result);
     } catch (Exception e) {
       log.warn("Could not check connector state info. Connector might not have started.");
+      return Optional.empty();
+    }
+  }
+
+  protected long waitConnectorToWriteDataIntoMysql(Connection connection, String connectorName, int numTasks, String tableName, int numberOfRecords) throws InterruptedException {
+    TestUtils.waitForCondition(
+        () -> assertRecordsCountInMysql(connection, connectorName, numTasks, tableName, numberOfRecords).orElse(false),
+        CONSUME_MAX_DURATION_MS,
+        "Either writing into table has not started or row count did not matched."
+    );
+    return System.currentTimeMillis();
+  }
+
+  private Optional<Boolean> assertRecordsCountInMysql(Connection connection, String name, int numTasks, String tableName, int numberOfRecords) {
+    try {
+      Statement st = connection.createStatement();
+      ResultSet rs = st.executeQuery("SELECT COUNT(*) AS rowcount FROM " + tableName);
+      rs.next();
+      ConnectorStateInfo info = connect.connectorStatus(name);
+      boolean result = info != null
+          && info.tasks().size() == numTasks
+          && info.connector().state().equals(AbstractStatus.State.RUNNING.toString())
+          && info.tasks().stream().allMatch(s -> s.state().equals(AbstractStatus.State.RUNNING.toString()));
+      int targetRowCount = rs.getInt("rowcount");
+      boolean targetRowCountStatus = rs.getInt("rowcount") == numberOfRecords;
+      if (!targetRowCountStatus) {
+        log.warn("Row count did not matched. Expected {}, Actual {}.", numberOfRecords, targetRowCount);
+      }
+      return Optional.of(result && targetRowCountStatus);
+    } catch (SQLException e) {
+      log.warn("Getting sql exception while counting table's row..");
+      return Optional.empty();
+    } catch (Exception e) {
+      log.warn("Could not check connector state info, will retry shortly ...");
       return Optional.empty();
     }
   }

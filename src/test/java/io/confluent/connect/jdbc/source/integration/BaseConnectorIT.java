@@ -101,9 +101,7 @@ public class BaseConnectorIT {
    * @return : Map of props.
    */
   public Map<String, String> getCommonProps() {
-
     Map<String, String> props = new HashMap<>();
-//    props.put(SinkConnectorConfig.TOPICS_CONFIG, KAFKA_TOPIC);
     props.put("connector.class", JdbcSourceConnector.class.getName());
     props.put("tasks.max", MAX_TASKS);
     // license properties

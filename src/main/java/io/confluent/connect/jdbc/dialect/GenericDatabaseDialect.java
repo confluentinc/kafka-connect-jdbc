@@ -207,8 +207,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     return timeZone;
   }
 
-  @Override
-  public Connection getConnection() throws SQLException {
+  private Connection createConnection() throws SQLException {
     // These config names are the same for both source and sink configs ...
     String username = config.getString(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG);
     Password dbPassword = config.getPassword(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG);
@@ -230,6 +229,12 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     }
     connections.add(connection);
     return connection;
+  }
+
+  @Override
+  public Connection getConnection() throws SQLException {
+    log.info("Getting connection in GenericDatabaseDialect - connections.size(): {}", connections.size());
+    return connections.size() == 0 ? createConnection() : connections.peek();
   }
 
   @Override
@@ -285,7 +290,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
   protected JdbcDriverInfo jdbcDriverInfo() {
     if (jdbcDriverInfo == null) {
-      try (Connection connection = getConnection()) {
+      try {
+        Connection connection = getConnection();
         jdbcDriverInfo = createJdbcDriverInfo(connection);
       } catch (SQLException e) {
         throw new ConnectException("Unable to get JDBC driver information", e);
@@ -479,7 +485,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     if (identifierRules.get() == null) {
       // Otherwise try to get the actual quote string and separator from the database, since
       // many databases allow them to be changed
-      try (Connection connection = getConnection()) {
+      try {
+        Connection connection = getConnection();
         DatabaseMetaData metaData = connection.getMetaData();
         String leadingQuoteStr = metaData.getIdentifierQuoteString();
         String trailingQuoteStr = leadingQuoteStr; // JDBC does not distinguish
@@ -493,6 +500,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         }
         identifierRules.set(new IdentifierRules(separator, leadingQuoteStr, trailingQuoteStr));
       } catch (SQLException e) {
+        log.warn("Exception when getting identifier metadata: {}", e.toString());
         if (defaultIdentifierRules != null) {
           identifierRules.set(defaultIdentifierRules);
           log.warn("Unable to get identifier metadata; using default rules", e);

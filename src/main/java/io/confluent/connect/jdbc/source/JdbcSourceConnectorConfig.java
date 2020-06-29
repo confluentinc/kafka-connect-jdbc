@@ -651,7 +651,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       // Create the dialect to get the tables ...
       AbstractConfig jdbcConfig = new AbstractConfig(CONFIG_DEF, config);
       DatabaseDialect dialect = DatabaseDialects.findBestFor(dbUrl, jdbcConfig);
-      try (Connection db = dialect.getConnection()) {
+      try {
+        Connection db = dialect.getConnection();
         List<Object> result = new LinkedList<>();
         for (TableId id : dialect.tableIds(db)) {
           // Just add the unqualified table name

@@ -119,16 +119,16 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
   public void shouldBuildCreateQueryStatement() {
     assertEquals(
         "CREATE TABLE `myTable` (\n"
-            + "`c1` INTEGER NOT NULL,\n"
-            + "`c2` INTEGER NOT NULL,\n"
-            + "`c3` TEXT NOT NULL,\n"
-            + "`c4` TEXT NULL,\n"
-            + "`c5` NUMERIC DEFAULT '2001-03-15',\n"
-            + "`c6` NUMERIC DEFAULT '00:00:00.000',\n"
-            + "`c7` NUMERIC DEFAULT '2001-03-15 00:00:00.000',\n"
-            + "`c8` NUMERIC NULL,\n"
-            + "`c9` INTEGER DEFAULT 1,\n"
-            + "PRIMARY KEY(`c1`))",
+        + "`c1` INTEGER NOT NULL,\n"
+        + "`c2` INTEGER NOT NULL,\n"
+        + "`c3` TEXT NOT NULL,\n"
+        + "`c4` TEXT NULL,\n"
+        + "`c5` NUMERIC DEFAULT '2001-03-15',\n"
+        + "`c6` NUMERIC DEFAULT '00:00:00.000',\n"
+        + "`c7` NUMERIC DEFAULT '2001-03-15 00:00:00.000',\n"
+        + "`c8` NUMERIC NULL,\n"
+        + "`c9` INTEGER DEFAULT 1,\n"
+        + "PRIMARY KEY(`c1`))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
 
@@ -136,16 +136,16 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
     dialect = createDialect();
     assertEquals(
         "CREATE TABLE myTable (\n"
-            + "c1 INTEGER NOT NULL,\n"
-            + "c2 INTEGER NOT NULL,\n"
-            + "c3 TEXT NOT NULL,\n"
-            + "c4 TEXT NULL,\n"
-            + "c5 NUMERIC DEFAULT '2001-03-15',\n"
-            + "c6 NUMERIC DEFAULT '00:00:00.000',\n"
-            + "c7 NUMERIC DEFAULT '2001-03-15 00:00:00.000',\n"
-            + "c8 NUMERIC NULL,\n"
-            + "c9 INTEGER DEFAULT 1,\n"
-            + "PRIMARY KEY(c1))",
+        + "c1 INTEGER NOT NULL,\n"
+        + "c2 INTEGER NOT NULL,\n"
+        + "c3 TEXT NOT NULL,\n"
+        + "c4 TEXT NULL,\n"
+        + "c5 NUMERIC DEFAULT '2001-03-15',\n"
+        + "c6 NUMERIC DEFAULT '00:00:00.000',\n"
+        + "c7 NUMERIC DEFAULT '2001-03-15 00:00:00.000',\n"
+        + "c8 NUMERIC NULL,\n"
+        + "c9 INTEGER DEFAULT 1,\n"
+        + "PRIMARY KEY(c1))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
   }
@@ -188,7 +188,7 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
   @Test
   public void shouldBuildUpsertStatement() {
     String expected = "INSERT OR REPLACE INTO `myTable`(`id1`,`id2`,`columnA`,`columnB`," +
-        "`columnC`,`columnD`) VALUES(?,?,?,?,?,?)";
+                      "`columnC`,`columnD`) VALUES(?,?,?,?,?,?)";
     String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD);
     assertEquals(expected, sql);
   }
@@ -203,22 +203,22 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
   public void createOneColOnePk() {
     verifyCreateOneColOnePk(
         "CREATE TABLE `myTable` (" + System.lineSeparator() + "`pk1` INTEGER NOT NULL," +
-            System.lineSeparator() + "PRIMARY KEY(`pk1`))");
+        System.lineSeparator() + "PRIMARY KEY(`pk1`))");
   }
 
   @Test
   public void createThreeColTwoPk() {
     verifyCreateThreeColTwoPk(
         "CREATE TABLE `myTable` (" + System.lineSeparator() + "`pk1` INTEGER NOT NULL," +
-            System.lineSeparator() + "`pk2` INTEGER NOT NULL," + System.lineSeparator() +
-            "`col1` INTEGER NOT NULL," + System.lineSeparator() + "PRIMARY KEY(`pk1`,`pk2`))");
+        System.lineSeparator() + "`pk2` INTEGER NOT NULL," + System.lineSeparator() +
+        "`col1` INTEGER NOT NULL," + System.lineSeparator() + "PRIMARY KEY(`pk1`,`pk2`))");
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
     verifyCreateThreeColTwoPk(
         "CREATE TABLE myTable (" + System.lineSeparator() + "pk1 INTEGER NOT NULL," +
-            System.lineSeparator() + "pk2 INTEGER NOT NULL," + System.lineSeparator() +
-            "col1 INTEGER NOT NULL," + System.lineSeparator() + "PRIMARY KEY(pk1,pk2))");
+        System.lineSeparator() + "pk2 INTEGER NOT NULL," + System.lineSeparator() +
+        "col1 INTEGER NOT NULL," + System.lineSeparator() + "PRIMARY KEY(pk1,pk2))");
   }
 
   @Test
@@ -229,7 +229,7 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
   @Test
   public void alterAddTwoCol() {
     verifyAlterAddTwoCols("ALTER TABLE `myTable` ADD `newcol1` INTEGER NULL",
-        "ALTER TABLE `myTable` ADD `newcol2` INTEGER DEFAULT 42");
+                          "ALTER TABLE `myTable` ADD `newcol2` INTEGER DEFAULT 42");
   }
 
   @Test

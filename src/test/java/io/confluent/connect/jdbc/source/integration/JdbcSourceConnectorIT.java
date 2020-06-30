@@ -15,7 +15,6 @@
 
 package io.confluent.connect.jdbc.source.integration;
 
-import io.confluent.connect.jdbc.sink.integration.JdbcSinkConnectorIT;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.test.IntegrationTest;
@@ -43,20 +42,20 @@ import java.util.concurrent.TimeUnit;
 
 @Category(IntegrationTest.class)
 public class JdbcSourceConnectorIT extends BaseConnectorIT {
-  private static final Logger log = LoggerFactory.getLogger(JdbcSinkConnectorIT.class);
+  private static final Logger log = LoggerFactory.getLogger(JdbcSourceConnectorIT.class);
 
   private Map<String, String> props;
   private static Connection connection;
 
   @ClassRule
-  public static DockerComposeContainer compose =
+  public static DockerComposeContainer mySqlContainer =
       new DockerComposeContainer(new File("src/test/docker/configA/mysql-docker-compose.yml"));
 
-  public static DockerComposeContainer pumbaCompose;
+  public static DockerComposeContainer pumbaContainer;
   private void startPumbaContainer() {
-    pumbaCompose =
+    pumbaContainer =
         new DockerComposeContainer(new File("src/test/docker/configB/pumba-docker-compose.yml"));
-    pumbaCompose.start();
+    pumbaContainer.start();
   }
 
   @Before
@@ -94,7 +93,7 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
 
   @AfterClass
   public static void closeConnection() {
-    compose.close();
+    mySqlContainer.close();
   }
 
   @Test
@@ -155,7 +154,7 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
         CONSUME_MAX_DURATION_MS,
         topicName);
     Assert.assertEquals(NUM_RECORDS * 2, records.count());
-    pumbaCompose.close();
+    pumbaContainer.close();
   }
 
   private void getConnectorConfigurations() {

@@ -55,14 +55,14 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
   private static Connection connection;
 
   @ClassRule
-  public static DockerComposeContainer compose =
+  public static DockerComposeContainer mySqlContainer =
       new DockerComposeContainer(new File("src/test/docker/configA/mysql-docker-compose.yml"));
 
-  public static DockerComposeContainer pumbaCompose;
+  public static DockerComposeContainer pumbaContainer;
   private void startPumbaContainer() {
-    pumbaCompose =
+    pumbaContainer =
         new DockerComposeContainer(new File("src/test/docker/configB/pumba-docker-compose.yml"));
-    pumbaCompose.start();
+    pumbaContainer.start();
   }
 
   @Before
@@ -100,7 +100,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
 
   @AfterClass
   public static void closeConnection() {
-    compose.close();
+    mySqlContainer.close();
   }
 
   @Test
@@ -193,7 +193,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
         NUM_RECORDS * 2);
     count = loadFromSQL(KAFKA_TOPIC);
     Assert.assertEquals(NUM_RECORDS * 2, count);
-    pumbaCompose.close();
+    pumbaContainer.close();
   }
 
   private void dropTableIfExists(String kafkaTopic) throws SQLException {

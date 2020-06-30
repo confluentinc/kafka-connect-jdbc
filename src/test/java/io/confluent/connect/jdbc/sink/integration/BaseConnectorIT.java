@@ -70,7 +70,7 @@ public class BaseConnectorIT {
 
   protected void startConnect() throws IOException {
     connect = new EmbeddedConnectCluster.Builder()
-        .name(CONNECTOR_NAME)
+        .name("jdbc-connect-cluster")
         .build();
 
     connect.start();

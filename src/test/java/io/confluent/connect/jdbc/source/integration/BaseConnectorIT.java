@@ -50,7 +50,7 @@ public class BaseConnectorIT {
 
   protected void startConnect() {
     connect = new EmbeddedConnectCluster.Builder()
-        .name(CONNECTOR_NAME)
+        .name("jdbc-connect-cluster")
         .build();
 
     connect.start();

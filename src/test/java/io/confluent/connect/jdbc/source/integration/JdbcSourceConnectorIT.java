@@ -52,9 +52,12 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
   public static DockerComposeContainer compose =
       new DockerComposeContainer(new File("src/test/docker/configA/mysql-docker-compose.yml"));
 
-  @ClassRule
-  public static DockerComposeContainer compose1 =
-      new DockerComposeContainer(new File("src/test/docker/configB/pumba-docker-compose.yml"));
+  public static DockerComposeContainer pumbaCompose;
+  private void startPumbaContainer() {
+    pumbaCompose =
+        new DockerComposeContainer(new File("src/test/docker/configB/pumba-docker-compose.yml"));
+    pumbaCompose.start();
+  }
 
   @Before
   public void setup() throws Exception {
@@ -92,12 +95,10 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
   @AfterClass
   public static void closeConnection() {
     compose.close();
-    compose1.close();
   }
 
   @Test
   public void testWithJDBCMysqlDialectSuccess() throws Exception {
-    compose1.close();
     // Add mysql dialect related configurations.
     getConnectorConfigurations();
     String topicName = props.get("topic.prefix") + KAFKA_TOPIC;
@@ -127,6 +128,8 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
 
   @Test
   public void testWithJDBCMysqlDialectUnavailable() throws Exception {
+    // Starting 'pumba' container to periodically pause services in sql container.
+    startPumbaContainer();
     // Add mysql dialect related configurations.
     getConnectorConfigurations();
     String topicName = props.get("topic.prefix") + KAFKA_TOPIC;
@@ -152,37 +155,7 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
         CONSUME_MAX_DURATION_MS,
         topicName);
     Assert.assertEquals(NUM_RECORDS * 2, records.count());
-  }
-
-  @Test
-  public void testWithChangeInServiceCredentials() throws Exception {
-    grantAllPrivileges();
-    // Add mysql dialect related configurations.
-    getConnectorConfigurations();
-    String topicName = props.get("topic.prefix") + KAFKA_TOPIC;
-    connect.kafka().createTopic(topicName);
-    dropTableIfExists(KAFKA_TOPIC);
-    sendTestDataToMysql(0, NUM_RECORDS);
-
-    // Configure Connector and wait some specific time to start the connector.
-    connect.configureConnector(CONNECTOR_NAME, props);
-    waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
-
-    log.info("Waiting for records in destination topic ...");
-    ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(
-        NUM_RECORDS,
-        CONSUME_MAX_DURATION_MS,
-        topicName);
-    Assert.assertEquals(NUM_RECORDS, records.count());
-
-    revokeReadPrivileges();
-
-    sendTestDataToMysql(NUM_RECORDS, NUM_RECORDS * 2);
-    records = connect.kafka().consume(
-        NUM_RECORDS * 2,
-        CONSUME_MAX_DURATION_MS,
-        topicName);
-    Assert.assertEquals(NUM_RECORDS * 2, records.count());
+    pumbaCompose.close();
   }
 
   private void getConnectorConfigurations() {
@@ -194,16 +167,6 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
     props.put("mode", "incrementing");
     props.put("incrementing.column.name", "id");
     props.put("topic.prefix", "sql-");
-  }
-
-  private void grantAllPrivileges() throws SQLException {
-    Statement st = connection.createStatement();
-    st.executeQuery("grant all privileges ON db.* TO user@'%'");
-  }
-
-  private void revokeReadPrivileges() throws SQLException {
-    Statement st = connection.createStatement();
-    st.executeQuery("revoke select on db.* from user@'%'");
   }
 
   private void dropTableIfExists(String kafkaTopic) throws SQLException {

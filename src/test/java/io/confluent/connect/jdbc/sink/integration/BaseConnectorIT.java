@@ -168,8 +168,7 @@ public class BaseConnectorIT {
     return props;
   }
 
-  protected Connection getConnection() throws ClassNotFoundException, SQLException {
-    //Class.forName("com.mysql.jdbc.Driver");
+  protected Connection getConnection() throws SQLException {
     return DriverManager.getConnection("jdbc:mysql://localhost:3306/db" , "root", "password");
   }
 }

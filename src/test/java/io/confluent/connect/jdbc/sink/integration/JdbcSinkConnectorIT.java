@@ -58,9 +58,12 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
   public static DockerComposeContainer compose =
       new DockerComposeContainer(new File("src/test/docker/configA/mysql-docker-compose.yml"));
 
-  @ClassRule
-  public static DockerComposeContainer compose1 =
-      new DockerComposeContainer(new File("src/test/docker/configB/pumba-docker-compose.yml"));
+  public static DockerComposeContainer pumbaCompose;
+  private void startPumbaContainer() {
+    pumbaCompose =
+        new DockerComposeContainer(new File("src/test/docker/configB/pumba-docker-compose.yml"));
+    pumbaCompose.start();
+  }
 
   @Before
   public void setup() throws Exception {
@@ -83,7 +86,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
       //Delay to avoid frequent connection requests.
       TimeUnit.MILLISECONDS.sleep(100);
       return Optional.empty();
-    } catch (ClassNotFoundException | SQLException | InterruptedException e) {
+    } catch (SQLException | InterruptedException e) {
       return Optional.empty();
     }
   }
@@ -98,14 +101,17 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
   @AfterClass
   public static void closeConnection() {
     compose.close();
-    compose1.close();
   }
 
   @Test
   public void testWithJDBCMysqlDialectSuccess() throws Exception {
-    compose1.close();
     dropTableIfExists(KAFKA_TOPIC);
     sendTestDataToKafka(SCHEMA);
+    ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
+        NUM_RECORDS,
+        CONSUME_MAX_DURATION_MS,
+        KAFKA_TOPIC);
+    log.info("Number of records added in kafka {}", totalRecords.count());
 
     // Add mysql dialect related configurations.
     getConnectorConfigurations();
@@ -114,33 +120,45 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
 
-    //Wait Connector to write data into Mysql
-    waitConnectorToWriteDataIntoMysql(connection, CONNECTOR_NAME, Integer.valueOf(MAX_TASKS), KAFKA_TOPIC, NUM_RECORDS);
+    // Wait Connector to write data into Mysql
+    waitConnectorToWriteDataIntoMysql(
+        connection,
+        CONNECTOR_NAME,
+        Integer.valueOf(MAX_TASKS),
+        KAFKA_TOPIC,
+        NUM_RECORDS);
 
-    ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
-        NUM_RECORDS,
-        CONSUME_MAX_DURATION_MS,
-        KAFKA_TOPIC);
-    log.info("Number of records added in kafka {}", totalRecords.count());
     int count = loadFromSQL(KAFKA_TOPIC);
     Assert.assertEquals(NUM_RECORDS, count);
 
     sendTestDataToKafka(SCHEMA);
-    //Wait Connector to write data into Mysql
-    waitConnectorToWriteDataIntoMysql(connection, CONNECTOR_NAME, Integer.valueOf(MAX_TASKS), KAFKA_TOPIC, NUM_RECORDS * 2);
     totalRecords = connect.kafka().consume(
         NUM_RECORDS * 2,
         CONSUME_MAX_DURATION_MS,
         KAFKA_TOPIC);
     log.info("Number of records added in kafka {}", totalRecords.count());
+    // Wait Connector to write data into Mysql
+    waitConnectorToWriteDataIntoMysql(
+        connection,
+        CONNECTOR_NAME,
+        Integer.valueOf(MAX_TASKS),
+        KAFKA_TOPIC,
+        NUM_RECORDS * 2);
     count = loadFromSQL(KAFKA_TOPIC);
     Assert.assertEquals(NUM_RECORDS * 2, count);
   }
 
   @Test
   public void testWithJDBCMysqlDialectUnavailable() throws Exception {
+    // Starting 'pumba' container to periodically pause services in sql container.
+    startPumbaContainer();
     dropTableIfExists(KAFKA_TOPIC);
     sendTestDataToKafka(SCHEMA);
+    ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
+        NUM_RECORDS,
+        CONSUME_MAX_DURATION_MS,
+        KAFKA_TOPIC);
+    log.info("Number of records added in kafka {}", totalRecords.count());
 
     // Add mysql dialect related configurations.
     getConnectorConfigurations();
@@ -149,74 +167,33 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
 
-    //Wait Connector to write data into Mysql
-    waitConnectorToWriteDataIntoMysql(connection, CONNECTOR_NAME, Integer.valueOf(MAX_TASKS), KAFKA_TOPIC, NUM_RECORDS);
+    // Wait Connector to write data into Mysql
+    waitConnectorToWriteDataIntoMysql(
+        connection,
+        CONNECTOR_NAME,
+        Integer.valueOf(MAX_TASKS),
+        KAFKA_TOPIC,
+        NUM_RECORDS);
 
-    ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
-        NUM_RECORDS,
-        CONSUME_MAX_DURATION_MS,
-        KAFKA_TOPIC);
-    log.info("Number of records added in kafka {}", totalRecords.count());
     int count = loadFromSQL(KAFKA_TOPIC);
     Assert.assertEquals(NUM_RECORDS, count);
 
     sendTestDataToKafka(SCHEMA);
-    //Wait Connector to write data into Mysql
-    waitConnectorToWriteDataIntoMysql(connection, CONNECTOR_NAME, Integer.valueOf(MAX_TASKS), KAFKA_TOPIC, NUM_RECORDS * 2);
     totalRecords = connect.kafka().consume(
         NUM_RECORDS * 2,
         CONSUME_MAX_DURATION_MS,
         KAFKA_TOPIC);
     log.info("Number of records added in kafka {}", totalRecords.count());
+    // Wait Connector to write data into Mysql
+    waitConnectorToWriteDataIntoMysql(
+        connection,
+        CONNECTOR_NAME,
+        Integer.valueOf(MAX_TASKS),
+        KAFKA_TOPIC,
+        NUM_RECORDS * 2);
     count = loadFromSQL(KAFKA_TOPIC);
     Assert.assertEquals(NUM_RECORDS * 2, count);
-  }
-
-  @Test
-  public void testWithChangeInServiceCredentials() throws Exception {
-    grantAllPrivileges();
-    dropTableIfExists(KAFKA_TOPIC);
-    sendTestDataToKafka(SCHEMA);
-
-    // Add mysql dialect related configurations.
-    getConnectorConfigurations();
-
-    // Configure Connector and wait some specific time to start the connector.
-    connect.configureConnector(CONNECTOR_NAME, props);
-    waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
-
-    //Wait Connector to write data into Mysql
-    waitConnectorToWriteDataIntoMysql(connection, CONNECTOR_NAME, Integer.valueOf(MAX_TASKS), KAFKA_TOPIC, NUM_RECORDS);
-    ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
-        NUM_RECORDS,
-        CONSUME_MAX_DURATION_MS,
-        KAFKA_TOPIC);
-    log.info("Number of records added in kafka {}", totalRecords.count());
-    int count = loadFromSQL(KAFKA_TOPIC);
-    Assert.assertEquals(NUM_RECORDS, count);
-
-    revokeWritePrivileges();
-
-    sendTestDataToKafka(SCHEMA);
-    //Wait Connector to write data into Mysql
-    waitConnectorToWriteDataIntoMysql(connection, CONNECTOR_NAME, Integer.valueOf(MAX_TASKS), KAFKA_TOPIC, NUM_RECORDS * 2);
-    totalRecords = connect.kafka().consume(
-        NUM_RECORDS * 2,
-        CONSUME_MAX_DURATION_MS,
-        KAFKA_TOPIC);
-    log.info("Number of records added in kafka {}", totalRecords.count());
-    count = loadFromSQL(KAFKA_TOPIC);
-    Assert.assertEquals(NUM_RECORDS * 2, count);
-  }
-
-  private void grantAllPrivileges() throws SQLException {
-    Statement st = connection.createStatement();
-    st.executeQuery("grant all privileges ON db.* TO user@'%'");
-  }
-
-  private void revokeWritePrivileges() throws SQLException {
-    Statement st = connection.createStatement();
-    st.executeQuery("revoke insert on db.* from user@'%'");
+    pumbaCompose.close();
   }
 
   private void dropTableIfExists(String kafkaTopic) throws SQLException {

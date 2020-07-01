@@ -15,6 +15,9 @@
 
 package io.confluent.connect.jdbc.source.integration;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.test.IntegrationTest;
@@ -31,6 +34,7 @@ import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.DockerComposeContainer;
 
 import java.io.File;
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -123,6 +127,7 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
         CONSUME_MAX_DURATION_MS,
         topicName);
     Assert.assertEquals(NUM_RECORDS * 2, records.count());
+    assertActualData(records);
   }
 
   @Test
@@ -154,6 +159,7 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
         CONSUME_MAX_DURATION_MS,
         topicName);
     Assert.assertEquals(NUM_RECORDS * 2, records.count());
+    assertActualData(records);
     pumbaContainer.close();
   }
 
@@ -202,7 +208,7 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
     sql = "INSERT INTO mysqlTable(id,first_name,last_name,age) "
         + "VALUES(?,?,?,?)";
     PreparedStatement pstmt = connection.prepareStatement(sql);
-    for (int i = idFrom; i<idTo; i++) {
+    for (int i = idFrom; i < idTo; i++) {
       pstmt.setLong(1, i);
       pstmt.setString(2, "FirstName");
       pstmt.setString(3, "LastName");
@@ -210,5 +216,19 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
       pstmt.executeUpdate();
     }
     pstmt.close();
+  }
+
+  private void assertActualData(ConsumerRecords<byte[], byte[]> totalRecords) throws IOException {
+    ObjectMapper objectMapper = new ObjectMapper();
+    int id = 0;
+    for (ConsumerRecord<byte[], byte[]> record : totalRecords) {
+      String value = new String(record.value());
+      JsonNode jsonNode = objectMapper.readTree(value);
+      jsonNode = jsonNode.get("payload");
+      Assert.assertEquals(id++, jsonNode.get("id").asInt());
+      Assert.assertEquals("FirstName", jsonNode.get("first_name").asText());
+      Assert.assertEquals("LastName", jsonNode.get("last_name").asText());
+      Assert.assertEquals(20, jsonNode.get("age").asInt());
+    }
   }
 }

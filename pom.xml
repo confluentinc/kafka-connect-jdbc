@@ -91,7 +91,7 @@
         <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>connect-json</artifactId>
-            <scope>provided</scope>
+            <scope>test</scope>
         </dependency>
          <!-- JDBC drivers, only included in runtime so they get packaged -->
         <dependency>
@@ -211,6 +211,12 @@
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers</artifactId>
             <version>1.11.4</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>2.9.8</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

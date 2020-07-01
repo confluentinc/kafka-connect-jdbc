@@ -146,7 +146,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
         NUM_RECORDS * 2);
     count = loadFromSQL(KAFKA_TOPIC);
     Assert.assertEquals(NUM_RECORDS * 2, count);
-    assertActualData(totalRecords, count);
+    assertActualData();
   }
 
   @Test
@@ -194,7 +194,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
         NUM_RECORDS * 2);
     count = loadFromSQL(KAFKA_TOPIC);
     Assert.assertEquals(NUM_RECORDS * 2, count);
-    assertActualData(totalRecords, count);
+    assertActualData();
     pumbaContainer.close();
   }
 
@@ -210,7 +210,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     return rs.getInt("rowcount");
   }
 
-  private void assertActualData(ConsumerRecords<byte[],byte[]> totalRecords, int count) throws SQLException {
+  private void assertActualData() throws SQLException {
     Statement st = connection.createStatement();
     ResultSet rs = st.executeQuery("SELECT * FROM " + KAFKA_TOPIC);
     int counter = 0;

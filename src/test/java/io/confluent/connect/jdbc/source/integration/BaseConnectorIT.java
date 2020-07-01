@@ -40,7 +40,7 @@ public class BaseConnectorIT {
 
   protected static final long CONSUME_MAX_DURATION_MS = TimeUnit.SECONDS.toMillis(100);
   protected static final long CONNECTOR_STARTUP_DURATION_MS = TimeUnit.SECONDS.toMillis(100);
-  protected static final String CONNECTOR_NAME = "mysql-jdbc-sink";
+  protected static final String CONNECTOR_NAME = "mysql-jdbc-source";
   protected static final String KAFKA_TOPIC = "mysqlTable";
   protected static final int NUM_RECORDS = 1000;
 

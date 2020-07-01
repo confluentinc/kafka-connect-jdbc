@@ -106,7 +106,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
   @Test
   public void testWithJDBCMysqlDialectSuccess() throws Exception {
     dropTableIfExists(KAFKA_TOPIC);
-    sendTestDataToKafka(SCHEMA);
+    sendTestDataToKafka();
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
         NUM_RECORDS,
         CONSUME_MAX_DURATION_MS,
@@ -131,7 +131,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     int count = loadFromSQL(KAFKA_TOPIC);
     Assert.assertEquals(NUM_RECORDS, count);
 
-    sendTestDataToKafka(SCHEMA);
+    sendTestDataToKafka();
     totalRecords = connect.kafka().consume(
         NUM_RECORDS * 2,
         CONSUME_MAX_DURATION_MS,
@@ -153,7 +153,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     // Starting 'pumba' container to periodically pause services in sql container.
     startPumbaContainer();
     dropTableIfExists(KAFKA_TOPIC);
-    sendTestDataToKafka(SCHEMA);
+    sendTestDataToKafka();
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
         NUM_RECORDS,
         CONSUME_MAX_DURATION_MS,
@@ -178,7 +178,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     int count = loadFromSQL(KAFKA_TOPIC);
     Assert.assertEquals(NUM_RECORDS, count);
 
-    sendTestDataToKafka(SCHEMA);
+    sendTestDataToKafka();
     totalRecords = connect.kafka().consume(
         NUM_RECORDS * 2,
         CONSUME_MAX_DURATION_MS,
@@ -208,7 +208,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     return rs.getInt("rowcount");
   }
 
-  private void sendTestDataToKafka(Schema SCHEMA) throws InterruptedException {
+  private void sendTestDataToKafka() throws InterruptedException {
     for (int i = 0; i < NUM_RECORDS; i++) {
       String value = asJson(KAFKA_TOPIC, SCHEMA, i);
       connect.kafka().produce(KAFKA_TOPIC, null, value);

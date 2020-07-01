@@ -146,6 +146,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
         NUM_RECORDS * 2);
     count = loadFromSQL(KAFKA_TOPIC);
     Assert.assertEquals(NUM_RECORDS * 2, count);
+    assertActualData(totalRecords, count);
   }
 
   @Test
@@ -193,6 +194,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
         NUM_RECORDS * 2);
     count = loadFromSQL(KAFKA_TOPIC);
     Assert.assertEquals(NUM_RECORDS * 2, count);
+    assertActualData(totalRecords, count);
     pumbaContainer.close();
   }
 
@@ -206,6 +208,23 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     ResultSet rs = st.executeQuery("SELECT COUNT(*) AS rowcount FROM " + mySqlTable);
     rs.next();
     return rs.getInt("rowcount");
+  }
+
+  private void assertActualData(ConsumerRecords<byte[],byte[]> totalRecords, int count) throws SQLException {
+    Statement st = connection.createStatement();
+    ResultSet rs = st.executeQuery("SELECT * FROM " + KAFKA_TOPIC);
+    int counter = 0;
+    while (rs.next()) {
+      Assert.assertEquals("Alex", rs.getString("firstName"));
+      Assert.assertEquals("Smith", rs.getString("lastName"));
+      Assert.assertEquals(true, rs.getBoolean("bool"));
+      Assert.assertEquals((short) 1234, rs.getShort("short"));
+      Assert.assertEquals((byte) -32, rs.getByte("byte"));
+      Assert.assertEquals(12425436L, rs.getLong("long"));
+      Assert.assertEquals((float) 2356.3, rs.getFloat("float"), 0.0);
+      Assert.assertEquals(-2436546.56457, rs.getDouble("double"), 0.0);
+      Assert.assertEquals((counter++)%1000, rs.getInt("age"));
+    }
   }
 
   private void sendTestDataToKafka() throws InterruptedException {

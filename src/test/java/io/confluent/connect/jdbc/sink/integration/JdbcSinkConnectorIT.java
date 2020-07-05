@@ -37,14 +37,12 @@ import org.testcontainers.containers.DockerComposeContainer;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
-import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 @Category(IntegrationTest.class)
@@ -52,43 +50,22 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
 
   private static final Logger log = LoggerFactory.getLogger(JdbcSinkConnectorIT.class);
   private Map<String, String> props;
-  private static Connection connection;
 
   @ClassRule
   public static DockerComposeContainer mySqlContainer =
       new DockerComposeContainer(new File("src/test/docker/configA/mysql-docker-compose.yml"));
 
-  public static DockerComposeContainer pumbaContainer;
-  private void startPumbaContainer() {
-    pumbaContainer =
-        new DockerComposeContainer(new File("src/test/docker/configB/pumba-docker-compose.yml"));
-    pumbaContainer.start();
-  }
-
   @Before
   public void setup() throws Exception {
     startConnect();
     connect.kafka().createTopic(KAFKA_TOPIC, 1);
-    props = getCommonProps();
+    props = getConnectorProps();
     if (connection == null) {
-      TestUtils.waitForCondition(() -> assertConnection().orElse(false),
+      TestUtils.waitForCondition(() -> assertDbConnection().orElse(false),
           TimeUnit.SECONDS.toMillis(50),
           "Failed to start the container.");
     }
-  }
-
-  private Optional<Boolean> assertConnection() {
-    try {
-      connection = getConnection();
-      if (connection != null) {
-        return Optional.of(true);
-      }
-      //Delay to avoid frequent connection requests.
-      TimeUnit.MILLISECONDS.sleep(100);
-      return Optional.empty();
-    } catch (SQLException | InterruptedException e) {
-      return Optional.empty();
-    }
+    dropTableIfExists(KAFKA_TOPIC);
   }
 
   @After
@@ -104,9 +81,8 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
   }
 
   @Test
-  public void testWithJDBCMysqlDialectSuccess() throws Exception {
-    dropTableIfExists(KAFKA_TOPIC);
-    sendTestDataToKafka();
+  public void testSuccess() throws Exception {
+    sendTestDataToKafka(0, NUM_RECORDS);
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
         NUM_RECORDS,
         CONSUME_MAX_DURATION_MS,
@@ -121,7 +97,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
 
     // Wait Connector to write data into Mysql
-    waitConnectorToWriteDataIntoMysql(
+    waitForConnectorToWriteDataIntoMysql(
         connection,
         CONNECTOR_NAME,
         Integer.valueOf(MAX_TASKS),
@@ -130,31 +106,14 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
 
     int count = loadFromSQL(KAFKA_TOPIC);
     Assert.assertEquals(NUM_RECORDS, count);
-
-    sendTestDataToKafka();
-    totalRecords = connect.kafka().consume(
-        NUM_RECORDS * 2,
-        CONSUME_MAX_DURATION_MS,
-        KAFKA_TOPIC);
-    log.info("Number of records added in kafka {}", totalRecords.count());
-    // Wait Connector to write data into Mysql
-    waitConnectorToWriteDataIntoMysql(
-        connection,
-        CONNECTOR_NAME,
-        Integer.valueOf(MAX_TASKS),
-        KAFKA_TOPIC,
-        NUM_RECORDS * 2);
-    count = loadFromSQL(KAFKA_TOPIC);
-    Assert.assertEquals(NUM_RECORDS * 2, count);
-    assertActualData();
+    assertRecordsCountAndContent();
   }
 
   @Test
-  public void testWithJDBCMysqlDialectUnavailable() throws Exception {
+  public void testForDbServerUnavailability() throws Exception {
     // Starting 'pumba' container to periodically pause services in sql container.
     startPumbaContainer();
-    dropTableIfExists(KAFKA_TOPIC);
-    sendTestDataToKafka();
+    sendTestDataToKafka(0, NUM_RECORDS);
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
         NUM_RECORDS,
         CONSUME_MAX_DURATION_MS,
@@ -169,7 +128,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
 
     // Wait Connector to write data into Mysql
-    waitConnectorToWriteDataIntoMysql(
+    waitForConnectorToWriteDataIntoMysql(
         connection,
         CONNECTOR_NAME,
         Integer.valueOf(MAX_TASKS),
@@ -179,14 +138,14 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     int count = loadFromSQL(KAFKA_TOPIC);
     Assert.assertEquals(NUM_RECORDS, count);
 
-    sendTestDataToKafka();
+    sendTestDataToKafka(NUM_RECORDS, NUM_RECORDS);
     totalRecords = connect.kafka().consume(
         NUM_RECORDS * 2,
         CONSUME_MAX_DURATION_MS,
         KAFKA_TOPIC);
     log.info("Number of records added in kafka {}", totalRecords.count());
     // Wait Connector to write data into Mysql
-    waitConnectorToWriteDataIntoMysql(
+    waitForConnectorToWriteDataIntoMysql(
         connection,
         CONNECTOR_NAME,
         Integer.valueOf(MAX_TASKS),
@@ -194,7 +153,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
         NUM_RECORDS * 2);
     count = loadFromSQL(KAFKA_TOPIC);
     Assert.assertEquals(NUM_RECORDS * 2, count);
-    assertActualData();
+    assertRecordsCountAndContent();
     pumbaContainer.close();
   }
 
@@ -210,7 +169,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     return rs.getInt("rowcount");
   }
 
-  private void assertActualData() throws SQLException {
+  private void assertRecordsCountAndContent() throws SQLException {
     Statement st = connection.createStatement();
     ResultSet rs = st.executeQuery("SELECT * FROM " + KAFKA_TOPIC);
     int counter = 0;
@@ -223,12 +182,12 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
       Assert.assertEquals(12425436L, rs.getLong("long"));
       Assert.assertEquals((float) 2356.3, rs.getFloat("float"), 0.0);
       Assert.assertEquals(-2436546.56457, rs.getDouble("double"), 0.0);
-      Assert.assertEquals((counter++)%1000, rs.getInt("age"));
+      Assert.assertEquals(counter++, rs.getInt("userId"));
     }
   }
 
-  private void sendTestDataToKafka() throws InterruptedException {
-    for (int i = 0; i < NUM_RECORDS; i++) {
+  private void sendTestDataToKafka(int startIndex, int numRecords) throws InterruptedException {
+    for (int i = startIndex; i < startIndex + numRecords; i++) {
       String value = asJson(KAFKA_TOPIC, SCHEMA, i);
       connect.kafka().produce(KAFKA_TOPIC, null, value);
       //A minor delay is added so that record produced will have different time stamp.
@@ -255,7 +214,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
           .put("long", 12425436L)
           .put("float", (float) 2356.3)
           .put("double", -2436546.56457)
-          .put("age", i)
+          .put("userId", i)
           .put("modified", new Date(1474661402123L));
       JsonConverter jsonConverter = new JsonConverter();
       Map<String, String> config = new HashMap<>();

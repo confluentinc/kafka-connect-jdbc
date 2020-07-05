@@ -28,7 +28,9 @@ import org.apache.kafka.test.TestUtils;
 import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.testcontainers.containers.DockerComposeContainer;
 
+import java.io.File;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -56,7 +58,7 @@ public class BaseConnectorIT {
   protected static final Schema SCHEMA = SchemaBuilder.struct().name("com.example.Person")
       .field("firstName", Schema.STRING_SCHEMA)
       .field("lastName", Schema.STRING_SCHEMA)
-      .field("age", Schema.OPTIONAL_INT32_SCHEMA)
+      .field("userId", Schema.OPTIONAL_INT32_SCHEMA)
       .field("bool", Schema.OPTIONAL_BOOLEAN_SCHEMA)
       .field("short", Schema.OPTIONAL_INT16_SCHEMA)
       .field("byte", Schema.OPTIONAL_INT8_SCHEMA)
@@ -67,6 +69,7 @@ public class BaseConnectorIT {
       .build();
 
   protected EmbeddedConnectCluster connect;
+  protected Connection connection;
 
   protected void startConnect() throws IOException {
     connect = new EmbeddedConnectCluster.Builder()
@@ -74,6 +77,13 @@ public class BaseConnectorIT {
         .build();
 
     connect.start();
+  }
+
+  public static DockerComposeContainer pumbaContainer;
+  protected void startPumbaContainer() {
+    pumbaContainer =
+        new DockerComposeContainer(new File("src/test/docker/configB/pumba-docker-compose.yml"));
+    pumbaContainer.start();
   }
 
   /**
@@ -115,7 +125,7 @@ public class BaseConnectorIT {
     }
   }
 
-  protected long waitConnectorToWriteDataIntoMysql(Connection connection, String connectorName, int numTasks, String tableName, int numberOfRecords) throws InterruptedException {
+  protected long waitForConnectorToWriteDataIntoMysql(Connection connection, String connectorName, int numTasks, String tableName, int numberOfRecords) throws InterruptedException {
     TestUtils.waitForCondition(
         () -> assertRecordsCountInMysql(connection, connectorName, numTasks, tableName, numberOfRecords).orElse(false),
         CONSUME_MAX_DURATION_MS,
@@ -149,12 +159,26 @@ public class BaseConnectorIT {
     }
   }
 
+  protected Optional<Boolean> assertDbConnection() {
+    try {
+      connection = getConnection();
+      if (connection != null) {
+        return Optional.of(true);
+      }
+      //Delay to avoid frequent connection requests.
+      TimeUnit.MILLISECONDS.sleep(100);
+      return Optional.empty();
+    } catch (SQLException | InterruptedException e) {
+      return Optional.empty();
+    }
+  }
+
   /**
    * Create a map of Common connector properties.
    *
    * @return : Map of props.
    */
-  public Map<String, String> getCommonProps() {
+  public Map<String, String> getConnectorProps() {
 
     Map<String, String> props = new HashMap<>();
     props.put(SinkConnectorConfig.TOPICS_CONFIG, KAFKA_TOPIC);

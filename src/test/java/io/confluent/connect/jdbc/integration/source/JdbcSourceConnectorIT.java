@@ -47,6 +47,7 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
   private static final Logger log = LoggerFactory.getLogger(JdbcSourceConnectorIT.class);
 
   private Map<String, String> props;
+  private static final ObjectMapper objectMapper = new ObjectMapper();
 
   @ClassRule
   public static DockerComposeContainer mySqlContainer =
@@ -157,7 +158,6 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
   }
 
   private void assertRecordsCountAndContent(int numRecords, ConsumerRecords<byte[], byte[]> totalRecords) throws IOException {
-    ObjectMapper objectMapper = new ObjectMapper();
     int id = 0;
     for (ConsumerRecord<byte[], byte[]> record : totalRecords) {
       String value = new String(record.value());

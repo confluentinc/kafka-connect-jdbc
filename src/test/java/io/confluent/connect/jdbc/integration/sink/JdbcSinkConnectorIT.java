@@ -91,7 +91,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     log.info("Number of records added in kafka {}", totalRecords.count());
 
     // Add mysql dialect related configurations.
-    getConnectorConfigurations();
+    props = getConnectorConfigurations();
 
     // Configure Connector and wait some specific time to start the connector.
     connect.configureConnector(CONNECTOR_NAME, props);
@@ -119,7 +119,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     log.info("Number of records added in kafka {}", totalRecords.count());
 
     // Add mysql dialect related configurations.
-    getConnectorConfigurations();
+    props = getConnectorConfigurations();
 
     // Configure Connector and wait some specific time to start the connector.
     connect.configureConnector(CONNECTOR_NAME, props);
@@ -170,23 +170,24 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
 
   private void sendTestDataToKafka(int startIndex, int numRecords) throws InterruptedException {
     for (int i = startIndex; i < startIndex + numRecords; i++) {
-      String value = asJson(KAFKA_TOPIC, SCHEMA, i);
+      String value = getTestKafkaRecord(KAFKA_TOPIC, SCHEMA, i);
       connect.kafka().produce(KAFKA_TOPIC, null, value);
       //A minor delay is added so that record produced will have different time stamp.
       Thread.sleep(10);
     }
   }
 
-  private void getConnectorConfigurations() {
+  private Map<String, String> getConnectorConfigurations() {
     props.put("connection.url", "jdbc:mysql://localhost:3306/db");
     props.put("connection.user", "user");
     props.put("connection.password", "password");
     props.put("dialect.name", "MySqlDatabaseDialect");
     props.put("auto.create", "true");
     props.put("value.converter", JsonConverter.class.getName());
+    return props;
   }
 
-  private String asJson(String topic, Schema schema, int i) {
+  private String getTestKafkaRecord(String topic, Schema schema, int i) {
       final Struct struct = new Struct(schema)
           .put("firstName", "Alex")
           .put("lastName", "Smith")

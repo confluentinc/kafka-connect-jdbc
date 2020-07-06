@@ -17,17 +17,18 @@ package io.confluent.connect.jdbc.source.integration;
 
 import io.confluent.connect.jdbc.JdbcSourceConnector;
 import org.apache.http.HttpHeaders;
-import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpPost;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.runtime.AbstractStatus;
 import org.apache.kafka.connect.runtime.rest.entities.ConnectorStateInfo;
 import org.apache.kafka.connect.util.clusters.EmbeddedConnectCluster;
 import org.apache.kafka.test.IntegrationTest;
 import org.apache.kafka.test.TestUtils;
-import org.junit.Assert;
 import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,11 +42,12 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
+
+import static org.junit.Assert.assertEquals;
 
 @Category(IntegrationTest.class)
 public class BaseConnectorIT {
@@ -55,12 +57,15 @@ public class BaseConnectorIT {
   protected static final long CONSUME_MAX_DURATION_MS = TimeUnit.SECONDS.toMillis(100);
   protected static final long CONNECTOR_STARTUP_DURATION_MS = TimeUnit.SECONDS.toMillis(100);
   protected static final String CONNECTOR_NAME = "mysql-jdbc-source";
-  protected static final String KAFKA_TOPIC = "mysqlTable";
-  protected static final int NUM_RECORDS = 25;
+  protected static final String KAFKA_TOPIC = "testtable";
+  protected static final int NUM_RECORDS = 1000;
 
   protected static final String MAX_TASKS = "1";
 
   protected EmbeddedConnectCluster connect;
+
+  protected final JsonConverter jsonConverter = new JsonConverter();
+  protected static Connection connection;
 
   protected void startConnect() {
       Properties properties = new Properties();
@@ -116,27 +121,28 @@ public class BaseConnectorIT {
    *
    * @return : Map of props.
    */
-  public Map<String, String> getCommonProps() {
+  public Map<String, String> getConnectorProps() {
 
     Map<String, String> props = new HashMap<>();
     props.put("connector.class", JdbcSourceConnector.class.getName());
     props.put("tasks.max", MAX_TASKS);
-    // license properties
     props.put("confluent.topic.replication.factor", "1");
     props.put("confluent.topic.bootstrap.servers", connect.kafka().bootstrapServers());
 
-    // connector-specific properties
     return props;
   }
 
-  protected Connection getConnection() throws SQLException {
-    //Class.forName("com.mysql.jdbc.Driver");
+  protected Connection initializeJdbcConnection() throws SQLException {
     return DriverManager.getConnection("jdbc:mysql://localhost:3307/db" , "user", "password");
   }
 
-  protected void assertRecordOffset(int start, int end, ConsumerRecords<byte[], byte[]> records) {
+  protected void assertRecords(int end, ConsumerRecords<byte[], byte[]> records) {
+    int start = 0;
     for (ConsumerRecord<byte[], byte[]> record : records) {
-      Assert.assertEquals(start++, record.offset());
+      assertEquals(start, record.offset());
+      Struct valueStruct = ((Struct) (jsonConverter.toConnectData(KAFKA_TOPIC, record.value()).value()));
+      int id = valueStruct.getInt32("id");
+      assertEquals(start++, id);
     }
     if(start!=end){
       throw new AssertionError("Invalid number of records found");
@@ -152,12 +158,12 @@ public class BaseConnectorIT {
     props.put("topic.prefix",  "sql-");
   }
 
-  protected void dropTableIfExists(String kafkaTopic, Connection connection) throws SQLException {
+  protected void dropTableIfExists(String tableName) throws SQLException {
     Statement st = connection.createStatement();
-    st.executeQuery("drop table if exists " + kafkaTopic);
+    st.executeQuery("drop table if exists " + tableName);
   }
 
-  protected void createTable(Connection connection) throws SQLException {
+  protected void createTable() throws SQLException {
     Statement st = connection.createStatement();
     String sql = "CREATE TABLE " + KAFKA_TOPIC +
             "(id INTEGER not NULL, " +
@@ -168,7 +174,7 @@ public class BaseConnectorIT {
     st.executeQuery(sql);
   }
 
-  protected void createTimestampTable(Connection connection) throws SQLException {
+  protected void createTimestampTable() throws SQLException {
     Statement st = connection.createStatement();
     String sql = "CREATE TABLE " + KAFKA_TOPIC +
             "(id int not NULL, " +
@@ -178,11 +184,11 @@ public class BaseConnectorIT {
     st.executeQuery(sql);
   }
 
-  protected void sendTestTimestampDataToMysql(int start, Connection connection) throws SQLException {
-    String sql = "INSERT INTO mysqlTable(id,first_name,last_name) "
+  protected void sendTestTimestampDataToMysql(int start, int numOfRecords) throws SQLException {
+    String sql = "INSERT INTO testtable(id,first_name,last_name) "
             + "VALUES(?,?,?)";
     PreparedStatement pstmt = connection.prepareStatement(sql);
-    for (int i=start; i<start+NUM_RECORDS; i++) {
+    for (int i=start; i<start+numOfRecords; i++) {
       pstmt.setInt(1, i);
       pstmt.setString(2, "FirstName");
       pstmt.setString(3, "LastName");
@@ -191,11 +197,11 @@ public class BaseConnectorIT {
     pstmt.close();
   }
 
-  protected void sendTestDataToMysql(int start, Connection connection) throws SQLException {
-    String sql = "INSERT INTO mysqlTable(id,first_name,last_name,age) "
+  protected void sendTestDataToMysql(int start, int numOfRecords) throws SQLException {
+    String sql = "INSERT INTO testtable(id,first_name,last_name,age) "
             + "VALUES(?,?,?,?)";
     PreparedStatement pstmt = connection.prepareStatement(sql);
-    for (int i=start; i<start+NUM_RECORDS; i++) {
+    for (int i=start; i<start+numOfRecords; i++) {
       pstmt.setLong(1, i);
       pstmt.setString(2, "FirstName");
       pstmt.setString(3, "LastName");
@@ -205,16 +211,18 @@ public class BaseConnectorIT {
     pstmt.close();
   }
 
-  protected int restartConnectorTask() throws IOException {
-    HttpClient httpClient = new HttpClient();
-    List<ConnectorStateInfo.TaskState> list = connect.connectorStatus(CONNECTOR_NAME).tasks();
-    int id = list.get(0).id();
+  protected void restartConnectorTask(int taskID) {
+    // Restart the task having specific 'taskID'.
     String url = connect.endpointForResource(String.format("connectors/%s/tasks", CONNECTOR_NAME));
-    url = url + String.format("/%s/restart", String.valueOf(id));
+    url = url + String.format("/%s/restart", String.valueOf(taskID));
+    CloseableHttpClient httpClient = HttpClients.createDefault();
     HttpPost postRequest = new HttpPost(url);
     postRequest.addHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON);
-    HttpResponse httpResponse = httpClient.getHttpClient().execute(postRequest);
-    return httpResponse.getStatusLine().getStatusCode();
+    try {
+      httpClient.execute(postRequest);
+    } catch (IOException e) {
+      throw new RuntimeException("Unable to restart the task");
+    }
   }
 
 }

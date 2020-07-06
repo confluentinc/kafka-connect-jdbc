@@ -83,11 +83,6 @@
             <scope>provided</scope>
         </dependency>
 
-        <dependency>
-            <groupId>org.apache.kafka</groupId>
-            <artifactId>connect-json</artifactId>
-            <scope>provided</scope>
-        </dependency>
          <!-- JDBC drivers, only included in runtime so they get packaged -->
         <dependency>
             <groupId>org.xerial</groupId>
@@ -214,6 +209,7 @@
             <groupId>org.apache.httpcomponents</groupId>
             <artifactId>httpclient</artifactId>
             <version>4.5.10</version>
+            <scope>test</scope>
         </dependency>
 
     </dependencies>

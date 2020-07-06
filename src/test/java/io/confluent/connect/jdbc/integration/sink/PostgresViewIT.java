@@ -13,7 +13,7 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package io.confluent.connect.jdbc.sink.integration;
+package io.confluent.connect.jdbc.integration.sink;
 
 import static junit.framework.TestCase.assertTrue;
 import static org.junit.Assert.assertEquals;

@@ -13,10 +13,11 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package io.confluent.connect.jdbc.source.integration;
+package io.confluent.connect.jdbc.integration.source;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.confluent.connect.jdbc.integration.BaseConnectorIT;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.connect.json.JsonConverter;
@@ -35,13 +36,10 @@ import org.testcontainers.containers.DockerComposeContainer;
 
 import java.io.File;
 import java.io.IOException;
-import java.sql.Connection;
 import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 @Category(IntegrationTest.class)
@@ -49,43 +47,22 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
   private static final Logger log = LoggerFactory.getLogger(JdbcSourceConnectorIT.class);
 
   private Map<String, String> props;
-  private static Connection connection;
 
   @ClassRule
   public static DockerComposeContainer mySqlContainer =
       new DockerComposeContainer(new File("src/test/docker/configA/mysql-docker-compose.yml"));
 
-  public static DockerComposeContainer pumbaContainer;
-  private void startPumbaContainer() {
-    pumbaContainer =
-        new DockerComposeContainer(new File("src/test/docker/configB/pumba-docker-compose.yml"));
-    pumbaContainer.start();
-  }
-
   @Before
   public void setup() throws Exception {
     startConnect();
     connect.kafka().createTopic(KAFKA_TOPIC, 1);
-    props = getCommonProps();
+    props = getSourceConnectorProps();
     if (connection == null) {
-      TestUtils.waitForCondition(() -> assertConnection().orElse(false),
+      TestUtils.waitForCondition(() -> assertDbConnection().orElse(false),
           TimeUnit.SECONDS.toMillis(30),
           "Failed to start the container.");
     }
-  }
-
-  private Optional<Boolean> assertConnection() {
-    try {
-      connection = getConnection();
-      if (connection != null) {
-        return Optional.of(true);
-      }
-      //Delay to avoid frequent connection requests.
-      TimeUnit.MILLISECONDS.sleep(100);
-      return Optional.empty();
-    } catch (SQLException | InterruptedException e) {
-      return Optional.empty();
-    }
+    dropTableIfExists(KAFKA_TOPIC);
   }
 
   @After
@@ -101,12 +78,11 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
   }
 
   @Test
-  public void testWithJDBCMysqlDialectSuccess() throws Exception {
+  public void testSuccess() throws Exception {
     // Add mysql dialect related configurations.
-    getConnectorConfigurations();
+    props = getConnectorConfigurations();
     String topicName = props.get("topic.prefix") + KAFKA_TOPIC;
     connect.kafka().createTopic(topicName);
-    dropTableIfExists(KAFKA_TOPIC);
     sendTestDataToMysql(0, NUM_RECORDS);
 
     // Configure Connector and wait some specific time to start the connector.
@@ -118,52 +94,32 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
         NUM_RECORDS,
         CONSUME_MAX_DURATION_MS,
         topicName);
-    Assert.assertEquals(NUM_RECORDS, records.count());
-
-    sendTestDataToMysql(NUM_RECORDS, NUM_RECORDS * 2);
-    log.info("Waiting for records in destination topic ...");
-    records = connect.kafka().consume(
-        NUM_RECORDS * 2,
-        CONSUME_MAX_DURATION_MS,
-        topicName);
-    Assert.assertEquals(NUM_RECORDS * 2, records.count());
-    assertActualData(records);
+    assertRecordsCountAndContent(NUM_RECORDS, records);
   }
 
   @Test
-  public void testWithJDBCMysqlDialectUnavailable() throws Exception {
+  public void testForDbServerUnavailability() throws Exception {
     // Starting 'pumba' container to periodically pause services in sql container.
     startPumbaContainer();
     // Add mysql dialect related configurations.
-    getConnectorConfigurations();
+    props = getConnectorConfigurations();
     String topicName = props.get("topic.prefix") + KAFKA_TOPIC;
     connect.kafka().createTopic(topicName);
-    dropTableIfExists(KAFKA_TOPIC);
     sendTestDataToMysql(0, NUM_RECORDS);
 
     // Configure Connector and wait some specific time to start the connector.
     connect.configureConnector(CONNECTOR_NAME, props);
+    log.info("Waiting for records in destination topic ...");
     waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
-
-    log.info("Waiting for records in destination topic ...");
     ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(
-        NUM_RECORDS,
-        CONSUME_MAX_DURATION_MS,
-        topicName);
-    Assert.assertEquals(NUM_RECORDS, records.count());
-
-    sendTestDataToMysql(NUM_RECORDS, NUM_RECORDS * 2);
-    log.info("Waiting for records in destination topic ...");
-    records = connect.kafka().consume(
         NUM_RECORDS * 2,
         CONSUME_MAX_DURATION_MS,
         topicName);
-    Assert.assertEquals(NUM_RECORDS * 2, records.count());
-    assertActualData(records);
+    assertRecordsCountAndContent(NUM_RECORDS * 2, records);
     pumbaContainer.close();
   }
 
-  private void getConnectorConfigurations() {
+  private Map<String, String> getConnectorConfigurations() {
     props.put("connection.password", "password");
     props.put("connection.user", "user");
     props.put("connection.url", "jdbc:mysql://localhost:3306/db");
@@ -172,28 +128,10 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
     props.put("mode", "incrementing");
     props.put("incrementing.column.name", "id");
     props.put("topic.prefix", "sql-");
+    return props;
   }
 
-  private void dropTableIfExists(String kafkaTopic) throws SQLException {
-    Statement st = connection.createStatement();
-    st.executeQuery("drop table if exists " + kafkaTopic);
-  }
-
-  public static boolean tableExist(Connection conn, String tableName) throws SQLException {
-    boolean tExists = false;
-    try (ResultSet rs = conn.getMetaData().getTables(null, null, tableName, null)) {
-      while (rs.next()) {
-        String tName = rs.getString("TABLE_NAME");
-        if (tName != null && tName.equals(tableName)) {
-          tExists = true;
-          break;
-        }
-      }
-    }
-    return tExists;
-  }
-
-  private void sendTestDataToMysql(int idFrom, int idTo) throws SQLException {
+  private void sendTestDataToMysql(int startIndex, int numRecords) throws SQLException {
     Statement st = connection.createStatement();
     String sql;
     if (!tableExist(connection, KAFKA_TOPIC)) {
@@ -208,7 +146,7 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
     sql = "INSERT INTO mysqlTable(id,first_name,last_name,age) "
         + "VALUES(?,?,?,?)";
     PreparedStatement pstmt = connection.prepareStatement(sql);
-    for (int i = idFrom; i < idTo; i++) {
+    for (int i = startIndex; i < startIndex + numRecords; i++) {
       pstmt.setLong(1, i);
       pstmt.setString(2, "FirstName");
       pstmt.setString(3, "LastName");
@@ -218,7 +156,7 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
     pstmt.close();
   }
 
-  private void assertActualData(ConsumerRecords<byte[], byte[]> totalRecords) throws IOException {
+  private void assertRecordsCountAndContent(int numRecords, ConsumerRecords<byte[], byte[]> totalRecords) throws IOException {
     ObjectMapper objectMapper = new ObjectMapper();
     int id = 0;
     for (ConsumerRecord<byte[], byte[]> record : totalRecords) {
@@ -230,5 +168,6 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
       Assert.assertEquals("LastName", jsonNode.get("last_name").asText());
       Assert.assertEquals(20, jsonNode.get("age").asInt());
     }
+    Assert.assertEquals(numRecords, totalRecords.count());
   }
 }

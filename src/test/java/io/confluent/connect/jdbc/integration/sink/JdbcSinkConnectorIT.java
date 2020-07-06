@@ -13,8 +13,9 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package io.confluent.connect.jdbc.sink.integration;
+package io.confluent.connect.jdbc.integration.sink;
 
+import io.confluent.connect.jdbc.integration.BaseConnectorIT;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
@@ -59,7 +60,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
   public void setup() throws Exception {
     startConnect();
     connect.kafka().createTopic(KAFKA_TOPIC, 1);
-    props = getConnectorProps();
+    props = getSinkConnectorProps();
     if (connection == null) {
       TestUtils.waitForCondition(() -> assertDbConnection().orElse(false),
           TimeUnit.SECONDS.toMillis(50),
@@ -103,10 +104,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
         Integer.valueOf(MAX_TASKS),
         KAFKA_TOPIC,
         NUM_RECORDS);
-
-    int count = loadFromSQL(KAFKA_TOPIC);
-    Assert.assertEquals(NUM_RECORDS, count);
-    assertRecordsCountAndContent();
+    assertRecordsCountAndContent(NUM_RECORDS);
   }
 
   @Test
@@ -135,9 +133,6 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
         KAFKA_TOPIC,
         NUM_RECORDS);
 
-    int count = loadFromSQL(KAFKA_TOPIC);
-    Assert.assertEquals(NUM_RECORDS, count);
-
     sendTestDataToKafka(NUM_RECORDS, NUM_RECORDS);
     totalRecords = connect.kafka().consume(
         NUM_RECORDS * 2,
@@ -151,25 +146,11 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
         Integer.valueOf(MAX_TASKS),
         KAFKA_TOPIC,
         NUM_RECORDS * 2);
-    count = loadFromSQL(KAFKA_TOPIC);
-    Assert.assertEquals(NUM_RECORDS * 2, count);
-    assertRecordsCountAndContent();
+    assertRecordsCountAndContent(NUM_RECORDS * 2);
     pumbaContainer.close();
   }
 
-  private void dropTableIfExists(String kafkaTopic) throws SQLException {
-    Statement st = connection.createStatement();
-    st.executeQuery("drop table if exists " + kafkaTopic);
-  }
-
-  private int loadFromSQL(String mySqlTable) throws SQLException {
-    Statement st = connection.createStatement();
-    ResultSet rs = st.executeQuery("SELECT COUNT(*) AS rowcount FROM " + mySqlTable);
-    rs.next();
-    return rs.getInt("rowcount");
-  }
-
-  private void assertRecordsCountAndContent() throws SQLException {
+  private void assertRecordsCountAndContent(int recordCount) throws SQLException {
     Statement st = connection.createStatement();
     ResultSet rs = st.executeQuery("SELECT * FROM " + KAFKA_TOPIC);
     int counter = 0;
@@ -184,6 +165,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
       Assert.assertEquals(-2436546.56457, rs.getDouble("double"), 0.0);
       Assert.assertEquals(counter++, rs.getInt("userId"));
     }
+    Assert.assertEquals(counter, recordCount);
   }
 
   private void sendTestDataToKafka(int startIndex, int numRecords) throws InterruptedException {

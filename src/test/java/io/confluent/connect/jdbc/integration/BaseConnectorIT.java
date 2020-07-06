@@ -13,9 +13,10 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package io.confluent.connect.jdbc.sink.integration;
+package io.confluent.connect.jdbc.integration;
 
 import io.confluent.connect.jdbc.JdbcSinkConnector;
+import io.confluent.connect.jdbc.JdbcSourceConnector;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Timestamp;
@@ -173,16 +174,52 @@ public class BaseConnectorIT {
     }
   }
 
+  protected void dropTableIfExists(String kafkaTopic) throws SQLException {
+    Statement st = connection.createStatement();
+    st.executeQuery("drop table if exists " + kafkaTopic);
+  }
+
+  protected boolean tableExist(Connection conn, String tableName) throws SQLException {
+    boolean tExists = false;
+    try (ResultSet rs = conn.getMetaData().getTables(null, null, tableName, null)) {
+      while (rs.next()) {
+        String tName = rs.getString("TABLE_NAME");
+        if (tName != null && tName.equals(tableName)) {
+          tExists = true;
+          break;
+        }
+      }
+    }
+    return tExists;
+  }
+
   /**
    * Create a map of Common connector properties.
    *
    * @return : Map of props.
    */
-  public Map<String, String> getConnectorProps() {
+  public Map<String, String> getSinkConnectorProps() {
 
     Map<String, String> props = new HashMap<>();
     props.put(SinkConnectorConfig.TOPICS_CONFIG, KAFKA_TOPIC);
     props.put("connector.class", JdbcSinkConnector.class.getName());
+    props.put("tasks.max", MAX_TASKS);
+    // license properties
+    props.put("confluent.topic.replication.factor", "1");
+    props.put("confluent.topic.bootstrap.servers", connect.kafka().bootstrapServers());
+
+    // connector-specific properties
+    return props;
+  }
+
+  /**
+   * Create a map of Common connector properties.
+   *
+   * @return : Map of props.
+   */
+  public Map<String, String> getSourceConnectorProps() {
+    Map<String, String> props = new HashMap<>();
+    props.put("connector.class", JdbcSourceConnector.class.getName());
     props.put("tasks.max", MAX_TASKS);
     // license properties
     props.put("confluent.topic.replication.factor", "1");

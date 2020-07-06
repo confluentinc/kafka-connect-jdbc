@@ -59,11 +59,8 @@ public class BaseConnectorIT {
   protected static final String CONNECTOR_NAME = "mysql-jdbc-source";
   protected static final String KAFKA_TOPIC = "testtable";
   protected static final int NUM_RECORDS = 1000;
-
   protected static final String MAX_TASKS = "1";
-
   protected EmbeddedConnectCluster connect;
-
   protected final JsonConverter jsonConverter = new JsonConverter();
   protected static Connection connection;
 
@@ -95,6 +92,20 @@ public class BaseConnectorIT {
     return System.currentTimeMillis();
   }
 
+  protected Optional<Boolean> assertDbConnection() {
+    try {
+      connection = getDbConnection();
+      if (connection != null) {
+        return Optional.of(true);
+      }
+      //Delay to avoid frequent connection requests.
+      TimeUnit.MILLISECONDS.sleep(100);
+      return Optional.empty();
+    } catch (SQLException | InterruptedException e) {
+      return Optional.empty();
+    }
+  }
+
   /**
    * Confirm that a connector with an exact number of tasks is running.
    *
@@ -102,7 +113,7 @@ public class BaseConnectorIT {
    * @param numTasks      the expected number of tasks
    * @return true if the connector and tasks are in RUNNING state; false otherwise
    */
-  protected Optional<Boolean> assertConnectorAndTasksRunning(String connectorName, int numTasks) {
+  private Optional<Boolean> assertConnectorAndTasksRunning(String connectorName, int numTasks) {
     try {
       ConnectorStateInfo info = connect.connectorStatus(connectorName);
       boolean result = info != null
@@ -121,41 +132,39 @@ public class BaseConnectorIT {
    *
    * @return : Map of props.
    */
-  public Map<String, String> getConnectorProps() {
-
+  protected Map<String, String> getConnectorProperties() {
     Map<String, String> props = new HashMap<>();
     props.put("connector.class", JdbcSourceConnector.class.getName());
     props.put("tasks.max", MAX_TASKS);
     props.put("confluent.topic.replication.factor", "1");
     props.put("confluent.topic.bootstrap.servers", connect.kafka().bootstrapServers());
-
-    return props;
-  }
-
-  protected Connection initializeJdbcConnection() throws SQLException {
-    return DriverManager.getConnection("jdbc:mysql://localhost:3307/db" , "user", "password");
-  }
-
-  protected void assertRecords(int end, ConsumerRecords<byte[], byte[]> records) {
-    int start = 0;
-    for (ConsumerRecord<byte[], byte[]> record : records) {
-      assertEquals(start, record.offset());
-      Struct valueStruct = ((Struct) (jsonConverter.toConnectData(KAFKA_TOPIC, record.value()).value()));
-      int id = valueStruct.getInt32("id");
-      assertEquals(start++, id);
-    }
-    if(start!=end){
-      throw new AssertionError("Invalid number of records found");
-    }
-  }
-
-  protected void addConnectionProperties(Map<String, String> props) {
     props.put("connection.password", "password");
     props.put("connection.user", "user");
     props.put("connection.url", "jdbc:mysql://localhost:3307/db");
     props.put("dialect.name", "MySqlDatabaseDialect");
     props.put("value.converter", JsonConverter.class.getName());
     props.put("topic.prefix",  "sql-");
+    return props;
+  }
+
+
+  protected Connection getDbConnection() throws SQLException {
+    return DriverManager.getConnection("jdbc:mysql://localhost:3307/db" , "user", "password");
+  }
+
+  protected void assertRecords(int numOfRecords, ConsumerRecords<byte[], byte[]> records) {
+    int start = 0;
+
+    if(numOfRecords != records.count()) {
+      throw new AssertionError("Invalid number of records found");
+    }
+
+    for (ConsumerRecord<byte[], byte[]> record : records) {
+      assertEquals(start, record.offset());
+      Struct valueStruct = ((Struct) (jsonConverter.toConnectData(KAFKA_TOPIC, record.value()).value()));
+      int id = valueStruct.getInt32("id");
+      assertEquals(start++, id);
+    }
   }
 
   protected void dropTableIfExists(String tableName) throws SQLException {
@@ -166,17 +175,6 @@ public class BaseConnectorIT {
   protected void createTable() throws SQLException {
     Statement st = connection.createStatement();
     String sql = "CREATE TABLE " + KAFKA_TOPIC +
-            "(id INTEGER not NULL, " +
-            " first_name VARCHAR(255), " +
-            " last_name VARCHAR(255), " +
-            " age INTEGER, " +
-            " PRIMARY KEY ( id ))";
-    st.executeQuery(sql);
-  }
-
-  protected void createTimestampTable() throws SQLException {
-    Statement st = connection.createStatement();
-    String sql = "CREATE TABLE " + KAFKA_TOPIC +
             "(id int not NULL, " +
             " first_name VARCHAR(255), " +
             " last_name VARCHAR(255), " +
@@ -184,7 +182,7 @@ public class BaseConnectorIT {
     st.executeQuery(sql);
   }
 
-  protected void sendTestTimestampDataToMysql(int start, int numOfRecords) throws SQLException {
+  protected void sendTestData(int start, int numOfRecords) throws SQLException {
     String sql = "INSERT INTO testtable(id,first_name,last_name) "
             + "VALUES(?,?,?)";
     PreparedStatement pstmt = connection.prepareStatement(sql);
@@ -192,20 +190,6 @@ public class BaseConnectorIT {
       pstmt.setInt(1, i);
       pstmt.setString(2, "FirstName");
       pstmt.setString(3, "LastName");
-      pstmt.executeUpdate();
-    }
-    pstmt.close();
-  }
-
-  protected void sendTestDataToMysql(int start, int numOfRecords) throws SQLException {
-    String sql = "INSERT INTO testtable(id,first_name,last_name,age) "
-            + "VALUES(?,?,?,?)";
-    PreparedStatement pstmt = connection.prepareStatement(sql);
-    for (int i=start; i<start+numOfRecords; i++) {
-      pstmt.setLong(1, i);
-      pstmt.setString(2, "FirstName");
-      pstmt.setString(3, "LastName");
-      pstmt.setLong(4, 20);
       pstmt.executeUpdate();
     }
     pstmt.close();
@@ -221,7 +205,7 @@ public class BaseConnectorIT {
     try {
       httpClient.execute(postRequest);
     } catch (IOException e) {
-      throw new RuntimeException("Unable to restart the task");
+      throw new RuntimeException("Unable to restart the task", e);
     }
   }
 

@@ -39,7 +39,6 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertEquals;
@@ -59,9 +58,9 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
   public void setup() throws Exception {
     startConnect();
     connect.kafka().createTopic(KAFKA_TOPIC, 1);
-    props = getConnectorProps();
+    props = getConnectorProperties();
     if (connection == null) {
-      TestUtils.waitForCondition(() -> assertConnection().orElse(false),
+      TestUtils.waitForCondition(() -> assertDbConnection().orElse(false),
           TimeUnit.SECONDS.toMillis(30),
           "Failed to start the container.");
     }
@@ -85,31 +84,14 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
     compose.close();
   }
 
-  private Optional<Boolean> assertConnection() {
-    try {
-      connection = initializeJdbcConnection();
-      if (connection != null) {
-        return Optional.of(true);
-      }
-      //Delay to avoid frequent connection requests.
-      TimeUnit.MILLISECONDS.sleep(100);
-      return Optional.empty();
-    } catch (SQLException | InterruptedException e) {
-      return Optional.empty();
-    }
-  }
-
   @Test
   public void testTaskBounce() throws Exception {
     int startIndex = 0;
 
     createTable();
-    sendTestDataToMysql(startIndex, NUM_RECORDS);
+    sendTestData(startIndex, NUM_RECORDS);
 
     connect.kafka().createTopic("sql-" + KAFKA_TOPIC);
-
-    // Add mysql dialect related configurations.
-    addConnectionProperties(props);
 
     props.put("mode", "incrementing");
     props.put("incrementing.column.name",  "id");
@@ -147,7 +129,7 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
         SQL_TESTTABLE);
 
     startIndex += NUM_RECORDS;
-    sendTestDataToMysql(startIndex, NUM_RECORDS);
+    sendTestData(startIndex, NUM_RECORDS);
 
     log.info("Waiting for records in destination topic ...");
     records = connect.kafka().consume(
@@ -164,12 +146,9 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
     int startIndex = 0;
 
     createTable();
-    sendTestDataToMysql(startIndex, NUM_RECORDS);
+    sendTestData(startIndex, NUM_RECORDS);
 
     connect.kafka().createTopic("sql-" + KAFKA_TOPIC);
-
-    // Add mysql dialect related configurations.
-    addConnectionProperties(props);
 
     props.put("mode", "incrementing");
     props.put("incrementing.column.name",  "id");
@@ -193,7 +172,7 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
     connect.deleteConnector(CONNECTOR_NAME);
 
     startIndex += NUM_RECORDS;
-    sendTestDataToMysql(startIndex, NUM_RECORDS);
+    sendTestData(startIndex, NUM_RECORDS);
 
     // start a source connector
     connect.configureConnector(CONNECTOR_NAME, props);
@@ -215,13 +194,11 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
   public void testConnectorModeChange() throws InterruptedException, SQLException {
     int startIndex = 0;
 
-    createTimestampTable();
-    sendTestTimestampDataToMysql(startIndex, NUM_RECORDS);
+    createTable();
+    sendTestData(startIndex, NUM_RECORDS);
 
     connect.kafka().createTopic("sql-" + KAFKA_TOPIC);
 
-    // Add mysql dialect related configurations.
-    addConnectionProperties(props);
     props.put("mode", "timestamp");
     props.put("timestamp.column.name",  "time1");
 
@@ -249,7 +226,7 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
     props.remove("timestamp.column.name");
 
     startIndex += NUM_RECORDS;
-    sendTestTimestampDataToMysql(startIndex, NUM_RECORDS);
+    sendTestData(startIndex, NUM_RECORDS);
 
     // start a source connector
     connect.configureConnector(CONNECTOR_NAME, props);

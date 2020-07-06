@@ -41,7 +41,6 @@ import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -110,7 +109,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
   @Test
   public void testForDbServerUnavailability() throws Exception {
     // Starting 'pumba' container to periodically pause services in sql container.
-    startPumbaContainer();
+    startPumbaPauseContainer();
     sendTestDataToKafka(0, NUM_RECORDS);
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
         NUM_RECORDS,
@@ -132,22 +131,37 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
         Integer.valueOf(MAX_TASKS),
         KAFKA_TOPIC,
         NUM_RECORDS);
+    assertRecordsCountAndContent(NUM_RECORDS);
+    pumbaPauseContainer.close();
+  }
 
-    sendTestDataToKafka(NUM_RECORDS, NUM_RECORDS);
-    totalRecords = connect.kafka().consume(
-        NUM_RECORDS * 2,
+  @Test
+  public void testForDbServerDelay() throws Exception {
+    // Starting 'pumba' container to periodically delay services in sql container.
+    startPumbaDelayContainer();
+    sendTestDataToKafka(0, NUM_RECORDS);
+    ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
+        NUM_RECORDS,
         CONSUME_MAX_DURATION_MS,
         KAFKA_TOPIC);
     log.info("Number of records added in kafka {}", totalRecords.count());
+
+    // Add mysql dialect related configurations.
+    props = getConnectorConfigurations();
+
+    // Configure Connector and wait some specific time to start the connector.
+    connect.configureConnector(CONNECTOR_NAME, props);
+    waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
+
     // Wait Connector to write data into Mysql
     waitForConnectorToWriteDataIntoMysql(
         connection,
         CONNECTOR_NAME,
         Integer.valueOf(MAX_TASKS),
         KAFKA_TOPIC,
-        NUM_RECORDS * 2);
-    assertRecordsCountAndContent(NUM_RECORDS * 2);
-    pumbaContainer.close();
+        NUM_RECORDS);
+    assertRecordsCountAndContent(NUM_RECORDS);
+    pumbaDelayContainer.close();
   }
 
   private void assertRecordsCountAndContent(int recordCount) throws SQLException {
@@ -155,15 +169,10 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     ResultSet rs = st.executeQuery("SELECT * FROM " + KAFKA_TOPIC);
     int counter = 0;
     while (rs.next()) {
+      Assert.assertEquals(counter++, rs.getInt("userId"));
       Assert.assertEquals("Alex", rs.getString("firstName"));
       Assert.assertEquals("Smith", rs.getString("lastName"));
-      Assert.assertEquals(true, rs.getBoolean("bool"));
-      Assert.assertEquals((short) 1234, rs.getShort("short"));
-      Assert.assertEquals((byte) -32, rs.getByte("byte"));
-      Assert.assertEquals(12425436L, rs.getLong("long"));
-      Assert.assertEquals((float) 2356.3, rs.getFloat("float"), 0.0);
-      Assert.assertEquals(-2436546.56457, rs.getDouble("double"), 0.0);
-      Assert.assertEquals(counter++, rs.getInt("userId"));
+      Assert.assertEquals(20, rs.getInt("age"));
     }
     Assert.assertEquals(counter, recordCount);
   }
@@ -172,8 +181,6 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     for (int i = startIndex; i < startIndex + numRecords; i++) {
       String value = getTestKafkaRecord(KAFKA_TOPIC, SCHEMA, i);
       connect.kafka().produce(KAFKA_TOPIC, null, value);
-      //A minor delay is added so that record produced will have different time stamp.
-      Thread.sleep(10);
     }
   }
 
@@ -189,16 +196,10 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
 
   private String getTestKafkaRecord(String topic, Schema schema, int i) {
       final Struct struct = new Struct(schema)
+          .put("userId", i)
           .put("firstName", "Alex")
           .put("lastName", "Smith")
-          .put("bool", true)
-          .put("short", (short) 1234)
-          .put("byte", (byte) -32)
-          .put("long", 12425436L)
-          .put("float", (float) 2356.3)
-          .put("double", -2436546.56457)
-          .put("userId", i)
-          .put("modified", new Date(1474661402123L));
+          .put("age", 20);
       JsonConverter jsonConverter = new JsonConverter();
       Map<String, String> config = new HashMap<>();
       config.put(JsonConverterConfig.SCHEMAS_CACHE_SIZE_CONFIG, "100");

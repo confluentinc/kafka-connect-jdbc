@@ -19,7 +19,6 @@ import io.confluent.connect.jdbc.JdbcSinkConnector;
 import io.confluent.connect.jdbc.JdbcSourceConnector;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
-import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.runtime.AbstractStatus;
 import org.apache.kafka.connect.runtime.SinkConnectorConfig;
 import org.apache.kafka.connect.runtime.rest.entities.ConnectorStateInfo;
@@ -57,16 +56,10 @@ public class BaseConnectorIT {
   protected static final String MAX_TASKS = "1";
 
   protected static final Schema SCHEMA = SchemaBuilder.struct().name("com.example.Person")
+      .field("userId", Schema.OPTIONAL_INT32_SCHEMA)
       .field("firstName", Schema.STRING_SCHEMA)
       .field("lastName", Schema.STRING_SCHEMA)
-      .field("userId", Schema.OPTIONAL_INT32_SCHEMA)
-      .field("bool", Schema.OPTIONAL_BOOLEAN_SCHEMA)
-      .field("short", Schema.OPTIONAL_INT16_SCHEMA)
-      .field("byte", Schema.OPTIONAL_INT8_SCHEMA)
-      .field("long", Schema.OPTIONAL_INT64_SCHEMA)
-      .field("float", Schema.OPTIONAL_FLOAT32_SCHEMA)
-      .field("double", Schema.OPTIONAL_FLOAT64_SCHEMA)
-      .field("modified", Timestamp.SCHEMA)
+      .field("age", Schema.OPTIONAL_INT32_SCHEMA)
       .build();
 
   protected EmbeddedConnectCluster connect;
@@ -80,11 +73,18 @@ public class BaseConnectorIT {
     connect.start();
   }
 
-  public static DockerComposeContainer pumbaContainer;
-  protected void startPumbaContainer() {
-    pumbaContainer =
-        new DockerComposeContainer(new File("src/test/docker/configB/pumba-docker-compose.yml"));
-    pumbaContainer.start();
+  public static DockerComposeContainer pumbaPauseContainer;
+  protected void startPumbaPauseContainer() {
+    pumbaPauseContainer =
+        new DockerComposeContainer(new File("src/test/docker/configB/pumba-pause-compose.yml"));
+    pumbaPauseContainer.start();
+  }
+
+  public static DockerComposeContainer pumbaDelayContainer;
+  protected void startPumbaDelayContainer() {
+    pumbaDelayContainer =
+        new DockerComposeContainer(new File("src/test/docker/configB/pumba-delay-compose.yml"));
+    pumbaDelayContainer.start();
   }
 
   /**

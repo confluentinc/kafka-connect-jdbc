@@ -108,11 +108,12 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
 
   @Test
   public void testForDbServerUnavailability() throws Exception {
+    int numRecords = 500000;
     // Starting 'pumba' container to periodically pause services in sql container.
     startPumbaPauseContainer();
-    sendTestDataToKafka(0, NUM_RECORDS);
+    sendTestDataToKafka(0, numRecords);
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
-        NUM_RECORDS,
+        numRecords,
         CONSUME_MAX_DURATION_MS,
         KAFKA_TOPIC);
     log.info("Number of records added in kafka {}", totalRecords.count());
@@ -130,18 +131,19 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
         CONNECTOR_NAME,
         Integer.valueOf(MAX_TASKS),
         KAFKA_TOPIC,
-        NUM_RECORDS);
-    assertRecordsCountAndContent(NUM_RECORDS);
+        numRecords);
+    assertRecordsCountAndContent(numRecords);
     pumbaPauseContainer.close();
   }
 
   @Test
   public void testForDbServerDelay() throws Exception {
+    int numRecords = 500000;
     // Starting 'pumba' container to periodically delay services in sql container.
     startPumbaDelayContainer();
-    sendTestDataToKafka(0, NUM_RECORDS);
+    sendTestDataToKafka(0, numRecords);
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
-        NUM_RECORDS,
+        numRecords,
         CONSUME_MAX_DURATION_MS,
         KAFKA_TOPIC);
     log.info("Number of records added in kafka {}", totalRecords.count());
@@ -159,8 +161,8 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
         CONNECTOR_NAME,
         Integer.valueOf(MAX_TASKS),
         KAFKA_TOPIC,
-        NUM_RECORDS);
-    assertRecordsCountAndContent(NUM_RECORDS);
+        numRecords);
+    assertRecordsCountAndContent(numRecords);
     pumbaDelayContainer.close();
   }
 

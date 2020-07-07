@@ -13,10 +13,10 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package io.confluent.connect.jdbc.integration.sink;
+package io.confluent.connect.jdbc.sink.integration;
 
 import io.confluent.connect.jdbc.JdbcSinkConnector;
-import io.confluent.connect.jdbc.integration.BaseConnectorIT;
+import io.confluent.connect.jdbc.BaseConnectorIT;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
@@ -52,7 +52,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
 
   private static final Logger log = LoggerFactory.getLogger(JdbcSinkConnectorIT.class);
   private Map<String, String> props;
-  private static final int NUM_RECORDS = 500000;
+  private static final int NUM_RECORDS = 500;
 
   @ClassRule
   public static DockerComposeContainer mySqlContainer =

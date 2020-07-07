@@ -13,12 +13,12 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package io.confluent.connect.jdbc.integration.source;
+package io.confluent.connect.jdbc.source.integration;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.confluent.connect.jdbc.JdbcSourceConnector;
-import io.confluent.connect.jdbc.integration.BaseConnectorIT;
+import io.confluent.connect.jdbc.BaseConnectorIT;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.connect.json.JsonConverter;
@@ -50,7 +50,7 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
 
   private static final ObjectMapper objectMapper = new ObjectMapper();
   private Map<String, String> props;
-  private static final int NUM_RECORDS = 50000;
+  private static final int NUM_RECORDS = 500;
 
   @ClassRule
   public static DockerComposeContainer mySqlContainer =

@@ -1,4 +1,4 @@
-package io.confluent.connect.jdbc.integration.source;
+package io.confluent.connect.jdbc.source.integration;
 
 import static junit.framework.TestCase.assertTrue;
 import static org.junit.Assert.assertEquals;

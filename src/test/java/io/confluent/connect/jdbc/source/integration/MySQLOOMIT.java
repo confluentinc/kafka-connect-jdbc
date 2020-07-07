@@ -1,4 +1,4 @@
-package io.confluent.connect.jdbc.integration.source;
+package io.confluent.connect.jdbc.source.integration;
 
 import ch.vorburger.mariadb4j.junit.MariaDB4jRule;
 import io.confluent.common.utils.IntegrationTest;

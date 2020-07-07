@@ -52,7 +52,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
 
   private static final Logger log = LoggerFactory.getLogger(JdbcSinkConnectorIT.class);
   private Map<String, String> props;
-  private static final int NUM_RECORDS = 500;
+  private static final int NUM_RECORDS = 500000;
 
   @ClassRule
   public static DockerComposeContainer mySqlContainer =

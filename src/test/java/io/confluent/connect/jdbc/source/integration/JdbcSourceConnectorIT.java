@@ -50,7 +50,7 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
 
   private static final ObjectMapper objectMapper = new ObjectMapper();
   private Map<String, String> props;
-  private static final int NUM_RECORDS = 500;
+  private static final int NUM_RECORDS = 50000;
 
   @ClassRule
   public static DockerComposeContainer mySqlContainer =

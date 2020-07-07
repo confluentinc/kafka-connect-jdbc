@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.integration.source;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.confluent.connect.jdbc.JdbcSourceConnector;
 import io.confluent.connect.jdbc.integration.BaseConnectorIT;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -39,6 +40,7 @@ import java.io.IOException;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -46,8 +48,9 @@ import java.util.concurrent.TimeUnit;
 public class JdbcSourceConnectorIT extends BaseConnectorIT {
   private static final Logger log = LoggerFactory.getLogger(JdbcSourceConnectorIT.class);
 
-  private Map<String, String> props;
   private static final ObjectMapper objectMapper = new ObjectMapper();
+  private Map<String, String> props;
+  private int numRecords = 50000;
 
   @ClassRule
   public static DockerComposeContainer mySqlContainer =
@@ -80,8 +83,6 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
 
   @Test
   public void testSuccess() throws Exception {
-    // Add mysql dialect related configurations.
-    props = getConnectorConfigurations();
     String topicName = props.get("topic.prefix") + KAFKA_TOPIC;
     connect.kafka().createTopic(topicName);
     sendTestDataToMysql(0, NUM_RECORDS);
@@ -100,11 +101,9 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
 
   @Test
   public void testForDbServerUnavailability() throws Exception {
-    int numRecords = 50000;
     // Starting 'pumba' container to periodically pause services in sql container.
+    // Will pause the sql container for 10s in a period of 30s.
     startPumbaPauseContainer();
-    // Add mysql dialect related configurations.
-    props = getConnectorConfigurations();
     String topicName = props.get("topic.prefix") + KAFKA_TOPIC;
     connect.kafka().createTopic(topicName);
     sendTestDataToMysql(0, numRecords);
@@ -123,11 +122,9 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
 
   @Test
   public void testForDbServerDelay() throws Exception {
-    int numRecords = 50000;
     // Starting 'pumba' container to periodically delay services in sql container.
+    // Will delay the sql container's services for 1s in a period of 5s.
     startPumbaDelayContainer();
-    // Add mysql dialect related configurations.
-    props = getConnectorConfigurations();
     String topicName = props.get("topic.prefix") + KAFKA_TOPIC;
     connect.kafka().createTopic(topicName);
     sendTestDataToMysql(0, numRecords);
@@ -144,7 +141,19 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
     pumbaDelayContainer.close();
   }
 
-  private Map<String, String> getConnectorConfigurations() {
+  /**
+   * Create a map of Common connector properties.
+   *
+   * @return : Map of props.
+   */
+  private Map<String, String> getSourceConnectorProps() {
+    Map<String, String> props = new HashMap<>();
+    props.put("connector.class", JdbcSourceConnector.class.getName());
+    props.put("tasks.max", MAX_TASKS);
+    // license properties
+    props.put("confluent.topic.replication.factor", "1");
+    props.put("confluent.topic.bootstrap.servers", connect.kafka().bootstrapServers());
+    // connector-specific properties
     props.put("connection.password", "password");
     props.put("connection.user", "user");
     props.put("connection.url", "jdbc:mysql://localhost:3306/db");
@@ -183,6 +192,7 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
 
   private void assertRecordsCountAndContent(int numRecords, ConsumerRecords<byte[], byte[]> totalRecords) throws IOException {
     int id = 0;
+    Assert.assertEquals(numRecords, totalRecords.count());
     for (ConsumerRecord<byte[], byte[]> record : totalRecords) {
       String value = new String(record.value());
       JsonNode jsonNode = objectMapper.readTree(value);
@@ -192,6 +202,5 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
       Assert.assertEquals("LastName", jsonNode.get("lastName").asText());
       Assert.assertEquals(20, jsonNode.get("age").asInt());
     }
-    Assert.assertEquals(numRecords, totalRecords.count());
   }
 }

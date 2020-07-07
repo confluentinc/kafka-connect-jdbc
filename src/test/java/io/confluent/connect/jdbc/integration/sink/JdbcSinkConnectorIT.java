@@ -15,12 +15,14 @@
 
 package io.confluent.connect.jdbc.integration.sink;
 
+import io.confluent.connect.jdbc.JdbcSinkConnector;
 import io.confluent.connect.jdbc.integration.BaseConnectorIT;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.json.JsonConverterConfig;
+import org.apache.kafka.connect.runtime.SinkConnectorConfig;
 import org.apache.kafka.connect.storage.ConverterConfig;
 import org.apache.kafka.connect.storage.ConverterType;
 import org.apache.kafka.test.IntegrationTest;
@@ -50,6 +52,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
 
   private static final Logger log = LoggerFactory.getLogger(JdbcSinkConnectorIT.class);
   private Map<String, String> props;
+  private int numRecords = 500000;
 
   @ClassRule
   public static DockerComposeContainer mySqlContainer =
@@ -89,9 +92,6 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
         KAFKA_TOPIC);
     log.info("Number of records added in kafka {}", totalRecords.count());
 
-    // Add mysql dialect related configurations.
-    props = getConnectorConfigurations();
-
     // Configure Connector and wait some specific time to start the connector.
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
@@ -108,8 +108,8 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
 
   @Test
   public void testForDbServerUnavailability() throws Exception {
-    int numRecords = 500000;
     // Starting 'pumba' container to periodically pause services in sql container.
+    // Will pause the sql container for 10s in a period of 30s.
     startPumbaPauseContainer();
     sendTestDataToKafka(0, numRecords);
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
@@ -117,9 +117,6 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
         CONSUME_MAX_DURATION_MS,
         KAFKA_TOPIC);
     log.info("Number of records added in kafka {}", totalRecords.count());
-
-    // Add mysql dialect related configurations.
-    props = getConnectorConfigurations();
 
     // Configure Connector and wait some specific time to start the connector.
     connect.configureConnector(CONNECTOR_NAME, props);
@@ -138,8 +135,8 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
 
   @Test
   public void testForDbServerDelay() throws Exception {
-    int numRecords = 500000;
     // Starting 'pumba' container to periodically delay services in sql container.
+    // Will delay the sql container's services for 1s in a period of 5s.
     startPumbaDelayContainer();
     sendTestDataToKafka(0, numRecords);
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
@@ -147,9 +144,6 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
         CONSUME_MAX_DURATION_MS,
         KAFKA_TOPIC);
     log.info("Number of records added in kafka {}", totalRecords.count());
-
-    // Add mysql dialect related configurations.
-    props = getConnectorConfigurations();
 
     // Configure Connector and wait some specific time to start the connector.
     connect.configureConnector(CONNECTOR_NAME, props);
@@ -186,7 +180,20 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     }
   }
 
-  private Map<String, String> getConnectorConfigurations() {
+  /**
+   * Create a map of Common connector properties.
+   *
+   * @return : Map of props.
+   */
+  private Map<String, String> getSinkConnectorProps() {
+    Map<String, String> props = new HashMap<>();
+    props.put(SinkConnectorConfig.TOPICS_CONFIG, KAFKA_TOPIC);
+    props.put("connector.class", JdbcSinkConnector.class.getName());
+    props.put("tasks.max", MAX_TASKS);
+    // license properties
+    props.put("confluent.topic.replication.factor", "1");
+    props.put("confluent.topic.bootstrap.servers", connect.kafka().bootstrapServers());
+    // connector-specific properties
     props.put("connection.url", "jdbc:mysql://localhost:3306/db");
     props.put("connection.user", "user");
     props.put("connection.password", "password");

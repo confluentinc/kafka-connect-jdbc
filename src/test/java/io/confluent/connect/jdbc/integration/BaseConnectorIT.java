@@ -15,12 +15,9 @@
 
 package io.confluent.connect.jdbc.integration;
 
-import io.confluent.connect.jdbc.JdbcSinkConnector;
-import io.confluent.connect.jdbc.JdbcSourceConnector;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.runtime.AbstractStatus;
-import org.apache.kafka.connect.runtime.SinkConnectorConfig;
 import org.apache.kafka.connect.runtime.rest.entities.ConnectorStateInfo;
 import org.apache.kafka.connect.util.clusters.EmbeddedConnectCluster;
 import org.apache.kafka.test.IntegrationTest;
@@ -37,8 +34,6 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
@@ -73,14 +68,14 @@ public class BaseConnectorIT {
     connect.start();
   }
 
-  public static DockerComposeContainer pumbaPauseContainer;
+  protected static DockerComposeContainer pumbaPauseContainer;
   protected void startPumbaPauseContainer() {
     pumbaPauseContainer =
         new DockerComposeContainer(new File("src/test/docker/configB/pumba-pause-compose.yml"));
     pumbaPauseContainer.start();
   }
 
-  public static DockerComposeContainer pumbaDelayContainer;
+  protected static DockerComposeContainer pumbaDelayContainer;
   protected void startPumbaDelayContainer() {
     pumbaDelayContainer =
         new DockerComposeContainer(new File("src/test/docker/configB/pumba-delay-compose.yml"));
@@ -191,42 +186,6 @@ public class BaseConnectorIT {
       }
     }
     return tExists;
-  }
-
-  /**
-   * Create a map of Common connector properties.
-   *
-   * @return : Map of props.
-   */
-  public Map<String, String> getSinkConnectorProps() {
-
-    Map<String, String> props = new HashMap<>();
-    props.put(SinkConnectorConfig.TOPICS_CONFIG, KAFKA_TOPIC);
-    props.put("connector.class", JdbcSinkConnector.class.getName());
-    props.put("tasks.max", MAX_TASKS);
-    // license properties
-    props.put("confluent.topic.replication.factor", "1");
-    props.put("confluent.topic.bootstrap.servers", connect.kafka().bootstrapServers());
-
-    // connector-specific properties
-    return props;
-  }
-
-  /**
-   * Create a map of Common connector properties.
-   *
-   * @return : Map of props.
-   */
-  public Map<String, String> getSourceConnectorProps() {
-    Map<String, String> props = new HashMap<>();
-    props.put("connector.class", JdbcSourceConnector.class.getName());
-    props.put("tasks.max", MAX_TASKS);
-    // license properties
-    props.put("confluent.topic.replication.factor", "1");
-    props.put("confluent.topic.bootstrap.servers", connect.kafka().bootstrapServers());
-
-    // connector-specific properties
-    return props;
   }
 
   protected Connection getConnection() throws SQLException {

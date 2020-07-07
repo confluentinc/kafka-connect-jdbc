@@ -55,9 +55,11 @@ public class JdbcSourceConnector extends SourceConnector {
 
   private Map<String, String> configProperties;
   private JdbcSourceConnectorConfig config;
-  private CachedConnectionProvider cachedConnectionProvider;
   private TableMonitorThread tableMonitorThread;
   private DatabaseDialect dialect;
+
+  // visible for testing
+  CachedConnectionProvider cachedConnectionProvider;
 
   @Override
   public String version() {

@@ -50,7 +50,7 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
 
   private static final ObjectMapper objectMapper = new ObjectMapper();
   private Map<String, String> props;
-  private int numRecords = 50000;
+  private static final int NUM_RECORDS = 50000;
 
   @ClassRule
   public static DockerComposeContainer mySqlContainer =
@@ -106,17 +106,17 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
     startPumbaPauseContainer();
     String topicName = props.get("topic.prefix") + KAFKA_TOPIC;
     connect.kafka().createTopic(topicName);
-    sendTestDataToMysql(0, numRecords);
+    sendTestDataToMysql(0, NUM_RECORDS);
 
     // Configure Connector and wait some specific time to start the connector.
     connect.configureConnector(CONNECTOR_NAME, props);
     log.info("Waiting for records in destination topic ...");
     waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
     ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(
-        numRecords,
+        NUM_RECORDS,
         CONSUME_MAX_DURATION_MS,
         topicName);
-    assertRecordsCountAndContent(numRecords, records);
+    assertRecordsCountAndContent(NUM_RECORDS, records);
     pumbaPauseContainer.close();
   }
 
@@ -127,17 +127,17 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
     startPumbaDelayContainer();
     String topicName = props.get("topic.prefix") + KAFKA_TOPIC;
     connect.kafka().createTopic(topicName);
-    sendTestDataToMysql(0, numRecords);
+    sendTestDataToMysql(0, NUM_RECORDS);
 
     // Configure Connector and wait some specific time to start the connector.
     connect.configureConnector(CONNECTOR_NAME, props);
     log.info("Waiting for records in destination topic ...");
     waitForConnectorToStart(CONNECTOR_NAME, Integer.valueOf(MAX_TASKS));
     ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(
-        numRecords,
+        NUM_RECORDS,
         CONSUME_MAX_DURATION_MS,
         topicName);
-    assertRecordsCountAndContent(numRecords, records);
+    assertRecordsCountAndContent(NUM_RECORDS, records);
     pumbaDelayContainer.close();
   }
 

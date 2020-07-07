@@ -52,7 +52,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
 
   private static final Logger log = LoggerFactory.getLogger(JdbcSinkConnectorIT.class);
   private Map<String, String> props;
-  private int numRecords = 500000;
+  private static final int NUM_RECORDS = 500000;
 
   @ClassRule
   public static DockerComposeContainer mySqlContainer =
@@ -111,9 +111,9 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     // Starting 'pumba' container to periodically pause services in sql container.
     // Will pause the sql container for 10s in a period of 30s.
     startPumbaPauseContainer();
-    sendTestDataToKafka(0, numRecords);
+    sendTestDataToKafka(0, NUM_RECORDS);
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
-        numRecords,
+        NUM_RECORDS,
         CONSUME_MAX_DURATION_MS,
         KAFKA_TOPIC);
     log.info("Number of records added in kafka {}", totalRecords.count());
@@ -128,8 +128,8 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
         CONNECTOR_NAME,
         Integer.valueOf(MAX_TASKS),
         KAFKA_TOPIC,
-        numRecords);
-    assertRecordsCountAndContent(numRecords);
+        NUM_RECORDS);
+    assertRecordsCountAndContent(NUM_RECORDS);
     pumbaPauseContainer.close();
   }
 
@@ -138,9 +138,9 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     // Starting 'pumba' container to periodically delay services in sql container.
     // Will delay the sql container's services for 1s in a period of 5s.
     startPumbaDelayContainer();
-    sendTestDataToKafka(0, numRecords);
+    sendTestDataToKafka(0, NUM_RECORDS);
     ConsumerRecords<byte[], byte[]> totalRecords = connect.kafka().consume(
-        numRecords,
+        NUM_RECORDS,
         CONSUME_MAX_DURATION_MS,
         KAFKA_TOPIC);
     log.info("Number of records added in kafka {}", totalRecords.count());
@@ -155,8 +155,8 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
         CONNECTOR_NAME,
         Integer.valueOf(MAX_TASKS),
         KAFKA_TOPIC,
-        numRecords);
-    assertRecordsCountAndContent(numRecords);
+        NUM_RECORDS);
+    assertRecordsCountAndContent(NUM_RECORDS);
     pumbaDelayContainer.close();
   }
 

@@ -22,14 +22,14 @@
     <parent>
         <groupId>io.confluent</groupId>
         <artifactId>common</artifactId>
-        <version>[6.0.0-0, 6.0.1-0)</version>
+        <version>6.0.0-57</version>
     </parent>
 
     <groupId>io.confluent</groupId>
     <artifactId>kafka-connect-jdbc</artifactId>
     <packaging>jar</packaging>
     <name>kafka-connect-jdbc</name>
-    <version>6.0.0-0</version>
+    <version>6.0.0-37</version>
     <organization>
         <name>Confluent, Inc.</name>
         <url>http://confluent.io</url>
@@ -64,7 +64,7 @@
         <licenses.name>Confluent Community License</licenses.name>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
-        <io.confluent.kafka-connect-jdbc.version>6.0.0-0</io.confluent.kafka-connect-jdbc.version>
+        <io.confluent.kafka-connect-jdbc.version>6.0.0-37</io.confluent.kafka-connect-jdbc.version>
         <project.package.home>target/${project.artifactId}-${io.confluent.kafka-connect-jdbc.version}-package</project.package.home>
     </properties>
 

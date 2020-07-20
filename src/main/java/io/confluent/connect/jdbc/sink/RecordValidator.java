@@ -65,6 +65,9 @@ public interface RecordValidator {
     if (config.deleteEnabled) {
       // When delete is enabled, we need a key
       keyValidator = keyValidator.and(requiresKey);
+    } else {
+      // When delete is disabled, we need non-tombstone values
+      valueValidator = valueValidator.and(requiresValue);
     }
 
     // Compose the validator that may or may be NO_OP

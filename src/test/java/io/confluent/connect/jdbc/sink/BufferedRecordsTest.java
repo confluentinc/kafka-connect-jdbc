@@ -559,12 +559,12 @@ public class BufferedRecordsTest {
     props.put("pk.mode", "record_key");
     props.put("pk.fields", "id");
 
-    // Delete is not enabled, so therefore require non-null key and key schema,
-    // but any combination of value and value schema works
+    // Delete is not enabled, so therefore require non-null key and values with schemas
     assertValidRecord(true, true, true, true);
-    assertValidRecord(true, true, false, true);
-    assertValidRecord(true, true, true, false);
-    assertValidRecord(true, true, false, false);
+    // Fail when ingesting tombstones
+    assertInvalidRecord(true, true, false, true, "with a non-null Struct value and non-null Struct schema");
+    assertInvalidRecord(true, true, true, false, "with a non-null Struct value and non-null Struct schema");
+    assertInvalidRecord(true, true, false, false, "with a non-null Struct value and non-null Struct schema");
 
     // Fail when null key and null key schema
     assertInvalidRecord(false, false, true, true, "with a null key and null key schema");
@@ -624,20 +624,20 @@ public class BufferedRecordsTest {
     assertValidRecord(true, false, true, true);
     assertValidRecord(false, false, true, true);
 
-    assertValidRecord(true, true, true, false);
-    assertValidRecord(false, true, true, false);
-    assertValidRecord(true, false, true, false);
-    assertValidRecord(false, false, true, false);
+    assertInvalidRecord(true, true, true, false, "with a non-null Struct value and non-null Struct schema");
+    assertInvalidRecord(false, true, true, false, "with a non-null Struct value and non-null Struct schema");
+    assertInvalidRecord(true, false, true, false, "with a non-null Struct value and non-null Struct schema");
+    assertInvalidRecord(false, false, true, false, "with a non-null Struct value and non-null Struct schema");
 
-    assertValidRecord(true, true, false, true);
-    assertValidRecord(false, true, false, true);
-    assertValidRecord(true, false, false, true);
-    assertValidRecord(false, false, false, true);
+    assertInvalidRecord(true, true, false, true, "with a non-null Struct value and non-null Struct schema");
+    assertInvalidRecord(false, true, false, true, "with a non-null Struct value and non-null Struct schema");
+    assertInvalidRecord(true, false, false, true, "with a non-null Struct value and non-null Struct schema");
+    assertInvalidRecord(false, false, false, true, "with a non-null Struct value and non-null Struct schema");
 
-    assertValidRecord(true, true, false, false);
-    assertValidRecord(false, true, false, false);
-    assertValidRecord(true, false, false, false);
-    assertValidRecord(false, false, false, false);
+    assertInvalidRecord(true, true, false, false, "with a non-null Struct value and non-null Struct schema");
+    assertInvalidRecord(false, true, false, false, "with a non-null Struct value and non-null Struct schema");
+    assertInvalidRecord(true, false, false, false, "with a non-null Struct value and non-null Struct schema");
+    assertInvalidRecord(false, false, false, false, "with a non-null Struct value and non-null Struct schema");
   }
 
   @Test

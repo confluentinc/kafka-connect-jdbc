@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.sink.integration;
 
 import io.confluent.connect.jdbc.JdbcSinkConnector;
 import io.confluent.connect.jdbc.BaseConnectorIT;
+import io.confluent.connect.jdbc.MysqlTestContainer;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
@@ -36,9 +37,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.containers.DockerComposeContainer;
 
-import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -55,8 +54,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
   private static final int NUM_RECORDS = 500000;
 
   @ClassRule
-  public static DockerComposeContainer mySqlContainer =
-      new DockerComposeContainer(new File("src/test/docker/configA/mysql-docker-compose.yml"));
+  public static MysqlTestContainer mySqlContainer = new MysqlTestContainer();
 
   @Before
   public void setup() throws Exception {
@@ -64,7 +62,8 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     connect.kafka().createTopic(KAFKA_TOPIC, 1);
     props = getSinkConnectorProps();
     if (connection == null) {
-      TestUtils.waitForCondition(() -> assertDbConnection().orElse(false),
+      TestUtils.waitForCondition(
+          () -> assertDbConnection(mySqlContainer.getMappedPort(3306)).orElse(false),
           TimeUnit.SECONDS.toMillis(50),
           "Failed to start the container.");
     }
@@ -194,7 +193,7 @@ public class JdbcSinkConnectorIT extends BaseConnectorIT {
     props.put("confluent.topic.replication.factor", "1");
     props.put("confluent.topic.bootstrap.servers", connect.kafka().bootstrapServers());
     // connector-specific properties
-    props.put("connection.url", "jdbc:mysql://localhost:3306/db");
+    props.put("connection.url", getConnectionUrl(mySqlContainer.getMappedPort(3306)));
     props.put("connection.user", "user");
     props.put("connection.password", "password");
     props.put("dialect.name", "MySqlDatabaseDialect");

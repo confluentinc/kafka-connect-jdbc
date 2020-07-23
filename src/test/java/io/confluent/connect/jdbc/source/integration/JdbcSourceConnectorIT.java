@@ -19,6 +19,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.confluent.connect.jdbc.JdbcSourceConnector;
 import io.confluent.connect.jdbc.BaseConnectorIT;
+import io.confluent.connect.jdbc.MysqlTestContainer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.connect.json.JsonConverter;
@@ -33,9 +34,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.containers.DockerComposeContainer;
 
-import java.io.File;
 import java.io.IOException;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -53,16 +52,15 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
   private static final int NUM_RECORDS = 50000;
 
   @ClassRule
-  public static DockerComposeContainer mySqlContainer =
-      new DockerComposeContainer(new File("src/test/docker/configA/mysql-docker-compose.yml"));
-
+  public static MysqlTestContainer mySqlContainer = new MysqlTestContainer();
   @Before
   public void setup() throws Exception {
     startConnect();
     connect.kafka().createTopic(KAFKA_TOPIC, 1);
     props = getSourceConnectorProps();
     if (connection == null) {
-      TestUtils.waitForCondition(() -> assertDbConnection().orElse(false),
+      TestUtils.waitForCondition(
+          () -> assertDbConnection(mySqlContainer.getMappedPort(3306)).orElse(false),
           TimeUnit.SECONDS.toMillis(30),
           "Failed to start the container.");
     }
@@ -156,7 +154,7 @@ public class JdbcSourceConnectorIT extends BaseConnectorIT {
     // connector-specific properties
     props.put("connection.password", "password");
     props.put("connection.user", "user");
-    props.put("connection.url", "jdbc:mysql://localhost:3306/db");
+    props.put("connection.url", getConnectionUrl(mySqlContainer.getMappedPort(3306)));
     props.put("dialect.name", "MySqlDatabaseDialect");
     props.put("value.converter", JsonConverter.class.getName());
     props.put("mode", "incrementing");

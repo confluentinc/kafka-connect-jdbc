@@ -22,12 +22,11 @@ import org.apache.kafka.connect.runtime.rest.entities.ConnectorStateInfo;
 import org.apache.kafka.connect.util.clusters.EmbeddedConnectCluster;
 import org.apache.kafka.test.IntegrationTest;
 import org.apache.kafka.test.TestUtils;
+import org.jetbrains.annotations.NotNull;
 import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.containers.DockerComposeContainer;
 
-import java.io.File;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -67,17 +66,15 @@ public class BaseConnectorIT {
     connect.start();
   }
 
-  protected static DockerComposeContainer pumbaPauseContainer;
+  protected static PumbaPauseContainer pumbaPauseContainer;
   protected void startPumbaPauseContainer() {
-    pumbaPauseContainer =
-        new DockerComposeContainer(new File("src/test/docker/configB/pumba-pause-compose.yml"));
+    pumbaPauseContainer = new PumbaPauseContainer();
     pumbaPauseContainer.start();
   }
 
-  protected static DockerComposeContainer pumbaDelayContainer;
+  protected static PumbaDelayContainer pumbaDelayContainer;
   protected void startPumbaDelayContainer() {
-    pumbaDelayContainer =
-        new DockerComposeContainer(new File("src/test/docker/configB/pumba-delay-compose.yml"));
+    pumbaDelayContainer = new PumbaDelayContainer();
     pumbaDelayContainer.start();
   }
 
@@ -154,9 +151,9 @@ public class BaseConnectorIT {
     }
   }
 
-  protected Optional<Boolean> assertDbConnection() {
+  protected Optional<Boolean> assertDbConnection(int mappedPort) {
     try {
-      connection = getConnection();
+      connection = getConnection(mappedPort);
       if (connection != null) {
         return Optional.of(true);
       }
@@ -187,7 +184,12 @@ public class BaseConnectorIT {
     return tExists;
   }
 
-  protected Connection getConnection() throws SQLException {
-    return DriverManager.getConnection("jdbc:mysql://localhost:3306/db" , "root", "password");
+  protected Connection getConnection(int mappedPort) throws SQLException {
+    return DriverManager.getConnection(getConnectionUrl(mappedPort), "root", "password");
+  }
+
+  @NotNull
+  protected String getConnectionUrl(int mappedPort) {
+    return "jdbc:mysql://localhost:" + mappedPort + "/db";
   }
 }

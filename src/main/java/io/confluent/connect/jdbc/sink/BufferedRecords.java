@@ -55,6 +55,7 @@ public class BufferedRecords {
   private List<SinkRecord> records = new ArrayList<>();
   private Schema keySchema;
   private Schema valueSchema;
+  private RecordValidator recordValidator;
   private FieldsMetadata fieldsMetadata;
   private PreparedStatement updatePreparedStatement;
   private PreparedStatement deletePreparedStatement;
@@ -74,9 +75,11 @@ public class BufferedRecords {
     this.dbDialect = dbDialect;
     this.dbStructure = dbStructure;
     this.connection = connection;
+    this.recordValidator = RecordValidator.create(config);
   }
 
   public List<SinkRecord> add(SinkRecord record) throws SQLException {
+    recordValidator.validate(record);
     final List<SinkRecord> flushed = new ArrayList<>();
 
     boolean schemaChanged = false;
@@ -101,7 +104,7 @@ public class BufferedRecords {
       valueSchema = record.valueSchema();
       schemaChanged = true;
     }
-    if (schemaChanged) {
+    if (schemaChanged || updateStatementBinder == null) {
       // Each batch needs to have the same schemas, so get the buffered records out
       flushed.addAll(flush());
 
@@ -259,13 +262,14 @@ public class BufferedRecords {
     }
   }
 
-  private String getInsertSql() {
+  private String getInsertSql() throws SQLException {
     switch (config.insertMode) {
       case INSERT:
         return dbDialect.buildInsertStatement(
             tableId,
             asColumns(fieldsMetadata.keyFieldNames),
-            asColumns(fieldsMetadata.nonKeyFieldNames)
+            asColumns(fieldsMetadata.nonKeyFieldNames),
+            dbStructure.tableDefinition(connection, tableId)
         );
       case UPSERT:
         if (fieldsMetadata.keyFieldNames.isEmpty()) {
@@ -279,7 +283,8 @@ public class BufferedRecords {
           return dbDialect.buildUpsertQueryStatement(
               tableId,
               asColumns(fieldsMetadata.keyFieldNames),
-              asColumns(fieldsMetadata.nonKeyFieldNames)
+              asColumns(fieldsMetadata.nonKeyFieldNames),
+              dbStructure.tableDefinition(connection, tableId)
           );
         } catch (UnsupportedOperationException e) {
           throw new ConnectException(String.format(
@@ -292,7 +297,8 @@ public class BufferedRecords {
         return dbDialect.buildUpdateStatement(
             tableId,
             asColumns(fieldsMetadata.keyFieldNames),
-            asColumns(fieldsMetadata.nonKeyFieldNames)
+            asColumns(fieldsMetadata.nonKeyFieldNames),
+            dbStructure.tableDefinition(connection, tableId)
         );
       default:
         throw new ConnectException("Invalid insert mode");

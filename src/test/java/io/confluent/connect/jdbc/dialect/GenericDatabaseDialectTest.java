@@ -37,8 +37,10 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.SqliteHelper;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.EmbeddedDerby;
@@ -52,19 +54,27 @@ import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.StringUtils;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.util.TableType;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseDialect> {
 
   public static final Set<String> TABLE_TYPES = Collections.singleton("TABLE");
+  public static final Set<String> VIEW_TYPES = Collections.singleton("VIEW");
+  public static final Set<String> ALL_TABLE_TYPES = Collections.unmodifiableSet(
+      new HashSet<>(Arrays.asList("TABLE", "VIEW"))
+  );
 
   private final SqliteHelper sqliteHelper = new SqliteHelper(getClass().getSimpleName());
   private Map<String, String> connProps;
   private JdbcSourceConnectorConfig config;
+  private JdbcSinkConfig sinkConfig;
   private EmbeddedDerby db;
   private ConnectionProvider connectionProvider;
   private Connection conn;
@@ -118,6 +128,35 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
     return dialect;
   }
 
+
+  protected GenericDatabaseDialect newSinkDialectFor(Set<String> tableTypes) {
+    assertNotNull(tableTypes);
+    assertFalse(tableTypes.isEmpty());
+    connProps.put(JdbcSinkConfig.TABLE_TYPES_CONFIG, StringUtils.join(tableTypes, ","));
+    sinkConfig = new JdbcSinkConfig(connProps);
+    dialect = createDialect(sinkConfig);
+    assertTrue(dialect.tableTypes.containsAll(tableTypes));
+    return dialect;
+  }
+
+  @Test
+  public void testDialectForSinkConnectorWithTablesOnly() throws Exception {
+    newSinkDialectFor(TABLE_TYPES);
+    assertEquals(Collections.emptyList(), dialect.tableIds(conn));
+  }
+
+  @Test
+  public void testDialectForSinkConnectorWithViewsOnly() throws Exception {
+    newSinkDialectFor(VIEW_TYPES);
+    assertEquals(Collections.emptyList(), dialect.tableIds(conn));
+  }
+
+  @Test
+  public void testDialectForSinkConnectorWithTablesAndViews() throws Exception {
+    newSinkDialectFor(ALL_TABLE_TYPES);
+    assertEquals(Collections.emptyList(), dialect.tableIds(conn));
+  }
+
   @Test
   public void testGetTablesEmpty() throws Exception {
     newDialectFor(TABLE_TYPES, null);
@@ -154,20 +193,30 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
     db.createTable("test", "id", "INT");
     db.createTable("foo", "id", "INT", "bar", "VARCHAR(20)");
     db.createTable("zab", "id", "INT");
+    db.createView("fooview", "foo", "id", "bar");
     TableId test = new TableId(null, "APP", "test");
     TableId foo = new TableId(null, "APP", "foo");
     TableId zab = new TableId(null, "APP", "zab");
+    TableId vfoo = new TableId(null, "APP", "fooview");
+
+    // Does not contain views
     assertEquals(new HashSet<>(Arrays.asList(test, foo, zab)),
-                 new HashSet<>(dialect.tableIds(conn)));
+        new HashSet<>(dialect.tableIds(conn)));
+
+    newDialectFor(ALL_TABLE_TYPES, null);
+    assertEquals(new HashSet<>(Arrays.asList(test, foo, zab, vfoo)),
+        new HashSet<>(dialect.tableIds(conn)));
   }
 
   @Test
   public void testGetTablesNarrowedToSchemas() throws Exception {
+    newDialectFor(TABLE_TYPES, null);
     db.createTable("some_table", "id", "INT");
 
     db.execute("CREATE SCHEMA PUBLIC_SCHEMA");
     db.execute("SET SCHEMA PUBLIC_SCHEMA");
     db.createTable("public_table", "id", "INT");
+    db.createView("public_view", "public_table", "id");
 
     db.execute("CREATE SCHEMA PRIVATE_SCHEMA");
     db.execute("SET SCHEMA PRIVATE_SCHEMA");
@@ -178,6 +227,7 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
     TableId publicTable = new TableId(null, "PUBLIC_SCHEMA", "public_table");
     TableId privateTable = new TableId(null, "PRIVATE_SCHEMA", "private_table");
     TableId anotherPrivateTable = new TableId(null, "PRIVATE_SCHEMA", "another_private_table");
+    TableId publicView = new TableId(null, "PUBLIC_SCHEMA", "public_view");
 
     assertTableNames(TABLE_TYPES, "PUBLIC_SCHEMA", publicTable);
     assertTableNames(TABLE_TYPES, "PRIVATE_SCHEMA", privateTable, anotherPrivateTable);
@@ -189,18 +239,29 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
 
     TableDefinition defn = dialect.describeTable(db.getConnection(), someTable);
     assertEquals(someTable, defn.id());
+    assertEquals(TableType.TABLE, defn.type());
     assertEquals("INTEGER", defn.definitionForColumn("id").typeName());
 
     defn = dialect.describeTable(db.getConnection(), publicTable);
     assertEquals(publicTable, defn.id());
+    assertEquals(TableType.TABLE, defn.type());
     assertEquals("INTEGER", defn.definitionForColumn("id").typeName());
 
     defn = dialect.describeTable(db.getConnection(), privateTable);
     assertEquals(privateTable, defn.id());
+    assertEquals(TableType.TABLE, defn.type());
     assertEquals("INTEGER", defn.definitionForColumn("id").typeName());
 
     defn = dialect.describeTable(db.getConnection(), anotherPrivateTable);
     assertEquals(anotherPrivateTable, defn.id());
+    assertEquals(TableType.TABLE, defn.type());
+    assertEquals("INTEGER", defn.definitionForColumn("id").typeName());
+
+    // Create a new dialect that uses views, and describe the view
+    newDialectFor(ALL_TABLE_TYPES, null);
+    defn = dialect.describeTable(db.getConnection(), publicView);
+    assertEquals(publicView, defn.id());
+    assertEquals(TableType.VIEW, defn.type());
     assertEquals("INTEGER", defn.definitionForColumn("id").typeName());
   }
 
@@ -421,5 +482,71 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
         "jdbc:acme:db/foo:100?password=****&key1=value1&key2=value2&key3=value3&"
         + "user=smith&password=****&other=value"
     );
+  }
+
+  @Test
+  public void shouldSanitizeUrlWithManyPasswordVariationsInUrlProperties() {
+    assertSanitizedUrl(
+        "jdbc:acme:db/foo:100?"
+        + "javax.net.ssl.keyStorePassword=secret2&"
+        + "password=secret&"
+        + "password&" // incorrect parameter before a non-secret
+        + "key1=value1&"
+        + "key2=value2&"
+        + "key3=value3&"
+        + "passworNotSanitized=not-secret&"
+        + "passwordShouldBeSanitized=value3&"
+        + "javax.net.ssl.trustStorePassword=superSecret&"
+        + "user=smith&"
+        + "Password=secret&"
+        + "other=value",
+        "jdbc:acme:db/foo:100?"
+        + "javax.net.ssl.keyStorePassword=****&"
+        + "password=****&"
+        + "password&"
+        + "key1=value1&"
+        + "key2=value2&"
+        + "key3=value3&"
+        + "passworNotSanitized=not-secret&"
+        + "passwordShouldBeSanitized=****&"
+        + "javax.net.ssl.trustStorePassword=****&"
+        + "user=smith&"
+        + "Password=****&"
+        + "other=value"
+    );
+  }
+
+  @Test
+  public void shouldAddExtraProperties() {
+    // When adding extra properties with the 'connection.' prefix
+    connProps.put("connection.oracle.something", "somethingValue");
+    connProps.put("connection.oracle.else", "elseValue");
+    connProps.put("connection.foo", "bar");
+    // and some other extra properties not prefixed with 'connection.'
+    connProps.put("foo2", "bar2");
+    config = new JdbcSourceConnectorConfig(connProps);
+    dialect = createDialect(config);
+    // and the dialect computes the connection properties
+    Properties props = new Properties();
+    Properties modified = dialect.addConnectionProperties(props);
+    // then the resulting properties
+    // should be the same properties object as what was passed in
+    assertSame(props, modified);
+    // should include props that began with 'connection.' but without prefix
+    assertEquals("somethingValue", modified.get("oracle.something"));
+    assertEquals("elseValue", modified.get("oracle.else"));
+    assertEquals("bar", modified.get("foo"));
+    // should not include any 'connection.*' properties defined by the connector
+    assertFalse(modified.containsKey("url"));
+    assertFalse(modified.containsKey("password"));
+    assertFalse(modified.containsKey("connection.url"));
+    assertFalse(modified.containsKey("connection.password"));
+    // should not include the prefixed props
+    assertFalse(modified.containsKey("connection.oracle.something"));
+    assertFalse(modified.containsKey("connection.oracle.else"));
+    assertFalse(modified.containsKey("connection.foo"));
+    // should not include props not prefixed with 'connection.'
+    assertFalse(modified.containsKey("foo2"));
+    assertFalse(modified.containsKey("connection.foo2"));
   }
 }

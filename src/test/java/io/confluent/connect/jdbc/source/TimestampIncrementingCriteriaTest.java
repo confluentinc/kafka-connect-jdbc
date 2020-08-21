@@ -61,10 +61,10 @@ public class TimestampIncrementingCriteriaTest {
 
   @Before
   public void beforeEach() {
-    criteria = new TimestampIncrementingCriteria(null, null, utcTimeZone);
-    criteriaInc = new TimestampIncrementingCriteria(INCREMENTING_COLUMN, null, utcTimeZone);
-    criteriaTs = new TimestampIncrementingCriteria(null, TS_COLUMNS, utcTimeZone);
-    criteriaIncTs = new TimestampIncrementingCriteria(INCREMENTING_COLUMN, TS_COLUMNS, utcTimeZone);
+    criteria = new TimestampIncrementingCriteria(null, false, null, utcTimeZone);
+    criteriaInc = new TimestampIncrementingCriteria(INCREMENTING_COLUMN, false, null, utcTimeZone);
+    criteriaTs = new TimestampIncrementingCriteria(null, false, TS_COLUMNS, utcTimeZone);
+    criteriaIncTs = new TimestampIncrementingCriteria(INCREMENTING_COLUMN, false, TS_COLUMNS, utcTimeZone);
     identifierQuoting = null;
     rules = null;
     builder = null;

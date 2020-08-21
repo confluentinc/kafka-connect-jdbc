@@ -226,6 +226,11 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   }
 
   @Override
+  public Long maximumSeenValue() {
+    return offset.getIncrementingOffset();
+  }
+
+  @Override
   public String toString() {
     return "TimestampIncrementingTableQuerier{"
            + "table=" + tableId

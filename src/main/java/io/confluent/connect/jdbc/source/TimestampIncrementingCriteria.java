@@ -74,6 +74,7 @@ public class TimestampIncrementingCriteria {
   protected final Logger log = LoggerFactory.getLogger(getClass());
   protected final List<ColumnId> timestampColumns;
   protected final ColumnId incrementingColumn;
+  protected final boolean incrementingRelaxed;
   protected final TimeZone timeZone;
 
 

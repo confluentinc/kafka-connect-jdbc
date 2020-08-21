@@ -163,6 +163,16 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String INCREMENTING_COLUMN_NAME_DEFAULT = "";
   private static final String INCREMENTING_COLUMN_NAME_DISPLAY = "Incrementing Column Name";
 
+  public static final String INCREMENTING_RELAXED_MONOTONIC_CONFIG = "incrementing.relaxed.monotonic";
+  private static final String INCREMENTING_RELAXED_MONOTONIC_DOC =
+          "Slightly relaxes monotonic requirement. Column specified or auto-detected as incrementing column "
+          + "allows values inserted in the last `poll.interval.ms` to be visible out-of-order. Values inserted "
+          + "before `poll.interval.ms` are required to be strictly monotonically increasing. "
+          + "This flag will introduce `poll.interval.ms` delay, but will allow transactions in the source database to be "
+          + "visible within this interval (usable e.g. when reading from read-only replicas).";
+  public static final boolean INCREMENTING_RELAXED_MONOTONIC_DEFAULT = false;
+  private static final String INCREMENTING_RELAXED_MONOTONIC_DISPLAY = "Enabled relaxed monotonic requirement";
+
   public static final String TIMESTAMP_COLUMN_NAME_CONFIG = "timestamp.column.name";
   private static final String TIMESTAMP_COLUMN_NAME_DOC =
       "Comma separated list of one or more timestamp columns to detect new or modified rows using "
@@ -454,6 +464,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         MODE_DISPLAY,
         Arrays.asList(
             INCREMENTING_COLUMN_NAME_CONFIG,
+            INCREMENTING_RELAXED_MONOTONIC_CONFIG,
             TIMESTAMP_COLUMN_NAME_CONFIG,
             VALIDATE_NON_NULL_CONFIG
         )
@@ -479,6 +490,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Width.MEDIUM,
         TIMESTAMP_COLUMN_NAME_DISPLAY,
         MODE_DEPENDENTS_RECOMMENDER
+    ).define(
+            INCREMENTING_RELAXED_MONOTONIC_CONFIG,
+            Type.BOOLEAN,
+            INCREMENTING_RELAXED_MONOTONIC_DEFAULT,
+            Importance.LOW,
+            INCREMENTING_RELAXED_MONOTONIC_DOC,
+            MODE_GROUP,
+            ++orderInGroup,
+            Width.SHORT,
+            INCREMENTING_RELAXED_MONOTONIC_DISPLAY,
+            MODE_DEPENDENTS_RECOMMENDER
     ).define(
         VALIDATE_NON_NULL_CONFIG,
         Type.BOOLEAN,
@@ -709,10 +731,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
           return name.equals(TIMESTAMP_COLUMN_NAME_CONFIG) || name.equals(VALIDATE_NON_NULL_CONFIG);
         case MODE_INCREMENTING:
           return name.equals(INCREMENTING_COLUMN_NAME_CONFIG)
-                 || name.equals(VALIDATE_NON_NULL_CONFIG);
+                 || name.equals(VALIDATE_NON_NULL_CONFIG)
+                 || name.equals(INCREMENTING_RELAXED_MONOTONIC_CONFIG);
         case MODE_TIMESTAMP_INCREMENTING:
           return name.equals(TIMESTAMP_COLUMN_NAME_CONFIG)
                  || name.equals(INCREMENTING_COLUMN_NAME_CONFIG)
+                 || name.equals(INCREMENTING_RELAXED_MONOTONIC_CONFIG)
                  || name.equals(VALIDATE_NON_NULL_CONFIG);
         case MODE_UNSPECIFIED:
           throw new ConfigException("Query mode must be specified");

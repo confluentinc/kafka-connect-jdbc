@@ -66,6 +66,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   private final List<String> timestampColumnNames;
   private final List<ColumnId> timestampColumns;
   private String incrementingColumnName;
+  private boolean incrementingRelaxed;
   private long timestampDelay;
   private TimestampIncrementingOffset offset;
   private TimestampIncrementingCriteria criteria;
@@ -77,11 +78,13 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
                                            String topicPrefix,
                                            List<String> timestampColumnNames,
                                            String incrementingColumnName,
+                                           boolean incrementingRelaxed,
                                            Map<String, Object> offsetMap,
                                            Long timestampDelay,
                                            TimeZone timeZone) {
     super(dialect, mode, name, topicPrefix);
     this.incrementingColumnName = incrementingColumnName;
+    this.incrementingRelaxed = incrementingRelaxed;
     this.timestampColumnNames = timestampColumnNames != null
                                 ? timestampColumnNames : Collections.<String>emptyList();
     this.timestampDelay = timestampDelay;
@@ -142,6 +145,11 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     recordQuery(queryString);
     log.debug("{} prepared SQL query: {}", this, queryString);
     stmt = dialect.createPreparedStatement(db, queryString);
+  }
+
+  @Override
+  public void reset(long now) {
+    super.reset(now);
   }
 
   private void findDefaultAutoIncrementingColumn(Connection db) throws SQLException {

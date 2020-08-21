@@ -50,7 +50,7 @@ public class TimestampIncrementingCriteria {
      * @return the beginning timestamp; may be null
      * @throws SQLException if there is a problem accessing the value
      */
-    Timestamp beginTimetampValue() throws SQLException;
+    Timestamp beginTimestampValue() throws SQLException;
 
     /**
      * Get the end of the time period.
@@ -58,7 +58,7 @@ public class TimestampIncrementingCriteria {
      * @return the ending timestamp; never null
      * @throws SQLException if there is a problem accessing the value
      */
-    Timestamp endTimetampValue() throws SQLException;
+    Timestamp endTimestampValue() throws SQLException;
 
     /**
      * Get the last incremented value seen.
@@ -136,8 +136,8 @@ public class TimestampIncrementingCriteria {
       PreparedStatement stmt,
       CriteriaValues values
   ) throws SQLException {
-    Timestamp beginTime = values.beginTimetampValue();
-    Timestamp endTime = values.endTimetampValue();
+    Timestamp beginTime = values.beginTimestampValue();
+    Timestamp endTime = values.endTimestampValue();
     Long incOffset = values.lastIncrementedValue();
     stmt.setTimestamp(1, endTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
     stmt.setTimestamp(2, beginTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
@@ -163,8 +163,8 @@ public class TimestampIncrementingCriteria {
       PreparedStatement stmt,
       CriteriaValues values
   ) throws SQLException {
-    Timestamp beginTime = values.beginTimetampValue();
-    Timestamp endTime = values.endTimetampValue();
+    Timestamp beginTime = values.beginTimestampValue();
+    Timestamp endTime = values.endTimestampValue();
     stmt.setTimestamp(1, beginTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
     stmt.setTimestamp(2, endTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
     log.debug("Executing prepared statement with timestamp value = {} end time = {}",

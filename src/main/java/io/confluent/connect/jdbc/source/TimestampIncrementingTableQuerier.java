@@ -77,7 +77,8 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
                                            String topicPrefix,
                                            List<String> timestampColumnNames,
                                            String incrementingColumnName,
-                                           Map<String, Object> offsetMap, Long timestampDelay,
+                                           Map<String, Object> offsetMap,
+                                           Long timestampDelay,
                                            TimeZone timeZone) {
     super(dialect, mode, name, topicPrefix);
     this.incrementingColumnName = incrementingColumnName;
@@ -198,12 +199,12 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   }
 
   @Override
-  public Timestamp beginTimetampValue() {
+  public Timestamp beginTimestampValue() {
     return offset.getTimestampOffset();
   }
 
   @Override
-  public Timestamp endTimetampValue()  throws SQLException {
+  public Timestamp endTimestampValue()  throws SQLException {
     final long currentDbTime = dialect.currentTimeOnDB(
         stmt.getConnection(),
         DateTimeUtils.getTimeZoneCalendar(timeZone)

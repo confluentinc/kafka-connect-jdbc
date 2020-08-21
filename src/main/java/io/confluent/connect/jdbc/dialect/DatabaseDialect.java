@@ -279,12 +279,14 @@ public interface DatabaseDialect extends ConnectionProvider {
    *
    * @param incrementingColumn the identifier of the incremented column; may be null if there is
    *                           none
+   * @param allowRelaxedIncrementing use upper bound  for incrementing column
    * @param timestampColumns   the identifiers of the timestamp column; may be null if there is
    *                           none
    * @return the {@link TimestampIncrementingCriteria} implementation; never null
    */
   TimestampIncrementingCriteria criteriaFor(
       ColumnId incrementingColumn,
+      boolean allowRelaxedIncrementing,
       List<ColumnId> timestampColumns
   );
 

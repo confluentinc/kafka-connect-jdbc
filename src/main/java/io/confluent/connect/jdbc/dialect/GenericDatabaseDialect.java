@@ -855,9 +855,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   @Override
   public TimestampIncrementingCriteria criteriaFor(
       ColumnId incrementingColumn,
+      boolean allowIncrementingRelax,
       List<ColumnId> timestampColumns
   ) {
-    return new TimestampIncrementingCriteria(incrementingColumn, timestampColumns, timeZone);
+    return new TimestampIncrementingCriteria(incrementingColumn,
+            allowIncrementingRelax, timestampColumns, timeZone);
   }
 
   /**

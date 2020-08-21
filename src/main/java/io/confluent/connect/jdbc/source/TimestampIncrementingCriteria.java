@@ -181,7 +181,8 @@ public class TimestampIncrementingCriteria {
     if (incrementingRelaxed) {
       stmt.setLong(2, maxOffset);
     }
-    log.debug("Executing prepared statement with incrementing value = {} and maximum value = {}", incOffset, maxOffset);
+    log.debug("Executing prepared statement with incrementing value = {} and maximum value = {}",
+            incOffset, maxOffset);
   }
 
   protected void setQueryParametersTimestamp(
@@ -227,7 +228,28 @@ public class TimestampIncrementingCriteria {
       assert previousOffset == null || previousOffset.getIncrementingOffset() == -1L
              || extractedId > previousOffset.getIncrementingOffset() || hasTimestampColumns();
     }
-    return new TimestampIncrementingOffset(extractedTimestamp, extractedId);
+    return new TimestampIncrementingOffset(extractedTimestamp, extractedId, null);
+  }
+
+  /**
+   * Extract the maximum offset value from the row
+   *
+   * @param record the record's struct; never null
+   * @return updated offset
+   */
+  public TimestampIncrementingOffset extractMaximumSeenOffset(
+          Schema schema,
+          Struct record,
+          TimestampIncrementingOffset previousOffset
+  ) {
+    Long maximumId = null;
+    if (hasIncrementedColumn() && isIncrementingRelaxed()) {
+      maximumId = extractOffsetIncrementedId(schema, record);
+      assert previousOffset == null || previousOffset.getMaximumSeenOffset() == -1L
+             || maximumId >= previousOffset.getMaximumSeenOffset();
+    }
+    return new TimestampIncrementingOffset(previousOffset.getTimestampOffset(),
+            previousOffset.getIncrementingOffset(), maximumId);
   }
 
   /**

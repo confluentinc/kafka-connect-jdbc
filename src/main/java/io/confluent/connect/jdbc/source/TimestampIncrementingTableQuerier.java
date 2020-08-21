@@ -16,6 +16,7 @@
 package io.confluent.connect.jdbc.source;
 
 import java.util.TimeZone;
+
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
@@ -138,7 +139,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     }
 
     // Append the criteria using the columns ...
-    criteria = dialect.criteriaFor(incrementingColumn, timestampColumns);
+    criteria = dialect.criteriaFor(incrementingColumn, incrementingRelaxed, timestampColumns);
     criteria.whereClause(builder);
 
     String queryString = builder.toString();
@@ -150,6 +151,33 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   @Override
   public void reset(long now) {
     super.reset(now);
+    refreshMaximumSeenOffset();
+  }
+
+  private void refreshMaximumSeenOffset() throws ConnectException {
+    this.offset = fetchNewMaximum();
+  }
+
+  private TimestampIncrementingOffset fetchNewMaximum() throws ConnectException {
+    ExpressionBuilder builder = dialect.expressionBuilder();
+    builder.append("SELECT MAX(");
+    builder.append(incrementingColumnName);
+    builder.append(") FROM");
+    builder.append(tableId);
+    String queryString = builder.toString();
+    recordQuery(queryString);
+    try {
+      stmt = dialect.createPreparedStatement(db, queryString);
+      ResultSet rs = stmt.executeQuery();
+      FieldSetter se = this.schemaMapping.fieldSetters().stream()
+              .filter(fs -> fs.field().schema().name() == incrementingColumnName).findFirst().get();
+      Struct st = new Struct(this.schemaMapping.schema());
+      se.setField(st, rs);
+      return criteria.extractMaximumSeenOffset(this.schemaMapping.schema(), st, this.offset);
+    } catch (Throwable th) {
+      // TODO: do something about it
+      throw new ConnectException("Unable to fetch new maximum", th);
+    }
   }
 
   private void findDefaultAutoIncrementingColumn(Connection db) throws SQLException {

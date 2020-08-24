@@ -1376,6 +1376,19 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   @Override
+  public String buildSelectMaxStatement(
+      TableId table,
+      ColumnId keyColumn
+  ) {
+    ExpressionBuilder builder = expressionBuilder();
+    builder.append("SELECT MAX(");
+    builder.append(keyColumn);
+    builder.append(") FROM");
+    builder.append(table);
+    return builder.toString();
+  }
+
+  @Override
   public String buildInsertStatement(
       TableId table,
       Collection<ColumnId> keyColumns,

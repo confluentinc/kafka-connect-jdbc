@@ -310,6 +310,21 @@ public interface DatabaseDialect extends ConnectionProvider {
    */
   void applyDdlStatements(Connection connection, List<String> statements) throws SQLException;
 
+
+  /**
+   * Build the SELECT prepared statement expression returning maximum id for the given table
+   * and the first column.
+   *
+   * @param table        the identifier of the table; may not be null
+   * @keyColumn          the identifier of the primary key columns; may not be null or empty
+   *
+   * @return the SELECT statement; may not be null
+   */
+  String buildSelectMaxStatement(
+      TableId table,
+      ColumnId keyColumn
+  );
+
   /**
    * Build the INSERT prepared statement expression for the given table and its columns.
    *

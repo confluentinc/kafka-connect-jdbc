@@ -151,7 +151,9 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   @Override
   public void reset(long now) {
     super.reset(now);
-    refreshMaximumSeenOffset();
+    if (this.incrementingRelaxed) {
+      refreshMaximumSeenOffset();
+    }
   }
 
   private void refreshMaximumSeenOffset() throws ConnectException {

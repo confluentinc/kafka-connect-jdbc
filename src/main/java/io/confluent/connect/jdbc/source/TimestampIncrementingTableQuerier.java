@@ -153,24 +153,26 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   public void reset(long now) {
     if (this.incrementingRelaxed
         && this.incrementingColumnName != null
-        && this.incrementingColumnName.length() > 0) {
+        && this.incrementingColumnName.length() > 0
+        && this.db != null
+    ) {
       updateMaximumSeenOffset();
+    } else {
+      if (this.incrementingRelaxed) {
+        log.warn("Skipping maximum update, but incrementing.relaxed.monotonic is enabled.");
+      }
     }
     super.reset(now);
   }
 
   private void updateMaximumSeenOffset() throws ConnectException {
-    if (this.db != null) {
-      try (
+    try (
               PreparedStatement st = createSelectMaximumPreparedStatement(db);
               ResultSet rs = executeMaxQuery(st)
-      ) {
+    ) {
         this.offset = extractMaximumOffset(rs);
-      } catch (Throwable th) {
+    } catch (Throwable th) {
         throw new ConnectException("Unable to fetch new maximum", th);
-      }
-    } else {
-      log.warn("Unable to update maximum seen offset. Database connection closed.");
     }
   }
 

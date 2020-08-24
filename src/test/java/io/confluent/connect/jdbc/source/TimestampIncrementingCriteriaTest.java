@@ -44,6 +44,7 @@ public class TimestampIncrementingCriteriaTest {
 
   private static final TableId TABLE_ID = new TableId(null, null,"myTable");
   private static final ColumnId INCREMENTING_COLUMN = new ColumnId(TABLE_ID, "id");
+  private static final ColumnId INCREMENTING_MAX_COLUMN = new ColumnId(TABLE_ID, "id_with_max");
   private static final ColumnId TS1_COLUMN = new ColumnId(TABLE_ID, "ts1");
   private static final ColumnId TS2_COLUMN = new ColumnId(TABLE_ID, "ts2");
   private static final List<ColumnId> TS_COLUMNS = Arrays.asList(TS1_COLUMN, TS2_COLUMN);
@@ -53,6 +54,7 @@ public class TimestampIncrementingCriteriaTest {
   private ExpressionBuilder builder;
   private TimestampIncrementingCriteria criteria;
   private TimestampIncrementingCriteria criteriaInc;
+  private TimestampIncrementingCriteria criteriaIncMax;
   private TimestampIncrementingCriteria criteriaTs;
   private TimestampIncrementingCriteria criteriaIncTs;
   private Schema schema;
@@ -63,6 +65,7 @@ public class TimestampIncrementingCriteriaTest {
   public void beforeEach() {
     criteria = new TimestampIncrementingCriteria(null, false, null, utcTimeZone);
     criteriaInc = new TimestampIncrementingCriteria(INCREMENTING_COLUMN, false, null, utcTimeZone);
+    criteriaIncMax = new TimestampIncrementingCriteria(INCREMENTING_MAX_COLUMN, true, null, utcTimeZone);
     criteriaTs = new TimestampIncrementingCriteria(null, false, TS_COLUMNS, utcTimeZone);
     criteriaIncTs = new TimestampIncrementingCriteria(INCREMENTING_COLUMN, false, TS_COLUMNS, utcTimeZone);
     identifierQuoting = null;
@@ -134,6 +137,18 @@ public class TimestampIncrementingCriteriaTest {
                           .build();
     record = new Struct(schema).put("id", 42);
     assertExtractedOffset(42L, schema, record);
+  }
+
+  @Test
+  public void extractWithIncMax() throws SQLException {
+    schema = SchemaBuilder.struct()
+            .field("id_with_max", SchemaBuilder.INT32_SCHEMA)
+            .field(TS1_COLUMN.name(), Timestamp.SCHEMA)
+            .field(TS2_COLUMN.name(), Timestamp.SCHEMA)
+            .build();
+    record = new Struct(schema).put("id_with_max", 42);
+    TimestampIncrementingOffset offset = criteriaIncMax.extractMaximumSeenOffset(schema, record, null);
+    assertEquals(42, offset.getMaximumSeenOffset());
   }
 
   @Test(expected = DataException.class)

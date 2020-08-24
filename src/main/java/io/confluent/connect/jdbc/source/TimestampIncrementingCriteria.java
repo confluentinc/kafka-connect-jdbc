@@ -248,8 +248,12 @@ public class TimestampIncrementingCriteria {
       assert previousOffset == null || previousOffset.getMaximumSeenOffset() == -1L
              || maximumId >= previousOffset.getMaximumSeenOffset();
     }
-    return new TimestampIncrementingOffset(previousOffset.getTimestampOffset(),
-            previousOffset.getIncrementingOffset(), maximumId);
+    if (previousOffset == null) {
+      return new TimestampIncrementingOffset(null, null, maximumId);
+    } else {
+      return new TimestampIncrementingOffset(previousOffset.getTimestampOffset(),
+              previousOffset.getIncrementingOffset(), maximumId);
+    }
   }
 
   /**

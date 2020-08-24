@@ -33,7 +33,6 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.Collections;
 import java.util.TimeZone;
-import java.util.Optional;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.source.SchemaMapping.FieldSetter;
@@ -170,9 +169,9 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
               PreparedStatement st = createSelectMaximumPreparedStatement(db);
               ResultSet rs = executeMaxQuery(st)
     ) {
-        this.offset = extractMaximumOffset(rs);
+      this.offset = extractMaximumOffset(rs);
     } catch (Throwable th) {
-        throw new ConnectException("Unable to fetch new maximum", th);
+      throw new ConnectException("Unable to fetch new maximum", th);
     }
   }
 
@@ -252,13 +251,15 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
 
   protected TimestampIncrementingOffset extractMaximumOffset(ResultSet rs) throws SQLException {
     try {
-      Optional<FieldSetter> se = this.schemaMapping.fieldSetters().stream()
-              .filter(
-                fs -> fs.field().schema().name() == incrementingColumnName
-              ).findFirst();
-      assert se.isPresent();
-      Struct st = new Struct(this.schemaMapping.schema());
-      se.get().setField(st, rs);
+      // TODO: refactor/cleanup, add test case
+      String schemaName = tableId != null ? tableId.tableName() : null; // backwards compatible
+      SchemaMapping mapping = SchemaMapping.create(schemaName, resultSet.getMetaData(), dialect);
+      assert !mapping.fieldSetters().isEmpty();
+      FieldSetter se = mapping.fieldSetters().get(0);
+      log.info("Found field {} with schema", se.field().name(), se.field().schema());
+      assert se.field().schema().name() == incrementingColumnName;
+      Struct st = new Struct(mapping.schema());
+      se.setField(st, rs);
       return criteria.extractMaximumSeenOffset(this.schemaMapping.schema(), st, this.offset);
     } catch (IOException e) {
       log.warn("Error extracting maximum", e);

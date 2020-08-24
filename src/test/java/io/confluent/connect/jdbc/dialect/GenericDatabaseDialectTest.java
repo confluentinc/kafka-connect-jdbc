@@ -216,7 +216,7 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
   public void testMaxStatement() {
     newDialectFor(TABLE_TYPES, null);
     assertEquals(
-      "SELECT MAX(\"id1\") FROM \"myTable\"",
+      "SELECT MAX(\"id1\") as \"id1\" FROM \"myTable\"",
       dialect.buildSelectMaxStatement(tableId, pkColumns.get(0))
     );
   }

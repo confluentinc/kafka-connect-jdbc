@@ -1382,9 +1382,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   ) {
     ExpressionBuilder builder = expressionBuilder();
     builder.append("SELECT MAX(");
-    builder.append(keyColumn);
-    builder.append(") FROM");
-    builder.append(table);
+    builder.appendColumnName(keyColumn.name());
+    builder.append(") FROM ");
+    builder.appendTableName(table.tableName());
     return builder.toString();
   }
 

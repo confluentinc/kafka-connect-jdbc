@@ -169,7 +169,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
               PreparedStatement st = createSelectMaximumPreparedStatement(db);
               ResultSet rs = executeMaxQuery(st)
     ) {
-      this.offset = extractMaximumOffset(rs);
+      this.offset = extractMaximumOffset(rs, this.offset);
       log.trace("Maximum offset: {}", this.offset.getMaximumSeenOffset());
     } catch (Throwable th) {
       throw new ConnectException("Unable to fetch new maximum", th);
@@ -250,21 +250,23 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     return new SourceRecord(partition, offset.toMap(), topic, record.schema(), record);
   }
 
-  protected TimestampIncrementingOffset extractMaximumOffset(ResultSet rs) throws SQLException {
+  protected TimestampIncrementingOffset extractMaximumOffset(
+          ResultSet rs,
+          TimestampIncrementingOffset offset
+  ) {
     try {
-      // TODO: add test case
       if (rs.next()) {
         String schemaName = tableId != null ? tableId.tableName() : null; // backwards compatible
-        SchemaMapping mapping = SchemaMapping.create(schemaName, resultSet.getMetaData(), dialect);
+        SchemaMapping mapping = SchemaMapping.create(schemaName, rs.getMetaData(), dialect);
         assert !mapping.fieldSetters().isEmpty();
-        FieldSetter se = mapping.fieldSetters().get(0);
+        FieldSetter se = mapping.fieldSetters().get(0); // there is always one column
         assert se.field().schema().name() == incrementingColumnName;
         Struct st = new Struct(mapping.schema());
         se.setField(st, rs);
-        return criteria.extractMaximumSeenOffset(this.schemaMapping.schema(), st, this.offset);
+        return criteria.extractMaximumSeenOffset(mapping.schema(), st, offset);
       } else {
-        log.info("No maximum found. Skipping table.");
-        return this.offset;
+        log.warn("No maximum found. Skipping table.");
+        return offset;
       }
     } catch (IOException e) {
       log.warn("Error extracting maximum", e);

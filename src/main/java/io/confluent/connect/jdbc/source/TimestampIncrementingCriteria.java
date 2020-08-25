@@ -50,7 +50,7 @@ public class TimestampIncrementingCriteria {
      * @return the beginning timestamp; may be null
      * @throws SQLException if there is a problem accessing the value
      */
-    Timestamp beginTimetampValue() throws SQLException;
+    Timestamp beginTimestampValue() throws SQLException;
 
     /**
      * Get the end of the time period.
@@ -58,7 +58,7 @@ public class TimestampIncrementingCriteria {
      * @return the ending timestamp; never null
      * @throws SQLException if there is a problem accessing the value
      */
-    Timestamp endTimetampValue() throws SQLException;
+    Timestamp endTimestampValue() throws SQLException;
 
     /**
      * Get the last incremented value seen.
@@ -67,6 +67,14 @@ public class TimestampIncrementingCriteria {
      * @throws SQLException if there is a problem accessing the value
      */
     Long lastIncrementedValue() throws SQLException;
+
+    /**
+     * Get the maximum detected value.
+     *
+     * @return maximum value seen in the table at the end of the last cycle
+     * @throws SQLException if there is a problem accessing the value
+     */
+    Long maximumSeenValue() throws SQLException;
   }
 
   protected static final BigDecimal LONG_MAX_VALUE_AS_BIGDEC = new BigDecimal(Long.MAX_VALUE);
@@ -74,17 +82,20 @@ public class TimestampIncrementingCriteria {
   protected final Logger log = LoggerFactory.getLogger(getClass());
   protected final List<ColumnId> timestampColumns;
   protected final ColumnId incrementingColumn;
+  protected final boolean incrementingRelaxed;
   protected final TimeZone timeZone;
 
 
   public TimestampIncrementingCriteria(
       ColumnId incrementingColumn,
+      boolean incrementingRelaxed,
       List<ColumnId> timestampColumns,
       TimeZone timeZone
   ) {
     this.timestampColumns =
         timestampColumns != null ? timestampColumns : Collections.<ColumnId>emptyList();
     this.incrementingColumn = incrementingColumn;
+    this.incrementingRelaxed = incrementingRelaxed;
     this.timeZone = timeZone;
   }
 
@@ -94,6 +105,10 @@ public class TimestampIncrementingCriteria {
 
   protected boolean hasIncrementedColumn() {
     return incrementingColumn != null;
+  }
+
+  protected boolean isIncrementingRelaxed() {
+    return incrementingRelaxed;
   }
 
   /**
@@ -136,13 +151,19 @@ public class TimestampIncrementingCriteria {
       PreparedStatement stmt,
       CriteriaValues values
   ) throws SQLException {
-    Timestamp beginTime = values.beginTimetampValue();
-    Timestamp endTime = values.endTimetampValue();
+    Timestamp beginTime = values.beginTimestampValue();
+    Timestamp endTime = values.endTimestampValue();
     Long incOffset = values.lastIncrementedValue();
+    Long maxOffset = values.maximumSeenValue();
     stmt.setTimestamp(1, endTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
     stmt.setTimestamp(2, beginTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
     stmt.setLong(3, incOffset);
-    stmt.setTimestamp(4, beginTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
+    if (incrementingRelaxed) {
+      stmt.setLong(4, maxOffset);
+      stmt.setTimestamp(5, beginTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
+    } else {
+      stmt.setTimestamp(4, beginTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
+    }
     log.debug(
         "Executing prepared statement with start time value = {} end time = {} and incrementing"
         + " value = {}", DateTimeUtils.formatTimestamp(beginTime, timeZone),
@@ -155,16 +176,21 @@ public class TimestampIncrementingCriteria {
       CriteriaValues values
   ) throws SQLException {
     Long incOffset = values.lastIncrementedValue();
+    Long maxOffset = values.maximumSeenValue();
     stmt.setLong(1, incOffset);
-    log.debug("Executing prepared statement with incrementing value = {}", incOffset);
+    if (incrementingRelaxed) {
+      stmt.setLong(2, maxOffset);
+    }
+    log.debug("Executing prepared statement with incrementing value = {} and maximum value = {}",
+            incOffset, maxOffset);
   }
 
   protected void setQueryParametersTimestamp(
       PreparedStatement stmt,
       CriteriaValues values
   ) throws SQLException {
-    Timestamp beginTime = values.beginTimetampValue();
-    Timestamp endTime = values.endTimetampValue();
+    Timestamp beginTime = values.beginTimestampValue();
+    Timestamp endTime = values.endTimestampValue();
     stmt.setTimestamp(1, beginTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
     stmt.setTimestamp(2, endTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
     log.debug("Executing prepared statement with timestamp value = {} end time = {}",
@@ -202,7 +228,32 @@ public class TimestampIncrementingCriteria {
       assert previousOffset == null || previousOffset.getIncrementingOffset() == -1L
              || extractedId > previousOffset.getIncrementingOffset() || hasTimestampColumns();
     }
-    return new TimestampIncrementingOffset(extractedTimestamp, extractedId);
+    return new TimestampIncrementingOffset(extractedTimestamp, extractedId, null);
+  }
+
+  /**
+   * Extract the maximum offset value from the row
+   *
+   * @param record the record's struct; never null
+   * @return updated offset
+   */
+  public TimestampIncrementingOffset extractMaximumSeenOffset(
+          Schema schema,
+          Struct record,
+          TimestampIncrementingOffset previousOffset
+  ) {
+    Long maximumId = null;
+    if (hasIncrementedColumn() && isIncrementingRelaxed()) {
+      maximumId = extractOffsetIncrementedId(schema, record);
+      assert previousOffset == null || previousOffset.getMaximumSeenOffset() == -1L
+             || maximumId >= previousOffset.getMaximumSeenOffset();
+    }
+    if (previousOffset == null) {
+      return new TimestampIncrementingOffset(null, null, maximumId);
+    } else {
+      return new TimestampIncrementingOffset(previousOffset.getTimestampOffset(),
+              previousOffset.getIncrementingOffset(), maximumId);
+    }
   }
 
   /**
@@ -309,6 +360,11 @@ public class TimestampIncrementingCriteria {
     builder.append(" = ? AND ");
     builder.append(incrementingColumn);
     builder.append(" > ?");
+    if (incrementingRelaxed) {
+      builder.append(" AND ");
+      builder.append(incrementingColumn);
+      builder.append(" <= ?");
+    }
     builder.append(") OR ");
     coalesceTimestampColumns(builder);
     builder.append(" > ?)");
@@ -323,6 +379,11 @@ public class TimestampIncrementingCriteria {
     builder.append(" WHERE ");
     builder.append(incrementingColumn);
     builder.append(" > ?");
+    if (incrementingRelaxed) {
+      builder.append(" AND ");
+      builder.append(incrementingColumn);
+      builder.append(" <= ?");
+    }
     builder.append(" ORDER BY ");
     builder.append(incrementingColumn);
     builder.append(" ASC");

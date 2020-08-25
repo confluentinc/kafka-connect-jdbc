@@ -30,6 +30,7 @@ public class TimestampIncrementingOffset {
   private static final String TIMESTAMP_NANOS_FIELD = "timestamp_nanos";
 
   private final Long incrementingOffset;
+  private final Long maximumSeenOffset;
   private final Timestamp timestampOffset;
 
   /**
@@ -38,19 +39,30 @@ public class TimestampIncrementingOffset {
    *                        {@code new Timestamp(0)}.
    * @param incrementingOffset the incrementing offset.
    *                           If null, {@link #getIncrementingOffset()} will return -1.
+   * @param maximumSeenOffset the maximum previously seen offset.
+   *                          If null {@link #getMaximumSeenOffset()} will return -1.
    */
-  public TimestampIncrementingOffset(Timestamp timestampOffset, Long incrementingOffset) {
+  public TimestampIncrementingOffset(
+          Timestamp timestampOffset,
+          Long incrementingOffset,
+          Long maximumSeenOffset) {
     this.timestampOffset = timestampOffset;
     this.incrementingOffset = incrementingOffset;
+    this.maximumSeenOffset = maximumSeenOffset;
   }
 
   public long getIncrementingOffset() {
     return incrementingOffset == null ? -1 : incrementingOffset;
   }
 
+  public long getMaximumSeenOffset() {
+    return maximumSeenOffset == null ? -1 : maximumSeenOffset;
+  }
+
   public Timestamp getTimestampOffset() {
     return timestampOffset != null ? timestampOffset : new Timestamp(0L);
   }
+
 
   public Map<String, Object> toMap() {
     Map<String, Object> map = new HashMap<>(3);
@@ -66,7 +78,7 @@ public class TimestampIncrementingOffset {
 
   public static TimestampIncrementingOffset fromMap(Map<String, ?> map) {
     if (map == null || map.isEmpty()) {
-      return new TimestampIncrementingOffset(null, null);
+      return new TimestampIncrementingOffset(null, null, null);
     }
 
     Long incr = (Long) map.get(INCREMENTING_FIELD);
@@ -81,7 +93,7 @@ public class TimestampIncrementingOffset {
         ts.setNanos(nanos.intValue());
       }
     }
-    return new TimestampIncrementingOffset(ts, incr);
+    return new TimestampIncrementingOffset(ts, incr, null);
   }
 
   @Override
@@ -100,15 +112,20 @@ public class TimestampIncrementingOffset {
         : that.incrementingOffset != null) {
       return false;
     }
+    if (maximumSeenOffset != null
+            ? !maximumSeenOffset.equals(that.maximumSeenOffset)
+            : that.maximumSeenOffset != null) {
+      return false;
+    }
     return timestampOffset != null
            ? timestampOffset.equals(that.timestampOffset)
            : that.timestampOffset == null;
-
   }
 
   @Override
   public int hashCode() {
     int result = incrementingOffset != null ? incrementingOffset.hashCode() : 0;
+    result = 1001 * result + (maximumSeenOffset != null ? maximumSeenOffset.hashCode() : 0);
     result = 31 * result + (timestampOffset != null ? timestampOffset.hashCode() : 0);
     return result;
   }

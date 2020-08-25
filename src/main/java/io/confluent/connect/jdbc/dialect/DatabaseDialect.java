@@ -279,12 +279,14 @@ public interface DatabaseDialect extends ConnectionProvider {
    *
    * @param incrementingColumn the identifier of the incremented column; may be null if there is
    *                           none
+   * @param allowRelaxedIncrementing use upper bound  for incrementing column
    * @param timestampColumns   the identifiers of the timestamp column; may be null if there is
    *                           none
    * @return the {@link TimestampIncrementingCriteria} implementation; never null
    */
   TimestampIncrementingCriteria criteriaFor(
       ColumnId incrementingColumn,
+      boolean allowRelaxedIncrementing,
       List<ColumnId> timestampColumns
   );
 
@@ -307,6 +309,21 @@ public interface DatabaseDialect extends ConnectionProvider {
    * @throws SQLException if there is an error executing the statements
    */
   void applyDdlStatements(Connection connection, List<String> statements) throws SQLException;
+
+
+  /**
+   * Build the SELECT prepared statement expression returning maximum id for the given table
+   * and the first column.
+   *
+   * @param table        the identifier of the table; may not be null
+   * @keyColumn          the identifier of the primary key columns; may not be null or empty
+   *
+   * @return the SELECT statement; may not be null
+   */
+  String buildSelectMaxStatement(
+      TableId table,
+      ColumnId keyColumn
+  );
 
   /**
    * Build the INSERT prepared statement expression for the given table and its columns.

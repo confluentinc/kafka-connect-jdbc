@@ -15,7 +15,6 @@
 
 package io.confluent.connect.jdbc.source;
 
-import java.util.TimeZone;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
@@ -25,13 +24,15 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Timestamp;
-import java.util.ArrayList;
-import java.util.Collections;
+import java.sql.SQLException;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
+import java.util.Collections;
+import java.util.TimeZone;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.source.SchemaMapping.FieldSetter;
@@ -66,6 +67,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   private final List<String> timestampColumnNames;
   private final List<ColumnId> timestampColumns;
   private String incrementingColumnName;
+  private boolean incrementingRelaxed;
   private long timestampDelay;
   private TimestampIncrementingOffset offset;
   private TimestampIncrementingCriteria criteria;
@@ -77,10 +79,13 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
                                            String topicPrefix,
                                            List<String> timestampColumnNames,
                                            String incrementingColumnName,
-                                           Map<String, Object> offsetMap, Long timestampDelay,
+                                           boolean incrementingRelaxed,
+                                           Map<String, Object> offsetMap,
+                                           Long timestampDelay,
                                            TimeZone timeZone) {
     super(dialect, mode, name, topicPrefix);
     this.incrementingColumnName = incrementingColumnName;
+    this.incrementingRelaxed = incrementingRelaxed;
     this.timestampColumnNames = timestampColumnNames != null
                                 ? timestampColumnNames : Collections.<String>emptyList();
     this.timestampDelay = timestampDelay;
@@ -134,7 +139,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     }
 
     // Append the criteria using the columns ...
-    criteria = dialect.criteriaFor(incrementingColumn, timestampColumns);
+    criteria = dialect.criteriaFor(incrementingColumn, incrementingRelaxed, timestampColumns);
     criteria.whereClause(builder);
 
     String queryString = builder.toString();
@@ -142,6 +147,49 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     log.debug("{} prepared SQL query: {}", this, queryString);
     stmt = dialect.createPreparedStatement(db, queryString);
   }
+
+  @Override
+  public void reset(long now) {
+    if (this.incrementingRelaxed
+        && this.incrementingColumnName != null
+        && this.incrementingColumnName.length() > 0
+        && this.db != null
+    ) {
+      updateMaximumSeenOffset();
+    } else {
+      if (this.incrementingRelaxed) {
+        log.warn("Skipping maximum update, but incrementing.relaxed.monotonic is enabled.");
+      }
+    }
+    super.reset(now);
+  }
+
+  private void updateMaximumSeenOffset() throws ConnectException {
+    try (
+              PreparedStatement st = createSelectMaximumPreparedStatement(db);
+              ResultSet rs = executeMaxQuery(st)
+    ) {
+      this.offset = extractMaximumOffset(rs);
+      log.trace("Maximum offset: {}", this.offset.getMaximumSeenOffset());
+    } catch (Throwable th) {
+      throw new ConnectException("Unable to fetch new maximum", th);
+    }
+  }
+
+  protected PreparedStatement createSelectMaximumPreparedStatement(Connection db)
+          throws SQLException {
+    ColumnId incrementingColumn = null;
+    if (incrementingColumnName != null && !incrementingColumnName.isEmpty()) {
+      incrementingColumn = new ColumnId(tableId, incrementingColumnName);
+      String queryString = dialect.buildSelectMaxStatement(tableId, incrementingColumn);
+      recordQuery(queryString);
+      log.trace("{} prepared SQL query: {}", this, queryString);
+      return dialect.createPreparedStatement(db, queryString);
+    } else {
+      throw new ConnectException("Unable to find incrementing column");
+    }
+  }
+
 
   private void findDefaultAutoIncrementingColumn(Connection db) throws SQLException {
     // Default when unspecified uses an autoincrementing column
@@ -179,6 +227,11 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     return stmt.executeQuery();
   }
 
+  private ResultSet executeMaxQuery(PreparedStatement st) throws SQLException {
+    log.trace("Statement to execute: {}", st.toString());
+    return st.executeQuery();
+  }
+
   @Override
   public SourceRecord extractRecord() throws SQLException {
     Struct record = new Struct(schemaMapping.schema());
@@ -197,13 +250,38 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     return new SourceRecord(partition, offset.toMap(), topic, record.schema(), record);
   }
 
+  protected TimestampIncrementingOffset extractMaximumOffset(ResultSet rs) throws SQLException {
+    try {
+      // TODO: add test case
+      if (rs.next()) {
+        String schemaName = tableId != null ? tableId.tableName() : null; // backwards compatible
+        SchemaMapping mapping = SchemaMapping.create(schemaName, resultSet.getMetaData(), dialect);
+        assert !mapping.fieldSetters().isEmpty();
+        FieldSetter se = mapping.fieldSetters().get(0);
+        assert se.field().schema().name() == incrementingColumnName;
+        Struct st = new Struct(mapping.schema());
+        se.setField(st, rs);
+        return criteria.extractMaximumSeenOffset(this.schemaMapping.schema(), st, this.offset);
+      } else {
+        log.info("No maximum found. Skipping table.");
+        return this.offset;
+      }
+    } catch (IOException e) {
+      log.warn("Error extracting maximum", e);
+      throw new ConnectException(e);
+    } catch (SQLException e) {
+      log.warn("SQL error mapping incrementing column into maximum offset", e);
+      throw new DataException(e);
+    }
+  }
+
   @Override
-  public Timestamp beginTimetampValue() {
+  public Timestamp beginTimestampValue() {
     return offset.getTimestampOffset();
   }
 
   @Override
-  public Timestamp endTimetampValue()  throws SQLException {
+  public Timestamp endTimestampValue()  throws SQLException {
     final long currentDbTime = dialect.currentTimeOnDB(
         stmt.getConnection(),
         DateTimeUtils.getTimeZoneCalendar(timeZone)
@@ -214,6 +292,11 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   @Override
   public Long lastIncrementedValue() {
     return offset.getIncrementingOffset();
+  }
+
+  @Override
+  public Long maximumSeenValue() {
+    return offset.getMaximumSeenOffset();
   }
 
   @Override

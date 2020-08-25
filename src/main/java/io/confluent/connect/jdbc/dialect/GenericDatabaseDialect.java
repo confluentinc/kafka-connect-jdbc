@@ -855,9 +855,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   @Override
   public TimestampIncrementingCriteria criteriaFor(
       ColumnId incrementingColumn,
+      boolean allowIncrementingRelax,
       List<ColumnId> timestampColumns
   ) {
-    return new TimestampIncrementingCriteria(incrementingColumn, timestampColumns, timeZone);
+    return new TimestampIncrementingCriteria(incrementingColumn,
+            allowIncrementingRelax, timestampColumns, timeZone);
   }
 
   /**
@@ -1371,6 +1373,21 @@ public class GenericDatabaseDialect implements DatabaseDialect {
    */
   protected void free(Clob clob) throws SQLException {
     clob.free();
+  }
+
+  @Override
+  public String buildSelectMaxStatement(
+      TableId table,
+      ColumnId keyColumn
+  ) {
+    ExpressionBuilder builder = expressionBuilder();
+    builder.append("SELECT MAX(");
+    builder.appendColumnName(keyColumn.name());
+    builder.append(") as ");
+    builder.appendColumnName(keyColumn.name());
+    builder.append(" FROM ");
+    builder.appendTableName(table.tableName());
+    return builder.toString();
   }
 
   @Override

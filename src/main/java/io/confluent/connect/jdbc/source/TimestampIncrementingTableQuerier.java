@@ -258,13 +258,12 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
         SchemaMapping mapping = SchemaMapping.create(schemaName, resultSet.getMetaData(), dialect);
         assert !mapping.fieldSetters().isEmpty();
         FieldSetter se = mapping.fieldSetters().get(0);
-        log.info("Found field {} with schema", se.field().name(), se.field().schema());
         assert se.field().schema().name() == incrementingColumnName;
         Struct st = new Struct(mapping.schema());
         se.setField(st, rs);
         return criteria.extractMaximumSeenOffset(this.schemaMapping.schema(), st, this.offset);
       } else {
-        log.warn("No maximum found");
+        log.info("No maximum found. Skipping table.");
         return this.offset;
       }
     } catch (IOException e) {

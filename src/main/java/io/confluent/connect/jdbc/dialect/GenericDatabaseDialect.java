@@ -1381,9 +1381,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       ColumnId keyColumn
   ) {
     ExpressionBuilder builder = expressionBuilder();
-    builder.append("SELECT MAX(");
+    builder.append("SELECT COALESCE(MAX(");
     builder.appendColumnName(keyColumn.name());
-    builder.append(") as ");
+    builder.append("),-1) as ");
     builder.appendColumnName(keyColumn.name());
     builder.append(" FROM ");
     builder.appendTableName(table.tableName());

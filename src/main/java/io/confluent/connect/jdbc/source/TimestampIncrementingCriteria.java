@@ -231,6 +231,7 @@ public class TimestampIncrementingCriteria {
     return new TimestampIncrementingOffset(extractedTimestamp, extractedId, null);
   }
 
+
   /**
    * Extract the maximum offset value from the row
    *

@@ -269,7 +269,7 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
   @Test
   public void testTime() throws Exception {
     GregorianCalendar expected = new GregorianCalendar(1970, Calendar.JANUARY, 1, 23, 3, 20);
-    expected.setTimeZone(TimeZone.getTimeZone("UTC"));
+    expected.setTimeZone(timezone);
     typeConversion("TIME", false, "23:03:20",
                    Time.builder().build(),
                    expected.getTime());
@@ -278,7 +278,7 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
   @Test
   public void testNullableTime() throws Exception {
     GregorianCalendar expected = new GregorianCalendar(1970, Calendar.JANUARY, 1, 23, 3, 20);
-    expected.setTimeZone(TimeZone.getTimeZone("UTC"));
+    expected.setTimeZone(timezone);
     typeConversion("TIME", true, "23:03:20",
                    Time.builder().optional().build(),
                    expected.getTime());

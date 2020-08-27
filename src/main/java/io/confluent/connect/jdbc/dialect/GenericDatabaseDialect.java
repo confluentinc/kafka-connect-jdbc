@@ -1252,8 +1252,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
       // Time is a time of day -- hour, minute, seconds, nanoseconds
       case Types.TIME: {
-        return rs -> rs.getTime(col,
-            DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone(ZoneOffset.UTC)));
+        return rs -> rs.getTime(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
       }
 
       // Timestamp is a date + time

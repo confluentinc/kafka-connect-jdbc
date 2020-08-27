@@ -1246,12 +1246,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
       // Date is day + month + year
       case Types.DATE: {
-        return rs -> rs.getDate(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
+        return rs -> rs.getDate(col,
+            DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone(ZoneOffset.UTC)));
       }
 
       // Time is a time of day -- hour, minute, seconds, nanoseconds
       case Types.TIME: {
-        return rs -> rs.getTime(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
+        return rs -> rs.getTime(col,
+            DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone(ZoneOffset.UTC)));
       }
 
       // Timestamp is a date + time

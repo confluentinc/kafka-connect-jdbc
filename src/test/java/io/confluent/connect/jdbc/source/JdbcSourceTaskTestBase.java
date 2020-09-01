@@ -27,6 +27,7 @@ import org.powermock.api.easymock.annotation.Mock;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.TimeZone;
 
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.NumericMapping;
 
@@ -100,6 +101,14 @@ public class JdbcSourceTaskTestBase {
     } else {
       props.put(JdbcSourceTaskConfig.NUMERIC_PRECISION_MAPPING_CONFIG, "true");
     }
+    return props;
+  }
+
+  protected Map<String, String> singleTableWithTimezoneConfig(
+      boolean completeMapping,
+      TimeZone tz) {
+    Map<String, String> props = singleTableConfig(completeMapping);
+    props.put(JdbcSourceTaskConfig.DB_TIMEZONE_CONFIG, tz.getID());
     return props;
   }
 

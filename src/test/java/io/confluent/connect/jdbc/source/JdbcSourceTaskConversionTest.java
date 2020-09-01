@@ -34,7 +34,9 @@ import javax.sql.rowset.serial.SerialBlob;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Calendar;
+import java.util.Collection;
 import java.util.GregorianCalendar;
 import java.util.List;
 import java.util.TimeZone;
@@ -48,18 +50,26 @@ import static org.junit.Assert.assertTrue;
 @RunWith(Parameterized.class)
 public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
 
-  @Parameterized.Parameters
-  public static Object[] mapping() {
-    return new Object[] { false, true };
+  @Parameterized.Parameters(name="extendedMapping: {0}, timezone: {1}")
+  public static Collection<Object[]> mapping() {
+    return Arrays.asList(new Object[][] {
+        {false, TimeZone.getTimeZone("UTC")},
+        {true, TimeZone.getTimeZone("UTC")},
+        {false, TimeZone.getTimeZone("America/Los_Angeles")},
+        {true, TimeZone.getTimeZone("Asia/Kolkata")}
+    });
   }
 
-  @Parameterized.Parameter
+  @Parameterized.Parameter(0)
   public boolean extendedMapping;
+
+  @Parameterized.Parameter(1)
+  public TimeZone timezone;
 
   @Before
   public void setup() throws Exception {
     super.setup();
-    task.start(singleTableConfig(extendedMapping));
+    task.start(singleTableWithTimezoneConfig(extendedMapping, timezone));
   }
 
   @After
@@ -258,7 +268,7 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
   @Test
   public void testTime() throws Exception {
     GregorianCalendar expected = new GregorianCalendar(1970, Calendar.JANUARY, 1, 23, 3, 20);
-    expected.setTimeZone(TimeZone.getTimeZone("UTC"));
+    expected.setTimeZone(timezone);
     typeConversion("TIME", false, "23:03:20",
                    Time.builder().build(),
                    expected.getTime());
@@ -267,7 +277,7 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
   @Test
   public void testNullableTime() throws Exception {
     GregorianCalendar expected = new GregorianCalendar(1970, Calendar.JANUARY, 1, 23, 3, 20);
-    expected.setTimeZone(TimeZone.getTimeZone("UTC"));
+    expected.setTimeZone(timezone);
     typeConversion("TIME", true, "23:03:20",
                    Time.builder().optional().build(),
                    expected.getTime());
@@ -279,7 +289,7 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
   @Test
   public void testTimestamp() throws Exception {
     GregorianCalendar expected = new GregorianCalendar(1977, Calendar.FEBRUARY, 13, 23, 3, 20);
-    expected.setTimeZone(TimeZone.getTimeZone("UTC"));
+    expected.setTimeZone(timezone);
     typeConversion("TIMESTAMP", false, "1977-02-13 23:03:20",
                    Timestamp.builder().build(),
                    expected.getTime());
@@ -288,7 +298,7 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
   @Test
   public void testNullableTimestamp() throws Exception {
     GregorianCalendar expected = new GregorianCalendar(1977, Calendar.FEBRUARY, 13, 23, 3, 20);
-    expected.setTimeZone(TimeZone.getTimeZone("UTC"));
+    expected.setTimeZone(timezone);
     typeConversion("TIMESTAMP", true, "1977-02-13 23:03:20",
                    Timestamp.builder().optional().build(),
                    expected.getTime());

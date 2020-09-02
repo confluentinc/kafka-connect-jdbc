@@ -26,10 +26,12 @@ public class MySQLOOMIT extends BaseOOMIntegrationTest {
   public void before() {
     props = new HashMap<>();
     props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG,
-        dbRule.getDBConfiguration().getURL("test") + "?useCursorFetch=true");
+        dbRule.getDBConfiguration().getURL("test"));
     props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "root");
     props.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
     props.put(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG, "topic_");
+    // Use "extra" connection properties behavior
+    props.put("connection.useCursorFetch", "true");
   }
 
   protected String buildLargeQuery() {

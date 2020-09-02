@@ -364,7 +364,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
   }
 
   protected void verifyDataTypeMapping(String expected, Schema schema) {
-    SinkRecordField field = new SinkRecordField(schema, schema.name(),schema.isOptional());
+    SinkRecordField field = new SinkRecordField(schema, schema.name(), schema.isOptional());
     assertEquals(expected, dialect.getSqlType(field));
   }
 
@@ -377,6 +377,12 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
   protected void verifyCreateOneColOnePk(String expected) {
     assertEquals(expected, dialect.buildCreateTableStatement(tableId, Arrays.asList(
         new SinkRecordField(Schema.INT32_SCHEMA, "pk1", true)
+    )));
+  }
+
+  protected void verifyCreateOneColOnePkAsString(String expected) {
+    assertEquals(expected, dialect.buildCreateTableStatement(tableId, Arrays.asList(
+            new SinkRecordField(Schema.STRING_SCHEMA, "pk1", true)
     )));
   }
 

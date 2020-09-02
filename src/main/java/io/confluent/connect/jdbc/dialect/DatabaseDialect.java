@@ -328,14 +328,70 @@ public interface DatabaseDialect extends ConnectionProvider {
   /**
    * Build the INSERT prepared statement expression for the given table and its columns.
    *
+   * <p>This method is only called by the default implementation of
+   * {@link #buildInsertStatement(TableId, Collection, Collection, TableDefinition)}, since
+   * many dialects implement this variant of the method. However, overriding
+   * {@link #buildInsertStatement(TableId, Collection, Collection, TableDefinition)} is suggested.
+   *
    * @param table         the identifier of the table; may not be null
    * @param keyColumns    the identifiers of the columns in the primary/unique key; may not be null
    *                      but may be empty
    * @param nonKeyColumns the identifiers of the other columns in the table; may not be null but may
    *                      be empty
    * @return the INSERT statement; may not be null
+   * @deprecated use {@link #buildInsertStatement(TableId, Collection, Collection, TableDefinition)}
    */
+  @Deprecated
   String buildInsertStatement(
+      TableId table,
+      Collection<ColumnId> keyColumns,
+      Collection<ColumnId> nonKeyColumns
+  );
+
+  /**
+   * Build the INSERT prepared statement expression for the given table and its columns.
+   *
+   * <p>By default this method calls
+   * {@link #buildInsertStatement(TableId, Collection, Collection)} to maintain backward
+   * compatibility with older versions. Subclasses that override this method do not need to
+   * override {@link #buildInsertStatement(TableId, Collection, Collection)}.
+   *
+   * @param table         the identifier of the table; may not be null
+   * @param keyColumns    the identifiers of the columns in the primary/unique key; may not be null
+   *                      but may be empty
+   * @param nonKeyColumns the identifiers of the other columns in the table; may not be null but may
+   *                      be empty
+   * @param definition    the table definition; may be null if unknown
+   * @return the INSERT statement; may not be null
+   */
+  default String buildInsertStatement(
+      TableId table,
+      Collection<ColumnId> keyColumns,
+      Collection<ColumnId> nonKeyColumns,
+      TableDefinition definition
+  ) {
+    return buildInsertStatement(table, keyColumns, nonKeyColumns);
+  }
+
+  /**
+   * Build the UPDATE prepared statement expression for the given table and its columns. Variables
+   * for each key column should also appear in the WHERE clause of the statement.
+   *
+   * <p>This method is only called by the default implementation of
+   * {@link #buildUpdateStatement(TableId, Collection, Collection, TableDefinition)}, since
+   * many dialects implement this variant of the method. However, overriding
+   * {@link #buildUpdateStatement(TableId, Collection, Collection, TableDefinition)} is suggested.
+   *
+   * @param table         the identifier of the table; may not be null
+   * @param keyColumns    the identifiers of the columns in the primary/unique key; may not be null
+   *                      but may be empty
+   * @param nonKeyColumns the identifiers of the other columns in the table; may not be null but may
+   *                      be empty
+   * @return the UPDATE statement; may not be null
+   * @deprecated use {@link #buildUpdateStatement(TableId, Collection, Collection, TableDefinition)}
+   */
+  @Deprecated
+  String buildUpdateStatement(
       TableId table,
       Collection<ColumnId> keyColumns,
       Collection<ColumnId> nonKeyColumns
@@ -345,14 +401,50 @@ public interface DatabaseDialect extends ConnectionProvider {
    * Build the UPDATE prepared statement expression for the given table and its columns. Variables
    * for each key column should also appear in the WHERE clause of the statement.
    *
+   * <p>By default this method calls
+   * {@link #buildUpdateStatement(TableId, Collection, Collection)} to maintain backward
+   * compatibility with older versions. Subclasses that override this method do not need to
+   * override {@link #buildUpdateStatement(TableId, Collection, Collection)}.
+   *
    * @param table         the identifier of the table; may not be null
    * @param keyColumns    the identifiers of the columns in the primary/unique key; may not be null
    *                      but may be empty
    * @param nonKeyColumns the identifiers of the other columns in the table; may not be null but may
    *                      be empty
+   * @param definition    the table definition; may be null if unknown
    * @return the UPDATE statement; may not be null
    */
-  String buildUpdateStatement(
+  default String buildUpdateStatement(
+      TableId table,
+      Collection<ColumnId> keyColumns,
+      Collection<ColumnId> nonKeyColumns,
+      TableDefinition definition
+  ) {
+    return buildUpdateStatement(table, keyColumns, nonKeyColumns);
+  }
+
+  /**
+   * Build the UPSERT or MERGE prepared statement expression to either insert a new record into the
+   * given table or update an existing record in that table Variables for each key column should
+   * also appear in the WHERE clause of the statement.
+   *
+   * <p>This method is only called by the default implementation of
+   * {@link #buildUpsertQueryStatement(TableId, Collection, Collection, TableDefinition)}, since
+   * many dialects implement this variant of the method. However, overriding
+   * {@link #buildUpsertQueryStatement(TableId, Collection, Collection, TableDefinition)}
+   * is suggested.
+   *
+   * @param table         the identifier of the table; may not be null
+   * @param keyColumns    the identifiers of the columns in the primary/unique key; may not be null
+   *                      but may be empty
+   * @param nonKeyColumns the identifiers of the other columns in the table; may not be null but may
+   *                      be empty
+   * @return the upsert/merge statement; may not be null
+   * @throws UnsupportedOperationException if the dialect does not support upserts
+   * @deprecated use {@link #buildUpsertQueryStatement(TableId, Collection, Collection)}
+   */
+  @Deprecated
+  String buildUpsertQueryStatement(
       TableId table,
       Collection<ColumnId> keyColumns,
       Collection<ColumnId> nonKeyColumns
@@ -363,19 +455,28 @@ public interface DatabaseDialect extends ConnectionProvider {
    * given table or update an existing record in that table Variables for each key column should
    * also appear in the WHERE clause of the statement.
    *
+   * <p>By default this method calls
+   * {@link #buildUpsertQueryStatement(TableId, Collection, Collection)} to maintain backward
+   * compatibility with older versions. Subclasses that override this method do not need to
+   * override {@link #buildUpsertQueryStatement(TableId, Collection, Collection)}.
+   *
    * @param table         the identifier of the table; may not be null
    * @param keyColumns    the identifiers of the columns in the primary/unique key; may not be null
    *                      but may be empty
    * @param nonKeyColumns the identifiers of the other columns in the table; may not be null but may
    *                      be empty
+   * @param definition    the table definition; may be null if unknown
    * @return the upsert/merge statement; may not be null
    * @throws UnsupportedOperationException if the dialect does not support upserts
    */
-  String buildUpsertQueryStatement(
+  default String buildUpsertQueryStatement(
       TableId table,
       Collection<ColumnId> keyColumns,
-      Collection<ColumnId> nonKeyColumns
-  );
+      Collection<ColumnId> nonKeyColumns,
+      TableDefinition definition
+  ) {
+    return buildUpsertQueryStatement(table, keyColumns, nonKeyColumns);
+  }
 
   /**
    * Build the DELETE prepared statement expression for the given table and its columns. Variables

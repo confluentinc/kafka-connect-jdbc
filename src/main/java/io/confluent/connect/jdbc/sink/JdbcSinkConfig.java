@@ -19,20 +19,24 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 
+import io.confluent.connect.jdbc.util.ConfigUtils;
 import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
 import io.confluent.connect.jdbc.util.DeleteEnabledRecommender;
 import io.confluent.connect.jdbc.util.EnumRecommender;
 import io.confluent.connect.jdbc.util.PrimaryKeyModeRecommender;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.StringUtils;
+import io.confluent.connect.jdbc.util.TableType;
 import io.confluent.connect.jdbc.util.TimeZoneValidator;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
@@ -221,8 +225,22 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String QUOTE_SQL_IDENTIFIERS_DISPLAY =
       JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_DISPLAY;
 
+  public static final String TABLE_TYPES_CONFIG = "table.types";
+  private static final String TABLE_TYPES_DISPLAY = "Table Types";
+  public static final String TABLE_TYPES_DEFAULT = TableType.TABLE.toString();
+  private static final String TABLE_TYPES_DOC =
+      "The comma-separated types of database tables to which the sink connector can write. "
+      + "By default this is ``" + TableType.TABLE + "``, but any combination of ``"
+      + TableType.TABLE + "`` and ``" + TableType.VIEW + "`` is allowed. Not all databases "
+      + "support writing to views, and when they do the the sink connector will fail if the "
+      + "view definition does not match the records' schemas (regardless of ``"
+      + AUTO_EVOLVE + "``).";
+
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
+
+  private static final EnumRecommender TABLE_TYPES_RECOMMENDER =
+      EnumRecommender.in(TableType.values());
 
   public static final ConfigDef CONFIG_DEF = new ConfigDef()
         // Connection
@@ -306,6 +324,18 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Width.SHORT,
             DELETE_ENABLED_DISPLAY,
             DeleteEnabledRecommender.INSTANCE
+        )
+        .define(
+            TABLE_TYPES_CONFIG,
+            ConfigDef.Type.LIST,
+            TABLE_TYPES_DEFAULT,
+            TABLE_TYPES_RECOMMENDER,
+            ConfigDef.Importance.LOW,
+            TABLE_TYPES_DOC,
+            WRITES_GROUP,
+            4,
+            ConfigDef.Width.MEDIUM,
+            TABLE_TYPES_DISPLAY
         )
         // Data Mapping
         .define(
@@ -422,6 +452,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             RETRY_BACKOFF_MS_DISPLAY
         );
 
+  public final String connectorName;
   public final String connectionUrl;
   public final String connectionUser;
   public final String connectionPassword;
@@ -438,9 +469,11 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final Set<String> fieldsWhitelist;
   public final String dialectName;
   public final TimeZone timeZone;
+  public final EnumSet<TableType> tableTypes;
 
   public JdbcSinkConfig(Map<?, ?> props) {
     super(CONFIG_DEF, props);
+    connectorName = ConfigUtils.connectorName(props);
     connectionUrl = getString(CONNECTION_URL);
     connectionUser = getString(CONNECTION_USER);
     connectionPassword = getPasswordValue(CONNECTION_PASSWORD);
@@ -463,6 +496,7 @@ public class JdbcSinkConfig extends AbstractConfig {
       throw new ConfigException(
           "Primary key mode must be 'record_key' when delete support is enabled");
     }
+    tableTypes = TableType.parse(getList(TABLE_TYPES_CONFIG));
   }
 
   private String getPasswordValue(String key) {
@@ -471,6 +505,18 @@ public class JdbcSinkConfig extends AbstractConfig {
       return password.value();
     }
     return null;
+  }
+
+  public String connectorName() {
+    return connectorName;
+  }
+
+  public EnumSet<TableType> tableTypes() {
+    return tableTypes;
+  }
+
+  public Set<String> tableTypeNames() {
+    return tableTypes().stream().map(TableType::toString).collect(Collectors.toSet());
   }
 
   private static class EnumValidator implements ConfigDef.Validator {

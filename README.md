@@ -21,6 +21,8 @@ https://github.com/confluentinc/kafka-connect-jdbc/wiki/FAQ
 
 # Contribute
 
+Contributions can only be accepted if they contain appropriate testing. For example, adding a new dialect of JDBC will require an integration test.
+
 - Source Code: https://github.com/confluentinc/kafka-connect-jdbc
 - Issue Tracker: https://github.com/confluentinc/kafka-connect-jdbc/issues
 

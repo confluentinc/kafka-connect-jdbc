@@ -33,6 +33,7 @@ import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableDefinitions;
 import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.util.TableType;
 
 public class DbStructure {
   private static final Logger log = LoggerFactory.getLogger(DbStructure.class);
@@ -72,6 +73,27 @@ public class DbStructure {
       }
     }
     return amendIfNecessary(config, connection, tableId, fieldsMetadata, config.maxRetries);
+  }
+
+  /**
+   * Get the definition for the table with the given ID. This returns a cached definition if
+   * there is one; otherwise, it reads the definition from the database
+   *
+   * @param connection the connection that may be used to fetch the table definition if not
+   *                   already known; may not be null
+   * @param tableId    the ID of the table; may not be null
+   * @return the table definition; or null if the table does not exist
+   * @throws SQLException if there is an error getting the definition from the database
+   */
+  public TableDefinition tableDefinition(
+      Connection connection,
+      TableId tableId
+  ) throws SQLException {
+    TableDefinition defn = tableDefns.get(connection, tableId);
+    if (defn != null) {
+      return defn;
+    }
+    return tableDefns.refresh(connection, tableId);
   }
 
   /**
@@ -128,20 +150,41 @@ public class DbStructure {
       return false;
     }
 
-    for (SinkRecordField missingField: missingFields) {
-      if (!missingField.isOptional() && missingField.defaultValue() == null) {
+    // At this point there are missing fields
+    TableType type = tableDefn.type();
+    switch (type) {
+      case TABLE:
+        // Rather than embed the logic and change lots of lines, just break out
+        break;
+      case VIEW:
+      default:
         throw new ConnectException(
             String.format(
-                "Cannot ALTER %s to add missing field %s, as it is not optional and "
-                    + "does not have a default value",
-                tableId, missingField)
+                "%s %s is missing fields (%s) and ALTER %s is unsupported",
+                type.capitalized(),
+                tableId,
+                missingFields,
+                type.jdbcName()
+            )
         );
+    }
+
+    for (SinkRecordField missingField: missingFields) {
+      if (!missingField.isOptional() && missingField.defaultValue() == null) {
+        throw new ConnectException(String.format(
+            "Cannot ALTER %s %s to add missing field %s, as the field is not optional and does "
+            + "not have a default value",
+            type.jdbcName(),
+            tableId,
+            missingField
+        ));
       }
     }
 
     if (!config.autoEvolve) {
       throw new ConnectException(String.format(
-          "Table %s is missing fields (%s) and auto-evolution is disabled",
+          "%s %s is missing fields (%s) and auto-evolution is disabled",
+          type.capitalized(),
           tableId,
           missingFields
       ));
@@ -149,7 +192,8 @@ public class DbStructure {
 
     final List<String> amendTableQueries = dbDialect.buildAlterTable(tableId, missingFields);
     log.info(
-        "Amending table to add missing fields:{} maxRetries:{} with SQL: {}",
+        "Amending {} to add missing fields:{} maxRetries:{} with SQL: {}",
+        type,
         missingFields,
         maxRetries,
         amendTableQueries
@@ -160,7 +204,8 @@ public class DbStructure {
       if (maxRetries <= 0) {
         throw new ConnectException(
             String.format(
-                "Failed to amend table '%s' to add missing fields: %s",
+                "Failed to amend %s '%s' to add missing fields: %s",
+                type,
                 tableId,
                 missingFields
             ),

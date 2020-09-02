@@ -31,6 +31,7 @@ import java.util.Map;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.source.SchemaMapping.FieldSetter;
+import io.confluent.connect.jdbc.util.ExpressionBuilder;
 
 /**
  * BulkTableQuerier always returns the entire table.
@@ -42,29 +43,35 @@ public class BulkTableQuerier extends TableQuerier {
       DatabaseDialect dialect,
       QueryMode mode,
       String name,
-      String topicPrefix
+      String topicPrefix,
+      String suffix
   ) {
-    super(dialect, mode, name, topicPrefix);
+    super(dialect, mode, name, topicPrefix, suffix);
   }
 
   @Override
   protected void createPreparedStatement(Connection db) throws SQLException {
+    ExpressionBuilder builder = dialect.expressionBuilder();  
     switch (mode) {
       case TABLE:
-        String queryStr = dialect.expressionBuilder().append("SELECT * FROM ")
-                                 .append(tableId).toString();
-        recordQuery(queryStr);
-        log.debug("{} prepared SQL query: {}", this, queryStr);
-        stmt = dialect.createPreparedStatement(db, queryStr);
+        builder.append("SELECT * FROM ").append(tableId);
+
         break;
       case QUERY:
-        recordQuery(query);
-        log.debug("{} prepared SQL query: {}", this, query);
-        stmt = dialect.createPreparedStatement(db, query);
+        builder.append(query);  
+        
         break;
       default:
         throw new ConnectException("Unknown mode: " + mode);
     }
+
+    addSuffixIfPresent(builder);
+    
+    String queryStr = builder.toString();
+
+    recordQuery(queryStr);
+    log.debug("{} prepared SQL query: {}", this, queryStr);
+    stmt = dialect.createPreparedStatement(db, queryStr);
   }
 
   @Override

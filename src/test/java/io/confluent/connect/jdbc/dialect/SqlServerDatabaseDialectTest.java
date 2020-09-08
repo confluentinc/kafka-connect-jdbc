@@ -13,404 +13,476 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package io.confluent.connect.jdbc.dialect;
+package io.confluent.connect.jdbc.source;
 
-import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.TimeZone;
-
-import io.confluent.connect.jdbc.util.ColumnId;
-import org.apache.kafka.connect.data.Date;
-import org.apache.kafka.connect.data.Decimal;
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.Schema.Type;
-import org.apache.kafka.connect.data.Time;
-import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.utils.SystemTime;
+import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
-import org.junit.Test;
+import org.apache.kafka.connect.source.SourceRecord;
+import org.apache.kafka.connect.source.SourceTask;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import io.confluent.connect.jdbc.util.QuoteMethod;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Calendar;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.PriorityQueue;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.dialect.DatabaseDialects;
+import io.confluent.connect.jdbc.util.CachedConnectionProvider;
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.TableId;
-import org.mockito.Mockito;
+import io.confluent.connect.jdbc.util.Version;
 
-import static org.junit.Assert.assertEquals;
+/**
+ * JdbcSourceTask is a Kafka Connect SourceTask implementation that reads from JDBC databases and
+ * generates Kafka Connect records.
+ */
+public class JdbcSourceTask extends SourceTask {
+  // When no results, periodically return control flow to caller to give it a chance to pause us.
+  private static final int CONSECUTIVE_EMPTY_RESULTS_BEFORE_RETURN = 3;
 
-public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatabaseDialect> {
+  private static final Logger log = LoggerFactory.getLogger(JdbcSourceTask.class);
 
-  public class MockSqlServerDatabaseDialect extends SqlServerDatabaseDialect {
-    public MockSqlServerDatabaseDialect() {
-      super(sourceConfigWithUrl("jdbc:jtds:sqlsserver://something"));
+  private Time time;
+  private JdbcSourceTaskConfig config;
+  private DatabaseDialect dialect;
+  private CachedConnectionProvider cachedConnectionProvider;
+  private PriorityQueue<TableQuerier> tableQueue = new PriorityQueue<TableQuerier>();
+  private final AtomicBoolean running = new AtomicBoolean(false);
+
+  public JdbcSourceTask() {
+    this.time = new SystemTime();
+  }
+
+  public JdbcSourceTask(Time time) {
+    this.time = time;
+  }
+
+  @Override
+  public String version() {
+    return Version.getVersion();
+  }
+
+  @Override
+  public void start(Map<String, String> properties) {
+    log.info("Starting JDBC source task");
+    try {
+      config = new JdbcSourceTaskConfig(properties);
+    } catch (ConfigException e) {
+      throw new ConnectException("Couldn't start JdbcSourceTask due to configuration error", e);
     }
-    @Override
-    public boolean versionWithBreakingDatetimeChange() {
-      return true;
+
+    final String url = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
+    final int maxConnAttempts = config.getInt(JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_CONFIG);
+    final long retryBackoff = config.getLong(JdbcSourceConnectorConfig.CONNECTION_BACKOFF_CONFIG);
+
+    final String dialectName = config.getString(JdbcSourceConnectorConfig.DIALECT_NAME_CONFIG);
+    if (dialectName != null && !dialectName.trim().isEmpty()) {
+      dialect = DatabaseDialects.create(dialectName, config);
+    } else {
+      dialect = DatabaseDialects.findBestFor(url, config);
+    }
+    log.info("Using JDBC dialect {}", dialect.name());
+
+    cachedConnectionProvider = connectionProvider(maxConnAttempts, retryBackoff);
+
+    List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
+    String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
+    if ((tables.isEmpty() && query.isEmpty()) || (!tables.isEmpty() && !query.isEmpty())) {
+      throw new ConnectException("Invalid configuration: each JdbcSourceTask must have at "
+                                        + "least one table assigned to it or one query specified");
+    }
+    TableQuerier.QueryMode queryMode = !query.isEmpty() ? TableQuerier.QueryMode.QUERY :
+                                       TableQuerier.QueryMode.TABLE;
+    List<String> tablesOrQuery = queryMode == TableQuerier.QueryMode.QUERY
+                                 ? Collections.singletonList(query) : tables;
+
+    String mode = config.getString(JdbcSourceTaskConfig.MODE_CONFIG);
+    //used only in table mode
+    Map<String, List<Map<String, String>>> partitionsByTableFqn = new HashMap<>();
+    Map<Map<String, String>, Map<String, Object>> offsets = null;
+    if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)
+        || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)
+        || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
+      List<Map<String, String>> partitions = new ArrayList<>(tables.size());
+      switch (queryMode) {
+        case TABLE:
+          log.trace("Starting in TABLE mode");
+          for (String table : tables) {
+            // Find possible partition maps for different offset protocols
+            // We need to search by all offset protocol partition keys to support compatibility
+            List<Map<String, String>> tablePartitions = possibleTablePartitions(table);
+            partitions.addAll(tablePartitions);
+            partitionsByTableFqn.put(table, tablePartitions);
+          }
+          break;
+        case QUERY:
+          log.trace("Starting in QUERY mode");
+          partitions.add(Collections.singletonMap(JdbcSourceConnectorConstants.QUERY_NAME_KEY,
+                                                  JdbcSourceConnectorConstants.QUERY_NAME_VALUE));
+          break;
+        default:
+          throw new ConnectException("Unknown query mode: " + queryMode);
+      }
+      offsets = context.offsetStorageReader().offsets(partitions);
+      log.trace("The partition offsets are {}", offsets);
+    }
+
+    String incrementingColumn
+        = config.getString(JdbcSourceTaskConfig.INCREMENTING_COLUMN_NAME_CONFIG);
+    List<String> timestampColumns
+        = config.getList(JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
+    Long timestampDelayInterval
+        = config.getLong(JdbcSourceTaskConfig.TIMESTAMP_DELAY_INTERVAL_MS_CONFIG);
+    boolean validateNonNulls
+        = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
+    TimeZone timeZone = config.timeZone();
+    String suffix = config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG).trim();
+
+    for (String tableOrQuery : tablesOrQuery) {
+      final List<Map<String, String>> tablePartitionsToCheck;
+      final Map<String, String> partition;
+      switch (queryMode) {
+        case TABLE:
+          if (validateNonNulls) {
+            validateNonNullable(
+                mode,
+                tableOrQuery,
+                incrementingColumn,
+                timestampColumns
+            );
+          }
+          tablePartitionsToCheck = partitionsByTableFqn.get(tableOrQuery);
+          break;
+        case QUERY:
+          partition = Collections.singletonMap(
+              JdbcSourceConnectorConstants.QUERY_NAME_KEY,
+              JdbcSourceConnectorConstants.QUERY_NAME_VALUE
+          );
+          tablePartitionsToCheck = Collections.singletonList(partition);
+          break;
+        default:
+          throw new ConnectException("Unexpected query mode: " + queryMode);
+      }
+
+      // The partition map varies by offset protocol. Since we don't know which protocol each
+      // table's offsets are keyed by, we need to use the different possible partitions
+      // (newest protocol version first) to find the actual offsets for each table.
+      Map<String, Object> offset = null;
+      if (offsets != null) {
+        for (Map<String, String> toCheckPartition : tablePartitionsToCheck) {
+          offset = offsets.get(toCheckPartition);
+          if (offset != null) {
+            log.info("Found offset {} for partition {}", offsets, toCheckPartition);
+            break;
+          }
+        }
+      }
+      offset = computeInitialOffset(tableOrQuery, offset, timeZone);
+
+      String topicPrefix = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
+
+      if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
+        tableQueue.add(
+            new BulkTableQuerier(
+                dialect, 
+                queryMode, 
+                tableOrQuery, 
+                topicPrefix, 
+                suffix
+            )
+        );
+      } else if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)) {
+        tableQueue.add(
+            new TimestampIncrementingTableQuerier(
+                dialect,
+                queryMode,
+                tableOrQuery,
+                topicPrefix,
+                null,
+                incrementingColumn,
+                offset,
+                timestampDelayInterval,
+                timeZone,
+                suffix
+            )
+        );
+      } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
+        tableQueue.add(
+            new TimestampIncrementingTableQuerier(
+                dialect,
+                queryMode,
+                tableOrQuery,
+                topicPrefix,
+                timestampColumns,
+                null,
+                offset,
+                timestampDelayInterval,
+                timeZone,
+                suffix
+            )
+        );
+      } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
+        tableQueue.add(
+            new TimestampIncrementingTableQuerier(
+                dialect,
+                queryMode,
+                tableOrQuery,
+                topicPrefix,
+                timestampColumns,
+                incrementingColumn,
+                offset,
+                timestampDelayInterval,
+                timeZone,
+                suffix
+            )
+        );
+      }
+    }
+
+    running.set(true);
+    log.info("Started JDBC source task");
+  }
+
+  protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
+    return new CachedConnectionProvider(dialect, maxConnAttempts, retryBackoff) {
+      @Override
+      protected void onConnect(final Connection connection) throws SQLException {
+        super.onConnect(connection);
+        connection.setAutoCommit(false);
+      }
+    };
+  }
+
+  //This method returns a list of possible partition maps for different offset protocols
+  //This helps with the upgrades
+  private List<Map<String, String>> possibleTablePartitions(String table) {
+    TableId tableId = dialect.parseTableIdentifier(table);
+    return Arrays.asList(
+        OffsetProtocols.sourcePartitionForProtocolV1(tableId),
+        OffsetProtocols.sourcePartitionForProtocolV0(tableId)
+    );
+  }
+
+  protected Map<String, Object> computeInitialOffset(
+          String tableOrQuery,
+          Map<String, Object> partitionOffset,
+          TimeZone timezone) {
+    if (!(partitionOffset == null)) {
+      return partitionOffset;
+    } else {
+      Map<String, Object> initialPartitionOffset = null;
+      // no offsets found
+      Long timestampInitial = config.getLong(JdbcSourceConnectorConfig.TIMESTAMP_INITIAL_CONFIG);
+      if (timestampInitial != null) {
+        // start at the specified timestamp
+        if (timestampInitial == JdbcSourceConnectorConfig.TIMESTAMP_INITIAL_CURRENT) {
+          // use the current time
+          try {
+            final Connection con = cachedConnectionProvider.getConnection();
+            Calendar cal = Calendar.getInstance(timezone);
+            timestampInitial = dialect.currentTimeOnDB(con, cal).getTime();
+          } catch (SQLException e) {
+            throw new ConnectException("Error while getting initial timestamp from database", e);
+          }
+        }
+        initialPartitionOffset = new HashMap<String, Object>();
+        initialPartitionOffset.put(TimestampIncrementingOffset.TIMESTAMP_FIELD, timestampInitial);
+        log.info("No offsets found for '{}', so using configured timestamp {}", tableOrQuery,
+                timestampInitial);
+      }
+      return initialPartitionOffset;
     }
   }
 
   @Override
-  protected SqlServerDatabaseDialect createDialect() {
-    return new MockSqlServerDatabaseDialect();
+  public void stop() throws ConnectException {
+    log.info("Stopping JDBC source task");
+    running.set(false);
+    // All resources are closed at the end of 'poll()' when no longer running or
+    // if there is an error
   }
 
-  @Test
-  public void shouldConvertFromDateTimeOffset() {
-    ZoneId utc = ZoneId.of("UTC");
-    TimeZone timeZone = TimeZone.getTimeZone(utc.getId());
-
-    String value = "2016-12-08 12:34:56.7850000 -07:00";
-    java.sql.Timestamp ts = SqlServerDatabaseDialect.dateTimeOffsetFrom(value, timeZone);
-    assertTimestamp(ZonedDateTime.of(2016, 12, 8, 19, 34, 56, 785000000, utc), ts);
-
-    value = "2019-12-08 12:34:56.7850200 -00:00";
-    ts = SqlServerDatabaseDialect.dateTimeOffsetFrom(value, timeZone);
-    assertTimestamp(ZonedDateTime.of(2019, 12, 8, 12, 34, 56, 785020000, utc), ts);
+  protected void closeResources() {
+    log.info("Closing resources for JDBC source task");
+    try {
+      if (cachedConnectionProvider != null) {
+        cachedConnectionProvider.close();
+      }
+    } catch (Throwable t) {
+      log.warn("Error while closing the connections", t);
+    } finally {
+      cachedConnectionProvider = null;
+      try {
+        if (dialect != null) {
+          dialect.close();
+        }
+      } catch (Throwable t) {
+        log.warn("Error while closing the {} dialect: ", dialect.name(), t);
+      } finally {
+        dialect = null;
+      }
+    }
   }
 
-  @Test
-  public void testCustomColumnConverters() {
-    assertColumnConverter(SqlServerDatabaseDialect.DATETIMEOFFSET, null, Timestamp.SCHEMA, Timestamp.class);
+  @Override
+  public List<SourceRecord> poll() throws InterruptedException {
+    log.trace("{} Polling for new data");
+
+    Map<TableQuerier, Integer> consecutiveEmptyResults = tableQueue.stream().collect(
+        Collectors.toMap(Function.identity(), (q) -> 0));
+    while (running.get()) {
+      final TableQuerier querier = tableQueue.peek();
+
+      if (!querier.querying()) {
+        // If not in the middle of an update, wait for next update time
+        final long nextUpdate = querier.getLastUpdate()
+            + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
+        final long now = time.milliseconds();
+        final long sleepMs = Math.min(nextUpdate - now, 100);
+
+        if (sleepMs > 0) {
+          log.trace("Waiting {} ms to poll {} next", nextUpdate - now, querier.toString());
+          time.sleep(sleepMs);
+          continue; // Re-check stop flag before continuing
+        }
+      }
+
+      final List<SourceRecord> results = new ArrayList<>();
+      try {
+        log.debug("Checking for next block of results from {}", querier.toString());
+        querier.maybeStartQuery(cachedConnectionProvider.getConnection());
+
+        int batchMaxRows = config.getInt(JdbcSourceTaskConfig.BATCH_MAX_ROWS_CONFIG);
+        boolean hadNext = true;
+        while (results.size() < batchMaxRows && (hadNext = querier.next())) {
+          results.add(querier.extractRecord());
+        }
+
+        if (!hadNext) {
+          // If we finished processing the results from the current query, we can reset and send
+          // the querier to the tail of the queue
+          resetAndRequeueHead(querier);
+        }
+
+        if (results.isEmpty()) {
+          consecutiveEmptyResults.compute(querier, (k, v) -> v + 1);
+          log.trace("No updates for {}", querier.toString());
+
+          if (Collections.min(consecutiveEmptyResults.values())
+              >= CONSECUTIVE_EMPTY_RESULTS_BEFORE_RETURN) {
+            log.trace("More than " + CONSECUTIVE_EMPTY_RESULTS_BEFORE_RETURN
+                + " consecutive empty results for all queriers, returning");
+            return null;
+          } else {
+            continue;
+          }
+        } else {
+          consecutiveEmptyResults.put(querier, 0);
+        }
+
+        log.debug("Returning {} records for {}", results.size(), querier.toString());
+        return results;
+      } catch (SQLException sqle) {
+        log.error("Failed to run query for table {}: {}", querier.toString(), sqle);
+        resetAndRequeueHead(querier);
+        return null;
+      } catch (Throwable t) {
+        resetAndRequeueHead(querier);
+        // This task has failed, so close any resources (may be reopened if needed) before throwing
+        closeResources();
+        throw t;
+      }
+    }
+
+    // Only in case of shutdown
+    final TableQuerier querier = tableQueue.peek();
+    if (querier != null) {
+      resetAndRequeueHead(querier);
+    }
+    closeResources();
+    return null;
   }
 
-  protected void assertTimestamp(ZonedDateTime expected, java.sql.Timestamp actual) {
-    ZonedDateTime zdt = ZonedDateTime.ofInstant(actual.toInstant(), ZoneId.of("UTC"));
-    assertEquals(expected.getYear(), zdt.getYear());
-    assertEquals(expected.getMonthValue(), zdt.getMonthValue());
-    assertEquals(expected.getDayOfMonth(), zdt.getDayOfMonth());
-    assertEquals(expected.getHour(), zdt.getHour());
-    assertEquals(expected.getMinute(), zdt.getMinute());
-    assertEquals(expected.getSecond(), zdt.getSecond());
-    assertEquals(expected.getNano(), zdt.getNano());
+  private void resetAndRequeueHead(TableQuerier expectedHead) {
+    log.debug("Resetting querier {}", expectedHead.toString());
+    TableQuerier removedQuerier = tableQueue.poll();
+    assert removedQuerier == expectedHead;
+    expectedHead.reset(time.milliseconds());
+    tableQueue.add(expectedHead);
   }
 
-  @Test
-  public void shouldMapPrimitiveSchemaTypeToSqlTypes() {
-    assertPrimitiveMapping(Type.INT8, "tinyint");
-    assertPrimitiveMapping(Type.INT16, "smallint");
-    assertPrimitiveMapping(Type.INT32, "int");
-    assertPrimitiveMapping(Type.INT64, "bigint");
-    assertPrimitiveMapping(Type.FLOAT32, "real");
-    assertPrimitiveMapping(Type.FLOAT64, "float");
-    assertPrimitiveMapping(Type.BOOLEAN, "bit");
-    assertPrimitiveMapping(Type.BYTES, "varbinary(max)");
-    assertPrimitiveMapping(Type.STRING, "varchar(max)");
-  }
+  private void validateNonNullable(
+      String incrementalMode,
+      String table,
+      String incrementingColumn,
+      List<String> timestampColumns
+  ) {
+    try {
+      Set<String> lowercaseTsColumns = new HashSet<>();
+      for (String timestampColumn: timestampColumns) {
+        lowercaseTsColumns.add(timestampColumn.toLowerCase(Locale.getDefault()));
+      }
 
-  @Test
-  public void shouldMapDecimalSchemaTypeToDecimalSqlType() {
-    assertDecimalMapping(0, "decimal(38,0)");
-    assertDecimalMapping(3, "decimal(38,3)");
-    assertDecimalMapping(4, "decimal(38,4)");
-    assertDecimalMapping(5, "decimal(38,5)");
-  }
+      boolean incrementingOptional = false;
+      boolean atLeastOneTimestampNotOptional = false;
+      final Connection conn = cachedConnectionProvider.getConnection();
+      boolean autoCommit = conn.getAutoCommit();
+      try {
+        conn.setAutoCommit(true);
+        Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, table, null);
+        for (ColumnDefinition defn : defnsById.values()) {
+          String columnName = defn.id().name();
+          if (columnName.equalsIgnoreCase(incrementingColumn)) {
+            incrementingOptional = defn.isOptional();
+          } else if (lowercaseTsColumns.contains(columnName.toLowerCase(Locale.getDefault()))) {
+            if (!defn.isOptional()) {
+              atLeastOneTimestampNotOptional = true;
+            }
+          }
+        }
+      } finally {
+        conn.setAutoCommit(autoCommit);
+      }
 
-  @Test
-  public void shouldMapDataTypes() {
-    verifyDataTypeMapping("tinyint", Schema.INT8_SCHEMA);
-    verifyDataTypeMapping("smallint", Schema.INT16_SCHEMA);
-    verifyDataTypeMapping("int", Schema.INT32_SCHEMA);
-    verifyDataTypeMapping("bigint", Schema.INT64_SCHEMA);
-    verifyDataTypeMapping("real", Schema.FLOAT32_SCHEMA);
-    verifyDataTypeMapping("float", Schema.FLOAT64_SCHEMA);
-    verifyDataTypeMapping("bit", Schema.BOOLEAN_SCHEMA);
-    verifyDataTypeMapping("varchar(max)", Schema.STRING_SCHEMA);
-    verifyDataTypeMapping("varbinary(max)", Schema.BYTES_SCHEMA);
-    verifyDataTypeMapping("decimal(38,0)", Decimal.schema(0));
-    verifyDataTypeMapping("decimal(38,4)", Decimal.schema(4));
-    verifyDataTypeMapping("date", Date.SCHEMA);
-    verifyDataTypeMapping("time", Time.SCHEMA);
-    verifyDataTypeMapping("datetime2", Timestamp.SCHEMA);
-  }
-
-  @Test
-  public void shouldMapDateSchemaTypeToDateSqlType() {
-    assertDateMapping("date");
-  }
-
-  @Test
-  public void shouldMapTimeSchemaTypeToTimeSqlType() {
-    assertTimeMapping("time");
-  }
-
-  @Test
-  public void shouldMapTimestampSchemaTypeToTimestampSqlType() {
-    assertTimestampMapping("datetime2");
-  }
-
-  @Test
-  public void shouldBuildCreateQueryStatement() {
-    assertEquals(
-        "CREATE TABLE [myTable] (\n"
-        + "[c1] int NOT NULL,\n"
-        + "[c2] bigint NOT NULL,\n"
-        + "[c3] varchar(max) NOT NULL,\n"
-        + "[c4] varchar(max) NULL,\n"
-        + "[c5] date DEFAULT '2001-03-15',\n"
-        + "[c6] time DEFAULT '00:00:00.000',\n"
-        + "[c7] datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "[c8] decimal(38,4) NULL,\n"
-        + "[c9] bit DEFAULT 1,\n" +
-        "PRIMARY KEY([c1]))",
-        dialect.buildCreateTableStatement(tableId, sinkRecordFields)
-    );
-
-    quoteIdentfiiers = QuoteMethod.NEVER;
-    dialect = createDialect();
-    assertEquals(
-        "CREATE TABLE myTable (\n"
-        + "c1 int NOT NULL,\n"
-        + "c2 bigint NOT NULL,\n"
-        + "c3 varchar(max) NOT NULL,\n"
-        + "c4 varchar(max) NULL,\n"
-        + "c5 date DEFAULT '2001-03-15',\n"
-        + "c6 time DEFAULT '00:00:00.000',\n"
-        + "c7 datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "c8 decimal(38,4) NULL,\n"
-        + "c9 bit DEFAULT 1,\n" +
-        "PRIMARY KEY(c1))",
-        dialect.buildCreateTableStatement(tableId, sinkRecordFields)
-    );
-  }
-
-  @Test
-  public void shouldBuildAlterTableStatement() {
-    assertStatements(
-        new String[]{
-            "ALTER TABLE [myTable] ADD\n"
-            + "[c1] int NOT NULL,\n"
-            + "[c2] bigint NOT NULL,\n"
-            + "[c3] varchar(max) NOT NULL,\n"
-            + "[c4] varchar(max) NULL,\n"
-            + "[c5] date DEFAULT '2001-03-15',\n"
-            + "[c6] time DEFAULT '00:00:00.000',\n"
-            + "[c7] datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
-            + "[c8] decimal(38,4) NULL,\n"
-            + "[c9] bit DEFAULT 1"
-        },
-        dialect.buildAlterTable(tableId, sinkRecordFields)
-    );
-
-    quoteIdentfiiers = QuoteMethod.NEVER;
-    dialect = createDialect();
-    assertStatements(
-        new String[]{
-            "ALTER TABLE myTable ADD\n"
-            + "c1 int NOT NULL,\n"
-            + "c2 bigint NOT NULL,\n"
-            + "c3 varchar(max) NOT NULL,\n"
-            + "c4 varchar(max) NULL,\n"
-            + "c5 date DEFAULT '2001-03-15',\n"
-            + "c6 time DEFAULT '00:00:00.000',\n"
-            + "c7 datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
-            + "c8 decimal(38,4) NULL,\n"
-            + "c9 bit DEFAULT 1"
-        },
-        dialect.buildAlterTable(tableId, sinkRecordFields)
-    );
-  }
-
-  @Test
-  public void shouldBuildUpsertStatement() {
-    assertEquals(
-        "merge into [myTable] with (HOLDLOCK) AS target using (select ? AS [id1], ?" +
-        " AS [id2], ? AS [columnA], ? AS [columnB], ? AS [columnC], ? AS [columnD])" +
-        " AS incoming on (target.[id1]=incoming.[id1] and target.[id2]=incoming" +
-        ".[id2]) when matched then update set [columnA]=incoming.[columnA]," +
-        "[columnB]=incoming.[columnB],[columnC]=incoming.[columnC]," +
-        "[columnD]=incoming.[columnD] when not matched then insert ([columnA], " +
-        "[columnB], [columnC], [columnD], [id1], [id2]) values (incoming.[columnA]," +
-        "incoming.[columnB],incoming.[columnC],incoming.[columnD],incoming.[id1]," +
-        "incoming.[id2]);",
-        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
-    );
-
-    quoteIdentfiiers = QuoteMethod.NEVER;
-    dialect = createDialect();
-    assertEquals(
-        "merge into myTable with (HOLDLOCK) AS target using (select ? AS id1, ?" +
-        " AS id2, ? AS columnA, ? AS columnB, ? AS columnC, ? AS columnD)" +
-        " AS incoming on (target.id1=incoming.id1 and target.id2=incoming" +
-        ".id2) when matched then update set columnA=incoming.columnA," +
-        "columnB=incoming.columnB,columnC=incoming.columnC," +
-        "columnD=incoming.columnD when not matched then insert (columnA, " +
-        "columnB, columnC, columnD, id1, id2) values (incoming.columnA," +
-        "incoming.columnB,incoming.columnC,incoming.columnD,incoming.id1," +
-        "incoming.id2);",
-        dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
-    );
-  }
-
-  @Test
-  public void createOneColNoPk() {
-    verifyCreateOneColNoPk(
-        "CREATE TABLE [myTable] (" + System.lineSeparator() + "[col1] int NOT NULL)");
-  }
-
-  @Test
-  public void createOneColOnePk() {
-    verifyCreateOneColOnePk(
-        "CREATE TABLE [myTable] (" + System.lineSeparator() + "[pk1] int NOT NULL," +
-        System.lineSeparator() + "PRIMARY KEY([pk1]))");
-  }
-
-  @Test
-  public void createOneColOnePkInString() {
-    verifyCreateOneColOnePkAsString(
-        "CREATE TABLE [myTable] (" + System.lineSeparator() + "[pk1] varchar(900) NOT NULL," +
-          System.lineSeparator() + "PRIMARY KEY([pk1]))");
-  }
-
-  @Test
-  public void createThreeColTwoPk() {
-    verifyCreateThreeColTwoPk(
-        "CREATE TABLE [myTable] (" + System.lineSeparator() + "[pk1] int NOT NULL," +
-        System.lineSeparator() + "[pk2] int NOT NULL," + System.lineSeparator() +
-        "[col1] int NOT NULL," + System.lineSeparator() + "PRIMARY KEY([pk1],[pk2]))");
-  }
-
-  @Test
-  public void alterAddOneCol() {
-    verifyAlterAddOneCol(
-        "ALTER TABLE [myTable] ADD" + System.lineSeparator() + "[newcol1] int NULL");
-  }
-
-  @Test
-  public void alterAddTwoCol() {
-    verifyAlterAddTwoCols(
-        "ALTER TABLE [myTable] ADD" + System.lineSeparator() + "[newcol1] int NULL," +
-        System.lineSeparator() + "[newcol2] int DEFAULT 42");
-  }
-
-  @Test
-  public void upsert1() {
-    TableId customer = tableId("Customer");
-    assertEquals(
-        "merge into [Customer] with (HOLDLOCK) AS target using (select ? AS [id], ? AS [name], ? " +
-        "AS [salary], ? AS [address]) AS incoming on (target.[id]=incoming.[id]) when matched then update set " +
-        "[name]=incoming.[name],[salary]=incoming.[salary],[address]=incoming" +
-        ".[address] when not matched then insert " +
-        "([name], [salary], [address], [id]) values (incoming.[name],incoming" +
-        ".[salary],incoming.[address],incoming.[id]);",
-        dialect.buildUpsertQueryStatement(
-            customer,
-            columns(customer, "id"),
-            columns(customer, "name", "salary", "address")
-        )
-    );
-
-    quoteIdentfiiers = QuoteMethod.NEVER;
-    dialect = createDialect();
-    assertEquals(
-        "merge into Customer with (HOLDLOCK) AS target using (select ? AS id, ? AS name, ? " +
-        "AS salary, ? AS address) AS incoming on (target.id=incoming.id) when matched then update set " +
-        "name=incoming.name,salary=incoming.salary,address=incoming" +
-        ".address when not matched then insert " +
-        "(name, salary, address, id) values (incoming.name,incoming" +
-        ".salary,incoming.address,incoming.id);",
-        dialect.buildUpsertQueryStatement(
-            customer,
-            columns(customer, "id"),
-            columns(customer, "name", "salary", "address")
-        )
-    );
-  }
-
-  @Test
-  public void upsert2() {
-    TableId book = new TableId(null, null, "Book");
-    assertEquals(
-        "merge into [Book] with (HOLDLOCK) AS target using (select ? AS [author], ? AS [title], ?" +
-        " AS [ISBN], ? AS [year], ? AS [pages])" +
-        " AS incoming on (target.[author]=incoming.[author] and target.[title]=incoming.[title])" +
-        " when matched then update set [ISBN]=incoming.[ISBN],[year]=incoming.[year]," +
-        "[pages]=incoming.[pages] when not " +
-        "matched then insert ([ISBN], [year], [pages], [author], [title]) values (incoming" +
-        ".[ISBN],incoming.[year]," + "incoming.[pages],incoming.[author],incoming.[title]);",
-        dialect.buildUpsertQueryStatement(
-            book,
-            columns(book, "author", "title"),
-            columns(book, "ISBN", "year", "pages")
-        )
-    );
-
-    quoteIdentfiiers = QuoteMethod.NEVER;
-    dialect = createDialect();
-    assertEquals(
-        "merge into Book with (HOLDLOCK) AS target using (select ? AS author, ? AS title, ?" +
-        " AS ISBN, ? AS year, ? AS pages)" +
-        " AS incoming on (target.author=incoming.author and target.title=incoming.title)" +
-        " when matched then update set ISBN=incoming.ISBN,year=incoming.year," +
-        "pages=incoming.pages when not " +
-        "matched then insert (ISBN, year, pages, author, title) values (incoming" +
-        ".ISBN,incoming.year," + "incoming.pages,incoming.author,incoming.title);",
-        dialect.buildUpsertQueryStatement(
-            book,
-            columns(book, "author", "title"),
-            columns(book, "ISBN", "year", "pages")
-        )
-    );
-  }
-
-  @Test(expected=ConnectException.class)
-  public void shouldFailDatetimeColumnAsTimeStampColumn() throws SQLException, ConnectException {
-    String timeStampColumnName = "start_time";
-    List<ColumnId> timestampColumns = new ArrayList<>();
-    timestampColumns.add(new ColumnId(tableId, timeStampColumnName));
-    ResultSetMetaData spyRsMetadata = Mockito.spy(ResultSetMetaData.class);
-    Mockito.doReturn(1).when(spyRsMetadata).getColumnCount();
-
-    Mockito.doReturn(timeStampColumnName).when(spyRsMetadata).getColumnName(1);
-    Mockito.doReturn("datetime").when(spyRsMetadata).getColumnTypeName(1);
-
-    dialect.validateSpecificColumnTypes(spyRsMetadata, timestampColumns);
-  }
-
-  @Test
-  public void shouldNotFailDatetimeColumnAsRegularColumn() throws SQLException, ConnectException {
-    String timeStampColumnName = "start_time";
-    String regularColumnName = "datetime_as_regular";
-
-    List<ColumnId> timestampColumns = new ArrayList<>();
-    timestampColumns.add(new ColumnId(tableId, timeStampColumnName));
-    ResultSetMetaData spyRsMetadata = Mockito.spy(ResultSetMetaData.class);
-    Mockito.doReturn(2).when(spyRsMetadata).getColumnCount();
-
-    Mockito.doReturn(regularColumnName).when(spyRsMetadata).getColumnName(1);
-    Mockito.doReturn("datetime").when(spyRsMetadata).getColumnTypeName(1);
-
-    Mockito.doReturn(timeStampColumnName).when(spyRsMetadata).getColumnName(2);
-    Mockito.doReturn("datetime2").when(spyRsMetadata).getColumnTypeName(2);
-
-    dialect.validateSpecificColumnTypes(spyRsMetadata, timestampColumns);
-  }
-
-
-  @Test
-  public void shouldSanitizeUrlWithoutCredentialsInProperties() {
-    assertSanitizedUrl(
-        "jdbc:sqlserver://;servername=server_name;"
-        + "integratedSecurity=true;authenticationScheme=JavaKerberos",
-        "jdbc:sqlserver://;servername=server_name;"
-        + "integratedSecurity=true;authenticationScheme=JavaKerberos"
-    );
-  }
-
-  @Test
-  public void shouldSanitizeUrlWithCredentialsInUrlProperties() {
-    assertSanitizedUrl(
-        "jdbc:sqlserver://;servername=server_name;password=secret;keyStoreSecret=secret;"
-        + "gsscredential=secret;integratedSecurity=true;authenticationScheme=JavaKerberos",
-        "jdbc:sqlserver://;servername=server_name;password=****;keyStoreSecret=****;"
-        + "gsscredential=****;integratedSecurity=true;authenticationScheme=JavaKerberos"
-    );
-    assertSanitizedUrl(
-        "jdbc:sqlserver://;password=secret;servername=server_name;keyStoreSecret=secret;"
-        + "gsscredential=secret;integratedSecurity=true;authenticationScheme=JavaKerberos",
-        "jdbc:sqlserver://;password=****;servername=server_name;keyStoreSecret=****;"
-        + "gsscredential=****;integratedSecurity=true;authenticationScheme=JavaKerberos"
-    );
+      // Validate that requested columns for offsets are NOT NULL. Currently this is only performed
+      // for table-based copying because custom query mode doesn't allow this to be looked up
+      // without a query or parsing the query since we don't have a table name.
+      if ((incrementalMode.equals(JdbcSourceConnectorConfig.MODE_INCREMENTING)
+           || incrementalMode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING))
+          && incrementingOptional) {
+        throw new ConnectException("Cannot make incremental queries using incrementing column "
+                                   + incrementingColumn + " on " + table + " because this column "
+                                   + "is nullable.");
+      }
+      if ((incrementalMode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP)
+           || incrementalMode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING))
+          && !atLeastOneTimestampNotOptional) {
+        throw new ConnectException("Cannot make incremental queries using timestamp columns "
+                                   + timestampColumns + " on " + table + " because all of these "
+                                   + "columns "
+                                   + "nullable.");
+      }
+    } catch (SQLException e) {
+      throw new ConnectException("Failed trying to validate that columns used for offsets are NOT"
+                                 + " NULL", e);
+    }
   }
 }

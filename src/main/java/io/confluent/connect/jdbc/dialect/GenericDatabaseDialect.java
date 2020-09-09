@@ -1553,7 +1553,12 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       Object value
   ) throws SQLException {
     if (value == null) {
-      statement.setObject(index, null);
+      Integer type = getSqlTypeForSchema(schema);
+      if (type != null) {
+        statement.setNull(index, type);
+      } else {
+        statement.setObject(index, null);
+      }
     } else {
       boolean bound = maybeBindLogical(statement, index, schema, value);
       if (!bound) {
@@ -1563,6 +1568,15 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         throw new ConnectException("Unsupported source data type: " + schema.type());
       }
     }
+  }
+
+  /**
+   * Dialects not supporting `setObject(index, null)` can override this method
+   * to provide a specific sqlType, as per the JDBC documentation
+   * https://docs.oracle.com/javase/7/docs/api/java/sql/PreparedStatement.html
+   */
+  protected Integer getSqlTypeForSchema(Schema schema) {
+    return null;
   }
 
   protected boolean maybeBindPrimitive(

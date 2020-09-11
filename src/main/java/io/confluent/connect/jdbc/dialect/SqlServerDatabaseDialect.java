@@ -64,6 +64,9 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
   private static final DateTimeFormatter DATE_TIME_FORMATTER =
       DateTimeFormatter.ofPattern(DATE_TIME_FORMAT);
 
+  private static final int MSSQL_2016_VERSION = 13;
+  private static final int PRE_MSSQL_2016_VERSION = 12;
+
   /**
    * The provider for {@link SqlServerDatabaseDialect}.
    */
@@ -89,6 +92,21 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
   public SqlServerDatabaseDialect(AbstractConfig config) {
     super(config, new IdentifierRules(".", "[", "]"));
     jtdsDriver = jdbcUrlInfo == null ? false : jdbcUrlInfo.subprotocol().matches("jtds");
+  }
+
+  public boolean sqlServer2016OrLater() {
+    //DATETIME columns are handled different post MSSQL SERVER 2016
+    String jdbcDatabaseMajorVersion = jdbcDriverInfo().productVersion().split("\\.")[0];
+    int jdbcDatabaseMajorVersionValue = PRE_MSSQL_2016_VERSION;
+    try {
+      jdbcDatabaseMajorVersionValue = Integer.parseInt(jdbcDatabaseMajorVersion);
+    } catch (NumberFormatException e) {
+      log.warn("Could not retrieve MSSQL Database version from JDBC."
+              + "Version is used to verify timestamp mode compatibility with "
+              + "Sql Server Datetime columns. Defaulting to pre 2016 version."
+              + "Error:" + e.toString());
+    }
+    return (jdbcDatabaseMajorVersionValue >= MSSQL_2016_VERSION);
   }
 
   @Override

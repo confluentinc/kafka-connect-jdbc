@@ -57,6 +57,21 @@ public class JdbcSourceConnectorTest {
   private EmbeddedDerby db;
   private Map<String, String> connProps;
 
+  public static class MockJdbcSourceConnector extends JdbcSourceConnector {
+    CachedConnectionProvider provider;
+    public MockJdbcSourceConnector() {}
+    public MockJdbcSourceConnector(CachedConnectionProvider provider) {
+      this.provider = provider;
+    }
+    @Override
+    protected CachedConnectionProvider connectionProvider(
+            int maxConnAttempts,
+            long retryBackoff
+    ) {
+      return provider;
+    }
+  }
+
   @Mock
   private DatabaseDialect dialect;
 
@@ -104,15 +119,7 @@ public class JdbcSourceConnectorTest {
   @Test
   public void testStartStop() throws Exception {
     CachedConnectionProvider mockCachedConnectionProvider = PowerMock.createMock(CachedConnectionProvider.class);
-    connector = new JdbcSourceConnector() {
-        @Override
-        protected CachedConnectionProvider connectionProvider(
-            int maxConnAttempts,
-            long retryBackoff
-        ) {
-            return mockCachedConnectionProvider;
-        }
-    };
+    connector  = new MockJdbcSourceConnector(mockCachedConnectionProvider);
     // Should request a connection, then should close it on stop(). The background thread may also
     // request connections any time it performs updates.
     Connection conn = PowerMock.createMock(Connection.class);

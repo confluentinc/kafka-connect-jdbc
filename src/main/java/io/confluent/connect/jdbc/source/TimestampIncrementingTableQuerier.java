@@ -34,7 +34,6 @@ import java.util.TimeZone;
 import java.util.List;
 import java.util.Map;
 
-import io.confluent.connect.jdbc.dialect.SqlServerDatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.source.SchemaMapping.FieldSetter;
 import io.confluent.connect.jdbc.source.TimestampIncrementingCriteria.CriteriaValues;
@@ -42,8 +41,6 @@ import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
-
-import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG;
 
 /**
  * <p>
@@ -76,7 +73,6 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   private final Map<String, String> partition;
   private final String topic;
   private final TimeZone timeZone;
-  private boolean verifiedSqlServerTimestamp = false;
 
   public TimestampIncrementingTableQuerier(DatabaseDialect dialect, QueryMode mode, String name,
                                            String topicPrefix,
@@ -161,48 +157,10 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
       resultSet = executeQuery();
       String schemaName = tableId != null ? tableId.tableName() : null; // backwards compatible
       ResultSetMetaData metadata = resultSet.getMetaData();
-      testForUnsupportedDatabaseColumnTypes(metadata);
+      dialect.validateSpecificColumnsTypes(metadata, timestampColumns);
       schemaMapping = SchemaMapping.create(schemaName, metadata, dialect);
     }
   }
-
-  /**
-   * Do runtime checks on table metadata
-   * If SqlServer dialect (Sql Server 2016 or older), time stamp mode configured,
-   * and time stamp column is datetime, kill task
-   * @param metadata table meta data
-   * @throws ConnectException if run time check failed
-   */
-  private void testForUnsupportedDatabaseColumnTypes(
-          ResultSetMetaData metadata
-  ) throws ConnectException {
-    if (verifiedSqlServerTimestamp) {
-      return;
-    }
-    if (dialect.name().equals("SqlServer")) {
-      SqlServerDatabaseDialect sqlServerDialect = (SqlServerDatabaseDialect)dialect;
-      if (sqlServerDialect.sqlServer2016OrLater()) {
-        try {
-          for (int i = 1; i < metadata.getColumnCount(); i++) {
-            if (metadata.getColumnTypeName(i).equals(DATETIME)) {
-              for (ColumnId id: timestampColumns) {
-                if (id.name().equals(metadata.getColumnName(i))) {
-                  throw new ConnectException(
-                          "A DATETIME column is configured for " + TIMESTAMP_COLUMN_NAME_CONFIG
-                          + " with Sql Server. DATETIME is not supported. Use DATETIME2 instead.");
-                }
-              }
-            }
-          }
-        } catch (SQLException sqlException) {
-          throw new ConnectException("Failed to get table meta data"
-                 + "while verifying Timestamp column type:", sqlException);
-        }
-      }
-    }
-    verifiedSqlServerTimestamp = true;
-  }
-
 
   private void findDefaultAutoIncrementingColumn(Connection db) throws SQLException {
     // Default when unspecified uses an autoincrementing column

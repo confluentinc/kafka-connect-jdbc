@@ -241,7 +241,6 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     props.put(JdbcSinkConfig.CONNECTION_URL, "stub");
     props.put(JdbcSinkConfig.MAX_RETRIES, String.valueOf(maxRetries));
     props.put(JdbcSinkConfig.RETRY_BACKOFF_MS, String.valueOf(retryBackoffMs));
-    expect()
     task.start(props);
 
     replayAll();

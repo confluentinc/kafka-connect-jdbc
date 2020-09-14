@@ -116,7 +116,7 @@ public class JdbcSinkTask extends SinkTask {
   private void retryAndSendDLQ(Collection<SinkRecord> records) {
     try {
       writer.write(records);
-  } catch (SQLException e) {
+    } catch (SQLException e) {
       reporter.report(records.iterator().next(), e);
     }
   }

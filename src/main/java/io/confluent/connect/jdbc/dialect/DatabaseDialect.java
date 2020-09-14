@@ -452,7 +452,10 @@ public interface DatabaseDialect extends ConnectionProvider {
    * @throws ConnectException   if column type not compatible with connector
    *                            or if there is an error accessing the result set metadata
    */
-  void validateSpecificColumnsTypes(ResultSetMetaData rsMetadata, List<ColumnId> timestampColumns) throws ConnectException;
+  void validateSpecificColumnsTypes(
+          ResultSetMetaData rsMetadata,
+          List<ColumnId> timestampColumns
+  ) throws ConnectException;
 
   /**
    * A function to bind the values from a sink record into a prepared statement.

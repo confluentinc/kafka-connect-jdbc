@@ -15,28 +15,45 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.TimeZone;
 
+import io.confluent.connect.jdbc.util.ColumnId;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.junit.Test;
 
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
+import org.mockito.Mockito;
 
 import static org.junit.Assert.assertEquals;
 
 public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatabaseDialect> {
 
+  public class MockSqlServerDatabaseDialect extends SqlServerDatabaseDialect {
+    public MockSqlServerDatabaseDialect() {
+      super(sourceConfigWithUrl("jdbc:jtds:sqlsserver://something"));
+    }
+    @Override
+    public boolean versionWithBreakingDatetimeChange() {
+      return true;
+    }
+  }
+
   @Override
   protected SqlServerDatabaseDialect createDialect() {
-    return new SqlServerDatabaseDialect(sourceConfigWithUrl("jdbc:jtds:sqlsserver://something"));
+    return new MockSqlServerDatabaseDialect();
   }
 
   @Test
@@ -329,6 +346,40 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
         )
     );
   }
+
+  @Test(expected=ConnectException.class)
+  public void shouldFailDatetimeColumnAsTimeStampColumn() throws SQLException, ConnectException {
+    String timeStampColumnName = "start_time";
+    List<ColumnId> timestampColumns = new ArrayList<>();
+    timestampColumns.add(new ColumnId(tableId, timeStampColumnName));
+    ResultSetMetaData spyRsMetadata = Mockito.spy(ResultSetMetaData.class);
+    Mockito.doReturn(1).when(spyRsMetadata).getColumnCount();
+
+    Mockito.doReturn(timeStampColumnName).when(spyRsMetadata).getColumnName(1);
+    Mockito.doReturn("datetime").when(spyRsMetadata).getColumnTypeName(1);
+
+    dialect.validateSpecificColumnsTypes(spyRsMetadata, timestampColumns);
+  }
+
+  @Test
+  public void shouldNotFailDatetimeColumnAsRegularColumn() throws SQLException, ConnectException {
+    String timeStampColumnName = "start_time";
+    String regularColumnName = "datetime_as_regular";
+
+    List<ColumnId> timestampColumns = new ArrayList<>();
+    timestampColumns.add(new ColumnId(tableId, timeStampColumnName));
+    ResultSetMetaData spyRsMetadata = Mockito.spy(ResultSetMetaData.class);
+    Mockito.doReturn(2).when(spyRsMetadata).getColumnCount();
+
+    Mockito.doReturn(regularColumnName).when(spyRsMetadata).getColumnName(1);
+    Mockito.doReturn("datetime").when(spyRsMetadata).getColumnTypeName(1);
+
+    Mockito.doReturn(timeStampColumnName).when(spyRsMetadata).getColumnName(2);
+    Mockito.doReturn("datetime2").when(spyRsMetadata).getColumnTypeName(2);
+
+    dialect.validateSpecificColumnsTypes(spyRsMetadata, timestampColumns);
+  }
+
 
   @Test
   public void shouldSanitizeUrlWithoutCredentialsInProperties() {

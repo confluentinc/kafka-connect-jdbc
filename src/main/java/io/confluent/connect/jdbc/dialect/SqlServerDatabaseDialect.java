@@ -366,10 +366,10 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
 
     if (versionWithBreakingDatetimeChange()) {
       try {
-        for (int i = 1; i < rsMetadata.getColumnCount(); i++) {
-          if (rsMetadata.getColumnTypeName(i).equals(DATETIME)) {
+        for (int i = 0; i < rsMetadata.getColumnCount(); i++) {
+          if (rsMetadata.getColumnTypeName(i + 1).equals(DATETIME)) {
             for (ColumnId id: timestampColumns) {
-              if (id.name().equals(rsMetadata.getColumnName(i))) {
+              if (id.name().equals(rsMetadata.getColumnName(i + 1))) {
                 throw new ConnectException(
                         "A DATETIME column is configured for " + TIMESTAMP_COLUMN_NAME_CONFIG
                         + " with Sql Server. DATETIME is not supported. Use DATETIME2 instead.");

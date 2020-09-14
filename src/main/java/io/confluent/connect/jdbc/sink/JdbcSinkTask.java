@@ -19,6 +19,7 @@ import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.RetriableException;
+import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTask;
 import org.slf4j.Logger;
@@ -26,6 +27,7 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.SQLException;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Map;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
@@ -33,6 +35,8 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 
 public class JdbcSinkTask extends SinkTask {
   private static final Logger log = LoggerFactory.getLogger(JdbcSinkTask.class);
+
+  private ErrantRecordReporter reporter;
 
   DatabaseDialect dialect;
   JdbcSinkConfig config;
@@ -45,6 +49,12 @@ public class JdbcSinkTask extends SinkTask {
     config = new JdbcSinkConfig(props);
     initWriter();
     remainingRetries = config.maxRetries;
+    try {
+      reporter = context.errantRecordReporter(); // may be null if DLQ not enabled
+    } catch (NoClassDefFoundError e) {
+      // Will occur in Connect runtimes earlier than 2.6
+      reporter = null;
+    }
   }
 
   void initWriter() {
@@ -73,6 +83,11 @@ public class JdbcSinkTask extends SinkTask {
     try {
       writer.write(records);
     } catch (SQLException sqle) {
+      if (reporter != null) {
+        for (SinkRecord record : records) {
+          retryAndSendDLQ(Collections.singletonList(record));
+        }
+      }
       log.warn(
           "Write of {} records failed, remainingRetries={}",
           records.size(),
@@ -96,6 +111,14 @@ public class JdbcSinkTask extends SinkTask {
       }
     }
     remainingRetries = config.maxRetries;
+  }
+
+  private void retryAndSendDLQ(Collection<SinkRecord> records) {
+    try {
+      writer.write(records);
+  } catch (SQLException e) {
+      reporter.report(records.iterator().next(), e);
+    }
   }
 
   @Override

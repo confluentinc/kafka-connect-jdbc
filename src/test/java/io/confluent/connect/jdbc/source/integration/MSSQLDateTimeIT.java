@@ -28,7 +28,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.DriverManager;
-import java.sql.Statement;
 import java.sql.Connection;
 import java.sql.Timestamp;
 import java.sql.PreparedStatement;
@@ -36,7 +35,6 @@ import java.time.Duration;
 
 import io.confluent.connect.jdbc.integration.BaseConnectorIT;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
-import java.lang.StringBuilder;
 
 import static org.junit.Assert.assertEquals;
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG;
@@ -58,6 +56,19 @@ import static org.apache.kafka.connect.runtime.ConnectorConfig.KEY_CONVERTER_CLA
 import static org.apache.kafka.connect.runtime.ConnectorConfig.TASKS_MAX_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
 
+/**
+ * This test is to verify that JDBC source connector forbids Datetime column type
+ * for MSSQL Server (2016 and after).
+ *
+ * Datetime is forbidden because JDBC handles all time stamp columns as {@link java.sql.Time}.
+ * Datetime is only accurate to 3.33 MS but JDBC provides much higher accuracy
+ * for SQL operations against Datetime. Therefore MSSQL casts Datetime to a higher precision
+ * but it does so recursively (3.333333 MS). Since JDBC casts to higher precision
+ * non recursively (3.330000 MS) our {@link io.confluent.connect.jdbc.source.TimestampIncrementingTableQuerier}
+ * loops on the most recent record.
+ *
+ * Older MSSQL Server instances do not have this problem.
+ */
 @Category(IntegrationTest.class)
 public class MSSQLDateTimeIT extends BaseConnectorIT {
 
@@ -87,15 +98,15 @@ public class MSSQLDateTimeIT extends BaseConnectorIT {
 
     @Before
     public void setup() throws Exception {
-        //Create table
+        //Set up JDBC Driver
         Class.forName("com.microsoft.sqlserver.jdbc.SQLServerDriver");
         connection = DriverManager.getConnection(MSSQL_URL, USER, PASS);
         startConnect();
-
     }
 
     @After
     public void close() throws SQLException {
+        deleteTable();
         connect.deleteConnector(CONNECTOR_NAME);
         connection.close();
         // Stop all Connect, Kafka and Zk threads.
@@ -103,96 +114,126 @@ public class MSSQLDateTimeIT extends BaseConnectorIT {
     }
 
     /**
-     * Verify that after a number of poll intervals the number of records in topic
-     * still equal to the number of records written to the MSSQL Server instance.
-     *
-     * This test is for a datetime to datetime2 comparison error in MSSQL Server (2016 and after).
-     * Datetime is converted recursively to a higher precision (eg- 3.33 MS would be 3.33333 ),
-     * while java.sql.Timestamp converts by tacking on 0s (3.33000).
+     * Verify that Datetime as a timestamp column in Timestamp mode kills task.
      */
-    // Verify connect error thrown
     @Test
-    public void verifyDateTimeTSModeKillsTasks() throws Exception {
+    public void verifyTimeStampModeFailsWithDateTime() throws Exception {
         // Setup up props for the source connector
-        props = configProperties(true);
-        createDateTimeTable("DATETIME", "VARCHAR(255)", true);
-        ZoneId utc = ZoneId.of("UTC");
+        props = configProperties();
+        props.put(MODE_CONFIG, MODE_TIMESTAMP); // set to TimeStamp mode
+
+        String sql = "CREATE TABLE " + MSSQL_Table
+                + " (start_time DATETIME not NULL, record VARCHAR(255))";
+        PreparedStatement createStmt = connection.prepareStatement(sql);
+        executeSQL(createStmt);
+
         // Create topic in Kafka
         KAFKA_TOPICS.forEach(topic -> connect.kafka().createTopic(topic, 1));
-
         // Configure source connector
         configureAndWaitForConnector();
 
-        java.sql.Timestamp t = java.sql.Timestamp.from(
-                ZonedDateTime.of(2016, 12, 8, 19, 34, 56, 2000000, utc).toInstant()
+        Timestamp t = Timestamp.from(
+                ZonedDateTime.of(2016, 12, 8, 19, 34, 56, 0, ZoneId.of("UTC")).toInstant()
         );
 
-        writeSingleRowWithTimestamp(t, true, true);
+        sql = "INSERT INTO " + MSSQL_Table + " (start_time, record) "
+                + "values (?, ?)";
+        PreparedStatement insertStmt = connection.prepareStatement(sql);
+        insertStmt.setTimestamp(1, t);
+        insertStmt.setString(2, "example record value");
+        executeSQL(insertStmt);
 
         connect.assertions().assertConnectorIsRunningAndTasksHaveFailed(
                 CONNECTOR_NAME,
                 Math.min(KAFKA_TOPICS.size(), TASKS_MAX),
                 "failed to verify that tasks have failed"
         );
-
-        deleteTable();
-    }
-
-
-    @Test
-    public void verifyDateTimeTSAndIncrModeKillsTasks() throws Exception {
-        // Setup up props for the source connector
-        props = configProperties(false);
-        createDateTimeTable("DATETIME", "VARCHAR(255)", false);
-        ZoneId utc = ZoneId.of("UTC");
-        // Create topic in Kafka
-        KAFKA_TOPICS.forEach(topic -> connect.kafka().createTopic(topic, 1));
-
-        // Configure source connector
-        configureAndWaitForConnector();
-
-        java.sql.Timestamp t = java.sql.Timestamp.from(
-                ZonedDateTime.of(2016, 12, 8, 19, 34, 56, 2000000, utc).toInstant()
-        );
-
-        writeSingleRowWithTimestamp(t, true, false);
-
-        connect.assertions().assertConnectorIsRunningAndTasksHaveFailed(
-                CONNECTOR_NAME,
-                Math.min(KAFKA_TOPICS.size(), TASKS_MAX),
-                "failed to verify that tasks have failed"
-        );
-
-        deleteTable();
     }
 
 
     /**
-     * Verify that after a number of poll intervals the number of records in topic
-     * still equal to the number of records written to the MSSQL Server instance.
-     *
-     * This test is for a datetime to datetime2 comparison error in MSSQL Server (2016 and after).
-     * Datetime is converted recursively to a higer precision (eg- 3.33 MS would be 3.33333 ),
-     * while java.sql.Timestamp converts by tacking on 0s (3.33000).
+     * Verify that Datetime as a timestamp column in Timestamp and Incrementing mode
+     * kills task.
      */
-
     @Test
-    public void verifyDATETIME2DoesNotKillTask() throws Exception {
-        props = configProperties(true);
-        // And verify that datetime in a non-timestamp column does not kill task.
-        createDateTimeTable("DATETIME2", "DATETIME", true);
-        ZoneId utc = ZoneId.of("UTC");
+    public void verifyTimeStampAndIncrementingModeFailsWithDatetime() throws Exception {
+        // Setup up props for the source connector
+        props = configProperties();
+        // set to TimeStamp + Incrementing mode
+        props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+        props.put(INCREMENTING_COLUMN_NAME_CONFIG, "incrementing_col");
+
+
+        String sql = "CREATE TABLE " + MSSQL_Table
+                + " (start_time DATETIME not NULL, incrementing_col int not NULL, "
+                + "record VARCHAR(255))";
+        PreparedStatement createStmt = connection.prepareStatement(sql);
+        executeSQL(createStmt);
+
+
         // Create topic in Kafka
         KAFKA_TOPICS.forEach(topic -> connect.kafka().createTopic(topic, 1));
 
         // Configure source connector
         configureAndWaitForConnector();
 
-        java.sql.Timestamp t = java.sql.Timestamp.from(
-                ZonedDateTime.of(2016, 12, 8, 19, 34, 56, 2000000, utc).toInstant()
+        Timestamp t = Timestamp.from(
+                ZonedDateTime.of(2016, 12, 8, 19, 34, 56, 0, ZoneId.of("UTC")).toInstant()
         );
 
-        writeSingleRowWithTimestamp(t, false, true);
+        sql = "INSERT INTO " + MSSQL_Table + " (start_time, incrementing_col, record) "
+                + "values (?, ?, ?)";
+        PreparedStatement insertStmt = connection.prepareStatement(sql);
+        insertStmt.setTimestamp(1, t);
+        insertStmt.setInt(2, 1);
+        insertStmt.setString(3, "example record value");
+        executeSQL(insertStmt);
+
+
+        connect.assertions().assertConnectorIsRunningAndTasksHaveFailed(
+                CONNECTOR_NAME,
+                Math.min(KAFKA_TOPICS.size(), TASKS_MAX),
+                "failed to verify that tasks have failed"
+        );
+    }
+
+
+    /**
+     * Verify that Datetime as a non timestamp column does not kill task
+     *
+     * Also Verify that after a number of poll intervals the number of records in topic
+     * still equal to the number of records written to the MSSQL Server instance.
+     * This confirms that DateTime2 works as expected.
+     *
+     */
+    @Test
+    public void verifyDateTimeAllowedAsNonTimeStamp() throws Exception {
+        props = configProperties();
+        props.put(MODE_CONFIG, MODE_TIMESTAMP);
+
+
+        String sql = "CREATE TABLE " + MSSQL_Table
+                + " (start_time DATETIME2 not NULL, record DATETIME)";
+        PreparedStatement createStmt = connection.prepareStatement(sql);
+        executeSQL(createStmt);
+
+        // Create topic in Kafka
+        KAFKA_TOPICS.forEach(topic -> connect.kafka().createTopic(topic, 1));
+
+        // Configure source connector
+        configureAndWaitForConnector();
+
+        Timestamp t = Timestamp.from(
+                ZonedDateTime.of(2016, 12, 8, 19, 34, 56, 0, ZoneId.of("UTC")).toInstant()
+        );
+
+        sql = "INSERT INTO " + MSSQL_Table + " (start_time, record) "
+                + "values (?, ?)";
+        PreparedStatement insertStmt = connection.prepareStatement(sql);
+        insertStmt.setTimestamp(1, t);
+        insertStmt.setTimestamp(2, t);
+        executeSQL(insertStmt);
+
 
         Thread.sleep(Duration.ofSeconds(30).toMillis());
         for (String topic: KAFKA_TOPICS) {
@@ -202,13 +243,10 @@ public class MSSQLDateTimeIT extends BaseConnectorIT {
                     topic);
             //Assert that records in topic == NUM_RECORDS_PRODUCED
             assertEquals(NUM_RECORDS_PRODUCED, records.count());
-
         }
-        // clean up table
-        deleteTable();
     }
 
-    private Map<String, String> configProperties(boolean timestampModeOnly) {
+    private Map<String, String> configProperties() {
         // Create a hashmap to setup source connector config properties
         Map<String, String> props = new HashMap<>();
         props.put(CONNECTOR_CLASS_CONFIG, "JdbcSourceConnector");
@@ -216,14 +254,6 @@ public class MSSQLDateTimeIT extends BaseConnectorIT {
         props.put(CONNECTION_USER_CONFIG, "sa");
         props.put(CONNECTION_PASSWORD_CONFIG, "reallyStrongPwd123");
         props.put(TABLE_WHITELIST_CONFIG, MSSQL_Table);
-
-        if (timestampModeOnly) {
-            props.put(MODE_CONFIG, MODE_TIMESTAMP);
-        } else {
-            props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
-            props.put(INCREMENTING_COLUMN_NAME_CONFIG, "ict");
-        }
-
         props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "start_time");
         props.put(TOPIC_PREFIX_CONFIG, "test-");
         props.put(POLL_INTERVAL_MS_CONFIG, "30");
@@ -236,68 +266,22 @@ public class MSSQLDateTimeIT extends BaseConnectorIT {
         return props;
     }
 
-    private void createDateTimeTable(
-            String timestampColType,
-            String regularColType,
-            boolean timestampModeOnly
-    ) throws Exception {
+    private void executeSQL(PreparedStatement stmt) throws Exception {
         try {
-            Statement stmt = connection.createStatement();
-            StringBuilder builder = new StringBuilder();
-            builder.append("CREATE TABLE " + MSSQL_Table )
-                    .append("(start_time " + timestampColType +  " not NULL, " );
-            if (!timestampModeOnly) builder.append(" ict  int not NULL, ");
-            builder.append(" record " + regularColType +  " )");
-
-            String sql = builder.toString();
-
-            stmt.executeUpdate(sql);
-            log.info("Successfully created table");
-        } catch (Exception ex) {
-            log.error("Could not create table");
-            throw ex;
-        }
-    }
-
-    private void writeSingleRowWithTimestamp(
-            Timestamp t,
-            boolean stringRecord,
-            boolean timestampModeOnly
-    ) throws Exception {
-        try {
-            StringBuilder builder = new StringBuilder();
-            builder.append("INSERT INTO " + MSSQL_Table )
-                    .append("(start_time, record" );
-            if (!timestampModeOnly) builder.append(", ict");
-            builder.append(") values (?, ?");
-            if (!timestampModeOnly) builder.append(", ?");
-            builder.append(")");
-            String sql = builder.toString();
-            PreparedStatement stmt = connection.prepareStatement(sql);
-
-
-            stmt.setTimestamp(1, t);
-            if (stringRecord) {
-                stmt.setString(2, "example record value");
-            } else {
-                stmt.setTimestamp(2, t);
-            }
-            if (!timestampModeOnly) stmt.setInt(3, 1);
-
             stmt.executeUpdate();
         } catch (Exception ex) {
-            log.error("Could not write row to MSSQL table");
+            log.error("Could not execute SQL: " + stmt.toString());
             throw ex;
         }
     }
 
-    private void deleteTable() throws Exception {
+    private void deleteTable() throws SQLException {
         try {
             PreparedStatement stmt = connection.prepareStatement(
                     "DROP TABLE " + MSSQL_Table
             );
             stmt.executeUpdate();
-        } catch (Exception ex) {
+        } catch (SQLException ex) {
             log.error("Could delete all rows in the MSSQL table");
             throw ex;
         }

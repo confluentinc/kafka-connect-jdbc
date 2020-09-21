@@ -91,6 +91,10 @@ import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.TableType;
 
+import com.jcraft.jsch.JSch;
+import com.jcraft.jsch.Session;
+import com.jcraft.jsch.JSchException;
+
 /**
  * A {@link DatabaseDialect} implementation that provides functionality based upon JDBC and SQL.
  *
@@ -131,7 +135,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   protected String catalogPattern;
   protected final String schemaPattern;
   protected final Set<String> tableTypes;
-  protected final String jdbcUrl;
+  protected String jdbcUrl;
   protected final DatabaseDialectProvider.JdbcUrlInfo jdbcUrlInfo;
   private final QuoteMethod quoteSqlIdentifiers;
   private final IdentifierRules defaultIdentifierRules;
@@ -140,6 +144,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   private volatile JdbcDriverInfo jdbcDriverInfo;
   private final int batchMaxRows;
   private final TimeZone timeZone;
+  private final boolean connectThroughSSH;
+  private final String sshTunnelHost;
+  private final Integer sshTunnelPort;
+  private final String sshTunnelUser;
+  private final String sshTunnelPassword;
+  private final String sshTunnelKey;
+  private Session session;
+  private JSch jsch;
 
   /**
    * Create a new dialect instance with the given connector configuration.
@@ -165,6 +177,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     this.defaultIdentifierRules = defaultIdentifierRules;
     this.jdbcUrl = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
     this.jdbcUrlInfo = DatabaseDialects.extractJdbcUrlInfo(jdbcUrl);
+    this.connectThroughSSH = config.getString(JdbcSourceConnectorConfig.CONNECT_THROUGH_SSH_CONFIG);
     if (config instanceof JdbcSinkConfig) {
       JdbcSinkConfig sinkConfig = (JdbcSinkConfig) config;
       catalogPattern = JdbcSourceTaskConfig.CATALOG_PATTERN_DEFAULT;
@@ -196,6 +209,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     } else {
       timeZone = TimeZone.getTimeZone(ZoneOffset.UTC);
     }
+
+    if (this.connectThroughSSH) {
+      sshTunnelHost = config.getString(JdbcSourceConnectorConfig.SSH_TUNNEL_HOST_CONFIG);
+      sshTunnelPort = config.getString(JdbcSourceConnectorConfig.SSH_TUNNEL_PORT_CONFIG);
+      sshTunnelUser = config.getString(JdbcSourceConnectorConfig.SSH_TUNNEL_USER_CONFIG);
+      sshTunnelPassword = config.getString(JdbcSourceConnectorConfig.SSH_TUNNEL_PASSWORD_CONFIG);
+      sshTunnelKey = config.getString(JdbcSourceConnectorConfig.SSH_TUNNEL_KEY_CONFIG);
+    }
   }
 
   @Override
@@ -208,7 +229,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   @Override
-  public Connection getConnection() throws SQLException {
+  public Connection getConnection() throws SQLException, JSchException {
     // These config names are the same for both source and sink configs ...
     String username = config.getString(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG);
     Password dbPassword = config.getPassword(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG);
@@ -224,6 +245,28 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     // handshake, while still giving enough time to validate once in the follower worker,
     // and again in the leader worker and still be under 90s REST serving timeout
     DriverManager.setLoginTimeout(40);
+
+    if (connectThroughSSH) {
+      String remoteDatabaseHost = this.jdbcUrlInfo.url().split(":")[0];
+      Integer remoteDatabasePort = Integer.parseInt(this.jdbcUrlInfo.url().split(":")[1]);
+    	log.info("Establishing SSH tunnel session to {}", sshTunnelHost);
+      Properties sshProps = new Properties();
+	    props.put("StrictHostKeyChecking", "no");
+	    jsch = new JSch();
+      if (sshTunnelKey != null) {
+        jsch.addIdentity(sshTunnelKey);
+        session = jsch.getSession(sshTunnelUser, sshTunnelHost, 22);
+      } else {
+        session = jsch.getSession(sshTunnelUser, sshTunnelHost, 22);
+        session.setPassword(sshTunnelPassword);
+      }
+	    session.setConfig(props);
+	    session.connect();
+	    int forwardedPort = session.setPortForwardingL(0, remoteDatabaseHost, remoteDatabasePort);
+	    jdbcUrl = jdbcUrl.replace(remoteDatabaseHost, "localhost").(remoteDatabasePort+"", "" + forwardedPort);
+	    log.debug("Updated jdbcUrl: {}", jdbcUrl);
+    }
+
     Connection connection = DriverManager.getConnection(jdbcUrl, properties);
     if (jdbcDriverInfo == null) {
       jdbcDriverInfo = createJdbcDriverInfo(connection);
@@ -241,6 +284,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       } catch (Throwable e) {
         log.warn("Error while closing connection to {}", jdbcDriverInfo, e);
       }
+    }
+    if (session != null) {
+      session.disconnect();
     }
   }
 
@@ -287,6 +333,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     if (jdbcDriverInfo == null) {
       try (Connection connection = getConnection()) {
         jdbcDriverInfo = createJdbcDriverInfo(connection);
+      } catch (JSchException jsche) {
+        throw new ConnectException("Failed to establise SSH tunnel", e);
       } catch (SQLException e) {
         throw new ConnectException("Unable to get JDBC driver information", e);
       }
@@ -492,6 +540,13 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           separator = defaultIdentifierRules.identifierDelimiter();
         }
         identifierRules.set(new IdentifierRules(separator, leadingQuoteStr, trailingQuoteStr));
+      } catch (JSchException jsche) {
+        if (defaultIdentifierRules != null) {
+          identifierRules.set(defaultIdentifierRules);
+          log.warn("Unable to get identifier metadata; using default rules", e);
+        } else {
+          throw new ConnectException("Unable to get identifier metadata", e);
+        }
       } catch (SQLException e) {
         if (defaultIdentifierRules != null) {
           identifierRules.set(defaultIdentifierRules);

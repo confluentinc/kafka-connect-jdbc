@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.source;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import com.jcraft.jsch.JSchException;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -278,9 +279,41 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public static final String QUERY_SUFFIX_CONFIG = "query.suffix";
   public static final String QUERY_SUFFIX_DEFAULT = "";
-  public static final String QUERY_SUFFIX_DOC = 
+  public static final String QUERY_SUFFIX_DOC =
       "Suffix to append at the end of the generated query.";
   public static final String QUERY_SUFFIX_DISPLAY = "Query suffix";
+
+  public static final String CONNECT_THROUGH_SSH_CONFIG = "connect.through.ssh";
+  public static final Boolean CONNECT_THROUGH_SSH_DEFAULT = false;
+  public static final String CONNECT_THROUGH_SSH_DOC =
+      "Boolean to identify if the database has to connected through a SSH tunnel. "
+      + "If configured ``true``, SSH tunnel host, port, username, password/key has to be configured as well."
+  public static final String CONNECT_THROUGH_SSH_DISPLAY = "Connect through SSH";
+
+  public static final String SSH_TUNNEL_HOST_CONFIG = "ssh.tunnel.host";
+  public static final String SSH_TUNNEL_HOST_DEFAULT = "";
+  public static final String SSH_TUNNEL_HOST_DOC = "SSH Tunnel host";
+  public static final String SSH_TUNNEL_HOST_DISPLAY = "SSH Host";
+
+  public static final String SSH_TUNNEL_PORT_CONFIG = "ssh.tunnel.port";
+  public static final Integer SSH_TUNNEL_PORT_DEFAULT = 0;
+  public static final String SSH_TUNNEL_PORT_DOC = "SSH Tunnel Port";
+  public static final String SSH_TUNNEL_PORT_DISPLAY = "SSH Port";
+
+  public static final String SSH_TUNNEL_USER_CONFIG = "ssh.tunnel.user";
+  public static final String SSH_TUNNEL_USER_DEFAULT = "";
+  public static final String SSH_TUNNEL_USER_DOC = "SSH Tunnel User";
+  public static final String SSH_TUNNEL_USER_DISPLAY = "SSH User";
+
+  public static final String SSH_TUNNEL_PASSWORD_CONFIG = "ssh.tunnel.password";
+  public static final String SSH_TUNNEL_PASSWORD_DEFAULT = "";
+  public static final String SSH_TUNNEL_PASSWORD_DOC = "SSH Tunnel Password";
+  public static final String SSH_TUNNEL_PASSWORD_DISPLAY = "SSH Password";
+
+  public static final String SSH_TUNNEL_KEY_CONFIG = "ssh.tunnel.key";
+  public static final String SSH_TUNNEL_KEY_DEFAULT = "";
+  public static final String SSH_TUNNEL_KEY_DOC = "SSH Tunnel Key";
+  public static final String SSH_TUNNEL_KEY_DISPLAY = "SSH Key";
 
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
@@ -451,7 +484,68 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.LONG,
         DIALECT_NAME_DISPLAY,
-        DatabaseDialectRecommender.INSTANCE);
+        DatabaseDialectRecommender.INSTANCE
+    ).define(
+        CONNECT_THROUGH_SSH_CONFIG,
+        Type.BOOLEAN,
+        CONNECT_THROUGH_SSH_DEFAULT,
+        Importance.LOW,
+        CONNECT_THROUGH_SSH_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        CONNECT_THROUGH_SSH_DISPLAY
+    ).define(
+        SSH_TUNNEL_HOST_CONFIG,
+        Type.STRING,
+        SSH_TUNNEL_HOST_DEFAULT,
+        Importance.LOW,
+        SSH_TUNNEL_HOST_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        SSH_TUNNEL_HOST_DISPLAY
+    ).define(
+        SSH_TUNNEL_PORT_CONFIG,
+        Type.INTEGER,
+        SSH_TUNNEL_PORT_DEFAULT,
+        Importance.LOW,
+        SSH_TUNNEL_PORT_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        SSH_TUNNEL_PORT_DISPLAY
+    ).define(
+        SSH_TUNNEL_USER_CONFIG,
+        Type.STRING,
+        SSH_TUNNEL_USER_DEFAULT,
+        Importance.LOW,
+        SSH_TUNNEL_USER_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        SSH_TUNNEL_USER_DISPLAY
+    ).define(
+        SSH_TUNNEL_PASSWORD_CONFIG,
+        Type.STRING,
+        SSH_TUNNEL_PASSWORD_DEFAULT,
+        Importance.LOW,
+        SSH_TUNNEL_PASSWORD_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        SSH_TUNNEL_PASSWORD_DISPLAY
+    ).define(
+        SSH_TUNNEL_KEY_CONFIG,
+        Type.STRING,
+        SSH_TUNNEL_KEY_DEFAULT,
+        Importance.LOW,
+        SSH_TUNNEL_KEY_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        SSH_TUNNEL_KEY_DISPLAY
+    );
   }
 
   private static final void addModeOptions(ConfigDef config) {
@@ -658,6 +752,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
           result.add(id.tableName());
         }
         return result;
+      } catch (JSchException jsche) {
+        throw new ConfigException("Couldn't open SSH tunnel " + jsche);
       } catch (SQLException e) {
         throw new ConfigException("Couldn't open connection to " + dbUrl, e);
       }

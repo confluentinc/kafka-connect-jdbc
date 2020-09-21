@@ -86,20 +86,22 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String CONNECTION_PASSWORD_DISPLAY = "JDBC Password";
 
   public static final String CONNECTION_ATTEMPTS =
-          JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_CONFIG;
-  private static final String CONNECTION_ATTEMPTS_DOC
-          = "Maximum number of attempts to retrieve a valid JDBC connection. "
-          + "Must be a positive integer.";
-  private static final String CONNECTION_ATTEMPTS_DISPLAY = "JDBC connection attempts";
-  public static final int CONNECTION_ATTEMPTS_DEFAULT = 3;
+      JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_CONFIG;
+  private static final String CONNECTION_ATTEMPTS_DOC =
+      JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_DOC;
+  private static final String CONNECTION_ATTEMPTS_DISPLAY =
+      JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_DISPLAY;
+  public static final int CONNECTION_ATTEMPTS_DEFAULT =
+      JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_DEFAULT;
 
   public static final String CONNECTION_BACKOFF =
-          JdbcSourceConnectorConfig.CONNECTION_BACKOFF_CONFIG;
-  private static final String CONNECTION_BACKOFF_DOC
-          = "Backoff time in milliseconds between connection attempts.";
-  private static final String CONNECTION_BACKOFF_DISPLAY
-          = "JDBC connection backoff in milliseconds";
-  public static final long CONNECTION_BACKOFF_DEFAULT = 10000L;
+      JdbcSourceConnectorConfig.CONNECTION_BACKOFF_CONFIG;
+  private static final String CONNECTION_BACKOFF_DOC =
+      JdbcSourceConnectorConfig.CONNECTION_BACKOFF_DOC;
+  private static final String CONNECTION_BACKOFF_DISPLAY =
+      JdbcSourceConnectorConfig.CONNECTION_BACKOFF_DISPLAY;
+  public static final long CONNECTION_BACKOFF_DEFAULT =
+      JdbcSourceConnectorConfig.CONNECTION_BACKOFF_DEFAULT;
 
   public static final String TABLE_NAME_FORMAT = "table.name.format";
   private static final String TABLE_NAME_FORMAT_DEFAULT = "${topic}";

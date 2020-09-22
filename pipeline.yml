@@ -67,6 +67,34 @@ Resources:
         - {Key: stage, Value: !Ref Stage}
         - {Key: service, Value: kafka-connect-jdbc}
         - {Key: feature, Value: 'ingestion'}
+  CodeStoreBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName:
+        Fn::Join:
+          - '-'
+          -
+            - ais
+            - Ref: Stage
+            - kafka-connect-jdbc
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          -
+            ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      AccessControl: BucketOwnerFullControl
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      Tags:
+        - {Key: tenant, Value: platform}
+        - {Key: stage, Value: !Ref Stage}
+        - {Key: service, Value: kafka-connect-jdbc}
+        - {Key: feature, Value: 'ingestion'}
   Pipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
@@ -188,7 +216,7 @@ Resources:
             post_build:
               commands:
                 - echo Build completed on `date`
-                - aws s3 cp --recursive --exclude "*" --include "kafka-connect-jdbc-5.5.2-SNAPSHOT.jar" kafka-connect-jdbc/target s3://ais-$STAGE-kafka-connect-jdbc/
+                - aws s3 cp --recursive --exclude "*" --include "kafka-connect-jdbc-5.5.1.jar" target/ s3://ais-$STAGE-kafka-connect-jdbc/
       Tags:
         - {Key: tenant, Value: platform}
         - {Key: stage, Value: !Ref Stage}

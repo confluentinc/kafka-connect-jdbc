@@ -71,16 +71,16 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final String CONNECTION_PASSWORD_DISPLAY = "JDBC Password";
 
   public static final String CONNECTION_ATTEMPTS_CONFIG = CONNECTION_PREFIX + "attempts";
-  private static final String CONNECTION_ATTEMPTS_DOC
+  public static final String CONNECTION_ATTEMPTS_DOC
       = "Maximum number of attempts to retrieve a valid JDBC connection. "
           + "Must be a positive integer.";
-  private static final String CONNECTION_ATTEMPTS_DISPLAY = "JDBC connection attempts";
+  public static final String CONNECTION_ATTEMPTS_DISPLAY = "JDBC connection attempts";
   public static final int CONNECTION_ATTEMPTS_DEFAULT = 3;
 
   public static final String CONNECTION_BACKOFF_CONFIG = CONNECTION_PREFIX + "backoff.ms";
-  private static final String CONNECTION_BACKOFF_DOC
+  public static final String CONNECTION_BACKOFF_DOC
       = "Backoff time in milliseconds between connection attempts.";
-  private static final String CONNECTION_BACKOFF_DISPLAY
+  public static final String CONNECTION_BACKOFF_DISPLAY
       = "JDBC connection backoff in milliseconds";
   public static final long CONNECTION_BACKOFF_DEFAULT = 10000L;
 

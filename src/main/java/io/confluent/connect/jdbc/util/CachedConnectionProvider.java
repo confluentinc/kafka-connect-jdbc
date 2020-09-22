@@ -99,8 +99,8 @@ public class CachedConnectionProvider implements ConnectionProvider {
       } catch (JSchException jsche) {
         attempts++;
         if (attempts < maxConnectionAttempts) {
-          log.info("Unable to establish SSH tunnel to database on attempt {}/{}. Will retry in {} ms.", attempts,
-                   maxConnectionAttempts, connectionRetryBackoff, sqle
+          log.info("Unable to establish SSH tunnel on attempt {}/{}. Will retry in {} ms.", 
+                   attempts, maxConnectionAttempts, connectionRetryBackoff, jsche
           );
           try {
             Thread.sleep(connectionRetryBackoff);

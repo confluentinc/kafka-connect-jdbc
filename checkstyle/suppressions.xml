@@ -19,8 +19,11 @@
               files="(DataConverter|FieldsMetadata|JdbcSourceTask|GenericDatabaseDialect).java"/>
 
     <suppress checks="MethodLength"
-              files="(DataConverter|GenericDatabaseDialect|JdbcSourceTask).java"/>
+              files="(DataConverter|GenericDatabaseDialect|JdbcSourceTask|JdbcSourceConnectorConfig).java"/>
 
     <suppress checks="ParameterNumber"
               files="(ColumnDefinition|GenericDatabaseDialect|SqlServerDatabaseDialect|PostgreSqlDatabaseDialect).java"/>
+              
+    <suppress checks="AbbreviationAsWordInName"
+    		  files="(GenericDatabaseDialect|JdbcSourceConnectorConfig).java" />          
 </suppressions>

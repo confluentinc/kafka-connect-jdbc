@@ -287,7 +287,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final Boolean CONNECT_THROUGH_SSH_DEFAULT = false;
   public static final String CONNECT_THROUGH_SSH_DOC =
       "Boolean to identify if the database has to connected through a SSH tunnel. "
-      + "If configured ``true``, SSH tunnel host, port, username, password/key has to be configured as well."
+      + "If configured ``true``, SSH tunnel host, port, username, password/key has"
+      + " to be configured as well.";
   public static final String CONNECT_THROUGH_SSH_DISPLAY = "Connect through SSH";
 
   public static final String SSH_TUNNEL_HOST_CONFIG = "ssh.tunnel.host";
@@ -311,7 +312,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String SSH_TUNNEL_PASSWORD_DISPLAY = "SSH Password";
 
   public static final String SSH_TUNNEL_KEY_CONFIG = "ssh.tunnel.key";
-  public static final String SSH_TUNNEL_KEY_DEFAULT = "";
+  public static final String SSH_TUNNEL_KEY_DEFAULT = null;
   public static final String SSH_TUNNEL_KEY_DOC = "SSH Tunnel Key";
   public static final String SSH_TUNNEL_KEY_DISPLAY = "SSH Key";
 
@@ -507,7 +508,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         SSH_TUNNEL_HOST_DISPLAY
     ).define(
         SSH_TUNNEL_PORT_CONFIG,
-        Type.INTEGER,
+        Type.INT,
         SSH_TUNNEL_PORT_DEFAULT,
         Importance.LOW,
         SSH_TUNNEL_PORT_DOC,

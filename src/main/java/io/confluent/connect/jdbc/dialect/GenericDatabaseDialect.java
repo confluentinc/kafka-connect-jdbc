@@ -145,11 +145,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   private final int batchMaxRows;
   private final TimeZone timeZone;
   private final boolean connectThroughSSH;
-  private final String sshTunnelHost;
-  private final Integer sshTunnelPort;
-  private final String sshTunnelUser;
-  private final String sshTunnelPassword;
-  private final String sshTunnelKey;
+  private String sshTunnelHost;
+  private Integer sshTunnelPort;
+  private String sshTunnelUser;
+  private String sshTunnelPassword;
+  private String sshTunnelKey;
   private Session session;
   private JSch jsch;
 
@@ -177,7 +177,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     this.defaultIdentifierRules = defaultIdentifierRules;
     this.jdbcUrl = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
     this.jdbcUrlInfo = DatabaseDialects.extractJdbcUrlInfo(jdbcUrl);
-    this.connectThroughSSH = config.getString(JdbcSourceConnectorConfig.CONNECT_THROUGH_SSH_CONFIG);
+    this.connectThroughSSH = config.getBoolean(
+      JdbcSourceConnectorConfig.CONNECT_THROUGH_SSH_CONFIG);
+    this.sshTunnelHost = JdbcSourceConnectorConfig.SSH_TUNNEL_HOST_DEFAULT;
+    this.sshTunnelPort = JdbcSourceConnectorConfig.SSH_TUNNEL_PORT_DEFAULT;
+    this.sshTunnelUser = JdbcSourceConnectorConfig.SSH_TUNNEL_USER_DEFAULT;
+    this.sshTunnelPassword =  JdbcSourceConnectorConfig.SSH_TUNNEL_PASSWORD_DEFAULT;
+    this.sshTunnelKey =  JdbcSourceConnectorConfig.SSH_TUNNEL_KEY_DEFAULT;
+    
     if (config instanceof JdbcSinkConfig) {
       JdbcSinkConfig sinkConfig = (JdbcSinkConfig) config;
       catalogPattern = JdbcSourceTaskConfig.CATALOG_PATTERN_DEFAULT;
@@ -212,7 +219,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
     if (this.connectThroughSSH) {
       sshTunnelHost = config.getString(JdbcSourceConnectorConfig.SSH_TUNNEL_HOST_CONFIG);
-      sshTunnelPort = config.getString(JdbcSourceConnectorConfig.SSH_TUNNEL_PORT_CONFIG);
+      sshTunnelPort = config.getInt(JdbcSourceConnectorConfig.SSH_TUNNEL_PORT_CONFIG);
       sshTunnelUser = config.getString(JdbcSourceConnectorConfig.SSH_TUNNEL_USER_CONFIG);
       sshTunnelPassword = config.getString(JdbcSourceConnectorConfig.SSH_TUNNEL_PASSWORD_CONFIG);
       sshTunnelKey = config.getString(JdbcSourceConnectorConfig.SSH_TUNNEL_KEY_CONFIG);
@@ -247,27 +254,28 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     DriverManager.setLoginTimeout(40);
 
     if (connectThroughSSH) {
+      log.info("Establishing SSH tunnel session to {}", sshTunnelHost);
+      Properties sshProps = new Properties();
+      sshProps.put("StrictHostKeyChecking", "no");
+      jsch = new JSch();
+      if (this.sshTunnelKey != null) {
+        jsch.addIdentity(this.sshTunnelKey);
+        session = jsch.getSession(this.sshTunnelUser, this.sshTunnelHost, this.sshTunnelPort);
+      } else {
+        session = jsch.getSession(this.sshTunnelUser, this.sshTunnelHost, this.sshTunnelPort);
+        session.setPassword(this.sshTunnelPassword);
+      }
+      session.setConfig(sshProps);
+      session.connect();
       String remoteDatabaseHost = this.jdbcUrlInfo.url().split(":")[0];
       Integer remoteDatabasePort = Integer.parseInt(this.jdbcUrlInfo.url().split(":")[1]);
-    	log.info("Establishing SSH tunnel session to {}", sshTunnelHost);
-      Properties sshProps = new Properties();
-	    props.put("StrictHostKeyChecking", "no");
-	    jsch = new JSch();
-      if (sshTunnelKey != null) {
-        jsch.addIdentity(sshTunnelKey);
-        session = jsch.getSession(sshTunnelUser, sshTunnelHost, 22);
-      } else {
-        session = jsch.getSession(sshTunnelUser, sshTunnelHost, 22);
-        session.setPassword(sshTunnelPassword);
-      }
-	    session.setConfig(props);
-	    session.connect();
-	    int forwardedPort = session.setPortForwardingL(0, remoteDatabaseHost, remoteDatabasePort);
-	    jdbcUrl = jdbcUrl.replace(remoteDatabaseHost, "localhost").(remoteDatabasePort+"", "" + forwardedPort);
-	    log.debug("Updated jdbcUrl: {}", jdbcUrl);
+      int forwardedPort = session.setPortForwardingL(0, remoteDatabaseHost, remoteDatabasePort);
+      this.jdbcUrl = this.jdbcUrl.replace(remoteDatabaseHost, "localhost")
+        .replace(remoteDatabasePort + "", "" + forwardedPort);
+      log.debug("Updated jdbcUrl: {}", this.jdbcUrl);
     }
 
-    Connection connection = DriverManager.getConnection(jdbcUrl, properties);
+    Connection connection = DriverManager.getConnection(this.jdbcUrl, properties);
     if (jdbcDriverInfo == null) {
       jdbcDriverInfo = createJdbcDriverInfo(connection);
     }
@@ -334,7 +342,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       try (Connection connection = getConnection()) {
         jdbcDriverInfo = createJdbcDriverInfo(connection);
       } catch (JSchException jsche) {
-        throw new ConnectException("Failed to establise SSH tunnel", e);
+        throw new ConnectException("Failed to establise SSH tunnel", jsche);
       } catch (SQLException e) {
         throw new ConnectException("Unable to get JDBC driver information", e);
       }
@@ -543,9 +551,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       } catch (JSchException jsche) {
         if (defaultIdentifierRules != null) {
           identifierRules.set(defaultIdentifierRules);
-          log.warn("Unable to get identifier metadata; using default rules", e);
+          log.warn("Unable to get identifier metadata; using default rules", jsche);
         } else {
-          throw new ConnectException("Unable to get identifier metadata", e);
+          throw new ConnectException("Unable to get identifier metadata", jsche);
         }
       } catch (SQLException e) {
         if (defaultIdentifierRules != null) {

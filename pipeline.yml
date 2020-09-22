@@ -184,12 +184,11 @@ Resources:
             build:
               commands:
                 - echo Build started on `date`
-                - cd kafka-connect-jdbc
                 - mvn install -D maven.test.skip=true
             post_build:
               commands:
                 - echo Build completed on `date`
-                - aws s3 cp --recursive --exclude "*" --include "kafka-connect-jdbc-5.5.2-SNAPSHOT.jar" kafka-connect-jdbc/target s3://kafka-connect-jdbc/
+                - aws s3 cp --recursive --exclude "*" --include "kafka-connect-jdbc-5.5.2-SNAPSHOT.jar" kafka-connect-jdbc/target s3://ais-${stage}-kafka-connect-jdbc/
       Tags:
         - {Key: tenant, Value: platform}
         - {Key: stage, Value: !Ref Stage}

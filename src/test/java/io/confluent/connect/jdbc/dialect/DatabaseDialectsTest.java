@@ -109,6 +109,10 @@ public class DatabaseDialectsTest {
     DatabaseDialects.extractJdbcUrlInfo("mysql://Server:port");
   }
 
+  @Test
+  public void shouldFindCrateDialect() {
+    assertDialect(CrateDatabaseDialect.class, "jdbc:crate://localhost/");
+  }
 
   private void assertDialect(
       Class<? extends DatabaseDialect> clazz,

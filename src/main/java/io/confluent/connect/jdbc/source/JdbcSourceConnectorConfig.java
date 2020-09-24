@@ -26,6 +26,7 @@ import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.utils.Time;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -530,7 +531,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       try (Connection db = DriverManager.getConnection(dbUrl, dbUser, dbPasswordStr)) {
         return new LinkedList<Object>(JdbcUtils.getTables(db, schemaPattern, tableTypes));
       } catch (SQLException e) {
-        throw new ConfigException("Couldn't open connection to " + dbUrl, e);
+        throw new ConnectException("Couldn't open connection to " + dbUrl, e);
       }
     }
 

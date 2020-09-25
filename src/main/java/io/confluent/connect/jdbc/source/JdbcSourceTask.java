@@ -22,7 +22,6 @@ import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.apache.kafka.connect.source.SourceTask;
-import org.json.simple.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -360,13 +359,13 @@ public class JdbcSourceTask extends SourceTask {
           // send event to SNS topic
           String topicArn = config.getString(JdbcSourceTaskConfig.SNS_TOPIC_ARN_CONFIG);
           if (!topicArn.equals("")) {
-            JSONObject payload = new JSONObject();
+            Map<String, String> payload = new HashMap<String, String>();
             payload.put("event", "success");
             payload.put("topic", config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG) + "-" 
                 + (config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).get(0));
      
             log.trace("Sending event to SNS topic {} ", topicArn);
-            new SNSClient(config).publish(topicArn, payload.toJSONString());
+            new SNSClient(config).publish(topicArn, payload.toString());
           }
           
           
@@ -404,14 +403,14 @@ public class JdbcSourceTask extends SourceTask {
         // send event to SNS topic
         String topicArn = config.getString(JdbcSourceTaskConfig.SNS_TOPIC_ARN_CONFIG);
         if (!topicArn.equals("")) {
-          JSONObject payload = new JSONObject();
+          Map<String, String> payload = new HashMap<String, String>();
           payload.put("event", "failure");
           payload.put("error", sqle.getMessage());
           payload.put("topic", config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG) + "-" 
               + (config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).get(0));
 
           log.trace("Sending event to SNS topic {} ", topicArn);
-          new SNSClient(config).publish(topicArn, payload.toJSONString());
+          new SNSClient(config).publish(topicArn, payload.toString());
         }
         
         resetAndRequeueHead(querier);

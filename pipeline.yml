@@ -39,6 +39,49 @@ Metadata:
         Parameters:
           - NotificationMonitorFunction
 Resources:
+  ImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub '${Stage}-${GithubRepoName}'
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowPushPull
+            Effect: Allow
+            Principal:
+              Service:
+                - "codebuild.amazonaws.com"
+            Action:
+              - "ecr:GetDownloadUrlForLayer"
+              - "ecr:BatchGetImage"
+              - "ecr:BatchCheckLayerAvailability"
+              - "ecr:PutImage"
+              - "ecr:InitiateLayerUpload"
+              - "ecr:UploadLayerPart"
+              - "ecr:CompleteLayerUpload"
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Keep only five untagged image, expire all others",
+                  "selection": {
+                    "tagStatus": "untagged",
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 5
+                  },
+                  "action": {
+                      "type": "expire"
+                  }
+                }
+            ]
+          }
+      Tags:
+        - {Key: tenant, Value: platform}
+        - {Key: stage, Value: !Ref Stage}
+        - {Key: service, Value: kafka-connect-jdbc}
+        - {Key: feature, Value: 'ingestion'}
   ArtifactStoreBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -199,6 +242,8 @@ Resources:
         Type: LINUX_CONTAINER
         EnvironmentVariables:
           - {Name: STAGE, Value: !Ref Stage}
+          - Name: IMAGE_URL
+            Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ImageRepo}"
       Name: !Sub ${AWS::StackName}
       ServiceRole: !Ref DeployBackendBuildRole
       Source:
@@ -209,14 +254,20 @@ Resources:
             install:
               runtime-versions:
                 java: openjdk8
+            pre_build:
+              commands:
+                - |
+                  eval $(aws ecr get-login --no-include-email --region $AWS_REGION | sed 's|https://||') && echo "Got ECR Login";
             build:
               commands:
                 - echo Build started on `date`
                 - mvn install -D maven.test.skip=true
+                - docker build . --tag $IMAGE_URL:$STAGE
             post_build:
               commands:
                 - echo Build completed on `date`
                 - aws s3 cp --recursive --exclude "*" --include "kafka-connect-jdbc-5.5.1.jar" target/ s3://ais-$STAGE-kafka-connect-jdbc/
+                - docker push $IMAGE_URL
       Tags:
         - {Key: tenant, Value: platform}
         - {Key: stage, Value: !Ref Stage}

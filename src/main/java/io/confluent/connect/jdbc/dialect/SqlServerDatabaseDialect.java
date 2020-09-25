@@ -356,7 +356,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
    *                            or if there is an error accessing the result set metadata
    */
   @Override
-  public void validateSpecificColumnsTypes(
+  public void validateTimestampColumns(
           ResultSetMetaData rsMetadata,
           List<ColumnId> timestampColumns
   ) throws ConnectException {
@@ -367,6 +367,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     if (versionWithBreakingDatetimeChange()) {
       try {
         for (int i = 0; i < rsMetadata.getColumnCount(); i++) {
+          // columns in the meta data is indexed starting at 1 (not 0).
           if (rsMetadata.getColumnTypeName(i + 1).equals(DATETIME)) {
             for (ColumnId id: timestampColumns) {
               if (id.name().equals(rsMetadata.getColumnName(i + 1))) {

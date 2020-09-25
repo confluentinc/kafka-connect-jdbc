@@ -358,7 +358,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
     Mockito.doReturn(timeStampColumnName).when(spyRsMetadata).getColumnName(1);
     Mockito.doReturn("datetime").when(spyRsMetadata).getColumnTypeName(1);
 
-    dialect.validateSpecificColumnsTypes(spyRsMetadata, timestampColumns);
+    dialect.validateTimestampColumns(spyRsMetadata, timestampColumns);
   }
 
   @Test
@@ -377,7 +377,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
     Mockito.doReturn(timeStampColumnName).when(spyRsMetadata).getColumnName(2);
     Mockito.doReturn("datetime2").when(spyRsMetadata).getColumnTypeName(2);
 
-    dialect.validateSpecificColumnsTypes(spyRsMetadata, timestampColumns);
+    dialect.validateTimestampColumns(spyRsMetadata, timestampColumns);
   }
 
 

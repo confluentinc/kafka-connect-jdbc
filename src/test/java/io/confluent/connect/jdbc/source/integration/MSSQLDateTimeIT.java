@@ -234,14 +234,16 @@ public class MSSQLDateTimeIT extends BaseConnectorIT {
         insertStmt.setTimestamp(2, t);
         executeSQL(insertStmt);
 
-
+        // Wait long enough for connector to query table for new records
+        // if works as expected regardless of how long we wait, only one record would be found
+        // verifies that there is no looping on the most recent record for datetime2 in MSSQL Server
         Thread.sleep(Duration.ofSeconds(30).toMillis());
         for (String topic: KAFKA_TOPICS) {
             ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(
                     NUM_RECORDS_PRODUCED,
                     CONSUME_MAX_DURATION_MS,
                     topic);
-            //Assert that records in topic == NUM_RECORDS_PRODUCED
+            // Assert that records in topic == NUM_RECORDS_PRODUCED
             assertEquals(NUM_RECORDS_PRODUCED, records.count());
         }
     }

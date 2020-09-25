@@ -413,7 +413,12 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     verifyBindField(++index, Schema.FLOAT64_SCHEMA, 42d).setDouble(index, 42d);
     verifyBindField(++index, Schema.BYTES_SCHEMA, new byte[]{42}).setBytes(index, new byte[]{42});
     verifyBindField(++index, Schema.BYTES_SCHEMA, ByteBuffer.wrap(new byte[]{42})).setBytes(index, new byte[]{42});
-    verifyBindField(++index, Schema.STRING_SCHEMA, "yep").setString(index, "yep");
+    if (dialect instanceof OracleDatabaseDialect) {
+      verifyBindField(++index, Schema.STRING_SCHEMA, "yep").setNString(index, "yep");
+    } else {
+      verifyBindField(++index, Schema.STRING_SCHEMA, "yep").setString(index, "yep");
+    }
+
     verifyBindField(
         ++index,
         Decimal.schema(0),

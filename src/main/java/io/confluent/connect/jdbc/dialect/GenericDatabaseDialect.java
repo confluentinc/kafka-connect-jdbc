@@ -62,6 +62,8 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.FixedScoreProvider;
@@ -267,12 +269,27 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       }
       session.setConfig(sshProps);
       session.connect();
-      String remoteDatabaseHost = this.jdbcUrlInfo.url().split(":")[0];
-      Integer remoteDatabasePort = Integer.parseInt(this.jdbcUrlInfo.url().split(":")[1]);
+      String remoteDatabaseHost = "";
+      int remoteDatabasePort = 0;
+      String regexForHostAndPort = "[.A-Za-z0-9_-]+:\\d+";
+      Pattern hostAndPortPattern = Pattern.compile(regexForHostAndPort);
+      Matcher matcher = hostAndPortPattern.matcher(this.jdbcUrlInfo.url()); 
+      matcher.find();
+      int start = matcher.start();
+      int end = matcher.end();
+      if (start >= 0 && end >= 0) {
+        String hostAndPort = this.jdbcUrlInfo.url().substring(start, end);
+        String [] array = hostAndPort.split(":");
+        if (array.length >= 2) {
+          remoteDatabasePort = Integer.parseInt(array[1]);
+          remoteDatabaseHost = array[0];
+        }
+      }
+      
       int forwardedPort = session.setPortForwardingL(0, remoteDatabaseHost, remoteDatabasePort);
       this.jdbcUrl = this.jdbcUrl.replace(remoteDatabaseHost, "localhost")
         .replace(remoteDatabasePort + "", "" + forwardedPort);
-      log.debug("Updated jdbcUrl: {}", this.jdbcUrl);
+      log.info("Updated jdbcUrl: {}", this.jdbcUrl);
     }
 
     Connection connection = DriverManager.getConnection(this.jdbcUrl, properties);

@@ -22,6 +22,7 @@ import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.apache.kafka.connect.source.SourceTask;
+import org.json.simple.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,8 +46,10 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.SNSClient;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.Version;
+
 
 /**
  * JdbcSourceTask is a Kafka Connect SourceTask implementation that reads from JDBC databases and
@@ -350,9 +353,23 @@ public class JdbcSourceTask extends SourceTask {
         final long nextUpdate = querier.getLastUpdate()
             + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
         final long now = time.milliseconds();
-        final long sleepMs = Math.min(nextUpdate - now, 100);
+        final long sleepMs = nextUpdate - now;
         if (sleepMs > 0) {
           log.trace("Waiting {} ms to poll {} next", nextUpdate - now, querier.toString());
+          
+          // send event to SNS topic
+          String topicArn = config.getString(JdbcSourceTaskConfig.SNS_TOPIC_ARN_CONFIG);
+          if (!topicArn.equals("")) {
+            JSONObject payload = new JSONObject();
+            payload.put("event", "success");
+            payload.put("topic", config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG) + "-" 
+                + (config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).get(0));
+     
+            log.trace("Sending event to SNS topic {} ", topicArn);
+            new SNSClient(config).publish(topicArn, payload.toJSONString());
+          }
+          
+          
           time.sleep(sleepMs);
           continue; // Re-check stop flag before continuing
         }
@@ -384,6 +401,19 @@ public class JdbcSourceTask extends SourceTask {
         return results;
       } catch (SQLException sqle) {
         log.error("Failed to run query for table {}: {}", querier.toString(), sqle);
+        // send event to SNS topic
+        String topicArn = config.getString(JdbcSourceTaskConfig.SNS_TOPIC_ARN_CONFIG);
+        if (!topicArn.equals("")) {
+          JSONObject payload = new JSONObject();
+          payload.put("event", "failure");
+          payload.put("error", sqle.getMessage());
+          payload.put("topic", config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG) + "-" 
+              + (config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).get(0));
+
+          log.trace("Sending event to SNS topic {} ", topicArn);
+          new SNSClient(config).publish(topicArn, payload.toJSONString());
+        }
+        
         resetAndRequeueHead(querier);
         return null;
       } catch (Throwable t) {

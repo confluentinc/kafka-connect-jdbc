@@ -1,4 +1,4 @@
-FROM confluentinc/cp-kafka-connect:latest
+FROM confluentinc/cp-kafka-connect:5.4.0
 
 RUN echo "===> Installing MySQL connector" \
   && curl https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.19/mysql-connector-java-8.0.19.jar  --output /usr/share/java/kafka-connect-jdbc/mysql-connector-java-8.0.19.jar

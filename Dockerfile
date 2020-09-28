@@ -18,4 +18,4 @@ RUN echo "===> Collecting SNS" \
 RUN echo "===> Updateing JDBC jar" \
   && rm -rf /usr/share/java/kafka-connect-jdbc/kafka-connect-jdbc-5.4.0.jar
 
-COPY ./target/kafka-connect-jdbc-5.5.1.jar /usr/share/java/kafka-connect-jdbc/
+COPY ./target/kafka-connect-jdbc-5.4.0.jar /usr/share/java/kafka-connect-jdbc/

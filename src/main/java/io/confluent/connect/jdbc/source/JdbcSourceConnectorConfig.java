@@ -19,6 +19,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.ZoneId;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -659,7 +660,14 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         }
         return result;
       } catch (SQLException e) {
-        throw new ConfigException("Couldn't open connection to " + dbUrl, e);
+        // We're just recommending values, so just return an empty list if we run into
+        // any connectivity problems
+        LOG.debug(
+            "Recommending no tables due to error opening connection to {}",
+            dialect.identifier(),
+            e
+        );
+        return Collections.emptyList();
       }
     }
 

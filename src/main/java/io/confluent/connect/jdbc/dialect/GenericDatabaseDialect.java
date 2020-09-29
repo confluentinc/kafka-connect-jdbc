@@ -184,7 +184,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     this.sshTunnelHost = config.getString(JdbcSourceConnectorConfig.SSH_TUNNEL_HOST_CONFIG);
     this.sshTunnelPort = config.getInt(JdbcSourceConnectorConfig.SSH_TUNNEL_PORT_CONFIG);
     this.sshTunnelUser = config.getString(JdbcSourceConnectorConfig.SSH_TUNNEL_USER_CONFIG);
-    this.sshTunnelPassword =  config.getString(JdbcSourceConnectorConfig.SSH_TUNNEL_PASSWORD_CONFIG);
+    this.sshTunnelPassword =  config.getString(
+      JdbcSourceConnectorConfig.SSH_TUNNEL_PASSWORD_CONFIG);
     this.sshTunnelKey =  config.getString(JdbcSourceConnectorConfig.SSH_TUNNEL_KEY_CONFIG);
     
     if (config instanceof JdbcSinkConfig) {
@@ -253,11 +254,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       sshProps.put("StrictHostKeyChecking", "no");
       jsch = new JSch();
       if (sshTunnelKey != null) {
-    	log.info("SSH session using ssh key {}", sshTunnelKey);
+        log.info("SSH session using ssh key {}", sshTunnelKey);
         jsch.addIdentity(sshTunnelKey);
         session = jsch.getSession(sshTunnelUser, sshTunnelHost, sshTunnelPort);
       } else {
-    	log.info("SSH session using ssh password {}", sshTunnelPassword);
+        log.info("SSH session using ssh password {}", sshTunnelPassword);
         session = jsch.getSession(sshTunnelUser, sshTunnelHost, sshTunnelPort);
         session.setPassword(sshTunnelPassword);
       }

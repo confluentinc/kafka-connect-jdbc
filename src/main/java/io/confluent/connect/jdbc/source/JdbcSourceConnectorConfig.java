@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.source;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import com.jcraft.jsch.JSchException;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -34,18 +35,28 @@ import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
 import io.confluent.connect.jdbc.util.EnumRecommender;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.util.TableListProducer;
 import io.confluent.connect.jdbc.util.TimeZoneValidator;
 
+import org.apache.kafka.common.Configurable;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Recommender;
 import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Width;
+import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.Time;
+import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.common.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.amazonaws.auth.AWSCredentialsProvider;
+import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
+import com.amazonaws.regions.RegionUtils;
+import com.amazonaws.regions.Regions;
 
 public class JdbcSourceConnectorConfig extends AbstractConfig {
 
@@ -278,9 +289,91 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public static final String QUERY_SUFFIX_CONFIG = "query.suffix";
   public static final String QUERY_SUFFIX_DEFAULT = "";
-  public static final String QUERY_SUFFIX_DOC = 
+  public static final String QUERY_SUFFIX_DOC =
       "Suffix to append at the end of the generated query.";
   public static final String QUERY_SUFFIX_DISPLAY = "Query suffix";
+
+  // SSH related configuration - host, port, user, password, key
+  
+  public static final String CONNECT_THROUGH_SSH_CONFIG = "connect.through.ssh";
+  public static final Boolean CONNECT_THROUGH_SSH_DEFAULT = false;
+  public static final String CONNECT_THROUGH_SSH_DOC =
+      "Boolean to identify if the database has to connected through a SSH tunnel. "
+      + "If configured ``true``, SSH tunnel host, port, username, password/key has"
+      + " to be configured as well.";
+  public static final String CONNECT_THROUGH_SSH_DISPLAY = "Connect through SSH";
+
+  public static final String SSH_TUNNEL_HOST_CONFIG = "ssh.tunnel.host";
+  public static final String SSH_TUNNEL_HOST_DEFAULT = "";
+  public static final String SSH_TUNNEL_HOST_DOC = "SSH Tunnel host";
+  public static final String SSH_TUNNEL_HOST_DISPLAY = "SSH Host";
+
+  public static final String SSH_TUNNEL_PORT_CONFIG = "ssh.tunnel.port";
+  public static final Integer SSH_TUNNEL_PORT_DEFAULT = 0;
+  public static final String SSH_TUNNEL_PORT_DOC = "SSH Tunnel Port";
+  public static final String SSH_TUNNEL_PORT_DISPLAY = "SSH Port";
+
+  public static final String SSH_TUNNEL_USER_CONFIG = "ssh.tunnel.user";
+  public static final String SSH_TUNNEL_USER_DEFAULT = "";
+  public static final String SSH_TUNNEL_USER_DOC = "SSH Tunnel User";
+  public static final String SSH_TUNNEL_USER_DISPLAY = "SSH User";
+
+  public static final String SSH_TUNNEL_PASSWORD_CONFIG = "ssh.tunnel.password";
+  public static final String SSH_TUNNEL_PASSWORD_DEFAULT = "";
+  public static final String SSH_TUNNEL_PASSWORD_DOC = "SSH Tunnel Password";
+  public static final String SSH_TUNNEL_PASSWORD_DISPLAY = "SSH Password";
+
+  public static final String SSH_TUNNEL_KEY_CONFIG = "ssh.tunnel.key";
+  public static final String SSH_TUNNEL_KEY_DEFAULT = null;
+  public static final String SSH_TUNNEL_KEY_DOC = "SSH Tunnel Key";
+  public static final String SSH_TUNNEL_KEY_DISPLAY = "SSH Key";
+  
+  // table list related configuration - broker URL, message key 
+  
+  public static final String STORE_TABLE_LIST_CONFIG = "store.table.list";
+  public static final Boolean STORE_TABLE_LIST_DEFAULT = false;
+  public static final String STORE_TABLE_LIST_DOC = 
+      "Boolean to identify if the table list has to be stored.";
+  public static final String STORE_TABLE_LIST_DISPLAY = "Store table list";
+  
+  public static final String TABLE_LIST_KEY_CONFIG = "table.list.key";
+  public static final String TABLE_LIST_KEY_DEFAULT = "";
+  public static final String TABLE_LIST_KEY_DOC = 
+      "Key for the event that would be used to identify the table list";
+  public static final String TABLE_LIST_KEY_DISPLAY = "Table list key";
+  
+  public static final String BROKER_URL_CONFIG = "broker.url";
+  public static final String BROKER_URL_DEFAULT = "";
+  public static final String BROKER_URL_DOC = 
+      "Broker URL to connect to Kafka topic";
+  public static final String BROKER_URL_DISPLAY = "Broker URL";
+  
+  // SNS related configuration = topic ARN, AWS credentials and region
+  
+  public static final String SNS_TOPIC_ARN_CONFIG = "sns.topic.arn";
+  public static final String SNS_TOPIC_ARN_DEFAULT = "";
+  public static final String SNS_TOPIC_ARN_DOC = 
+      "SNS Topic ARN that would get the polling complete event";
+  public static final String SNS_TOPIC_ARN_DISPLAY = "Table list topic ARN";
+  
+  public static final String AWS_ACCESS_KEY_ID_CONFIG = "aws.access.key.id";
+  public static final String AWS_ACCESS_KEY_ID_DEFAULT = "";
+
+  public static final String AWS_SECRET_ACCESS_KEY_CONFIG = "aws.secret.access.key";
+  public static final Password AWS_SECRET_ACCESS_KEY_DEFAULT = new Password(null);
+  
+  public static final String REGION_CONFIG = "aws.region";
+  public static final String REGION_DEFAULT = Regions.DEFAULT_REGION.getName();
+  
+  public static final String CREDENTIALS_PROVIDER_CLASS_CONFIG = "aws.credentials.provider.class";
+  public static final Class<? extends AWSCredentialsProvider> CREDENTIALS_PROVIDER_CLASS_DEFAULT =
+      DefaultAWSCredentialsProviderChain.class;
+  
+  public static final String CREDENTIALS_PROVIDER_CONFIG_PREFIX =
+      CREDENTIALS_PROVIDER_CLASS_CONFIG.substring(
+         0,
+         CREDENTIALS_PROVIDER_CLASS_CONFIG.lastIndexOf(".") + 1);
+  
 
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
@@ -451,7 +544,68 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.LONG,
         DIALECT_NAME_DISPLAY,
-        DatabaseDialectRecommender.INSTANCE);
+        DatabaseDialectRecommender.INSTANCE
+    ).define(
+        CONNECT_THROUGH_SSH_CONFIG,
+        Type.BOOLEAN,
+        CONNECT_THROUGH_SSH_DEFAULT,
+        Importance.LOW,
+        CONNECT_THROUGH_SSH_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        CONNECT_THROUGH_SSH_DISPLAY
+    ).define(
+        SSH_TUNNEL_HOST_CONFIG,
+        Type.STRING,
+        SSH_TUNNEL_HOST_DEFAULT,
+        Importance.LOW,
+        SSH_TUNNEL_HOST_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        SSH_TUNNEL_HOST_DISPLAY
+    ).define(
+        SSH_TUNNEL_PORT_CONFIG,
+        Type.INT,
+        SSH_TUNNEL_PORT_DEFAULT,
+        Importance.LOW,
+        SSH_TUNNEL_PORT_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        SSH_TUNNEL_PORT_DISPLAY
+    ).define(
+        SSH_TUNNEL_USER_CONFIG,
+        Type.STRING,
+        SSH_TUNNEL_USER_DEFAULT,
+        Importance.LOW,
+        SSH_TUNNEL_USER_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        SSH_TUNNEL_USER_DISPLAY
+    ).define(
+        SSH_TUNNEL_PASSWORD_CONFIG,
+        Type.STRING,
+        SSH_TUNNEL_PASSWORD_DEFAULT,
+        Importance.LOW,
+        SSH_TUNNEL_PASSWORD_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        SSH_TUNNEL_PASSWORD_DISPLAY
+    ).define(
+        SSH_TUNNEL_KEY_CONFIG,
+        Type.STRING,
+        SSH_TUNNEL_KEY_DEFAULT,
+        Importance.LOW,
+        SSH_TUNNEL_KEY_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        SSH_TUNNEL_KEY_DISPLAY
+    );
   }
 
   private static final void addModeOptions(ConfigDef config) {
@@ -626,7 +780,102 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         CONNECTOR_GROUP,
         ++orderInGroup,
         Width.MEDIUM,
-        DB_TIMEZONE_CONFIG_DISPLAY);
+        DB_TIMEZONE_CONFIG_DISPLAY
+    ).define(
+        STORE_TABLE_LIST_CONFIG, 
+        Type.BOOLEAN, 
+        STORE_TABLE_LIST_DEFAULT, 
+        Importance.LOW, 
+        STORE_TABLE_LIST_DOC, 
+        CONNECTOR_GROUP, 
+        ++orderInGroup, 
+        Width.SHORT, 
+        STORE_TABLE_LIST_DISPLAY
+    ).define(
+        TABLE_LIST_KEY_CONFIG,
+        Type.STRING,
+        TABLE_LIST_KEY_DEFAULT,
+        Importance.LOW, 
+        TABLE_LIST_KEY_DOC, 
+        CONNECTOR_GROUP, 
+        ++orderInGroup, 
+        Width.MEDIUM, 
+        TABLE_LIST_KEY_DISPLAY
+    ).define(
+        BROKER_URL_CONFIG,
+        Type.STRING,
+        BROKER_URL_DEFAULT,
+        Importance.LOW,
+        BROKER_URL_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        BROKER_URL_DISPLAY
+    ).define(
+        SNS_TOPIC_ARN_CONFIG,
+        Type.STRING,
+        SNS_TOPIC_ARN_DEFAULT,
+        Importance.LOW, 
+        SNS_TOPIC_ARN_DOC, 
+        CONNECTOR_GROUP, 
+        ++orderInGroup, 
+        Width.LONG, 
+        SNS_TOPIC_ARN_DISPLAY
+    ).define(
+        CREDENTIALS_PROVIDER_CLASS_CONFIG,
+        Type.CLASS,
+        CREDENTIALS_PROVIDER_CLASS_DEFAULT,
+        new CredentialsProviderValidator(),
+        Importance.LOW,
+        "Credentials provider or provider chain to use for authentication to AWS. By default "
+        + "the connector uses ``"
+        + DefaultAWSCredentialsProviderChain.class.getSimpleName()
+        + "``.",
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        "AWS Credentials Provider Class"
+    ).define(
+        REGION_CONFIG,
+        Type.STRING,
+        REGION_DEFAULT,
+        new RegionValidator(),
+        Importance.MEDIUM,
+        "The AWS region to be used the connector.",
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        "AWS region",
+        new RegionRecommender()
+    ).define(
+        AWS_ACCESS_KEY_ID_CONFIG,
+        Type.STRING,
+        AWS_ACCESS_KEY_ID_DEFAULT,
+        Importance.HIGH,
+        "The AWS access key ID used to authenticate personal AWS credentials such as IAM "
+        + "credentials. Use only if you do not wish to authenticate by using a credentials "
+        + "provider class via ``"
+        + CREDENTIALS_PROVIDER_CLASS_CONFIG
+        + "``",
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        "AWS Access Key ID"
+    ).define(
+        AWS_SECRET_ACCESS_KEY_CONFIG,
+        Type.PASSWORD,
+        AWS_SECRET_ACCESS_KEY_DEFAULT,
+        Importance.HIGH,
+        "The secret access key used to authenticate personal AWS credentials such as IAM "
+        + "credentials. Use only if you do not wish to authenticate by using a credentials "
+        + "provider class via ``"
+        + CREDENTIALS_PROVIDER_CLASS_CONFIG
+        + "``",
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        "AWS Secret Access Key"
+    );
   }
 
   public static final ConfigDef CONFIG_DEF = baseConfigDef();
@@ -638,7 +887,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       throw new ConfigException("Query mode must be specified");
     }
   }
-
+  
   private static class TableRecommender implements Recommender {
 
     @SuppressWarnings("unchecked")
@@ -653,11 +902,21 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       DatabaseDialect dialect = DatabaseDialects.findBestFor(dbUrl, jdbcConfig);
       try (Connection db = dialect.getConnection()) {
         List<Object> result = new LinkedList<>();
+        List<Object> tables = new LinkedList<>();
         for (TableId id : dialect.tableIds(db)) {
           // Just add the unqualified table name
           result.add(id.tableName());
+          tables.add(id.toString());
+        }
+        if ((Boolean)config.get(STORE_TABLE_LIST_CONFIG)) {
+          TableListProducer tableListProducer = new TableListProducer(
+              (String)config.get(BROKER_URL_CONFIG));
+          tableListProducer.produce("_tables", (String)config.get(TABLE_LIST_KEY_CONFIG), 
+              tables.toString());
         }
         return result;
+      } catch (JSchException jsche) {
+        throw new ConfigException("Couldn't open SSH tunnel " + jsche);
       } catch (SQLException e) {
         throw new ConfigException("Couldn't open connection to " + dbUrl, e);
       }
@@ -806,6 +1065,81 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     String dbTimeZone = getString(JdbcSourceTaskConfig.DB_TIMEZONE_CONFIG);
     return TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
   }
+  
+  @SuppressWarnings("unchecked")
+  public AWSCredentialsProvider getCredentialsProvider() {
+    try {
+      AWSCredentialsProvider provider = ((Class<? extends AWSCredentialsProvider>)
+          getClass(JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG)).newInstance();
+
+      if (provider instanceof Configurable) {
+        Map<String, Object> configs = originalsWithPrefix(CREDENTIALS_PROVIDER_CONFIG_PREFIX);
+        configs.remove(CREDENTIALS_PROVIDER_CLASS_CONFIG.substring(
+            CREDENTIALS_PROVIDER_CONFIG_PREFIX.length()
+        ));
+        ((Configurable) provider).configure(configs);
+      }
+
+      return provider;
+    } catch (IllegalAccessException | InstantiationException e) {
+      throw new ConnectException(
+          "Invalid class for: " + JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG,
+          e
+      );
+    }
+  }
+  
+  private static class CredentialsProviderValidator implements ConfigDef.Validator {
+    @Override
+    public void ensureValid(String name, Object provider) {
+      if (provider != null && provider instanceof Class
+          && AWSCredentialsProvider.class.isAssignableFrom((Class<?>) provider)) {
+        return;
+      }
+      throw new ConfigException(
+        name,
+        provider,
+        "Class must extend: " + AWSCredentialsProvider.class
+      );
+    }
+    
+    @Override
+    public String toString() {
+      return "Any class implementing: " + AWSCredentialsProvider.class;
+    }
+  }
+  
+  private static class RegionRecommender implements ConfigDef.Recommender {
+    @Override
+    public List<Object> validValues(String name, Map<String, Object> connectorConfigs) {
+      return Arrays.<Object>asList(RegionUtils.getRegions());
+    }
+
+    @Override
+    public boolean visible(String name, Map<String, Object> connectorConfigs) {
+      return true;
+    }
+  }
+
+  private static class RegionValidator implements ConfigDef.Validator {
+    @Override
+    public void ensureValid(String name, Object region) {
+      String regionStr = ((String) region).toLowerCase().trim();
+      if (RegionUtils.getRegion(regionStr) == null) {
+        throw new ConfigException(
+          name,
+          region,
+          "Value must be one of: " + Utils.join(RegionUtils.getRegions(), ", ")
+        );
+      }
+    }
+
+    @Override
+    public String toString() {
+      return "[" + Utils.join(RegionUtils.getRegions(), ", ") + "]";
+    }
+  }
+  
 
   public static void main(String[] args) {
     System.out.println(CONFIG_DEF.toEnrichedRst());

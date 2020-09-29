@@ -25,6 +25,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.SQLException;
+import com.jcraft.jsch.JSchException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -140,6 +141,14 @@ public class TableMonitorThread extends Thread {
     try {
       tables = dialect.tableIds(connectionProvider.getConnection());
       log.debug("Got the following tables: {}", tables);
+    } catch (JSchException jsche) {
+      log.error(
+          "Error while establishing SSH tunnel, ignoring and waiting for next table poll"
+          + " interval",
+          jsche
+      );
+      connectionProvider.close();
+      return false;
     } catch (SQLException e) {
       log.error(
           "Error while trying to get updated table list, ignoring and waiting for next table poll"

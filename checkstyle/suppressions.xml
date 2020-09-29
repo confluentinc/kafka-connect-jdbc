@@ -10,7 +10,7 @@
               files="(BufferedRecords|DataConverter|DatabaseDialect|FieldsMetadata|HanaDialect|JdbcSourceTask|MySqlDatabaseDialect|OracleDatabaseDialect|PostgreSqlDatabaseDialect|PreparedStatementBinder|SqlServerDatabaseDialect|SqliteDatabaseDialect|TimestampIncrementingTableQuerier|VerticaDatabaseDialect|SapHanaDatabaseDialect|TableId|ColumnDefinition|TableMonitorThread).java"/>
 
     <suppress checks="ClassDataAbstractionCoupling"
-              files="(DbDialect|JdbcSourceTask|GenericDatabaseDialect).java"/>
+              files="(DbDialect|JdbcSourceTask|GenericDatabaseDialect|JdbcSourceConnectorConfig).java"/>
 
     <suppress checks="NPathComplexity"
               files="(BufferedRecords|DataConverter|FieldsMetadata|JdbcSourceTask|GenericDatabaseDialect).java"/>
@@ -19,8 +19,19 @@
               files="(DataConverter|FieldsMetadata|JdbcSourceTask|GenericDatabaseDialect).java"/>
 
     <suppress checks="MethodLength"
-              files="(DataConverter|GenericDatabaseDialect|JdbcSourceTask).java"/>
+              files="(DataConverter|GenericDatabaseDialect|JdbcSourceTask|JdbcSourceConnectorConfig).java"/>
 
     <suppress checks="ParameterNumber"
               files="(ColumnDefinition|GenericDatabaseDialect|SqlServerDatabaseDialect|PostgreSqlDatabaseDialect).java"/>
+              
+    <suppress checks="AbbreviationAsWordInName"
+    		  files="(GenericDatabaseDialect|JdbcSourceConnectorConfig|SNSClient).java" />    
+    		  
+    <suppress checks="RegexpHeader"
+    		  files="(SNSClient|TableListProducer).java" />
+    		  
+    <suppress checks="Indentation"
+    		  files="(JdbcSourceConnectorConfig).java" />
+    		  
+		      
 </suppressions>

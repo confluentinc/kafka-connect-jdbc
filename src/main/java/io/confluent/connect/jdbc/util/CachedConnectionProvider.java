@@ -21,6 +21,7 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import com.jcraft.jsch.JSchException;
 
 public class CachedConnectionProvider implements ConnectionProvider {
 
@@ -55,6 +56,8 @@ public class CachedConnectionProvider implements ConnectionProvider {
         close();
         newConnection();
       }
+    } catch (JSchException jsche) {
+      throw new ConnectException(jsche);
     } catch (SQLException sqle) {
       throw new ConnectException(sqle);
     }
@@ -74,7 +77,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
     }
   }
 
-  private void newConnection() throws SQLException {
+  private void newConnection() throws SQLException, JSchException {
     int attempts = 0;
     while (attempts < maxConnectionAttempts) {
       try {
@@ -83,6 +86,20 @@ public class CachedConnectionProvider implements ConnectionProvider {
         connection = provider.getConnection();
         onConnect(connection);
         return;
+      } catch (JSchException jsche) {
+        attempts++;
+        if (attempts < maxConnectionAttempts) {
+          log.info("Unable to establish SSH tunnel on attempt {}/{}. Will retry in {} ms.", 
+                   attempts, maxConnectionAttempts, connectionRetryBackoff, jsche
+          );
+          try {
+            Thread.sleep(connectionRetryBackoff);
+          } catch (InterruptedException e) {
+            // this is ok because just woke up early
+          }
+        } else {
+          throw jsche;
+        }
       } catch (SQLException sqle) {
         attempts++;
         if (attempts < maxConnectionAttempts) {

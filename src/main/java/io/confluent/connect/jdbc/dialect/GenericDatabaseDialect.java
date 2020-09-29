@@ -181,11 +181,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     this.jdbcUrlInfo = DatabaseDialects.extractJdbcUrlInfo(jdbcUrl);
     this.connectThroughSSH = config.getBoolean(
       JdbcSourceConnectorConfig.CONNECT_THROUGH_SSH_CONFIG);
-    this.sshTunnelHost = JdbcSourceConnectorConfig.SSH_TUNNEL_HOST_DEFAULT;
-    this.sshTunnelPort = JdbcSourceConnectorConfig.SSH_TUNNEL_PORT_DEFAULT;
-    this.sshTunnelUser = JdbcSourceConnectorConfig.SSH_TUNNEL_USER_DEFAULT;
-    this.sshTunnelPassword =  JdbcSourceConnectorConfig.SSH_TUNNEL_PASSWORD_DEFAULT;
-    this.sshTunnelKey =  JdbcSourceConnectorConfig.SSH_TUNNEL_KEY_DEFAULT;
+    this.sshTunnelHost = config.getString(JdbcSourceConnectorConfig.SSH_TUNNEL_HOST_CONFIG);
+    this.sshTunnelPort = config.getInt(JdbcSourceConnectorConfig.SSH_TUNNEL_PORT_CONFIG);
+    this.sshTunnelUser = config.getString(JdbcSourceConnectorConfig.SSH_TUNNEL_USER_CONFIG);
+    this.sshTunnelPassword =  config.getString(JdbcSourceConnectorConfig.SSH_TUNNEL_PASSWORD_CONFIG);
+    this.sshTunnelKey =  config.getString(JdbcSourceConnectorConfig.SSH_TUNNEL_KEY_CONFIG);
     
     if (config instanceof JdbcSinkConfig) {
       JdbcSinkConfig sinkConfig = (JdbcSinkConfig) config;
@@ -218,14 +218,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     } else {
       timeZone = TimeZone.getTimeZone(ZoneOffset.UTC);
     }
-
-    if (this.connectThroughSSH) {
-      sshTunnelHost = config.getString(JdbcSourceConnectorConfig.SSH_TUNNEL_HOST_CONFIG);
-      sshTunnelPort = config.getInt(JdbcSourceConnectorConfig.SSH_TUNNEL_PORT_CONFIG);
-      sshTunnelUser = config.getString(JdbcSourceConnectorConfig.SSH_TUNNEL_USER_CONFIG);
-      sshTunnelPassword = config.getString(JdbcSourceConnectorConfig.SSH_TUNNEL_PASSWORD_CONFIG);
-      sshTunnelKey = config.getString(JdbcSourceConnectorConfig.SSH_TUNNEL_KEY_CONFIG);
-    }
   }
 
   @Override
@@ -256,16 +248,18 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     DriverManager.setLoginTimeout(40);
 
     if (connectThroughSSH) {
-      log.info("Establishing SSH tunnel session to {}", sshTunnelHost);
+      log.info("Establishing SSH tunnel session to {}, {}", sshTunnelHost, sshTunnelUser);
       Properties sshProps = new Properties();
       sshProps.put("StrictHostKeyChecking", "no");
       jsch = new JSch();
-      if (this.sshTunnelKey != null) {
-        jsch.addIdentity(this.sshTunnelKey);
-        session = jsch.getSession(this.sshTunnelUser, this.sshTunnelHost, this.sshTunnelPort);
+      if (sshTunnelKey != null) {
+    	log.info("SSH session using ssh key {}", sshTunnelKey);
+        jsch.addIdentity(sshTunnelKey);
+        session = jsch.getSession(sshTunnelUser, sshTunnelHost, sshTunnelPort);
       } else {
-        session = jsch.getSession(this.sshTunnelUser, this.sshTunnelHost, this.sshTunnelPort);
-        session.setPassword(this.sshTunnelPassword);
+    	log.info("SSH session using ssh password {}", sshTunnelPassword);
+        session = jsch.getSession(sshTunnelUser, sshTunnelHost, sshTunnelPort);
+        session.setPassword(sshTunnelPassword);
       }
       session.setConfig(sshProps);
       session.connect();

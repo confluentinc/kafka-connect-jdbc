@@ -1,4 +1,4 @@
-FROM confluentinc/cp-kafka-connect:5.4.0
+FROM confluentinc/cp-kafka-connect:5.5.1
 
 RUN echo "===> Installing MySQL connector" \
   && curl https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.19/mysql-connector-java-8.0.19.jar  --output /usr/share/java/kafka-connect-jdbc/mysql-connector-java-8.0.19.jar
@@ -15,7 +15,7 @@ RUN echo "===> Collecting Jsch" \
 RUN echo "===> Collecting SNS" \
   && wget -O /usr/share/java/kafka-connect-jdbc/aws-java-sdk-sns-1.11.725.jar https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-sns/1.11.725/aws-java-sdk-sns-1.11.725.jar
 
-RUN echo "===> Updateing JDBC jar" \
-  && rm -rf /usr/share/java/kafka-connect-jdbc/kafka-connect-jdbc-5.4.0.jar
+RUN echo "===> Updating JDBC jar" \
+  && rm -rf /usr/share/java/kafka-connect-jdbc/kafka-connect-jdbc-5.5.1.jar
 
-COPY ./target/kafka-connect-jdbc-5.4.0.jar /usr/share/java/kafka-connect-jdbc/
+COPY ./target/kafka-connect-jdbc-5.5.1.jar /usr/share/java/kafka-connect-jdbc/

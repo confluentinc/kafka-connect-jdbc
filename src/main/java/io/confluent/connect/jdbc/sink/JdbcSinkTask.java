@@ -87,6 +87,7 @@ public class JdbcSinkTask extends SinkTask {
         for (SinkRecord record : records) {
           retryAndSendDLQ(Collections.singletonList(record));
         }
+        return;
       }
       log.warn(
           "Write of {} records failed, remainingRetries={}",

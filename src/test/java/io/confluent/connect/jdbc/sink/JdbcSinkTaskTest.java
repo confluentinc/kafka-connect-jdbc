@@ -15,8 +15,10 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import static org.easymock.EasyMock.anyObject;
 import static org.easymock.EasyMock.expect;
 import static org.easymock.EasyMock.expectLastCall;
+import static org.easymock.EasyMock.replay;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -40,8 +42,10 @@ import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.RetriableException;
+import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTaskContext;
+import org.easymock.EasyMock;
 import org.easymock.EasyMockSupport;
 import org.junit.After;
 import org.junit.Before;
@@ -236,14 +240,14 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
       }
     };
     task.initialize(ctx);
+    expect(ctx.errantRecordReporter()).andReturn(null);
+    replayAll();
 
     Map<String, String> props = new HashMap<>();
     props.put(JdbcSinkConfig.CONNECTION_URL, "stub");
     props.put(JdbcSinkConfig.MAX_RETRIES, String.valueOf(maxRetries));
     props.put(JdbcSinkConfig.RETRY_BACKOFF_MS, String.valueOf(retryBackoffMs));
     task.start(props);
-
-    replayAll();
 
     try {
       task.put(records);
@@ -288,6 +292,45 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
         System.out.println("Chained exception " + i + ": " + sw);
       }
     }
+
+    verifyAll();
+  }
+
+  @Test
+  public void errorReporting() throws SQLException {
+    final int maxRetries = 2;
+    final int retryBackoffMs = 1000;
+
+    Set<SinkRecord> records = Collections.singleton(new SinkRecord("stub", 0, null, null, null, null, 0));
+    final JdbcDbWriter mockWriter = createMock(JdbcDbWriter.class);
+    SinkTaskContext ctx = createMock(SinkTaskContext.class);
+
+    mockWriter.write(records);
+    SQLException chainedException = new SQLException("cause 1");
+    chainedException.setNextException(new SQLException("cause 2"));
+    chainedException.setNextException(new SQLException("cause 3"));
+    expectLastCall().andThrow(chainedException).times(1);
+    mockWriter.write(anyObject());
+    expectLastCall();
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(ctx);
+    ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
+    expect(ctx.errantRecordReporter()).andReturn(reporter);
+    replayAll();
+
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSinkConfig.CONNECTION_URL, "stub");
+    props.put(JdbcSinkConfig.MAX_RETRIES, String.valueOf(maxRetries));
+    props.put(JdbcSinkConfig.RETRY_BACKOFF_MS, String.valueOf(retryBackoffMs));
+    task.start(props);
+
+    task.put(records);
 
     verifyAll();
   }

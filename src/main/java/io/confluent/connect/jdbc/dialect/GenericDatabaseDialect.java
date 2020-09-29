@@ -269,6 +269,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       }
       session.setConfig(sshProps);
       session.connect();
+      log.info("SSH session connected to {}", sshTunnelHost);
       String remoteDatabaseHost = "";
       int remoteDatabasePort = 0;
       String regexForHostAndPort = "[.A-Za-z0-9_-]+:\\d+";
@@ -285,8 +286,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           remoteDatabaseHost = array[0];
         }
       }
-      
+      log.info("Remote database details {}, {}", remoteDatabaseHost, remoteDatabasePort + "");
       int forwardedPort = session.setPortForwardingL(0, remoteDatabaseHost, remoteDatabasePort);
+      log.info("Port forwarded to: {}", forwardedPort + "");
       this.jdbcUrl = this.jdbcUrl.replace(remoteDatabaseHost, "localhost")
         .replace(remoteDatabasePort + "", "" + forwardedPort);
       log.info("Updated jdbcUrl: {}", this.jdbcUrl);

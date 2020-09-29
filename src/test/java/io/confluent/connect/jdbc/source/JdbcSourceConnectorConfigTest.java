@@ -98,8 +98,9 @@ public class JdbcSourceConnectorConfigTest {
     props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, db.getUrl());
     configDef = JdbcSourceConnectorConfig.baseConfigDef();
     results = configDef.validate(props);
-    assertWhitelistRecommendations("some_table", "public_table", "private_table", "another_private_table");
-    assertBlacklistRecommendations("some_table", "public_table", "private_table", "another_private_table");
+    // Should have no recommended values
+    assertWhitelistRecommendations();
+    assertBlacklistRecommendations();
   }
 
   @Test
@@ -108,8 +109,9 @@ public class JdbcSourceConnectorConfigTest {
     props.put(JdbcSourceConnectorConfig.SCHEMA_PATTERN_CONFIG, "PRIVATE_SCHEMA");
     configDef = JdbcSourceConnectorConfig.baseConfigDef();
     results = configDef.validate(props);
-    assertWhitelistRecommendations("private_table", "another_private_table");
-    assertBlacklistRecommendations("private_table", "another_private_table");
+    // Should have no recommended values
+    assertWhitelistRecommendations();
+    assertBlacklistRecommendations();
   }
 
   @Test

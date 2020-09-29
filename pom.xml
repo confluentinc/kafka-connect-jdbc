@@ -64,7 +64,7 @@
         <mssqlserver.jdbc.driver.version>8.4.1.jre8</mssqlserver.jdbc.driver.version>
         <jtds.driver.version>1.3.1</jtds.driver.version>
         <licenses.name>Confluent Community License</licenses.name>
-        <licenses.version>${project.version}</licenses.version>
+        <licenses.version>4.0.4-SNAPSHOT</licenses.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.package.home>target/${project.artifactId}-${project.version}-package</project.package.home>
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>

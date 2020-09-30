@@ -15,6 +15,14 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.util.DateTimeUtils;
+import java.math.BigDecimal;
+import java.nio.ByteBuffer;
+import java.sql.SQLException;
+import java.time.ZoneOffset;
+import java.util.Calendar;
+import java.util.TimeZone;
+import java.util.concurrent.ThreadLocalRandom;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -33,6 +41,13 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
   @Override
   protected OracleDatabaseDialect createDialect() {
     return new OracleDatabaseDialect(sourceConfigWithUrl("jdbc:oracle:thin://something"));
+  }
+
+  @Override
+  @Test
+  public void bindFieldStringValue() throws SQLException {
+    int index = ThreadLocalRandom.current().nextInt();
+    verifyBindField(++index, Schema.STRING_SCHEMA, "yep").setNString(index, "yep");
   }
 
   @Test

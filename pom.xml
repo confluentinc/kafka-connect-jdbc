@@ -62,7 +62,6 @@
         <postgresql.version>42.2.10</postgresql.version>
         <jtds.driver.version>1.3.1</jtds.driver.version>
         <licenses.name>Confluent Community License</licenses.name>
-        <licenses.version>${project.version}</licenses.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.package.home>target/${project.artifactId}-${project.version}-package</project.package.home>
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
@@ -346,7 +345,7 @@
                             <needarch>noarch</needarch>
                             <targetOS>linux</targetOS>
                             <requires>
-                                <require>confluent-common = ${project.version}</require>
+                                <require>confluent-common = ${confluent.version}</require>
                             </requires>
                             <mappings>
                                 <mapping>
@@ -428,7 +427,7 @@
                                         <argument>-l ${project.build.directory}/${project.build.finalName}-package/share/doc/kafka-connect-jdbc/licenses</argument>
                                         <argument>-n ${project.build.directory}/${project.build.finalName}-package/share/doc/kafka-connect-jdbc/notices</argument>
                                         <argument>-t ${project.name}</argument>
-                                        <argument>-x licenses-${licenses.version}.jar</argument>
+                                        <argument>-x licenses-${confluent.version}.jar</argument>
                                     </arguments>
                                 </configuration>
                                 <phase>package</phase>
@@ -449,7 +448,7 @@
                             <dependency>
                                 <groupId>io.confluent</groupId>
                                 <artifactId>licenses</artifactId>
-                                <version>${licenses.version}</version>
+                                <version>${confluent.version}</version>
                             </dependency>
                         </dependencies>
                     </plugin>
@@ -478,7 +477,7 @@
                                         <argument>-l ${project.basedir}/licenses</argument>
                                         <argument>-n ${project.basedir}/notices</argument>
                                         <argument>-t ${project.name}</argument>
-                                        <argument>-x licenses-${licenses.version}.jar</argument>
+                                        <argument>-x licenses-${confluent.version}.jar</argument>
                                     </arguments>
                                 </configuration>
                                 <phase>package</phase>
@@ -499,7 +498,7 @@
                             <dependency>
                                 <groupId>io.confluent</groupId>
                                 <artifactId>licenses</artifactId>
-                                <version>${licenses.version}</version>
+                                <version>${confluent.version}</version>
                             </dependency>
                         </dependencies>
                     </plugin>

@@ -15,9 +15,13 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 
@@ -71,6 +75,21 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     return "SELECT 1 FROM DUAL";
   }
 
+  @Override
+  protected boolean maybeBindPrimitive(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
+      Object value
+  ) throws SQLException {
+    if (schema.type() == Type.STRING) {
+      statement.setNString(index, (String) value);
+      return true;
+    }
+    return super.maybeBindPrimitive(statement, index, schema, value);
+  }
+
+  @SuppressWarnings("checkstyle:CyclomaticComplexity")
   @Override
   protected String getSqlType(SinkRecordField field) {
     if (field.schemaName() != null) {

@@ -432,6 +432,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
    * <p>This method can be overridden to exclude certain database tables.
    *
    * @param table the identifier of the table; may be null
+   * @return true if the table should be included; false otherwise
    */
   protected boolean includeTable(TableId table) {
     return true;
@@ -1574,6 +1575,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
    * Dialects not supporting `setObject(index, null)` can override this method
    * to provide a specific sqlType, as per the JDBC documentation
    * https://docs.oracle.com/javase/7/docs/api/java/sql/PreparedStatement.html
+   *
+   * @param schema the schema
+   * @return the SQL type
    */
   protected Integer getSqlTypeForSchema(Schema schema) {
     return null;

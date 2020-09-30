@@ -414,6 +414,7 @@ public class ExpressionBuilder {
    * the leading and trailing quotes based upon {@link #setQuoteIdentifiers(QuoteMethod)}.
    *
    * @param name the name to be appended
+   * @param quote the quote method to be used
    * @return this builder to enable methods to be chained; never null
    */
   public ExpressionBuilder appendTableName(String name, QuoteMethod quote) {
@@ -547,6 +548,7 @@ public class ExpressionBuilder {
    * @param obj the object to be appended
    * @param transform the transform that should be used on the supplied object to obtain the
    *                  representation that is appended to the expression; may be null
+   * @param <T> the type of object to transform before appending.
    *
    * @return this builder to enable methods to be chained; never null
    */

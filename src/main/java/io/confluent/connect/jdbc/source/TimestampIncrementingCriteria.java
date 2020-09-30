@@ -178,6 +178,7 @@ public class TimestampIncrementingCriteria {
    *
    * @param schema the record's schema; never null
    * @param record the record's struct; never null
+   * @param previousOffset a previous timestamp offset if the table has timestamp columns
    * @return the timestamp for this row; may not be null
    */
   public TimestampIncrementingOffset extractValues(

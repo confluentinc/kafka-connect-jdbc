@@ -47,6 +47,12 @@ public class DbStructure {
   }
 
   /**
+   * Create or amend table.
+   *
+   * @param config the connector configuration
+   * @param connection the database connection handle
+   * @param tableId the table ID
+   * @param fieldsMetadata the fields metadata
    * @return whether a DDL operation was performed
    * @throws SQLException if a DDL operation was deemed necessary but failed
    */

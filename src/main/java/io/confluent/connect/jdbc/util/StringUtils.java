@@ -25,9 +25,10 @@ public class StringUtils {
 
   /**
    * Generate a String by appending all the @{elements}, converted to Strings, delimited by
-   * @{delim}.
+   * {@code delim}.
    * @param elements list of elements to concatenate
    * @param delim delimiter to place between each element
+   * @param <T> the type of objects to concatenate
    * @return the concatenated string with delimiters
    */
   public static <T> String join(Iterable<T> elements, String delim) {

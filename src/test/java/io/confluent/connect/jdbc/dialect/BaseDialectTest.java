@@ -402,7 +402,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
   }
 
   @Test
-  public void bindFieldPrimitiveValues() throws SQLException {
+  public void bindFieldPrimitiveValuesExceptString() throws SQLException {
     int index = ThreadLocalRandom.current().nextInt();
     verifyBindField(++index, Schema.INT8_SCHEMA, (byte) 42).setByte(index, (byte) 42);
     verifyBindField(++index, Schema.INT16_SCHEMA, (short) 42).setShort(index, (short) 42);
@@ -414,7 +414,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     verifyBindField(++index, Schema.FLOAT64_SCHEMA, 42d).setDouble(index, 42d);
     verifyBindField(++index, Schema.BYTES_SCHEMA, new byte[]{42}).setBytes(index, new byte[]{42});
     verifyBindField(++index, Schema.BYTES_SCHEMA, ByteBuffer.wrap(new byte[]{42})).setBytes(index, new byte[]{42});
-    verifyBindField(++index, Schema.STRING_SCHEMA, "yep").setString(index, "yep");
+
     verifyBindField(
         ++index,
         Decimal.schema(0),
@@ -436,6 +436,12 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
       Timestamp.SCHEMA,
       new java.util.Date(100)
     ).setTimestamp(index, new java.sql.Timestamp(100), utcCalendar);
+  }
+
+  @Test
+  public void bindFieldStringValue() throws SQLException {
+    int index = ThreadLocalRandom.current().nextInt();
+    verifyBindField(++index, Schema.STRING_SCHEMA, "yep").setString(index, "yep");
   }
 
   @Test

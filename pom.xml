@@ -588,9 +588,11 @@
                                         <directory>licenses/*.*</directory>
                                         <directory>notices/*.*</directory>
                                     </includes>
-                                    <!-- We have to manually keep this file until the license finder will find the Oracle license -->
                                     <excludes>
+                                        <!-- We have to manually keep this files until the license finder properly finds the Oracle license -->
                                         <exclude>licenses/LICENSE-ojdbc*.txt</exclude>
+                                        <!-- We have to manually keep this files because the license information in the JAR
+                                        uses an invalid URL to the MIT license -->
                                         <exclude>licenses/LICENSE-mssql-jdbc-*.txt</exclude>
                                     </excludes>
                                 </fileset>

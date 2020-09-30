@@ -44,6 +44,7 @@ import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.Time;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -622,7 +623,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         }
         return result;
       } catch (SQLException e) {
-        throw new ConfigException("Couldn't open connection to " + dbUrl, e);
+        throw new ConnectException("Couldn't open connection to " + dbUrl, e);
       }
     }
 

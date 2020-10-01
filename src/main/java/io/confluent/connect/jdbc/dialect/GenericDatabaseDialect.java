@@ -1705,6 +1705,12 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     return Collections.singletonList(builder.toString());
   }
 
+  @Override
+  public void validateSpecificColumnTypes(
+          ResultSetMetaData rsMetadata,
+          List<ColumnId> columns
+  ) throws ConnectException { }
+
   protected List<String> extractPrimaryKeyFieldNames(Collection<SinkRecordField> fields) {
     final List<String> pks = new ArrayList<>();
     for (SinkRecordField f : fields) {

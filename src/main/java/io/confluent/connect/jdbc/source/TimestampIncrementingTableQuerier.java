@@ -157,7 +157,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
       resultSet = executeQuery();
       String schemaName = tableId != null ? tableId.tableName() : null; // backwards compatible
       ResultSetMetaData metadata = resultSet.getMetaData();
-      dialect.validateTimestampColumns(metadata, timestampColumns);
+      dialect.validateSpecificColumnTypes(metadata, timestampColumns);
       schemaMapping = SchemaMapping.create(schemaName, metadata, dialect);
     }
   }

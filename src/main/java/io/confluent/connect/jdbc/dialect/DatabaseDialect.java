@@ -442,18 +442,19 @@ public interface DatabaseDialect extends ConnectionProvider {
   ) throws SQLException;
 
   /**
-   * Validate that columns used for timestamp mode are compatible with connector.
-   * For example MSSQL Server's DATETIME columns are not supported as
-   * columns in timestamp mode.
+   * Validate if dialect specific column types are compatible with connector.
+   * Sometimes JDBC treats some column types in a SQL database the same
+   * (eg, MSSQL Server's DATETIME and DATETIME2 are considered {@link java.sql.Time}).
+   * This function is used to handle these specifc column types.
    *
    * @param rsMetadata          the result set metadata; may not be null
-   * @param timestampColumns    the timestamp columns configured; may not be null
+   * @param columns             columns to check; may not be null
    * @throws ConnectException   if column type not compatible with connector
    *                            or if there is an error accessing the result set metadata
    */
-  void validateTimestampColumns(
+  void validateSpecificColumnTypes(
           ResultSetMetaData rsMetadata,
-          List<ColumnId> timestampColumns
+          List<ColumnId> columns
   ) throws ConnectException;
 
   /**

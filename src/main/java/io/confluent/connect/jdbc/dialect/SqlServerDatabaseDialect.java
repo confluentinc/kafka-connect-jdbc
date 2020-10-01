@@ -351,15 +351,16 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
    * References: http://www.dbdelta.com/sql-server-2016-and-azure-sql-database-v12-breaking-change/
    *
    * @param rsMetadata          the result set metadata; may not be null
-   * @param timestampColumns    the timestamp columns configured; may not be null
+   * @param columns             the timestamp columns configured; may not be null
    * @throws ConnectException   if column type not compatible with connector
    *                            or if there is an error accessing the result set metadata
    */
   @Override
-  public void validateTimestampColumns(
+  public void validateSpecificColumnTypes(
           ResultSetMetaData rsMetadata,
-          List<ColumnId> timestampColumns
+          List<ColumnId> columns
   ) throws ConnectException {
+    List<ColumnId> timestampColumns = columns;
     if (verifiedSqlServerTimestamp) {
       return;
     }

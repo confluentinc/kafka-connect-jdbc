@@ -1641,9 +1641,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   @Override
-  public void validateTimestampColumns(
+  public void validateSpecificColumnTypes(
           ResultSetMetaData rsMetadata,
-          List<ColumnId> timestampColumns
+          List<ColumnId> columns
   ) throws ConnectException { }
 
   protected List<String> extractPrimaryKeyFieldNames(Collection<SinkRecordField> fields) {

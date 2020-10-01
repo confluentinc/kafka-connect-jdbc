@@ -23,6 +23,7 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.time.ZonedDateTime;
@@ -44,6 +45,9 @@ import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.ColumnDefinition.Mutability;
 import io.confluent.connect.jdbc.util.ColumnDefinition.Nullability;
+import org.apache.kafka.connect.errors.ConnectException;
+
+import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG;
 
 /**
  * A {@link DatabaseDialect} for SQL Server.
@@ -63,6 +67,15 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
   private static final String DATE_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss.SSSSSSS ZZZZZ";
   private static final DateTimeFormatter DATE_TIME_FORMATTER =
       DateTimeFormatter.ofPattern(DATE_TIME_FORMAT);
+  private static final int MSSQL_2016_VERSION = 13;
+  private static final int PRE_MSSQL_2016_VERSION = 12;
+
+  /**
+   * JDBC TypeName constant for SQL Server's DATETIME columns.
+   */
+  private static String DATETIME = "datetime";
+
+  private boolean verifiedSqlServerTimestamp = false;
 
   /**
    * The provider for {@link SqlServerDatabaseDialect}.
@@ -89,6 +102,26 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
   public SqlServerDatabaseDialect(AbstractConfig config) {
     super(config, new IdentifierRules(".", "[", "]"));
     jtdsDriver = jdbcUrlInfo == null ? false : jdbcUrlInfo.subprotocol().matches("jtds");
+  }
+
+  /**
+   * Check if the mssql server instance, the connector is configured, to is an mssql version with
+   * the breaking Datetime change (MSSQL Server version 2016 or newer). If unable to get version
+   * assume non breaking datetime version
+   * @return if mssql server instance connected to, is version with breaking datetime or not
+   */
+  public boolean versionWithBreakingDatetimeChange() {
+    String jdbcDatabaseMajorVersion = jdbcDriverInfo().productVersion().split("\\.")[0];
+    int jdbcDatabaseMajorVersionValue = PRE_MSSQL_2016_VERSION;
+    try {
+      jdbcDatabaseMajorVersionValue = Integer.parseInt(jdbcDatabaseMajorVersion);
+    } catch (NumberFormatException e) {
+      log.warn("Could not retrieve MSSQL Database version from JDBC."
+              + "Version is used to verify timestamp mode compatibility with "
+              + "Sql Server Datetime columns. Defaulting to pre 2016 version."
+              + "Error:" + e.toString());
+    }
+    return (jdbcDatabaseMajorVersionValue >= MSSQL_2016_VERSION);
   }
 
   @Override
@@ -303,6 +336,55 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
            .of(nonKeyColumns, keyColumns);
     builder.append(");");
     return builder.toString();
+  }
+
+  /**
+   * If Sql Server is 2016 or newer, and time stamp mode configured against a datetime column
+   * kill task.
+   * Datetime as a Timestamp column is not supported for these versions because a Datetime casting
+   * error causes our connector to loop on the most recent record. The error arises because JDBC
+   * handles all timestamp columns as {@link java.sql.Time} and by extension to a greater precision
+   * than supported by Datetime. Since Datetime is only accurate to 3.33 MS it casts itself
+   * a higher precision recursively (3.333333 MS). However JDBC casts to higher precision
+   * non recursively (3.330000 MS). This disparity causes looping.
+   * Older MSSQL Server instances do not have this problem because it casts non-recursively.
+   * References: http://www.dbdelta.com/sql-server-2016-and-azure-sql-database-v12-breaking-change/
+   *
+   * @param rsMetadata          the result set metadata; may not be null
+   * @param columns             the timestamp columns configured; may not be null
+   * @throws ConnectException   if column type not compatible with connector
+   *                            or if there is an error accessing the result set metadata
+   */
+  @Override
+  public void validateSpecificColumnTypes(
+          ResultSetMetaData rsMetadata,
+          List<ColumnId> columns
+  ) throws ConnectException {
+    List<ColumnId> timestampColumns = columns;
+    if (verifiedSqlServerTimestamp) {
+      return;
+    }
+
+    if (versionWithBreakingDatetimeChange()) {
+      try {
+        for (int i = 0; i < rsMetadata.getColumnCount(); i++) {
+          // columns in the meta data is indexed starting at 1 (not 0).
+          if (rsMetadata.getColumnTypeName(i + 1).equals(DATETIME)) {
+            for (ColumnId id: timestampColumns) {
+              if (id.name().equals(rsMetadata.getColumnName(i + 1))) {
+                throw new ConnectException(
+                        "A DATETIME column is configured for " + TIMESTAMP_COLUMN_NAME_CONFIG
+                        + " with Sql Server. DATETIME is not supported. Use DATETIME2 instead.");
+              }
+            }
+          }
+        }
+      } catch (SQLException sqlException) {
+        throw new ConnectException("Failed to get table meta data"
+                + "while verifying Timestamp column type:", sqlException);
+      }
+    }
+    verifiedSqlServerTimestamp = true;
   }
 
   @Override

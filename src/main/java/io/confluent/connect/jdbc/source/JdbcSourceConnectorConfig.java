@@ -369,6 +369,26 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final Class<? extends AWSCredentialsProvider> CREDENTIALS_PROVIDER_CLASS_DEFAULT =
       DefaultAWSCredentialsProviderChain.class;
   
+  public static final String FEED_ID_CONFIG = "feed.id";
+  public static final String FEED_ID_DEFAULT = "";
+  public static final String FEED_ID_DOC = "Feed Id";
+  public static final String FEED_ID_DISPLAY = "Feed Id";
+  
+  public static final String FEED_RUN_ID_CONFIG = "feed.run.id";
+  public static final String FEED_RUN_ID_DEFAULT = "";
+  public static final String FEED_RUN_ID_DOC = "Feed Run Id";
+  public static final String FEED_RUN_ID_DISPLAY = "Feed Run Id";
+  
+  public static final String FEED_RUNTIME_CONFIG = "feed.runtime";
+  public static final String FEED_RUNTIME_DEFAULT = "";
+  public static final String FEED_RUNTIME_DOC = "Feed Runtime";
+  public static final String FEED_RUNTIME_DISPLAY = "Feed Runtime";
+  
+  public static final String TENANT_CONFIG = "tenant";
+  public static final String TENANT_DEFAULT = "";
+  public static final String TENANT_DOC = "Tenant";
+  public static final String TENANT_DISPLAY = "Tenant";
+  
   public static final String CREDENTIALS_PROVIDER_CONFIG_PREFIX =
       CREDENTIALS_PROVIDER_CLASS_CONFIG.substring(
          0,
@@ -875,7 +895,47 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.LONG,
         "AWS Secret Access Key"
-    );
+    ).define(
+        FEED_ID_CONFIG,
+        Type.STRING,
+        FEED_ID_DEFAULT,
+        Importance.LOW,
+        FEED_ID_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        FEED_ID_DISPLAY
+    ).define(
+        FEED_RUN_ID_CONFIG,
+        Type.STRING,
+        FEED_RUN_ID_DEFAULT,
+        Importance.LOW,
+        FEED_RUN_ID_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        FEED_RUN_ID_DISPLAY
+    ).define(
+        FEED_RUNTIME_CONFIG,
+        Type.STRING,
+        FEED_RUNTIME_DEFAULT,
+        Importance.LOW,
+        FEED_RUNTIME_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        FEED_RUNTIME_DISPLAY
+    ).define(
+        TENANT_CONFIG,
+        Type.STRING,
+        TENANT_DEFAULT,
+        Importance.LOW,
+        TENANT_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        TENANT_DISPLAY
+     );
   }
 
   public static final ConfigDef CONFIG_DEF = baseConfigDef();

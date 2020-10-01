@@ -363,6 +363,10 @@ public class JdbcSourceTask extends SourceTask {
             payload.put("event", "success");
             payload.put("topic", config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG) + "-" 
                 + (config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).get(0));
+            payload.put("feedId", config.getString(JdbcSourceTaskConfig.FEED_ID_CONFIG));
+            payload.put("feedRunId", config.getString(JdbcSourceTaskConfig.FEED_RUN_ID_CONFIG));
+            payload.put("tenant", config.getString(JdbcSourceTaskConfig.TENANT_CONFIG));
+            payload.put("runTime", config.getString(JdbcSourceTaskConfig.FEED_RUNTIME_CONFIG));
      
             log.trace("Sending event to SNS topic {} ", topicArn);
             new SNSClient(config).publish(topicArn, payload.toString());
@@ -408,6 +412,10 @@ public class JdbcSourceTask extends SourceTask {
           payload.put("error", sqle.getMessage());
           payload.put("topic", config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG) + "-" 
               + (config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).get(0));
+          payload.put("feedId", config.getString(JdbcSourceTaskConfig.FEED_ID_CONFIG));
+          payload.put("feedRunId", config.getString(JdbcSourceTaskConfig.FEED_RUN_ID_CONFIG));
+          payload.put("tenant", config.getString(JdbcSourceTaskConfig.TENANT_CONFIG));
+          payload.put("runTime", config.getString(JdbcSourceTaskConfig.FEED_RUNTIME_CONFIG));
 
           log.trace("Sending event to SNS topic {} ", topicArn);
           new SNSClient(config).publish(topicArn, payload.toString());

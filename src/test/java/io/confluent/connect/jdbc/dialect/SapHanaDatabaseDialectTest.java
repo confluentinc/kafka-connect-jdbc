@@ -21,6 +21,7 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.List;
@@ -31,6 +32,12 @@ import io.confluent.connect.jdbc.util.TableId;
 import static org.junit.Assert.assertEquals;
 
 public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseDialect> {
+
+  @Before
+  public void setup() throws Exception {
+    super.setup();
+    initDefaultIdentifierRules(dialect);
+  }
 
   @Override
   protected SapHanaDatabaseDialect createDialect() {
@@ -128,7 +135,7 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
   }
 
   @Test
-  public void shouldBuildUpsertStatement() {
+  public void shouldBuildUpsertStatement() throws Exception {
     assertEquals(
         "UPSERT \"myTable\""
         + "(\"id1\",\"id2\",\"columnA\",\"columnB\",\"columnC\",\"columnD\") "
@@ -139,6 +146,7 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     assertEquals(
         "UPSERT myTable"
         + "(id1,id2,columnA,columnB,columnC,columnD) "
@@ -163,7 +171,7 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
   }
 
   @Test
-  public void createThreeColTwoPk() {
+  public void createThreeColTwoPk() throws Exception {
     verifyCreateThreeColTwoPk(
         "CREATE COLUMN TABLE \"myTable\" (" + System.lineSeparator() + "\"pk1\" INTEGER NOT NULL," +
         System.lineSeparator() + "\"pk2\" INTEGER NOT NULL," + System.lineSeparator() +
@@ -171,6 +179,7 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     verifyCreateThreeColTwoPk(
         "CREATE COLUMN TABLE myTable (" + System.lineSeparator() + "pk1 INTEGER NOT NULL," +
         System.lineSeparator() + "pk2 INTEGER NOT NULL," + System.lineSeparator() +
@@ -191,7 +200,7 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
   }
 
   @Test
-  public void upsert() {
+  public void upsert() throws Exception {
     TableId tableA = tableId("tableA");
     assertEquals(
         "UPSERT \"tableA\"(\"col1\",\"col2\",\"col3\",\"col4\") VALUES(?,?,?,?) WITH PRIMARY KEY",
@@ -204,6 +213,7 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     assertEquals(
         "UPSERT tableA(col1,col2,col3,col4) VALUES(?,?,?,?) WITH PRIMARY KEY",
         dialect.buildUpsertQueryStatement(

@@ -47,20 +47,22 @@ public class TableQuerierTest {
   @Before
   public void init()
   {
+    connectionMock = mock(Connection.class);
     databaseDialectMock = mock(DatabaseDialect.class);
-    when(databaseDialectMock.parseTableIdentifier(Matchers.anyString()))
+    when(databaseDialectMock.parseTableIdentifier(Matchers.anyObject(), Matchers.anyString()))
       .thenReturn(new TableId(null,null,TABLE_NAME));	  
     when(databaseDialectMock.expressionBuilder())
       .thenReturn(ExpressionBuilder.create());
     when(databaseDialectMock.criteriaFor(Matchers.any(ColumnId.class), Matchers.anyListOf(ColumnId.class)))
       .thenReturn(new TimestampIncrementingCriteria(new ColumnId(new TableId(null,null,TABLE_NAME),INCREMENTING_COLUMN_NAME), null,null));
 	    
-    connectionMock = mock(Connection.class);	  
+
   }
   
   @Test
   public void testTimestampIncrementingTableQuerierInTableModeWithSuffix() throws SQLException {
     TimestampIncrementingTableQuerier querier = new TimestampIncrementingTableQuerier(
+                                                    connectionMock,
                                                     databaseDialectMock, 
                                                     QueryMode.TABLE, 
                                                     TABLE_NAME, 
@@ -81,6 +83,7 @@ public class TableQuerierTest {
   @Test
   public void testTimestampIncrementingTableQuerierInQueryModeWithSuffix() throws SQLException {	    
     TimestampIncrementingTableQuerier querier = new TimestampIncrementingTableQuerier(
+                                                    connectionMock,
                                                     databaseDialectMock, 
                                                     QueryMode.QUERY, 
                                                     QUERY, 
@@ -101,6 +104,7 @@ public class TableQuerierTest {
   @Test
   public void testBulkTableQuerierInTableModeWithSuffix() throws SQLException {	    
     BulkTableQuerier querier = new BulkTableQuerier(
+                                   connectionMock,
                                    databaseDialectMock,
                                    QueryMode.TABLE, 
                                    TABLE_NAME, 
@@ -116,6 +120,7 @@ public class TableQuerierTest {
   @Test
   public void testBulkTableQuerierInQueryModeWithSuffix() throws SQLException {
 	BulkTableQuerier querier = new BulkTableQuerier(
+                                   connectionMock,
                                    databaseDialectMock, 
                                    QueryMode.QUERY,
                                    QUERY, 
@@ -131,6 +136,7 @@ public class TableQuerierTest {
   @Test
   public void testBulkTableQuerierInQueryModeWithoutSuffix() throws SQLException {
     BulkTableQuerier querier = new BulkTableQuerier(
+                                   connectionMock,
                                    databaseDialectMock, 
                                    QueryMode.QUERY, 
                                    QUERY, 

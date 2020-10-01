@@ -148,10 +148,29 @@ public interface DatabaseDialect extends ConnectionProvider {
   /**
    * Parse the supplied simple name or fully qualified name for a table into a {@link TableId}.
    *
+   * <p>This method is only called by the default implementation of
+   * {@link #parseTableIdentifier(Connection, String)}, since
+   * many dialects implement this variant of the method. However, overriding
+   * {@link #parseTableIdentifier(Connection, String)} is suggested.
+   *
+   * @param fqn the fully qualified string representation; may not be null
+   * @return the table identifier; never nulll
+   * @deprecated use {@link #parseTableIdentifier(Connection, String)}
+   */
+  @Deprecated
+  TableId parseTableIdentifier(String fqn);
+
+  /**
+   * Parse the supplied simple name or fully qualified name for a table into a {@link TableId}.
+   *
+   * @param connection the database connection; may not be null
    * @param fqn the fully qualified string representation; may not be null
    * @return the table identifier; never null
    */
-  TableId parseTableIdentifier(String fqn);
+  default TableId parseTableIdentifier(Connection connection, String fqn) {
+    return parseTableIdentifier(fqn);
+  }
+
 
   /**
    * Get the identifier rules for this database.

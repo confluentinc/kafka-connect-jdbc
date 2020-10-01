@@ -58,6 +58,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   private String loggedQueryString;
 
   public TableQuerier(
+      Connection connection,
       DatabaseDialect dialect,
       QueryMode mode,
       String nameOrQuery,
@@ -66,7 +67,9 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   ) {
     this.dialect = dialect;
     this.mode = mode;
-    this.tableId = mode.equals(QueryMode.TABLE) ? dialect.parseTableIdentifier(nameOrQuery) : null;
+    this.tableId = mode.equals(QueryMode.TABLE)
+            ? dialect.parseTableIdentifier(connection, nameOrQuery)
+            : null;
     this.query = mode.equals(QueryMode.QUERY) ? nameOrQuery : null;
     this.topicPrefix = topicPrefix;
     this.lastUpdate = 0;

@@ -36,9 +36,16 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.junit.Before;
 import org.junit.Test;
 
 public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDialect> {
+
+  @Before
+  public void setup() throws Exception {
+    super.setup();
+    initDefaultIdentifierRules(dialect);
+  }
 
   @Override
   protected SybaseDatabaseDialect createDialect() {
@@ -101,7 +108,7 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
   }
 
   @Test
-  public void shouldBuildCreateTableStatement() {
+  public void shouldBuildCreateTableStatement() throws Exception{
     assertEquals(
         "CREATE TABLE \"myTable\" (\n"
         + "\"c1\" int NOT NULL,\n"
@@ -119,6 +126,7 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     assertEquals(
         "CREATE TABLE myTable (\n"
         + "c1 int NOT NULL,\n"
@@ -151,7 +159,7 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
   }
 
   @Test
-  public void shouldBuildDropTableStatementWithIfExistsClauseAndSchemaNameInTableId() {
+  public void shouldBuildDropTableStatementWithIfExistsClauseAndSchemaNameInTableId() throws Exception {
     tableId = new TableId("dbName","dbo", "myTable");
     assertEquals(
         "IF EXISTS (SELECT 1 FROM sysobjects INNER JOIN sysusers ON sysobjects.uid"
@@ -162,6 +170,7 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     assertEquals(
         "IF EXISTS (SELECT 1 FROM sysobjects INNER JOIN sysusers ON sysobjects.uid"
         + "=sysusers.uid WHERE sysusers.name='dbo' AND sysobjects.name='myTable'"
@@ -183,7 +192,7 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
   }
 
   @Test
-  public void shouldBuildUpsertStatement() {
+  public void shouldBuildUpsertStatement() throws Exception {
     assertEquals(
         "merge into \"myTable\" with (HOLDLOCK) AS target using (select ? AS \"id1\", ?" +
         " AS \"id2\", ? AS \"columnA\", ? AS \"columnB\", ? AS \"columnC\", ? AS \"columnD\")" +
@@ -199,6 +208,7 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     assertEquals(
         "merge into myTable with (HOLDLOCK) AS target using (select ? AS id1, ?" +
         " AS id2, ? AS columnA, ? AS columnB, ? AS columnC, ? AS columnD)" +
@@ -227,7 +237,7 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
   }
 
   @Test
-  public void createThreeColTwoPk() {
+  public void createThreeColTwoPk() throws Exception {
     verifyCreateThreeColTwoPk(
         "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "\"pk1\" int NOT NULL," +
         System.lineSeparator() + "\"pk2\" int NOT NULL," + System.lineSeparator() +
@@ -235,6 +245,7 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     verifyCreateThreeColTwoPk(
         "CREATE TABLE myTable (" + System.lineSeparator() + "pk1 int NOT NULL," +
         System.lineSeparator() + "pk2 int NOT NULL," + System.lineSeparator() +
@@ -255,7 +266,7 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
   }
 
   @Test
-  public void upsert1() {
+  public void upsert1() throws Exception{
     TableId customer = tableId("Customer");
     assertEquals(
         "merge into \"Customer\" with (HOLDLOCK) AS target using (select ? AS \"id\", ? AS \"name\", ? " +
@@ -273,6 +284,7 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     assertEquals(
         "merge into Customer with (HOLDLOCK) AS target using (select ? AS id, ? AS name, ? " +
         "AS salary, ? AS address) AS incoming on (target.id=incoming.id) when matched then update set " +
@@ -289,7 +301,7 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
   }
 
   @Test
-  public void upsert2() {
+  public void upsert2() throws Exception {
     TableId book = new TableId(null, null, "Book");
     assertEquals(
         "merge into \"Book\" with (HOLDLOCK) AS target using (select ? AS \"author\", ? AS \"title\", ?" +
@@ -308,6 +320,7 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     assertEquals(
         "merge into Book with (HOLDLOCK) AS target using (select ? AS author, ? AS title, ?" +
         " AS ISBN, ? AS year, ? AS pages)" +

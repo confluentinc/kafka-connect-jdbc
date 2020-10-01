@@ -112,7 +112,7 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
   protected GenericDatabaseDialect newDialectFor(
       Set<String> tableTypes,
       String schemaPattern
-  ) {
+  ) throws Exception {
     if (schemaPattern != null) {
       connProps.put(JdbcSourceConnectorConfig.SCHEMA_PATTERN_CONFIG, schemaPattern);
     } else {
@@ -266,16 +266,18 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
   }
 
   @Test
-  public void testBuildCreateTableStatement() {
+  public void testBuildCreateTableStatement() throws Exception {
     newDialectFor(TABLE_TYPES, null);
+    dialect.getConnection(); // init IdentifierRules
     assertEquals(
         "INSERT INTO \"myTable\"(\"id1\",\"id2\",\"columnA\",\"columnB\",\"columnC\",\"columnD\") VALUES(?,?,?,?,?,?)",
         dialect.buildInsertStatement(tableId, pkColumns, columnsAtoD));
   }
 
   @Test
-  public void testBuildDeleteStatement() {
+  public void testBuildDeleteStatement() throws Exception {
     newDialectFor(TABLE_TYPES, null);
+    dialect.getConnection(); // init IdentifierRules
     assertEquals(
         "DELETE FROM \"myTable\" WHERE \"id1\" = ? AND \"id2\" = ?",
         dialect.buildDeleteStatement(tableId, pkColumns)
@@ -403,7 +405,7 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
 
 
   @Test
-  public void formatColumnValue() {
+  public void formatColumnValue() throws Exception {
     verifyFormatColumnValue("42", Schema.INT8_SCHEMA, (byte) 42);
     verifyFormatColumnValue("42", Schema.INT16_SCHEMA, (short) 42);
     verifyFormatColumnValue("42", Schema.INT32_SCHEMA, 42);
@@ -423,14 +425,14 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
     verifyFormatColumnValue("'2016-09-23 20:10:02.123'", Timestamp.SCHEMA, instant);
   }
 
-  private void verifyFormatColumnValue(String expected, Schema schema, Object value) {
+  private void verifyFormatColumnValue(String expected, Schema schema, Object value) throws Exception {
     GenericDatabaseDialect dialect = dummyDialect();
     ExpressionBuilder builder = dialect.expressionBuilder();
     dialect.formatColumnValue(builder, schema.name(), schema.parameters(), schema.type(), value);
     assertEquals(expected, builder.toString());
   }
 
-  private void verifyWriteColumnSpec(String expected, SinkRecordField field) {
+  private void verifyWriteColumnSpec(String expected, SinkRecordField field) throws Exception {
     GenericDatabaseDialect dialect = dummyDialect();
     ExpressionBuilder builder = dialect.expressionBuilder();
     if (quoteIdentfiiers != null) {
@@ -440,18 +442,20 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
     assertEquals(expected, builder.toString());
   }
 
-  private GenericDatabaseDialect dummyDialect() {
+  private GenericDatabaseDialect dummyDialect() throws Exception {
     IdentifierRules rules = new IdentifierRules(",", "`", "`");
-    return new GenericDatabaseDialect(config, rules) {
+    GenericDatabaseDialect dialect =  new GenericDatabaseDialect(config, rules) {
       @Override
       protected String getSqlType(SinkRecordField f) {
         return "DUMMY";
       }
     };
+    dialect.getConnection(); //init IdentifierRules
+    return dialect;
   }
 
   @Test
-  public void writeColumnSpec() {
+  public void writeColumnSpec() throws Exception {
     verifyWriteColumnSpec("\"foo\" DUMMY DEFAULT 42", new SinkRecordField(
         SchemaBuilder.int32().defaultValue(42).build(), "foo", true));
     verifyWriteColumnSpec("\"foo\" DUMMY DEFAULT 42", new SinkRecordField(SchemaBuilder.int32().defaultValue(42).build(), "foo", false));

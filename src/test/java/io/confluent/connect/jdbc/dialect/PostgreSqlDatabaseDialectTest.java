@@ -23,6 +23,7 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -40,6 +41,12 @@ import io.confluent.connect.jdbc.util.TableId;
 import static org.junit.Assert.assertEquals;
 
 public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDatabaseDialect> {
+
+  @Before
+  public void setup() throws Exception {
+    super.setup();
+    initDefaultIdentifierRules(dialect);
+  }
 
   @Override
   protected PostgreSqlDatabaseDialect createDialect() {
@@ -107,7 +114,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
-  public void shouldBuildCreateQueryStatement() {
+  public void shouldBuildCreateQueryStatement() throws Exception {
     assertEquals(
         "CREATE TABLE \"myTable\" (\n"
         + "\"c1\" INT NOT NULL,\n"
@@ -125,7 +132,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
-
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     assertEquals(
         "CREATE TABLE myTable (\n"
         + "c1 INT NOT NULL,\n"
@@ -143,7 +150,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
-  public void shouldBuildAlterTableStatement() {
+  public void shouldBuildAlterTableStatement() throws Exception {
     assertEquals(
         Arrays.asList(
             "ALTER TABLE \"myTable\" \n"
@@ -162,7 +169,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
-
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     assertEquals(
         Arrays.asList(
             "ALTER TABLE myTable \n"
@@ -181,7 +188,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
-  public void shouldBuildInsertStatement() {
+  public void shouldBuildInsertStatement() throws Exception {
     TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("myTable");
     builder.withColumn("id1").type("int", JDBCType.INTEGER, Integer.class);
     builder.withColumn("id2").type("int", JDBCType.INTEGER, Integer.class);
@@ -198,7 +205,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
-
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     assertEquals(
         "INSERT INTO myTable (id1,id2,columnA,columnB," +
         "columnC,columnD) VALUES (?,?,?,?,?,?)",
@@ -224,7 +231,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     );
   }
   @Test
-  public void shouldBuildUpsertStatement() {
+  public void shouldBuildUpsertStatement() throws Exception {
     TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("myTable");
     builder.withColumn("id1").type("int", JDBCType.INTEGER, Integer.class);
     builder.withColumn("id2").type("int", JDBCType.INTEGER, Integer.class);
@@ -244,7 +251,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
-
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     assertEquals(
         "INSERT INTO myTable (id1,id2,columnA,columnB," +
         "columnC,columnD) VALUES (?,?,?,?,?,?) ON CONFLICT (id1," +
@@ -309,7 +316,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
-  public void createThreeColTwoPk() {
+  public void createThreeColTwoPk() throws Exception {
     verifyCreateThreeColTwoPk(
         "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "\"pk1\" INT NOT NULL," +
         System.lineSeparator() + "\"pk2\" INT NOT NULL," + System.lineSeparator() +
@@ -317,7 +324,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
-
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     verifyCreateThreeColTwoPk(
         "CREATE TABLE myTable (" + System.lineSeparator() + "pk1 INT NOT NULL," +
         System.lineSeparator() + "pk2 INT NOT NULL," + System.lineSeparator() +
@@ -337,7 +344,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
-  public void upsert() {
+  public void upsert() throws Exception {
     TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("Customer");
     builder.withColumn("id").type("int", JDBCType.INTEGER, Integer.class);
     builder.withColumn("name").type("varchar", JDBCType.VARCHAR, String.class);
@@ -370,7 +377,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
-
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     assertEquals(
         "INSERT INTO Customer (id,name,salary,address) " +
         "VALUES (?,?,?,?) ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name," +

@@ -19,7 +19,9 @@ import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnDefinition.Mutability;
 import io.confluent.connect.jdbc.util.ColumnDefinition.Nullability;
-import java.sql.Types;
+
+import java.lang.reflect.Method;
+import java.sql.*;
 import java.time.ZoneOffset;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -36,9 +38,6 @@ import org.junit.Test;
 
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -62,9 +61,8 @@ import io.confluent.connect.jdbc.util.TableId;
 import static junit.framework.TestCase.assertNotNull;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.when;
 
 public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
 
@@ -144,12 +142,49 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     DriverManager.setLoginTimeout(defaultLoginTimeout);
   }
 
+  protected void initDefaultIdentifierRules(DatabaseDialect dialect) throws Exception {
+    DatabaseMetaData mockMetaData = mock(DatabaseMetaData.class);
+    when(mockMetaData.getIdentifierQuoteString()).thenReturn("");
+    when(mockMetaData.getCatalogSeparator()).thenReturn("");
+
+    Connection connectionMock = mock(Connection.class);
+    when(connectionMock.getMetaData()).thenReturn(mockMetaData);
+    Method method;
+    try {
+      //usually `DatabaseDialect` object is a child of `GenericDatabaseDialect`
+      // so get `GenericDatabaseDialect` object and the declared method
+      method = dialect.getClass().getSuperclass().getDeclaredMethod(
+              "setIdentifierRules",
+              Connection.class
+      );
+    } catch(NoSuchMethodException ex) {
+      try {
+        // if that fails, check if `DatabaseDialect` object is `GenericDatabaseDialect` object
+        // and ignore error
+        method = dialect.getClass().getDeclaredMethod(
+                "setIdentifierRules",
+                Connection.class
+        );
+
+
+      } catch(NoSuchMethodException ex2) {
+        // if that fails, check if object is a grand child of GenericDatabaseDialect
+        // and ignore error
+        method = dialect.getClass().getSuperclass().getSuperclass().getDeclaredMethod(
+                "setIdentifierRules",
+                Connection.class
+        );
+      }
+    }
+    method.setAccessible(true);
+    method.invoke(dialect, connectionMock);
+  }
   /**
    * Create an instance of the dialect to be tested.
    *
    * @return the dialect; may not be null
    */
-  protected abstract T createDialect();
+  protected abstract T createDialect() throws Exception;
 
   /**
    * Create a {@link JdbcSourceConnectorConfig} with the specified URL and optional config props.

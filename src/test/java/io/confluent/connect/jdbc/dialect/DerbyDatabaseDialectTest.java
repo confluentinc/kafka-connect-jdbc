@@ -21,6 +21,7 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -33,6 +34,12 @@ import static org.junit.Assert.assertEquals;
 
 public class DerbyDatabaseDialectTest extends BaseDialectTest<DerbyDatabaseDialect> {
 
+  @Before
+  public void setup() throws Exception {
+    super.setup();
+    initDefaultIdentifierRules(dialect);
+  }
+  
   @Override
   protected DerbyDatabaseDialect createDialect() {
     return new DerbyDatabaseDialect(sourceConfigWithUrl("jdbc:derby://something"));
@@ -104,9 +111,10 @@ public class DerbyDatabaseDialectTest extends BaseDialectTest<DerbyDatabaseDiale
   }
 
   @Test
-  public void shouldBuildCreateQueryStatementWithNoIdentifierQuoting() {
+  public void shouldBuildCreateQueryStatementWithNoIdentifierQuoting() throws Exception {
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
+    initDefaultIdentifierRules(dialect);
 
     String expected =
         "CREATE TABLE myTable (\nc1 INTEGER NOT NULL,\nc2 BIGINT NOT NULL,\n"
@@ -134,9 +142,10 @@ public class DerbyDatabaseDialectTest extends BaseDialectTest<DerbyDatabaseDiale
   }
 
   @Test
-  public void shouldBuildAlterTableStatementWithNoIdentifierQuoting() {
+  public void shouldBuildAlterTableStatementWithNoIdentifierQuoting() throws Exception {
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
+    initDefaultIdentifierRules(dialect);
 
     List<String> statements = dialect.buildAlterTable(tableId, sinkRecordFields);
     String[] sql = {"ALTER TABLE myTable \n"
@@ -261,9 +270,10 @@ public class DerbyDatabaseDialectTest extends BaseDialectTest<DerbyDatabaseDiale
   }
 
   @Test
-  public void upsertOnlyKeyColsWithNoIdentifiernQuoting() {
+  public void upsertOnlyKeyColsWithNoIdentifiernQuoting() throws Exception {
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
+    initDefaultIdentifierRules(dialect);
 
     TableId actor = tableId("actor");
     String expected = "merge into actor using (values(?)) as DAT(actor_id) on actor"

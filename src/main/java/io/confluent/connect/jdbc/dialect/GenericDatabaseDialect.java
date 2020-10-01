@@ -225,9 +225,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     // and again in the leader worker and still be under 90s REST serving timeout
     DriverManager.setLoginTimeout(40);
     Connection connection = DriverManager.getConnection(jdbcUrl, properties);
-    if (jdbcDriverInfo == null) {
-      jdbcDriverInfo = createJdbcDriverInfo(connection);
-    }
+    createJdbcDriverInfo(connection);
+    setIdentifierRules(connection);
     connections.add(connection);
     return connection;
   }
@@ -284,25 +283,25 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   protected JdbcDriverInfo jdbcDriverInfo() {
+    return jdbcDriverInfo;
+  }
+
+  protected void createJdbcDriverInfo(Connection connection) {
     if (jdbcDriverInfo == null) {
-      try (Connection connection = getConnection()) {
-        jdbcDriverInfo = createJdbcDriverInfo(connection);
+      try {
+        DatabaseMetaData metadata = connection.getMetaData();
+        jdbcDriverInfo = new JdbcDriverInfo(
+          metadata.getJDBCMajorVersion(),
+          metadata.getJDBCMinorVersion(),
+          metadata.getDriverName(),
+          metadata.getDatabaseProductName(),
+          metadata.getDatabaseProductVersion()
+        );
+
       } catch (SQLException e) {
         throw new ConnectException("Unable to get JDBC driver information", e);
       }
     }
-    return jdbcDriverInfo;
-  }
-
-  protected JdbcDriverInfo createJdbcDriverInfo(Connection connection) throws SQLException {
-    DatabaseMetaData metadata = connection.getMetaData();
-    return new JdbcDriverInfo(
-        metadata.getJDBCMajorVersion(),
-        metadata.getJDBCMinorVersion(),
-        metadata.getDriverName(),
-        metadata.getDatabaseProductName(),
-        metadata.getDatabaseProductVersion()
-    );
   }
 
   /**
@@ -368,7 +367,29 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   @Override
+  @SuppressWarnings("deprecation") //TODO: What's missing here/
   public TableId parseTableIdentifier(String fqn) {
+    List<String> parts = identifierRules().parseQualifiedIdentifier(fqn);
+    if (parts.isEmpty()) {
+      throw new IllegalArgumentException("Invalid fully qualified name: '" + fqn + "'");
+    }
+    if (parts.size() == 1) {
+      return new TableId(null, null, parts.get(0));
+    }
+    if (parts.size() == 3) {
+      return new TableId(parts.get(0), parts.get(1), parts.get(2));
+    }
+    assert parts.size() >= 2;
+    if (useCatalog()) {
+      return new TableId(parts.get(0), null, parts.get(1));
+    }
+    return new TableId(null, parts.get(0), parts.get(1));
+  }
+
+  //The point of the connection object is to make sure a
+  // connection was made before this function is called
+  @Override
+  public TableId parseTableIdentifier(Connection connection, String fqn) {
     List<String> parts = identifierRules().parseQualifiedIdentifier(fqn);
     if (parts.isEmpty()) {
       throw new IllegalArgumentException("Invalid fully qualified name: '" + fqn + "'");
@@ -477,10 +498,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
   @Override
   public IdentifierRules identifierRules() {
+    return identifierRules.get();
+  }
+
+  protected void setIdentifierRules(Connection connection) {
     if (identifierRules.get() == null) {
       // Otherwise try to get the actual quote string and separator from the database, since
       // many databases allow them to be changed
-      try (Connection connection = getConnection()) {
+      try {
         DatabaseMetaData metaData = connection.getMetaData();
         String leadingQuoteStr = metaData.getIdentifierQuoteString();
         String trailingQuoteStr = leadingQuoteStr; // JDBC does not distinguish
@@ -502,7 +527,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         }
       }
     }
-    return identifierRules.get();
   }
 
   @Override
@@ -590,7 +614,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       String columnPattern
   ) throws SQLException {
     //if the table pattern is fqn, then just use the actual table name
-    TableId tableId = parseTableIdentifier(tablePattern);
+    TableId tableId = parseTableIdentifier(connection, tablePattern);
     String catalog = tableId.catalogName() != null ? tableId.catalogName() : catalogPattern;
     String schema = tableId.schemaName() != null ? tableId.schemaName() : schemaPattern;
     return describeColumns(connection, catalog , schema, tableId.tableName(), columnPattern);

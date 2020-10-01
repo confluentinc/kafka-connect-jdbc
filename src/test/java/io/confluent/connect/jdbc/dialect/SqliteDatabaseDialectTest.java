@@ -47,6 +47,12 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
   private final SqliteHelper sqliteHelper = new SqliteHelper(getClass().getSimpleName());
 
   @Before
+  public void setup() throws Exception {
+    super.setup();
+    initDefaultIdentifierRules(dialect);
+  }
+
+  @Before
   public void beforeEach() throws Exception {
     sqliteHelper.setUp();
   }
@@ -116,7 +122,7 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
   }
 
   @Test
-  public void shouldBuildCreateQueryStatement() {
+  public void shouldBuildCreateQueryStatement() throws Exception {
     assertEquals(
         "CREATE TABLE `myTable` (\n"
         + "`c1` INTEGER NOT NULL,\n"
@@ -134,6 +140,7 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     assertEquals(
         "CREATE TABLE myTable (\n"
         + "c1 INTEGER NOT NULL,\n"
@@ -151,7 +158,7 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
   }
 
   @Test
-  public void shouldBuildAlterTableStatement() {
+  public void shouldBuildAlterTableStatement() throws Exception {
     assertStatements(
         new String[]{
             "ALTER TABLE `myTable` ADD `c1` INTEGER NOT NULL",
@@ -169,6 +176,7 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     assertStatements(
         new String[]{
             "ALTER TABLE myTable ADD c1 INTEGER NOT NULL",
@@ -207,7 +215,7 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
   }
 
   @Test
-  public void createThreeColTwoPk() {
+  public void createThreeColTwoPk() throws Exception {
     verifyCreateThreeColTwoPk(
         "CREATE TABLE `myTable` (" + System.lineSeparator() + "`pk1` INTEGER NOT NULL," +
         System.lineSeparator() + "`pk2` INTEGER NOT NULL," + System.lineSeparator() +
@@ -215,6 +223,7 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     verifyCreateThreeColTwoPk(
         "CREATE TABLE myTable (" + System.lineSeparator() + "pk1 INTEGER NOT NULL," +
         System.lineSeparator() + "pk2 INTEGER NOT NULL," + System.lineSeparator() +
@@ -233,7 +242,7 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
   }
 
   @Test
-  public void upsert() {
+  public void upsert() throws Exception {
     TableId book = new TableId(null, null, "Book");
     assertEquals(
         "INSERT OR REPLACE INTO `Book`(`author`,`title`,`ISBN`,`year`,`pages`) VALUES(?,?,?,?,?)",
@@ -246,6 +255,7 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     assertEquals(
         "INSERT OR REPLACE INTO Book(author,title,ISBN,year,pages) VALUES(?,?,?,?,?)",
         dialect.buildUpsertQueryStatement(

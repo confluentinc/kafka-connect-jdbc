@@ -74,13 +74,14 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   private final String topic;
   private final TimeZone timeZone;
 
-  public TimestampIncrementingTableQuerier(DatabaseDialect dialect, QueryMode mode, String name,
+  public TimestampIncrementingTableQuerier(Connection connection, DatabaseDialect dialect,
+                                           QueryMode mode, String name,
                                            String topicPrefix,
                                            List<String> timestampColumnNames,
                                            String incrementingColumnName,
                                            Map<String, Object> offsetMap, Long timestampDelay,
                                            TimeZone timeZone, String suffix) {
-    super(dialect, mode, name, topicPrefix, suffix);
+    super(connection, dialect, mode, name, topicPrefix, suffix);
     this.incrementingColumnName = incrementingColumnName;
     this.timestampColumnNames = timestampColumnNames != null
                                 ? timestampColumnNames : Collections.<String>emptyList();

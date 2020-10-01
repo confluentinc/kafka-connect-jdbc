@@ -104,15 +104,6 @@ public class JdbcSourceConnectorTest {
   @Test
   public void testStartStop() throws Exception {
     CachedConnectionProvider mockCachedConnectionProvider = PowerMock.createMock(CachedConnectionProvider.class);
-    connector = new JdbcSourceConnector() {
-        @Override
-        protected CachedConnectionProvider connectionProvider(
-            int maxConnAttempts,
-            long retryBackoff
-        ) {
-            return mockCachedConnectionProvider;
-        }
-    };
     // Should request a connection, then should close it on stop(). The background thread may also
     // request connections any time it performs updates.
     Connection conn = PowerMock.createMock(Connection.class);
@@ -128,6 +119,7 @@ public class JdbcSourceConnectorTest {
     PowerMock.replayAll();
 
     connector.start(connProps);
+    connector.cachedConnectionProvider = mockCachedConnectionProvider;
     connector.stop();
 
     PowerMock.verifyAll();

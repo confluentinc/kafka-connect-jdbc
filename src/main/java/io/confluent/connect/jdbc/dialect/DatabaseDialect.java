@@ -154,7 +154,7 @@ public interface DatabaseDialect extends ConnectionProvider {
    * {@link #parseTableIdentifier(Connection, String)} is suggested.
    *
    * @param fqn the fully qualified string representation; may not be null
-   * @return the table identifier; never nulll
+   * @return the table identifier; never null
    * @deprecated use {@link #parseTableIdentifier(Connection, String)}
    */
   @Deprecated

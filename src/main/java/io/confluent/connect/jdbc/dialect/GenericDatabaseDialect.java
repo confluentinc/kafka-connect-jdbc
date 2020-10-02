@@ -209,6 +209,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
   @Override
   public Connection getConnection() throws SQLException {
+    //This function is a pseudo-init function for this class.
+    // Needs to be called before other methods are called.
+
     // These config names are the same for both source and sink configs ...
     String username = config.getString(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG);
     Password dbPassword = config.getPassword(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG);
@@ -367,7 +370,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   @Override
-  @SuppressWarnings("deprecation") //TODO: What's missing here/
+  @SuppressWarnings("deprecation")
   public TableId parseTableIdentifier(String fqn) {
     List<String> parts = identifierRules().parseQualifiedIdentifier(fqn);
     if (parts.isEmpty()) {
@@ -386,10 +389,10 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     return new TableId(null, parts.get(0), parts.get(1));
   }
 
-  //The point of the connection object is to make sure a
-  // connection was made before this function is called
   @Override
   public TableId parseTableIdentifier(Connection connection, String fqn) {
+    //connection parameter is used to enforce that getConnection()
+    //is called before this function
     List<String> parts = identifierRules().parseQualifiedIdentifier(fqn);
     if (parts.isEmpty()) {
       throw new IllegalArgumentException("Invalid fully qualified name: '" + fqn + "'");
@@ -531,6 +534,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
   @Override
   public ExpressionBuilder expressionBuilder() {
+    //Note: A connection should be procured before calling this
+    // function, no exceptions.
+    // Currently this is enforced indirectly because all methods that call
+    // expressionBuilder() need to get a TableId first which requires a connection.
+    // TODO: Enforce this prerequisite more strongly
     return identifierRules().expressionBuilder()
                             .setQuoteIdentifiers(quoteSqlIdentifiers);
   }

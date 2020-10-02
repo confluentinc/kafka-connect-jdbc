@@ -82,7 +82,7 @@ public class JdbcSourceConnector extends SourceConnector {
     );
 
     // Initial connection attempt will validate the connectivity-related properties
-    try (Connection conn = getConnection()) {
+    try (Connection conn = dialect.getConnection()) {
       // Wait no more than 5 seconds to check if the connection is healthy
       if (!dialect.isConnectionValid(conn, 5)) {
         log.debug("Connected to database but connection was not healthy");
@@ -190,9 +190,5 @@ public class JdbcSourceConnector extends SourceConnector {
   @Override
   public ConfigDef config() {
     return JdbcSourceConnectorConfig.CONFIG_DEF;
-  }
-
-  protected Connection getConnection() throws SQLException {
-    return dialect.getConnection();
   }
 }

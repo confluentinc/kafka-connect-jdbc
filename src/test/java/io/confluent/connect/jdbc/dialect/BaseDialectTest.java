@@ -21,7 +21,12 @@ import io.confluent.connect.jdbc.util.ColumnDefinition.Mutability;
 import io.confluent.connect.jdbc.util.ColumnDefinition.Nullability;
 
 import java.lang.reflect.Method;
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Types;
 import java.time.ZoneOffset;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -142,6 +147,12 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     DriverManager.setLoginTimeout(defaultLoginTimeout);
   }
 
+  /**
+   * All Dialect Tests mock out the connection/ don't use dialect.getConnection()
+   * to procure a connection. Since this function is required to set up IdentifierRules
+   * we have to setIdentifierRules ourselves.
+   * This function sets IdentifierRules to the default described for that dialect.
+   * */
   protected void initDefaultIdentifierRules(DatabaseDialect dialect) throws Exception {
     DatabaseMetaData mockMetaData = mock(DatabaseMetaData.class);
     when(mockMetaData.getIdentifierQuoteString()).thenReturn("");

@@ -140,7 +140,7 @@ public class TableMonitorThread extends Thread {
     } catch (SQLException e) {
       log.error(
           "Error while trying to get updated table list, ignoring and waiting for next table poll"
-                  + " interval",
+          + " interval",
           e
       );
       return false;

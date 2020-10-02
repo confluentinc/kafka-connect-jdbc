@@ -17,7 +17,7 @@ package io.confluent.connect.jdbc;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.dialect.GenericDatabaseDialect;
-import org.apache.derby.iapi.db.Database;
+
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.easymock.EasyMock;
@@ -44,11 +44,9 @@ import io.confluent.connect.jdbc.source.EmbeddedDerby;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.source.JdbcSourceTask;
 import io.confluent.connect.jdbc.source.JdbcSourceTaskConfig;
-import io.confluent.connect.jdbc.util.CachedConnectionProvider;
+
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.TableId;
-
-import javax.xml.crypto.Data;
 
 import static org.easymock.EasyMock.anyInt;
 import static org.easymock.EasyMock.anyObject;
@@ -64,26 +62,8 @@ public class JdbcSourceConnectorTest {
   private JdbcSourceConnector connector;
   private EmbeddedDerby db;
   private Map<String, String> connProps;
-//<<<<<<< HEAD
-//
-//  public static class MockJdbcSourceConnector extends JdbcSourceConnector {
-//    CachedConnectionProvider provider;
-//    public MockJdbcSourceConnector() {}
-//    public MockJdbcSourceConnector(CachedConnectionProvider provider) {
-//      this.provider = provider;
-//    }
-//    @Override
-//    protected CachedConnectionProvider connectionProvider(
-//            int maxConnAttempts,
-//            long retryBackoff
-//    ) {
-//      return provider;
-//    }
-//  }
-//
-//=======
   private AbstractConfig abstractConfig;
-//>>>>>>> 6eae2969... Removed CachedConnectionProvider from Connector Thread
+
   @Mock
   private DatabaseDialect dialect;
 
@@ -131,11 +111,6 @@ public class JdbcSourceConnectorTest {
 
   @Test
   public void testStartStop() throws Exception {
-//<<<<<<< HEAD
-//    CachedConnectionProvider mockCachedConnectionProvider = PowerMock.createMock(CachedConnectionProvider.class);
-//    connector  = new MockJdbcSourceConnector(mockCachedConnectionProvider);
-//=======
-//>>>>>>> 6eae2969... Removed CachedConnectionProvider from Connector Thread
     // Should request a connection, then should close it on stop(). The background thread may also
     // request connections any time it performs updates.
     connector = new JdbcSourceConnector();
@@ -169,7 +144,7 @@ public class JdbcSourceConnectorTest {
     connector.start(connProps);
     connector.stop();
 
-    PowerMock.verifyAll(); // DatabaseDialects.findBestFor(..) called
+    PowerMock.verifyAll(); // verify DatabaseDialects.findBestFor(..) called
   }
 
   @Test

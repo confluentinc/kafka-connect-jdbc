@@ -51,7 +51,7 @@ public class JdbcSinkTask extends SinkTask {
     remainingRetries = config.maxRetries;
     try {
       reporter = context.errantRecordReporter(); // may be null if DLQ not enabled
-    } catch (NoClassDefFoundError e) {
+    } catch (NoSuchMethodError | NoClassDefFoundError e) {
       // Will occur in Connect runtimes earlier than 2.6
       reporter = null;
     }

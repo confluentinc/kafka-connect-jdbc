@@ -16,7 +16,6 @@
 package io.confluent.connect.jdbc.source;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
-import io.confluent.connect.jdbc.util.ConnectionProvider;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 import org.apache.kafka.connect.connector.ConnectorContext;
@@ -24,6 +23,7 @@ import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -41,7 +41,6 @@ public class TableMonitorThread extends Thread {
   private static final Logger log = LoggerFactory.getLogger(TableMonitorThread.class);
 
   private final DatabaseDialect dialect;
-  private final ConnectionProvider connectionProvider;
   private final ConnectorContext context;
   private final CountDownLatch shutdownLatch;
   private final long pollMs;
@@ -51,21 +50,18 @@ public class TableMonitorThread extends Thread {
   private Map<String, List<TableId>> duplicates;
 
   public TableMonitorThread(DatabaseDialect dialect,
-      ConnectionProvider connectionProvider,
       ConnectorContext context,
       long pollMs,
       Set<String> whitelist,
       Set<String> blacklist
   ) {
     this.dialect = dialect;
-    this.connectionProvider = connectionProvider;
     this.context = context;
     this.shutdownLatch = new CountDownLatch(1);
     this.pollMs = pollMs;
     this.whitelist = whitelist;
     this.blacklist = blacklist;
     this.tables = null;
-
   }
 
   @Override
@@ -137,16 +133,16 @@ public class TableMonitorThread extends Thread {
 
   private synchronized boolean updateTables() {
     final List<TableId> tables;
-    try {
-      tables = dialect.tableIds(connectionProvider.getConnection());
+    try (Connection conn = dialect.getConnection()) {
+      log.debug("Connected to the database to read the accessible tables");
+      tables = dialect.tableIds(conn);
       log.debug("Got the following tables: {}", tables);
     } catch (SQLException e) {
       log.error(
           "Error while trying to get updated table list, ignoring and waiting for next table poll"
-          + " interval",
+                  + " interval",
           e
       );
-      connectionProvider.close();
       return false;
     }
 

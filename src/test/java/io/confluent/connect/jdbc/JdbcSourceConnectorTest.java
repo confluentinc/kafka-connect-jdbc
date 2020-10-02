@@ -15,6 +15,10 @@
 
 package io.confluent.connect.jdbc;
 
+import io.confluent.connect.jdbc.dialect.DatabaseDialects;
+import io.confluent.connect.jdbc.dialect.GenericDatabaseDialect;
+import org.apache.derby.iapi.db.Database;
+import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.easymock.EasyMock;
 import org.easymock.Mock;
@@ -44,34 +48,42 @@ import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.TableId;
 
+import javax.xml.crypto.Data;
+
+import static org.easymock.EasyMock.anyInt;
+import static org.easymock.EasyMock.anyObject;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(PowerMockRunner.class)
-@PrepareForTest({JdbcSourceConnector.class, DatabaseDialect.class})
+@PrepareForTest({JdbcSourceConnector.class, DatabaseDialect.class,  DatabaseDialects.class})
 @PowerMockIgnore("javax.management.*")
 public class JdbcSourceConnectorTest {
 
   private JdbcSourceConnector connector;
   private EmbeddedDerby db;
   private Map<String, String> connProps;
-
-  public static class MockJdbcSourceConnector extends JdbcSourceConnector {
-    CachedConnectionProvider provider;
-    public MockJdbcSourceConnector() {}
-    public MockJdbcSourceConnector(CachedConnectionProvider provider) {
-      this.provider = provider;
-    }
-    @Override
-    protected CachedConnectionProvider connectionProvider(
-            int maxConnAttempts,
-            long retryBackoff
-    ) {
-      return provider;
-    }
-  }
-
+//<<<<<<< HEAD
+//
+//  public static class MockJdbcSourceConnector extends JdbcSourceConnector {
+//    CachedConnectionProvider provider;
+//    public MockJdbcSourceConnector() {}
+//    public MockJdbcSourceConnector(CachedConnectionProvider provider) {
+//      this.provider = provider;
+//    }
+//    @Override
+//    protected CachedConnectionProvider connectionProvider(
+//            int maxConnAttempts,
+//            long retryBackoff
+//    ) {
+//      return provider;
+//    }
+//  }
+//
+//=======
+  private AbstractConfig abstractConfig;
+//>>>>>>> 6eae2969... Removed CachedConnectionProvider from Connector Thread
   @Mock
   private DatabaseDialect dialect;
 
@@ -83,6 +95,7 @@ public class JdbcSourceConnectorTest {
     connProps.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, db.getUrl());
     connProps.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
     connProps.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, "test-");
+    abstractConfig = new JdbcSourceConnectorConfig(connProps);
   }
 
   @After
@@ -118,26 +131,45 @@ public class JdbcSourceConnectorTest {
 
   @Test
   public void testStartStop() throws Exception {
-    CachedConnectionProvider mockCachedConnectionProvider = PowerMock.createMock(CachedConnectionProvider.class);
-    connector  = new MockJdbcSourceConnector(mockCachedConnectionProvider);
+//<<<<<<< HEAD
+//    CachedConnectionProvider mockCachedConnectionProvider = PowerMock.createMock(CachedConnectionProvider.class);
+//    connector  = new MockJdbcSourceConnector(mockCachedConnectionProvider);
+//=======
+//>>>>>>> 6eae2969... Removed CachedConnectionProvider from Connector Thread
     // Should request a connection, then should close it on stop(). The background thread may also
     // request connections any time it performs updates.
-    Connection conn = PowerMock.createMock(Connection.class);
-    EasyMock.expect(mockCachedConnectionProvider.getConnection()).andReturn(conn).anyTimes();
+    connector = new JdbcSourceConnector();
 
-    // Since we're just testing start/stop, we don't worry about the value here but need to stub
-    // something since the background thread will be started and try to lookup metadata.
-    EasyMock.expect(conn.getMetaData()).andStubThrow(new SQLException());
-    // Close will be invoked both for the SQLExeption and when the connector is stopped
-    mockCachedConnectionProvider.close();
-    PowerMock.expectLastCall().atLeastOnce();
+    // mocked to return a mocked dialect
+    PowerMock.mockStatic(DatabaseDialects.class);
+    // mocked to return mocked connection
+    GenericDatabaseDialect dbDialect = EasyMock.createMock(GenericDatabaseDialect.class);
+    Connection conn = EasyMock.createMock(Connection.class);
 
+    EasyMock.expect(dbDialect.getConnection()).andReturn(conn).anyTimes();
+
+    //Stubs to keep background thread working till close is called
+    EasyMock.expect(dbDialect.isConnectionValid(anyObject(), anyInt())).andReturn(true).anyTimes();
+    EasyMock.expect(dbDialect.tableIds(anyObject())).andStubThrow(new SQLException());
+
+    //deliver mocked dialect
+    EasyMock.expect(
+            DatabaseDialects.findBestFor(
+                    db.getUrl(),
+                    abstractConfig
+            )
+    ).andReturn(dbDialect);
+
+    dbDialect.close();
+    EasyMock.expectLastCall().times(1); // verify dbDialect closed when stopped
+
+    EasyMock.replay(dbDialect);
     PowerMock.replayAll();
 
     connector.start(connProps);
     connector.stop();
 
-    PowerMock.verifyAll();
+    PowerMock.verifyAll(); // DatabaseDialects.findBestFor(..) called
   }
 
   @Test

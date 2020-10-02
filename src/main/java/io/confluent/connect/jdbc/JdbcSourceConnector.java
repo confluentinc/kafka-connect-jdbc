@@ -24,6 +24,8 @@ import org.apache.kafka.connect.util.ConnectorUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -38,7 +40,6 @@ import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.source.JdbcSourceTask;
 import io.confluent.connect.jdbc.source.JdbcSourceTaskConfig;
 import io.confluent.connect.jdbc.source.TableMonitorThread;
-import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.Version;
@@ -55,7 +56,6 @@ public class JdbcSourceConnector extends SourceConnector {
 
   private Map<String, String> configProperties;
   private JdbcSourceConnectorConfig config;
-  private CachedConnectionProvider cachedConnectionProvider;
   private TableMonitorThread tableMonitorThread;
   private DatabaseDialect dialect;
 
@@ -76,20 +76,22 @@ public class JdbcSourceConnector extends SourceConnector {
     }
 
     final String dbUrl = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
-    final int maxConnectionAttempts = config.getInt(
-        JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_CONFIG
-    );
-    final long connectionRetryBackoff = config.getLong(
-        JdbcSourceConnectorConfig.CONNECTION_BACKOFF_CONFIG
-    );
     dialect = DatabaseDialects.findBestFor(
         dbUrl,
         config
     );
-    cachedConnectionProvider = connectionProvider(maxConnectionAttempts, connectionRetryBackoff);
 
-    // Initial connection attempt
-    cachedConnectionProvider.getConnection();
+    // Initial connection attempt will validate the connectivity-related properties
+    try (Connection conn = getConnection()) {
+      // Wait no more than 5 seconds to check if the connection is healthy
+      if (!dialect.isConnectionValid(conn, 5)) {
+        log.debug("Connected to database but connection was not healthy");
+      } else {
+        log.debug("Connected to database with healthy connection");
+      }
+    } catch (SQLException e) {
+      throw new ConnectException("Failed to connect to database: " + e.getMessage(), e);
+    }
 
     long tablePollMs = config.getLong(JdbcSourceConnectorConfig.TABLE_POLL_INTERVAL_MS_CONFIG);
     List<String> whitelist = config.getList(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG);
@@ -115,17 +117,12 @@ public class JdbcSourceConnector extends SourceConnector {
     }
     tableMonitorThread = new TableMonitorThread(
         dialect,
-        cachedConnectionProvider,
         context,
         tablePollMs,
         whitelistSet,
         blacklistSet
     );
     tableMonitorThread.start();
-  }
-
-  protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
-    return new CachedConnectionProvider(dialect, maxConnAttempts, retryBackoff);
   }
 
   @Override
@@ -179,17 +176,13 @@ public class JdbcSourceConnector extends SourceConnector {
       // Ignore, shouldn't be interrupted
     } finally {
       try {
-        cachedConnectionProvider.close();
-      } finally {
-        try {
-          if (dialect != null) {
-            dialect.close();
-          }
-        } catch (Throwable t) {
-          log.warn("Error while closing the {} dialect: ", dialect, t);
-        } finally {
-          dialect = null;
+        if (dialect != null) {
+          dialect.close();
         }
+      } catch (Throwable t) {
+        log.warn("Error while closing the {} dialect: ", dialect, t);
+      } finally {
+        dialect = null;
       }
     }
   }
@@ -197,5 +190,9 @@ public class JdbcSourceConnector extends SourceConnector {
   @Override
   public ConfigDef config() {
     return JdbcSourceConnectorConfig.CONFIG_DEF;
+  }
+
+  protected Connection getConnection() throws SQLException {
+    return dialect.getConnection();
   }
 }

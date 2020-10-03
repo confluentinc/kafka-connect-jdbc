@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.concurrent.Future;
 
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -309,9 +310,9 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
 
     mockWriter.write(records);
     SQLException exception = new SQLException("cause 1");
-    expectLastCall().andThrow(exception).times(1);
+    expectLastCall().andThrow(exception);
     mockWriter.write(anyObject());
-    expectLastCall();
+    expectLastCall().andThrow(exception);
 
     JdbcSinkTask task = new JdbcSinkTask() {
       @Override
@@ -322,6 +323,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     task.initialize(ctx);
     ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
     expect(ctx.errantRecordReporter()).andReturn(reporter);
+    expect(reporter.report(anyObject(), anyObject())).andReturn(createMock(Future.class));
     replayAll();
 
     Map<String, String> props = new HashMap<>();
@@ -352,13 +354,10 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     SinkTaskContext ctx = createMock(SinkTaskContext.class);
 
     mockWriter.write(records);
-    SQLException chainedException = new SQLException("cause 1");
-    chainedException.setNextException(new SQLException("cause 2"));
-    chainedException.setNextException(new SQLException("cause 3"));
-    expectLastCall().andThrow(chainedException).times(1);
-
+    SQLException exception = new SQLException("cause 1");
+    expectLastCall().andThrow(exception);
     mockWriter.write(anyObject());
-    expectLastCall().times(batchSize);
+    expectLastCall().andThrow(exception).times(batchSize);
 
     JdbcSinkTask task = new JdbcSinkTask() {
       @Override
@@ -369,6 +368,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     task.initialize(ctx);
     ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
     expect(ctx.errantRecordReporter()).andReturn(reporter);
+    expect(reporter.report(anyObject(), anyObject())).andReturn(createMock(Future.class)).times(batchSize);
     replayAll();
 
     Map<String, String> props = new HashMap<>();

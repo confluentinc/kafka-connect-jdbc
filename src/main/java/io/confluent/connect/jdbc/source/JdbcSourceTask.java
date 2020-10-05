@@ -201,10 +201,10 @@ public class JdbcSourceTask extends SourceTask {
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(
             new BulkTableQuerier(
-                dialect, 
-                queryMode, 
-                tableOrQuery, 
-                topicPrefix, 
+                dialect,
+                queryMode,
+                tableOrQuery,
+                topicPrefix,
                 suffix
             )
         );
@@ -356,25 +356,25 @@ public class JdbcSourceTask extends SourceTask {
         final long sleepMs = nextUpdate - now;
         if (sleepMs > 0) {
           log.trace("Waiting {} ms to poll {} next", nextUpdate - now, querier.toString());
-          
+
           // send event to SNS topic
           String topicArn = config.getString(JdbcSourceTaskConfig.SNS_TOPIC_ARN_CONFIG);
           if (!topicArn.equals("")) {
             Map<String, String> payload = new HashMap<String, String>();
             payload.put("event", "success");
-            payload.put("topic", config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG) 
-                + "" + (config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).get(0).split(".")[1]);
+            payload.put("topic", config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG));
+            payload.put("table", config.getString(JdbcSourceTaskConfig.FEED_TABLE_CONFIG));
             payload.put("feedId", config.getString(JdbcSourceTaskConfig.FEED_ID_CONFIG));
             payload.put("feedRunId", config.getString(JdbcSourceTaskConfig.FEED_RUN_ID_CONFIG));
             payload.put("tenant", config.getString(JdbcSourceTaskConfig.TENANT_CONFIG));
             payload.put("runTime", config.getString(JdbcSourceTaskConfig.FEED_RUNTIME_CONFIG));
-            
+
             JSONObject message = new JSONObject(payload);
             log.trace("Sending event to SNS topic {} ", topicArn);
             new SNSClient(config).publish(topicArn, message.toJSONString());
           }
-          
-          
+
+
           time.sleep(sleepMs);
           continue; // Re-check stop flag before continuing
         }
@@ -412,8 +412,8 @@ public class JdbcSourceTask extends SourceTask {
           Map<String, String> payload = new HashMap<String, String>();
           payload.put("event", "failure");
           payload.put("error", sqle.getMessage());
-          payload.put("topic", config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG) 
-              + "" + (config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).get(0).split(".")[1]);
+          payload.put("topic", config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG));
+          payload.put("feedId", config.getString(JdbcSourceTaskConfig.FEED_TABLE_CONFIG));
           payload.put("feedId", config.getString(JdbcSourceTaskConfig.FEED_ID_CONFIG));
           payload.put("feedRunId", config.getString(JdbcSourceTaskConfig.FEED_RUN_ID_CONFIG));
           payload.put("tenant", config.getString(JdbcSourceTaskConfig.TENANT_CONFIG));
@@ -423,7 +423,7 @@ public class JdbcSourceTask extends SourceTask {
           log.trace("Sending event to SNS topic {} ", topicArn);
           new SNSClient(config).publish(topicArn, message.toJSONString());
         }
-        
+
         resetAndRequeueHead(querier);
         return null;
       } catch (Throwable t) {

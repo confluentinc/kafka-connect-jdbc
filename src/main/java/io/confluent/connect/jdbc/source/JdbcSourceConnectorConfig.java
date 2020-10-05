@@ -294,7 +294,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String QUERY_SUFFIX_DISPLAY = "Query suffix";
 
   // SSH related configuration - host, port, user, password, key
-  
+
   public static final String CONNECT_THROUGH_SSH_CONFIG = "connect.through.ssh";
   public static final Boolean CONNECT_THROUGH_SSH_DEFAULT = false;
   public static final String CONNECT_THROUGH_SSH_DOC =
@@ -327,73 +327,78 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String SSH_TUNNEL_KEY_DEFAULT = null;
   public static final String SSH_TUNNEL_KEY_DOC = "SSH Tunnel Key";
   public static final String SSH_TUNNEL_KEY_DISPLAY = "SSH Key";
-  
-  // table list related configuration - broker URL, message key 
-  
+
+  // table list related configuration - broker URL, message key
+
   public static final String STORE_TABLE_LIST_CONFIG = "store.table.list";
   public static final Boolean STORE_TABLE_LIST_DEFAULT = false;
-  public static final String STORE_TABLE_LIST_DOC = 
+  public static final String STORE_TABLE_LIST_DOC =
       "Boolean to identify if the table list has to be stored.";
   public static final String STORE_TABLE_LIST_DISPLAY = "Store table list";
-  
+
   public static final String TABLE_LIST_KEY_CONFIG = "table.list.key";
   public static final String TABLE_LIST_KEY_DEFAULT = "";
-  public static final String TABLE_LIST_KEY_DOC = 
+  public static final String TABLE_LIST_KEY_DOC =
       "Key for the event that would be used to identify the table list";
   public static final String TABLE_LIST_KEY_DISPLAY = "Table list key";
-  
+
   public static final String BROKER_URL_CONFIG = "broker.url";
   public static final String BROKER_URL_DEFAULT = "";
-  public static final String BROKER_URL_DOC = 
+  public static final String BROKER_URL_DOC =
       "Broker URL to connect to Kafka topic";
   public static final String BROKER_URL_DISPLAY = "Broker URL";
-  
+
   // SNS related configuration = topic ARN, AWS credentials and region
-  
+
   public static final String SNS_TOPIC_ARN_CONFIG = "sns.topic.arn";
   public static final String SNS_TOPIC_ARN_DEFAULT = "";
-  public static final String SNS_TOPIC_ARN_DOC = 
+  public static final String SNS_TOPIC_ARN_DOC =
       "SNS Topic ARN that would get the polling complete event";
   public static final String SNS_TOPIC_ARN_DISPLAY = "Table list topic ARN";
-  
+
   public static final String AWS_ACCESS_KEY_ID_CONFIG = "aws.access.key.id";
   public static final String AWS_ACCESS_KEY_ID_DEFAULT = "";
 
   public static final String AWS_SECRET_ACCESS_KEY_CONFIG = "aws.secret.access.key";
   public static final Password AWS_SECRET_ACCESS_KEY_DEFAULT = new Password(null);
-  
+
   public static final String REGION_CONFIG = "aws.region";
   public static final String REGION_DEFAULT = Regions.DEFAULT_REGION.getName();
-  
+
   public static final String CREDENTIALS_PROVIDER_CLASS_CONFIG = "aws.credentials.provider.class";
   public static final Class<? extends AWSCredentialsProvider> CREDENTIALS_PROVIDER_CLASS_DEFAULT =
       DefaultAWSCredentialsProviderChain.class;
-  
+
+  public static final String FEED_TABLE_CONFIG = "feed.table";
+  public static final String FEED_TABLE_DEFAULT = "";
+  public static final String FEED_TABLE_DOC = "Feed Table";
+  public static final String FEED_TABLE_DISPLAY = "Feed Table";
+
   public static final String FEED_ID_CONFIG = "feed.id";
   public static final String FEED_ID_DEFAULT = "";
   public static final String FEED_ID_DOC = "Feed Id";
   public static final String FEED_ID_DISPLAY = "Feed Id";
-  
+
   public static final String FEED_RUN_ID_CONFIG = "feed.run.id";
   public static final String FEED_RUN_ID_DEFAULT = "";
   public static final String FEED_RUN_ID_DOC = "Feed Run Id";
   public static final String FEED_RUN_ID_DISPLAY = "Feed Run Id";
-  
+
   public static final String FEED_RUNTIME_CONFIG = "feed.runtime";
   public static final String FEED_RUNTIME_DEFAULT = "";
   public static final String FEED_RUNTIME_DOC = "Feed Runtime";
   public static final String FEED_RUNTIME_DISPLAY = "Feed Runtime";
-  
+
   public static final String TENANT_CONFIG = "tenant";
   public static final String TENANT_DEFAULT = "";
   public static final String TENANT_DOC = "Tenant";
   public static final String TENANT_DISPLAY = "Tenant";
-  
+
   public static final String CREDENTIALS_PROVIDER_CONFIG_PREFIX =
       CREDENTIALS_PROVIDER_CLASS_CONFIG.substring(
          0,
          CREDENTIALS_PROVIDER_CLASS_CONFIG.lastIndexOf(".") + 1);
-  
+
 
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
@@ -802,24 +807,24 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Width.MEDIUM,
         DB_TIMEZONE_CONFIG_DISPLAY
     ).define(
-        STORE_TABLE_LIST_CONFIG, 
-        Type.BOOLEAN, 
-        STORE_TABLE_LIST_DEFAULT, 
-        Importance.LOW, 
-        STORE_TABLE_LIST_DOC, 
-        CONNECTOR_GROUP, 
-        ++orderInGroup, 
-        Width.SHORT, 
+        STORE_TABLE_LIST_CONFIG,
+        Type.BOOLEAN,
+        STORE_TABLE_LIST_DEFAULT,
+        Importance.LOW,
+        STORE_TABLE_LIST_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
         STORE_TABLE_LIST_DISPLAY
     ).define(
         TABLE_LIST_KEY_CONFIG,
         Type.STRING,
         TABLE_LIST_KEY_DEFAULT,
-        Importance.LOW, 
-        TABLE_LIST_KEY_DOC, 
-        CONNECTOR_GROUP, 
-        ++orderInGroup, 
-        Width.MEDIUM, 
+        Importance.LOW,
+        TABLE_LIST_KEY_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
         TABLE_LIST_KEY_DISPLAY
     ).define(
         BROKER_URL_CONFIG,
@@ -835,11 +840,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         SNS_TOPIC_ARN_CONFIG,
         Type.STRING,
         SNS_TOPIC_ARN_DEFAULT,
-        Importance.LOW, 
-        SNS_TOPIC_ARN_DOC, 
-        CONNECTOR_GROUP, 
-        ++orderInGroup, 
-        Width.LONG, 
+        Importance.LOW,
+        SNS_TOPIC_ARN_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.LONG,
         SNS_TOPIC_ARN_DISPLAY
     ).define(
         CREDENTIALS_PROVIDER_CLASS_CONFIG,
@@ -947,7 +952,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       throw new ConfigException("Query mode must be specified");
     }
   }
-  
+
   private static class TableRecommender implements Recommender {
 
     @SuppressWarnings("unchecked")
@@ -971,7 +976,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         if ((Boolean)config.get(STORE_TABLE_LIST_CONFIG)) {
           TableListProducer tableListProducer = new TableListProducer(
               (String)config.get(BROKER_URL_CONFIG));
-          tableListProducer.produce("_tables", (String)config.get(TABLE_LIST_KEY_CONFIG), 
+          tableListProducer.produce("_tables", (String)config.get(TABLE_LIST_KEY_CONFIG),
               tables.toString());
         }
         return result;
@@ -1125,7 +1130,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     String dbTimeZone = getString(JdbcSourceTaskConfig.DB_TIMEZONE_CONFIG);
     return TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
   }
-  
+
   @SuppressWarnings("unchecked")
   public AWSCredentialsProvider getCredentialsProvider() {
     try {
@@ -1148,7 +1153,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       );
     }
   }
-  
+
   private static class CredentialsProviderValidator implements ConfigDef.Validator {
     @Override
     public void ensureValid(String name, Object provider) {
@@ -1162,13 +1167,13 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         "Class must extend: " + AWSCredentialsProvider.class
       );
     }
-    
+
     @Override
     public String toString() {
       return "Any class implementing: " + AWSCredentialsProvider.class;
     }
   }
-  
+
   private static class RegionRecommender implements ConfigDef.Recommender {
     @Override
     public List<Object> validValues(String name, Map<String, Object> connectorConfigs) {
@@ -1199,7 +1204,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       return "[" + Utils.join(RegionUtils.getRegions(), ", ") + "]";
     }
   }
-  
+
 
   public static void main(String[] args) {
     System.out.println(CONFIG_DEF.toEnrichedRst());

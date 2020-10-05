@@ -19,6 +19,7 @@ import static junit.framework.TestCase.assertTrue;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
+import static org.mockito.Mockito.mock;
 
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
@@ -169,7 +170,7 @@ public class PostgresViewIT {
 
   private void startTask() {
     task = new JdbcSinkTask();
-    task.initialize(Mockito.mock(SinkTaskContext.class));
+    task.initialize(mock(SinkTaskContext.class));
     task.start(props);
   }
 

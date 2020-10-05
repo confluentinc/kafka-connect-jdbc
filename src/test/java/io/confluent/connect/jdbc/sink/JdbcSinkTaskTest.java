@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 
 import org.apache.kafka.connect.data.Schema;
@@ -368,7 +369,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     task.initialize(ctx);
     ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
     expect(ctx.errantRecordReporter()).andReturn(reporter);
-    expect(reporter.report(anyObject(), anyObject())).andReturn(createMock(Future.class)).times(batchSize);
+    expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null)).times(batchSize);
     replayAll();
 
     Map<String, String> props = new HashMap<>();
@@ -378,9 +379,55 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     task.start(props);
 
 
-      task.put(records);
+    task.put(records);
 
     verifyAll();
   }
 
+  @Test
+  public void oneInBatchErrorReporting() throws SQLException {
+    final int maxRetries = 2;
+    final int retryBackoffMs = 1000;
+    final int batchSize = 3;
+
+    List<SinkRecord> records = new ArrayList<>();
+    SinkRecord record = new SinkRecord("stub", 0, null, null, null, null, 0);
+
+    for (int i = 0; i < batchSize; i++) {
+      records.add(record);
+    }
+
+    final JdbcDbWriter mockWriter = createMock(JdbcDbWriter.class);
+    SinkTaskContext ctx = createMock(SinkTaskContext.class);
+
+    mockWriter.write(records);
+    SQLException exception = new SQLException("cause 1");
+    expectLastCall().andThrow(exception);
+    mockWriter.write(anyObject());
+    expectLastCall().times(2);
+    expectLastCall().andThrow(exception);
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(ctx);
+    ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
+    expect(ctx.errantRecordReporter()).andReturn(reporter);
+    expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null));
+    replayAll();
+
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSinkConfig.CONNECTION_URL, "stub");
+    props.put(JdbcSinkConfig.MAX_RETRIES, String.valueOf(maxRetries));
+    props.put(JdbcSinkConfig.RETRY_BACKOFF_MS, String.valueOf(retryBackoffMs));
+    task.start(props);
+
+
+    task.put(records);
+
+    verifyAll();
+  }
 }

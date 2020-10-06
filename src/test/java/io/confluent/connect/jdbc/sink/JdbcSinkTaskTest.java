@@ -324,7 +324,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     task.initialize(ctx);
     ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
     expect(ctx.errantRecordReporter()).andReturn(reporter);
-    expect(reporter.report(anyObject(), anyObject())).andReturn(createMock(Future.class));
+    expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null));
     replayAll();
 
     Map<String, String> props = new HashMap<>();
@@ -378,7 +378,6 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     props.put(JdbcSinkConfig.RETRY_BACKOFF_MS, String.valueOf(retryBackoffMs));
     task.start(props);
 
-
     task.put(records);
 
     verifyAll();
@@ -424,7 +423,6 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     props.put(JdbcSinkConfig.MAX_RETRIES, String.valueOf(maxRetries));
     props.put(JdbcSinkConfig.RETRY_BACKOFF_MS, String.valueOf(retryBackoffMs));
     task.start(props);
-
 
     task.put(records);
 

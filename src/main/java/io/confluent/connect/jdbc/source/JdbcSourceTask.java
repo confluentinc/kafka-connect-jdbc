@@ -363,7 +363,7 @@ public class JdbcSourceTask extends SourceTask {
             Map<String, String> payload = new HashMap<String, String>();
             payload.put("event", "success");
             payload.put("topic", config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG)
-              + "" + (config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).get(0).split(".")[1]);
+                + "" + (config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).get(0).split(".")[1]);
             payload.put("feedId", config.getString(JdbcSourceTaskConfig.FEED_ID_CONFIG));
             payload.put("feedRunId", config.getString(JdbcSourceTaskConfig.FEED_RUN_ID_CONFIG));
             payload.put("tenant", config.getString(JdbcSourceTaskConfig.TENANT_CONFIG));
@@ -413,7 +413,7 @@ public class JdbcSourceTask extends SourceTask {
           payload.put("event", "failure");
           payload.put("error", sqle.getMessage());
           payload.put("topic", config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG)
-            + "" + (config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).get(0).split(".")[1]);
+              + "" + (config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).get(0).split(".")[1]);
           payload.put("feedId", config.getString(JdbcSourceTaskConfig.FEED_ID_CONFIG));
           payload.put("feedRunId", config.getString(JdbcSourceTaskConfig.FEED_RUN_ID_CONFIG));
           payload.put("tenant", config.getString(JdbcSourceTaskConfig.TENANT_CONFIG));

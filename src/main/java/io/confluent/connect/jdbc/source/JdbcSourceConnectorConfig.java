@@ -369,11 +369,6 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final Class<? extends AWSCredentialsProvider> CREDENTIALS_PROVIDER_CLASS_DEFAULT =
       DefaultAWSCredentialsProviderChain.class;
 
-  public static final String FEED_TABLE_CONFIG = "feed.table";
-  public static final String FEED_TABLE_DEFAULT = "";
-  public static final String FEED_TABLE_DOC = "Feed Table";
-  public static final String FEED_TABLE_DISPLAY = "Feed Table";
-
   public static final String FEED_ID_CONFIG = "feed.id";
   public static final String FEED_ID_DEFAULT = "";
   public static final String FEED_ID_DOC = "Feed Id";

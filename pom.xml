@@ -42,7 +42,7 @@
     <licenses>
         <license>
             <name>Confluent Community License</name>
-            <url>http://www.confluent.io/confluent-community-license</url>
+            <url>https://www.confluent.io/confluent-community-license</url>
             <distribution>repo</distribution>
         </license>
     </licenses>
@@ -60,6 +60,8 @@
         <kafka.connect.maven.plugin.version>0.11.1</kafka.connect.maven.plugin.version>
         <sqlite-jdbc.version>3.25.2</sqlite-jdbc.version>
         <postgresql.version>42.2.10</postgresql.version>
+        <oracle.jdbc.driver.version>19.7.0.0</oracle.jdbc.driver.version>
+        <mssqlserver.jdbc.driver.version>8.4.1.jre8</mssqlserver.jdbc.driver.version>
         <jtds.driver.version>1.3.1</jtds.driver.version>
         <licenses.name>Confluent Community License</licenses.name>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -101,6 +103,23 @@
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <version>${postgresql.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <!--
+            Include all of the production JARs without observability fixes.
+            See https://www.oracle.com/database/technologies/maven-central-guide.html
+            -->
+            <groupId>com.oracle.database.jdbc</groupId>
+            <artifactId>ojdbc8-production</artifactId>
+            <version>${oracle.jdbc.driver.version}</version>
+            <type>pom</type>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.microsoft.sqlserver</groupId>
+            <artifactId>mssql-jdbc</artifactId>
+            <version>${mssqlserver.jdbc.driver.version}</version>
             <scope>runtime</scope>
         </dependency>
         <dependency>
@@ -173,13 +192,7 @@
         <dependency>
             <groupId>org.mariadb.jdbc</groupId>
             <artifactId>mariadb-java-client</artifactId>
-            <version>2.5.3</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.microsoft.sqlserver</groupId>
-            <artifactId>mssql-jdbc</artifactId>
-            <version>8.4.1.jre11</version>
+            <version>2.5.4</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -312,6 +325,13 @@
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <trimStackTrace>false</trimStackTrace>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <executions>
                     <execution>
@@ -321,6 +341,7 @@
                             <excludes>
                                 <exclude>**/*OOM*.java</exclude>
                             </excludes>
+                            <trimStackTrace>false</trimStackTrace>
                         </configuration>
                     </execution>
                     <execution>
@@ -334,6 +355,7 @@
                             <includes>
                                 <include>**/*OOM*.java</include>
                             </includes>
+                            <trimStackTrace>false</trimStackTrace>
                         </configuration>
                     </execution>
                 </executions>
@@ -574,6 +596,13 @@
                                         <directory>licenses/*.*</directory>
                                         <directory>notices/*.*</directory>
                                     </includes>
+                                    <excludes>
+                                        <!-- We have to manually keep this files until the license finder properly finds the Oracle license -->
+                                        <exclude>licenses/LICENSE-ojdbc*.txt</exclude>
+                                        <!-- We have to manually keep this files because the license information in the JAR
+                                        uses an invalid URL to the MIT license -->
+                                        <exclude>licenses/LICENSE-mssql-jdbc-*.txt</exclude>
+                                    </excludes>
                                 </fileset>
                             </filesets>
                         </configuration>

@@ -364,6 +364,7 @@ public class JdbcSourceTask extends SourceTask {
             List<String> tableList = config.getList(
                 JdbcSourceTaskConfig.TABLES_CONFIG);
             if (tableList.size() > 0) {
+              log.trace("Table that was being queried: {}", tableList.get(0));
               topicName += (tableList.get(0).split("."))[1];
             }
             Map<String, String> payload = new HashMap<String, String>();
@@ -417,6 +418,7 @@ public class JdbcSourceTask extends SourceTask {
           String topicName = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
           List<String> tableList = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
           if (tableList.size() > 0) { 
+            log.trace("Table that was being queried: {}", tableList.get(0));          
             topicName += (tableList.get(0).split("."))[1];
           }
           Map<String, String> payload = new HashMap<String, String>();

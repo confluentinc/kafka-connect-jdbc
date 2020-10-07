@@ -392,6 +392,16 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-release-plugin</artifactId>
+                <version>${maven.release.plugin.version}</version>
+                <configuration>
+                    <autoVersionSubmodules>true</autoVersionSubmodules>
+                    <remoteTagging>false</remoteTagging>
+                    <tagNameFormat>v@{project.version}</tagNameFormat>
+                </configuration>
+            </plugin>
         </plugins>
         <resources>
             <resource>
@@ -470,16 +480,6 @@
                             <descriptors>
                                 <descriptor>src/assembly/standalone.xml</descriptor>
                             </descriptors>
-                        </configuration>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-release-plugin</artifactId>
-                        <version>${maven.release.plugin.version}</version>
-                        <configuration>
-                            <autoVersionSubmodules>true</autoVersionSubmodules>
-                            <remoteTagging>false</remoteTagging>
-                            <tagNameFormat>v@{project.version}</tagNameFormat>
                         </configuration>
                     </plugin>
                 </plugins>

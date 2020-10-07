@@ -360,12 +360,12 @@ public class JdbcSourceTask extends SourceTask {
           // send event to SNS topic
           String topicArn = config.getString(JdbcSourceTaskConfig.SNS_TOPIC_ARN_CONFIG);
           if (!topicArn.equals("")) {
+            String topicName = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);  
             List<String> tableList = config.getList(
                 JdbcSourceTaskConfig.TABLES_CONFIG);
             if (tableList.size() > 0) {
-              log.trace("Table that was being queried: {}", tableList.get(0));
+              topicName += tableList.get(0).split("\\.")[1].replace("`", "");
             }
-            String topicName = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
             Map<String, String> payload = new HashMap<String, String>();
             payload.put("event", "success");
             payload.put("topic", topicName);
@@ -375,7 +375,7 @@ public class JdbcSourceTask extends SourceTask {
             payload.put("runTime", config.getString(JdbcSourceTaskConfig.FEED_RUNTIME_CONFIG));
 
             JSONObject message = new JSONObject(payload);
-            log.trace("Sending event to SNS topic {} ", topicArn);
+            log.trace("Sending event to SNS topic {} {}", topicArn, payload.toString());
             new SNSClient(config).publish(topicArn, message.toJSONString());
           }
 
@@ -414,11 +414,11 @@ public class JdbcSourceTask extends SourceTask {
         // send event to SNS topic
         String topicArn = config.getString(JdbcSourceTaskConfig.SNS_TOPIC_ARN_CONFIG);
         if (!topicArn.equals("")) {
-          List<String> tableList = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
-          if (tableList.size() > 0) { 
-            log.trace("Table that was being queried: {}", tableList.get(0));          
-          }
           String topicName = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
+          List<String> tableList = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
+          if (tableList.size() > 0) {
+            topicName += tableList.get(0).split("\\.")[1].replace("`", "");
+          }
           Map<String, String> payload = new HashMap<String, String>();
           payload.put("event", "failure");
           payload.put("error", sqle.getMessage());

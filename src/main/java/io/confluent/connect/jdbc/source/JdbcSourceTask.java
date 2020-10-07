@@ -360,9 +360,15 @@ public class JdbcSourceTask extends SourceTask {
           // send event to SNS topic
           String topicArn = config.getString(JdbcSourceTaskConfig.SNS_TOPIC_ARN_CONFIG);
           if (!topicArn.equals("")) {
+            String topicName = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
+            List<String> tableList = config.getList(
+                JdbcSourceTaskConfig.TABLES_CONFIG);
+            if (tableList.size() > 0) {
+              topicName += (tableList.get(0).split("."))[1];
+            }
             Map<String, String> payload = new HashMap<String, String>();
             payload.put("event", "success");
-            payload.put("topic", config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG));
+            payload.put("topic", topicName);
             payload.put("feedId", config.getString(JdbcSourceTaskConfig.FEED_ID_CONFIG));
             payload.put("feedRunId", config.getString(JdbcSourceTaskConfig.FEED_RUN_ID_CONFIG));
             payload.put("tenant", config.getString(JdbcSourceTaskConfig.TENANT_CONFIG));
@@ -408,10 +414,15 @@ public class JdbcSourceTask extends SourceTask {
         // send event to SNS topic
         String topicArn = config.getString(JdbcSourceTaskConfig.SNS_TOPIC_ARN_CONFIG);
         if (!topicArn.equals("")) {
+          String topicName = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
+          List<String> tableList = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
+          if (tableList.size() > 0) { 
+            topicName += (tableList.get(0).split("."))[1];
+          }
           Map<String, String> payload = new HashMap<String, String>();
           payload.put("event", "failure");
           payload.put("error", sqle.getMessage());
-          payload.put("topic", config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG));
+          payload.put("topic", topicName);
           payload.put("feedId", config.getString(JdbcSourceTaskConfig.FEED_ID_CONFIG));
           payload.put("feedRunId", config.getString(JdbcSourceTaskConfig.FEED_RUN_ID_CONFIG));
           payload.put("tenant", config.getString(JdbcSourceTaskConfig.TENANT_CONFIG));

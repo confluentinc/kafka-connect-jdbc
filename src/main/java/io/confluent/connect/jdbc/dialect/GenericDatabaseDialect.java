@@ -246,7 +246,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     // Timeout is 40 seconds to be as long as possible for customer to have a long connection
     // handshake, while still giving enough time to validate once in the follower worker,
     // and again in the leader worker and still be under 90s REST serving timeout
-    DriverManager.setLoginTimeout(40);
+    DriverManager.setLoginTimeout(15);
 
     if (connectThroughSSH) {
       log.info("Establishing SSH tunnel session to {}, {}", sshTunnelHost, sshTunnelUser);

@@ -360,13 +360,12 @@ public class JdbcSourceTask extends SourceTask {
           // send event to SNS topic
           String topicArn = config.getString(JdbcSourceTaskConfig.SNS_TOPIC_ARN_CONFIG);
           if (!topicArn.equals("")) {
-            String topicName = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
             List<String> tableList = config.getList(
                 JdbcSourceTaskConfig.TABLES_CONFIG);
             if (tableList.size() > 0) {
               log.trace("Table that was being queried: {}", tableList.get(0));
-              topicName += (tableList.get(0).split("."))[1];
             }
+            String topicName = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
             Map<String, String> payload = new HashMap<String, String>();
             payload.put("event", "success");
             payload.put("topic", topicName);
@@ -415,12 +414,11 @@ public class JdbcSourceTask extends SourceTask {
         // send event to SNS topic
         String topicArn = config.getString(JdbcSourceTaskConfig.SNS_TOPIC_ARN_CONFIG);
         if (!topicArn.equals("")) {
-          String topicName = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
           List<String> tableList = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
           if (tableList.size() > 0) { 
             log.trace("Table that was being queried: {}", tableList.get(0));          
-            topicName += (tableList.get(0).split("."))[1];
           }
+          String topicName = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
           Map<String, String> payload = new HashMap<String, String>();
           payload.put("event", "failure");
           payload.put("error", sqle.getMessage());

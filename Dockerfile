@@ -26,5 +26,8 @@ RUN echo "===> Collection Simple JSON" \
 
 RUN echo "===> Updating JDBC jar" \
   && rm -rf /usr/share/java/kafka-connect-jdbc/kafka-connect-jdbc-5.5.1.jar
+  && rm -rf /usr/share/java/kafka-connect-s3/kafka-connect-s3-5.5.1.jar
 
 COPY ./target/kafka-connect-jdbc-5.5.1.jar /usr/share/java/kafka-connect-jdbc/
+
+COPY .kafka-connect-storage-cloud/target/kafka-connect-s3-5.5.1.jar /usr/share/java/kafka-connect-jdbc/

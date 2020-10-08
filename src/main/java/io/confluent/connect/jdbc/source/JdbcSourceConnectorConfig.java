@@ -971,7 +971,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         if ((Boolean)config.get(STORE_TABLE_LIST_CONFIG)) {
           TableListProducer tableListProducer = new TableListProducer(
               (String)config.get(BROKER_URL_CONFIG));
-          tableListProducer.produce((String)config.get(TABLE_LIST_KEY_CONFIG), (String)config.get(TABLE_LIST_KEY_CONFIG),
+          tableListProducer.produce((String)config.get(TABLE_LIST_KEY_CONFIG),
+              (String)config.get(TABLE_LIST_KEY_CONFIG),
               tables.toString());
         }
         return result;

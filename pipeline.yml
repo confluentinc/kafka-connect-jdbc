@@ -282,7 +282,7 @@ Resources:
               commands:
                 - echo Build completed on `date`
                 - aws s3 cp --recursive --exclude "*" --include "kafka-connect-jdbc-5.5.1.jar" target/ s3://ais-$STAGE-kafka-connect-jdbc/
-                - cd kafka-connect-storage-cloud && aws s3 cp --recursive --exclude "*" --include "kafka-connect-s3-5.5.1.jar" target/ s3://ais-$STAGE-kafka-connect-jdbc/ && cd ..
+                - cd kafka-connect-storage-cloud && aws s3 cp --recursive --exclude "*" --include "kafka-connect-s3-5.5.1.jar" kafka-connect-s3/target/ s3://ais-$STAGE-kafka-connect-jdbc/ && cd ..
                 - docker push $IMAGE_URL
       Tags:
         - {Key: tenant, Value: platform}

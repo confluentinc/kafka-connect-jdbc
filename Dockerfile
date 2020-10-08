@@ -30,4 +30,4 @@ RUN echo "===> Updating JDBC jar" \
 
 COPY ./target/kafka-connect-jdbc-5.5.1.jar /usr/share/java/kafka-connect-jdbc/
 
-COPY ./kafka-connect-storage-cloud/target/kafka-connect-s3-5.5.1.jar /usr/share/java/kafka-connect-jdbc/
+COPY ./kafka-connect-storage-cloud/kafka-connect-s3/target/kafka-connect-s3-5.5.1.jar /usr/share/java/kafka-connect-s3/

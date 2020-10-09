@@ -49,8 +49,6 @@ import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TIMESTA
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG;
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.POLL_INTERVAL_MS_CONFIG;
 
-import static io.confluent.connect.utils.licensing.LicenseConfigUtil.CONFLUENT_TOPIC_BOOTSTRAP_SERVERS_CONFIG;
-import static io.confluent.connect.utils.licensing.LicenseConfigUtil.CONFLUENT_TOPIC_REPLICATION_FACTOR_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.CONNECTOR_CLASS_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.KEY_CONVERTER_CLASS_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.TASKS_MAX_CONFIG;
@@ -262,9 +260,6 @@ public class MSSQLDateTimeIT extends BaseConnectorIT {
         props.put(TASKS_MAX_CONFIG, Integer.toString(TASKS_MAX));
         props.put(KEY_CONVERTER_CLASS_CONFIG, StringConverter.class.getName());
         props.put(VALUE_CONVERTER_CLASS_CONFIG, StringConverter.class.getName());
-        props.put(CONFLUENT_TOPIC_BOOTSTRAP_SERVERS_CONFIG, connect.kafka().bootstrapServers());
-        props.put(CONFLUENT_TOPIC_REPLICATION_FACTOR_CONFIG, "1");
-
         return props;
     }
 

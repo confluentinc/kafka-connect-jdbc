@@ -1,0 +1,370 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Deployment pipeline for Kafka JDBC connector code deployment
+Parameters:
+  Application:
+    Type: String
+    Default: kafka-connect-jdbc
+  GithubRepoOwner:
+    Type: String
+    Default: PeakBI
+  GithubRepoName:
+    Type: String
+    Default: kafka-connect-jdbc
+  GithubRepoBranch:
+    Type: String
+    Default: master
+  GithubOauthToken:
+    Type: String
+    NoEcho: true
+  KafkaConnectS3RepoBranch:
+    Type: String
+    Default: master
+  Stage:
+    Type: String
+    Default: latest
+    AllowedValues: [latest, test, beta, prod]
+  NotificationMonitorFunction:
+    Type: String
+    Default: helper-functions-prod-codepipeline-notify-slack
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Application
+        Parameters:
+          - Application
+          - Stage
+      - Label:
+          default: Source Code Repository
+        Parameters:
+          - GithubRepoOwner
+          - GithubRepoName
+          - GithubRepoBranch
+          - GithubOauthToken
+      - Label:
+          default: CodePipeline Parameters
+        Parameters:
+          - NotificationMonitorFunction
+Resources:
+  ImageRepo:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub '${Stage}-${GithubRepoName}'
+      RepositoryPolicyText:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowPushPull
+            Effect: Allow
+            Principal:
+              Service:
+                - "codebuild.amazonaws.com"
+            Action:
+              - "ecr:GetDownloadUrlForLayer"
+              - "ecr:BatchGetImage"
+              - "ecr:BatchCheckLayerAvailability"
+              - "ecr:PutImage"
+              - "ecr:InitiateLayerUpload"
+              - "ecr:UploadLayerPart"
+              - "ecr:CompleteLayerUpload"
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Keep only five untagged image, expire all others",
+                  "selection": {
+                    "tagStatus": "untagged",
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 5
+                  },
+                  "action": {
+                      "type": "expire"
+                  }
+                }
+            ]
+          }
+      Tags:
+        - {Key: tenant, Value: platform}
+        - {Key: stage, Value: !Ref Stage}
+        - {Key: service, Value: kafka-connect-jdbc}
+        - {Key: feature, Value: 'ingestion'}
+  ArtifactStoreBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName:
+        Fn::Join:
+          - '-'
+          -
+            - Ref: Application
+            - Ref: Stage
+            - artifactstore
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          -
+            ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Suspended
+      AccessControl: BucketOwnerFullControl
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      Tags:
+        - {Key: tenant, Value: platform}
+        - {Key: stage, Value: !Ref Stage}
+        - {Key: service, Value: kafka-connect-jdbc}
+        - {Key: feature, Value: 'ingestion'}
+  CodeStoreBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName:
+        Fn::Join:
+          - '-'
+          -
+            - ais
+            - Ref: Stage
+            - kafka-connect-jdbc
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          -
+            ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      AccessControl: BucketOwnerFullControl
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      Tags:
+        - {Key: tenant, Value: platform}
+        - {Key: stage, Value: !Ref Stage}
+        - {Key: service, Value: kafka-connect-jdbc}
+        - {Key: feature, Value: 'ingestion'}
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      RoleArn: !GetAtt PipelineRole.Arn
+      Name: !Ref AWS::StackName
+      RestartExecutionOnUpdate: true
+      ArtifactStore:
+        Location:
+          Ref:
+            ArtifactStoreBucket
+        Type: S3
+      Stages:
+        - Name: Source
+          Actions:
+            - InputArtifacts: []
+              Name: Source
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Version: 1
+                Provider: GitHub
+              OutputArtifacts:
+                - Name: SourceOutput
+              Configuration:
+                Owner: !Ref GithubRepoOwner
+                Repo: !Ref GithubRepoName
+                Branch: !Ref GithubRepoBranch
+                OAuthToken: '{{resolve:secretsmanager:GitHubToken:SecretString:GitHubToken}}'
+                PollForSourceChanges: false
+              RunOrder: 1
+        - Name: Deploy
+          Actions:
+          - Name: NotificationMonitor
+            InputArtifacts: []
+            ActionTypeId:
+              Category: Invoke
+              Owner: AWS
+              Version: '1'
+              Provider: Lambda
+            OutputArtifacts: []
+            Configuration:
+              FunctionName:
+                Ref: NotificationMonitorFunction
+              UserParameters:
+                !Sub |
+                  {"pipeline": "${AWS::StackName}"}
+            RunOrder: 1
+          - Name: DeployBackend
+            ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: 1
+                Provider: CodeBuild
+            InputArtifacts:
+              - Name: SourceOutput
+            Configuration:
+                ProjectName: !Ref DeployBackendBuild
+            RunOrder: 1
+  PipelineWebhook:
+    Type: AWS::CodePipeline::Webhook
+    Properties:
+      AuthenticationConfiguration:
+        SecretToken: '{{resolve:secretsmanager:GitHubToken:SecretString:GitHubToken}}'
+      Filters:
+        - JsonPath: $.ref
+          MatchEquals: refs/heads/{Branch}
+      Authentication: GITHUB_HMAC
+      TargetPipeline: !Ref Pipeline
+      TargetAction: Source
+      Name: !Ref AWS::StackName
+      TargetPipelineVersion: 1
+      RegisterWithThirdParty: true
+  PipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: codepipeline.amazonaws.com
+          Action: sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSCodePipelineFullAccess
+        - arn:aws:iam::aws:policy/AWSCodeBuildDeveloperAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AWSLambdaFullAccess
+      Tags:
+        - {Key: tenant, Value: platform}
+        - {Key: stage, Value: !Ref Stage}
+        - {Key: service, Value: kafka-connect-jdbc}
+        - {Key: feature, Value: 'ingestion'}
+  DeployBackendBuild:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:2.0
+        Type: LINUX_CONTAINER
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - {Name: STAGE, Value: !Ref Stage}
+          - Name: IMAGE_URL
+            Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ImageRepo}"
+          - Name: KAFKA_CONNECT_S3_BRANCH
+            Value: !Ref KafkaConnectS3RepoBranch
+          - Name: GIT_TOKEN
+            Value: !Ref GithubOauthToken
+      Name: !Sub ${AWS::StackName}
+      ServiceRole: !Ref DeployBackendBuildRole
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            install:
+              runtime-versions:
+                java: openjdk8
+            pre_build:
+              commands:
+                - |
+                  eval $(aws ecr get-login --no-include-email --region $AWS_REGION | sed 's|https://||') && echo "Got ECR Login";
+            build:
+              commands:
+                - echo Build started on `date`
+                - git clone -b $KAFKA_CONNECT_S3_BRANCH https://$GIT_TOKEN@github.com/PeakBI/kafka-connect-storage-cloud.git
+                - ls && cd kafka-connect-storage-cloud
+                - mvn install -D maven.test.skip=true
+                - cd .. && mvn install -D maven.test.skip=true
+                - docker build . --tag $IMAGE_URL:$STAGE
+            post_build:
+              commands:
+                - echo Build completed on `date`
+                - aws s3 cp --recursive --exclude "*" --include "kafka-connect-jdbc-5.5.1.jar" target/ s3://ais-$STAGE-kafka-connect-jdbc/
+                - cd kafka-connect-storage-cloud && aws s3 cp --recursive --exclude "*" --include "kafka-connect-s3-5.5.1.jar" kafka-connect-s3/target/ s3://ais-$STAGE-kafka-connect-jdbc/ && cd ..
+                - docker push $IMAGE_URL
+      Tags:
+        - {Key: tenant, Value: platform}
+        - {Key: stage, Value: !Ref Stage}
+        - {Key: service, Value: kafka-connect-jdbc}
+        - {Key: feature, Value: ingestion}
+  DeployBackendBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: codebuild.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+        -
+          PolicyName: "root"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action:
+                  - logs:*
+                  - events:*
+                  - cloudwatch:*
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:CreateBucket
+                  - s3:DeleteBucket
+                  - s3:ListBucket
+                  - s3:ListBucketVersions
+                  - s3:GetBucketVersioning
+                  - s3:PutBucketVersioning
+                  - s3:GetBucketLocation
+                  - s3:PutLifecycleConfiguration
+                  - s3:PutBucketCORS
+                  - s3:PutBucketNotification
+                  - s3:DeleteBucketNotification
+                  - cloudformation:CreateStack
+                  - cloudformation:CreateUploadBucket
+                  - cloudformation:DeleteStack
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStackResource
+                  - cloudformation:DescribeStackResources
+                  - cloudformation:UpdateStack
+                  - cloudformation:DescribeStacks
+                  - cloudformation:ValidateTemplate
+                  - cloudformation:ListStackResources
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:PassRole
+                  - iam:DeleteRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:AttachRolePolicy
+                  - ec2:DescribeAccountAttributes
+                  - ec2:DescribeAvailabilityZones
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeVpcs
+                  - ec2:CreateNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DetachNetworkInterface
+                  - ec2:DeleteNetworkInterface
+                  - ecr:GetAuthorizationToken
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:PutImage
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecs:RegisterTaskDefinition
+                Resource: "*"
+      Tags:
+        - {Key: tenant, Value: platform}
+        - {Key: stage, Value: !Ref Stage}
+        - {Key: service, Value: kafka-connect-jdbc}
+        - {Key: feature, Value: 'ingestion'}

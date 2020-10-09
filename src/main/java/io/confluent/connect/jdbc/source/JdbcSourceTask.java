@@ -45,8 +45,11 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.SNSClient;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.Version;
+import org.json.simple.JSONObject;
+
 
 /**
  * JdbcSourceTask is a Kafka Connect SourceTask implementation that reads from JDBC databases and
@@ -198,10 +201,10 @@ public class JdbcSourceTask extends SourceTask {
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(
             new BulkTableQuerier(
-                dialect, 
-                queryMode, 
-                tableOrQuery, 
-                topicPrefix, 
+                dialect,
+                queryMode,
+                tableOrQuery,
+                topicPrefix,
                 suffix
             )
         );
@@ -350,9 +353,33 @@ public class JdbcSourceTask extends SourceTask {
         final long nextUpdate = querier.getLastUpdate()
             + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
         final long now = time.milliseconds();
-        final long sleepMs = Math.min(nextUpdate - now, 100);
+        final long sleepMs = nextUpdate - now;
         if (sleepMs > 0) {
           log.trace("Waiting {} ms to poll {} next", nextUpdate - now, querier.toString());
+
+          // send event to SNS topic
+          String topicArn = config.getString(JdbcSourceTaskConfig.SNS_TOPIC_ARN_CONFIG);
+          if (!topicArn.equals("")) {
+            String topicName = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
+            List<String> tableList = config.getList(
+                JdbcSourceTaskConfig.TABLES_CONFIG);
+            if (tableList.size() > 0) {
+              topicName += tableList.get(0).split("\\.")[1].replace("`", "");
+            }
+            Map<String, String> payload = new HashMap<String, String>();
+            payload.put("status", "success");
+            payload.put("topic", topicName);
+            payload.put("feedId", config.getString(JdbcSourceTaskConfig.FEED_ID_CONFIG));
+            payload.put("feedRunId", config.getString(JdbcSourceTaskConfig.FEED_RUN_ID_CONFIG));
+            payload.put("tenant", config.getString(JdbcSourceTaskConfig.TENANT_CONFIG));
+            payload.put("runTime", config.getString(JdbcSourceTaskConfig.FEED_RUNTIME_CONFIG));
+
+            JSONObject message = new JSONObject(payload);
+            log.trace("Sending event to SNS topic {} {}", topicArn, payload.toString());
+            new SNSClient(config).publish(topicArn, message.toJSONString());
+          }
+
+
           time.sleep(sleepMs);
           continue; // Re-check stop flag before continuing
         }
@@ -384,6 +411,28 @@ public class JdbcSourceTask extends SourceTask {
         return results;
       } catch (SQLException sqle) {
         log.error("Failed to run query for table {}: {}", querier.toString(), sqle);
+        // send event to SNS topic
+        String topicArn = config.getString(JdbcSourceTaskConfig.SNS_TOPIC_ARN_CONFIG);
+        if (!topicArn.equals("")) {
+          String topicName = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
+          List<String> tableList = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
+          if (tableList.size() > 0) {
+            topicName += tableList.get(0).split("\\.")[1].replace("`", "");
+          }
+          Map<String, String> payload = new HashMap<String, String>();
+          payload.put("status", "failure");
+          payload.put("error", sqle.getMessage());
+          payload.put("topic", topicName);
+          payload.put("feedId", config.getString(JdbcSourceTaskConfig.FEED_ID_CONFIG));
+          payload.put("feedRunId", config.getString(JdbcSourceTaskConfig.FEED_RUN_ID_CONFIG));
+          payload.put("tenant", config.getString(JdbcSourceTaskConfig.TENANT_CONFIG));
+          payload.put("runTime", config.getString(JdbcSourceTaskConfig.FEED_RUNTIME_CONFIG));
+
+          JSONObject message = new JSONObject(payload);
+          log.trace("Sending event to SNS topic {} ", topicArn);
+          new SNSClient(config).publish(topicArn, message.toJSONString());
+        }
+
         resetAndRequeueHead(querier);
         return null;
       } catch (Throwable t) {

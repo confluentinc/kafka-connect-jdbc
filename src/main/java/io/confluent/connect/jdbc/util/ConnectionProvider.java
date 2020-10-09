@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.util;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import com.jcraft.jsch.JSchException;
 
 /**
  * A provider of JDBC {@link Connection} instances.
@@ -28,7 +29,7 @@ public interface ConnectionProvider extends AutoCloseable {
    * @return the connection; never null
    * @throws SQLException if there is a problem getting the connection
    */
-  Connection getConnection() throws SQLException;
+  Connection getConnection() throws SQLException, JSchException;
 
   /**
    * Determine if the specified connection is valid.

@@ -22,7 +22,7 @@
     <parent>
         <groupId>io.confluent</groupId>
         <artifactId>common</artifactId>
-        <version>6.0.0-SNAPSHOT</version>
+        <version>5.5.1</version>
     </parent>
 
     <groupId>io.confluent</groupId>
@@ -66,17 +66,68 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.package.home>target/${project.artifactId}-${project.version}-package</project.package.home>
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
+        <aws.version>1.11.725</aws.version>
     </properties>
 
     <repositories>
         <repository>
             <id>confluent</id>
             <name>Confluent</name>
-            <url>${confluent.maven.repo}</url>
+            <url>http://packages.confluent.io/maven/</url>
         </repository>
     </repositories>
+    
+   	<dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.amazonaws</groupId>
+                <artifactId>aws-java-sdk-bom</artifactId>
+                <version>${aws.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.amazonaws</groupId>
+                <artifactId>aws-java-sdk-sts</artifactId>
+                <version>${aws.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+    
 
     <dependencies>
+        <!-- For SSH tunnelling -->
+        <dependency>
+            <groupId>com.jcraft</groupId>
+            <artifactId>jsch</artifactId>
+            <version>0.1.55</version>
+        </dependency>
+
+		
+		<!--  For generating event to SNS topic -->
+		<dependency>
+    		<groupId>com.amazonaws</groupId>
+    		<artifactId>aws-java-sdk-sns</artifactId>
+		</dependency>
+    	<dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-java-sdk-sts</artifactId>
+        </dependency>
+        
+        <!-- For creating a Kafka producer -->
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-clients</artifactId>
+            <version>2.2.1</version>
+        </dependency>
+
+		<!-- For using JSON -->		
+		<dependency>
+            <groupId>com.googlecode.json-simple</groupId>
+            <artifactId>json-simple</artifactId>
+            <version>1.1.1</version>
+		</dependency>
+		
         <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>connect-api</artifactId>
@@ -143,30 +194,6 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-log4j12</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <!-- Use a repackaged version of log4j with security patches. Default log4j v1.2 is a transitive dependency of slf4j-log4j12, but it is excluded in common/pom.xml -->
-        <dependency>
-            <groupId>io.confluent</groupId>
-            <artifactId>confluent-log4j</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.zonky.test</groupId>
-            <artifactId>embedded-postgres</artifactId>
-            <version>1.2.6</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>ch.vorburger.mariaDB4j</groupId>
-            <artifactId>mariaDB4j</artifactId>
-            <version>2.4.0</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.mariadb.jdbc</groupId>
-            <artifactId>mariadb-java-client</artifactId>
-            <version>2.5.3</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -246,34 +273,6 @@
                             </tags>
 
                             <confluentControlCenterIntegration>true</confluentControlCenterIntegration>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-failsafe-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <!--normal integration tests should not run the memory-restricted tests -->
-                        <id>integration-test</id>
-                        <configuration>
-                            <excludes>
-                                <exclude>**/*OOM*.java</exclude>
-                            </excludes>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>integration-test-memory-restricted</id>
-                        <goals>
-                            <goal>integration-test</goal>
-                        </goals>
-                        <configuration>
-                            <!-- out-of-memory tests should have a restricted heap size-->
-                            <argLine>@{argLine} -Djava.awt.headless=true -Xmx128M</argLine>
-                            <includes>
-                                <include>**/*OOM*.java</include>
-                            </includes>
                         </configuration>
                     </execution>
                 </executions>

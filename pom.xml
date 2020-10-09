@@ -66,8 +66,6 @@
         <project.package.home>target/${project.artifactId}-${project.version}-package</project.package.home>
         <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
         <maven.release.plugin.version>2.5.3</maven.release.plugin.version>
-        <connect.utils.version>0.1.11</connect.utils.version>
-        <confluent.licensing.version>0.5.2</confluent.licensing.version>
     </properties>
 
     <repositories>
@@ -194,12 +192,6 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>io.confluent</groupId>
-            <artifactId>connect-licensing-extensions</artifactId>
-            <version>${confluent.licensing.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>connect-runtime</artifactId>
             <version>${kafka.version}</version>
@@ -230,14 +222,9 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>io.confluent</groupId>
-            <artifactId>connect-utils</artifactId>
-            <version>${connect.utils.version}</version>
-        </dependency>
-        <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers</artifactId>
-            <version>1.12.2</version>
+            <version>1.15.0-rc2</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

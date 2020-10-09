@@ -177,12 +177,6 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>io.confluent</groupId>
-            <artifactId>connect-licensing-extensions</artifactId>
-            <version>${confluent.licensing.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>connect-runtime</artifactId>
             <version>${kafka.version}</version>
@@ -213,14 +207,9 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>io.confluent</groupId>
-            <artifactId>connect-utils</artifactId>
-            <version>${connect.utils.version}</version>
-        </dependency>
-        <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers</artifactId>
-            <version>1.12.2</version>
+            <version>1.15.0-rc2</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

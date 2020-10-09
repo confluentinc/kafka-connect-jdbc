@@ -49,13 +49,6 @@ import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TIMESTA
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG;
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.POLL_INTERVAL_MS_CONFIG;
 
-import static io.confluent.connect.utils.licensing.LicenseConfigUtil.CONFLUENT_TOPIC_BOOTSTRAP_SERVERS_CONFIG;
-import static io.confluent.connect.utils.licensing.LicenseConfigUtil.CONFLUENT_TOPIC_REPLICATION_FACTOR_CONFIG;
-import static org.apache.kafka.connect.runtime.ConnectorConfig.CONNECTOR_CLASS_CONFIG;
-import static org.apache.kafka.connect.runtime.ConnectorConfig.KEY_CONVERTER_CLASS_CONFIG;
-import static org.apache.kafka.connect.runtime.ConnectorConfig.TASKS_MAX_CONFIG;
-import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
-
 /**
  * This test is to verify that JDBC source connector forbids Datetime column type
  * for MSSQL Server (2016 and after).
@@ -251,7 +244,7 @@ public class MSSQLDateTimeIT extends BaseConnectorIT {
     private Map<String, String> configProperties() {
         // Create a hashmap to setup source connector config properties
         Map<String, String> props = new HashMap<>();
-        props.put(CONNECTOR_CLASS_CONFIG, "JdbcSourceConnector");
+        props.put("connector.class", "JdbcSourceConnector");
         props.put(CONNECTION_URL_CONFIG, MSSQL_URL);
         props.put(CONNECTION_USER_CONFIG, "sa");
         props.put(CONNECTION_PASSWORD_CONFIG, "reallyStrongPwd123");
@@ -259,11 +252,11 @@ public class MSSQLDateTimeIT extends BaseConnectorIT {
         props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "start_time");
         props.put(TOPIC_PREFIX_CONFIG, "test-");
         props.put(POLL_INTERVAL_MS_CONFIG, "30");
-        props.put(TASKS_MAX_CONFIG, Integer.toString(TASKS_MAX));
-        props.put(KEY_CONVERTER_CLASS_CONFIG, StringConverter.class.getName());
-        props.put(VALUE_CONVERTER_CLASS_CONFIG, StringConverter.class.getName());
-        props.put(CONFLUENT_TOPIC_BOOTSTRAP_SERVERS_CONFIG, connect.kafka().bootstrapServers());
-        props.put(CONFLUENT_TOPIC_REPLICATION_FACTOR_CONFIG, "1");
+        props.put("tasks.max", Integer.toString(TASKS_MAX));
+        props.put("key.converter", StringConverter.class.getName());
+        props.put("value.converter", StringConverter.class.getName());
+        props.put("confluent.topic.bootstrap.servers", connect.kafka().bootstrapServers());
+        props.put("confluent.topic.replication.factor", "1");
 
         return props;
     }

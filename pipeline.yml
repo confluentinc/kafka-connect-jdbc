@@ -25,7 +25,7 @@ Parameters:
     AllowedValues: [latest, test, beta, prod]
   NotificationMonitorFunction:
     Type: String
-    Default: helper-functions-prod-codepipeline-notify-slacks
+    Default: helper-functions-prod-codepipeline-notify-slack
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:

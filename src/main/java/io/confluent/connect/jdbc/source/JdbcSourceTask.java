@@ -360,6 +360,7 @@ public class JdbcSourceTask extends SourceTask {
 
           // send event to SNS topic
           String topicArn = config.getString(JdbcSourceTaskConfig.SNS_TOPIC_ARN_CONFIG);
+
           if (!topicArn.equals("") && !snsEventPushed.get()) {
             String topicName = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);  
             List<String> tableList = config.getList(
@@ -368,7 +369,7 @@ public class JdbcSourceTask extends SourceTask {
               topicName += tableList.get(0).split("\\.")[1].replace("`", "");
             }
             Map<String, String> payload = new HashMap<String, String>();
-            payload.put("event", "success");
+            payload.put("status", "success");
             payload.put("topic", topicName);
             payload.put("feedId", config.getString(JdbcSourceTaskConfig.FEED_ID_CONFIG));
             payload.put("feedRunId", config.getString(JdbcSourceTaskConfig.FEED_RUN_ID_CONFIG));
@@ -421,7 +422,7 @@ public class JdbcSourceTask extends SourceTask {
             topicName += tableList.get(0).split("\\.")[1].replace("`", "");
           }
           Map<String, String> payload = new HashMap<String, String>();
-          payload.put("event", "failure");
+          payload.put("status", "failure");
           payload.put("error", sqle.getMessage());
           payload.put("topic", topicName);
           payload.put("feedId", config.getString(JdbcSourceTaskConfig.FEED_ID_CONFIG));

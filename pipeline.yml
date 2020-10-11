@@ -13,6 +13,12 @@ Parameters:
   GithubRepoBranch:
     Type: String
     Default: master
+  GithubOauthToken:
+    Type: String
+    NoEcho: true
+  KafkaConnectS3RepoBranch:
+    Type: String
+    Default: master
   Stage:
     Type: String
     Default: latest
@@ -34,6 +40,7 @@ Metadata:
           - GithubRepoOwner
           - GithubRepoName
           - GithubRepoBranch
+          - GithubOauthToken
       - Label:
           default: CodePipeline Parameters
         Parameters:
@@ -245,6 +252,10 @@ Resources:
           - {Name: STAGE, Value: !Ref Stage}
           - Name: IMAGE_URL
             Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ImageRepo}"
+          - Name: KAFKA_CONNECT_S3_BRANCH
+            Value: !Ref KafkaConnectS3RepoBranch
+          - Name: GIT_TOKEN
+            Value: !Ref GithubOauthToken
       Name: !Sub ${AWS::StackName}
       ServiceRole: !Ref DeployBackendBuildRole
       Source:
@@ -262,12 +273,16 @@ Resources:
             build:
               commands:
                 - echo Build started on `date`
+                - git clone -b $KAFKA_CONNECT_S3_BRANCH https://$GIT_TOKEN@github.com/PeakBI/kafka-connect-storage-cloud.git
+                - ls && cd kafka-connect-storage-cloud
                 - mvn install -D maven.test.skip=true
+                - cd .. && mvn install -D maven.test.skip=true
                 - docker build . --tag $IMAGE_URL:$STAGE
             post_build:
               commands:
                 - echo Build completed on `date`
                 - aws s3 cp --recursive --exclude "*" --include "kafka-connect-jdbc-5.5.1.jar" target/ s3://ais-$STAGE-kafka-connect-jdbc/
+                - cd kafka-connect-storage-cloud && aws s3 cp --recursive --exclude "*" --include "kafka-connect-s3-5.5.1.jar" kafka-connect-s3/target/ s3://ais-$STAGE-kafka-connect-jdbc/ && cd ..
                 - docker push $IMAGE_URL
       Tags:
         - {Key: tenant, Value: platform}

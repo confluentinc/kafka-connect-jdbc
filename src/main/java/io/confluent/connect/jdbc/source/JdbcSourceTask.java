@@ -65,6 +65,7 @@ public class JdbcSourceTask extends SourceTask {
   private CachedConnectionProvider cachedConnectionProvider;
   private PriorityQueue<TableQuerier> tableQueue = new PriorityQueue<TableQuerier>();
   private final AtomicBoolean running = new AtomicBoolean(false);
+  private final AtomicBoolean snsEventPushed = new AtomicBoolean(false);
 
   public JdbcSourceTask() {
     this.time = new SystemTime();
@@ -353,14 +354,15 @@ public class JdbcSourceTask extends SourceTask {
         final long nextUpdate = querier.getLastUpdate()
             + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
         final long now = time.milliseconds();
-        final long sleepMs = nextUpdate - now;
+        final long sleepMs = Math.min(nextUpdate - now, 10);
         if (sleepMs > 0) {
           log.trace("Waiting {} ms to poll {} next", nextUpdate - now, querier.toString());
 
           // send event to SNS topic
           String topicArn = config.getString(JdbcSourceTaskConfig.SNS_TOPIC_ARN_CONFIG);
-          if (!topicArn.equals("")) {
-            String topicName = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
+
+          if (!topicArn.equals("") && !snsEventPushed.get()) {
+            String topicName = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);  
             List<String> tableList = config.getList(
                 JdbcSourceTaskConfig.TABLES_CONFIG);
             if (tableList.size() > 0) {
@@ -377,8 +379,8 @@ public class JdbcSourceTask extends SourceTask {
             JSONObject message = new JSONObject(payload);
             log.trace("Sending event to SNS topic {} {}", topicArn, payload.toString());
             new SNSClient(config).publish(topicArn, message.toJSONString());
+            snsEventPushed.set(true);
           }
-
 
           time.sleep(sleepMs);
           continue; // Re-check stop flag before continuing

@@ -208,6 +208,15 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
   }
 
   @Test
+  public void ignore() {
+    TableId customers = tableId("customers");
+    String expected = "INSERT IGNORE INTO `customers`(`age`,`firstName`,`lastName`) VALUES(?,?,?)";
+    String sql = dialect.buildInsertIgnoreStatement(customers, columns(customers),
+            columns(customers, "age", "firstName", "lastName"));
+    assertEquals(expected, sql);
+  }
+
+  @Test
   public void insert() {
     TableId customers = tableId("customers");
     String expected = "INSERT INTO `customers`(`age`,`firstName`,`lastName`) VALUES(?,?,?)";

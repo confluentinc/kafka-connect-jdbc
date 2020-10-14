@@ -314,7 +314,8 @@ public interface DatabaseDialect extends ConnectionProvider {
    * <p>This method is only called by the default implementation of
    * {@link #buildInsertIgnoreStatement(TableId, Collection, Collection, TableDefinition)}, since
    * many dialects implement this variant of the method. However, overriding
-   * {@link #buildInsertIgnoreStatement(TableId, Collection, Collection, TableDefinition)} is suggested.
+   * {@link #buildInsertIgnoreStatement(TableId, Collection, Collection, TableDefinition)}
+   * is suggested.
    *
    * @param table         the identifier of the table; may not be null
    * @param keyColumns    the identifiers of the columns in the primary/unique key; may not be null

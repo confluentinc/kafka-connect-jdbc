@@ -223,6 +223,25 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         dialect.buildInsertStatement(tableId, pkColumns, nonPkColumns, tableDefn)
     );
   }
+
+  @Test
+  public void shouldBuildInsertIgnoreStatement() {
+    TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("myTable");
+    builder.withColumn("id1").type("int", JDBCType.INTEGER, Integer.class);
+    builder.withColumn("id2").type("int", JDBCType.INTEGER, Integer.class);
+    builder.withColumn("columnA").type("varchar", JDBCType.VARCHAR, String.class);
+    builder.withColumn("columnB").type("varchar", JDBCType.VARCHAR, String.class);
+    builder.withColumn("columnC").type("varchar", JDBCType.VARCHAR, String.class);
+    builder.withColumn("columnD").type("varchar", JDBCType.VARCHAR, String.class);
+    TableDefinition tableDefn = builder.build();
+    assertEquals(
+            "INSERT INTO \"myTable\" (\"id1\",\"id2\",\"columnA\",\"columnB\"," +
+                    "\"columnC\",\"columnD\") VALUES (?,?,?,?,?,?) ON CONFLICT (\"id1\"," +
+                    "\"id2\") DO NOTHING",
+            dialect.buildInsertIgnoreStatement(tableId, pkColumns, columnsAtoD, tableDefn)
+    );
+  }
+
   @Test
   public void shouldBuildUpsertStatement() {
     TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("myTable");

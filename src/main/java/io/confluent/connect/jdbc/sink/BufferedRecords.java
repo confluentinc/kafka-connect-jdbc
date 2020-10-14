@@ -264,6 +264,13 @@ public class BufferedRecords {
 
   private String getInsertSql() throws SQLException {
     switch (config.insertMode) {
+      case IGNORE:
+        return dbDialect.buildInsertIgnoreStatement(
+                tableId,
+                asColumns(fieldsMetadata.keyFieldNames),
+                asColumns(fieldsMetadata.nonKeyFieldNames),
+                dbStructure.tableDefinition(connection, tableId)
+        );
       case INSERT:
         return dbDialect.buildInsertStatement(
             tableId,

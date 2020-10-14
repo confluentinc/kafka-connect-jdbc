@@ -309,6 +309,52 @@ public interface DatabaseDialect extends ConnectionProvider {
   void applyDdlStatements(Connection connection, List<String> statements) throws SQLException;
 
   /**
+   * Build the INSERT IGNORE prepared statement expression for the given table and its columns.
+   *
+   * <p>This method is only called by the default implementation of
+   * {@link #buildInsertIgnoreStatement(TableId, Collection, Collection, TableDefinition)}, since
+   * many dialects implement this variant of the method. However, overriding
+   * {@link #buildInsertIgnoreStatement(TableId, Collection, Collection, TableDefinition)} is suggested.
+   *
+   * @param table         the identifier of the table; may not be null
+   * @param keyColumns    the identifiers of the columns in the primary/unique key; may not be null
+   *                      but may be empty
+   * @param nonKeyColumns the identifiers of the other columns in the table; may not be null but may
+   *                      be empty
+   * @return the INSERT IGNORE statement; may not be null
+   */
+  String buildInsertIgnoreStatement(
+          TableId table,
+          Collection<ColumnId> keyColumns,
+          Collection<ColumnId> nonKeyColumns
+  );
+
+  /**
+   * Build the INSERT IGNORE prepared statement expression for the given table and its columns.
+   *
+   * <p>By default this method calls
+   * {@link #buildInsertIgnoreStatement(TableId, Collection, Collection)} to maintain backward
+   * compatibility with older versions. Subclasses that override this method do not need to
+   * override {@link #buildInsertIgnoreStatement(TableId, Collection, Collection)}.
+   *
+   * @param table         the identifier of the table; may not be null
+   * @param keyColumns    the identifiers of the columns in the primary/unique key; may not be null
+   *                      but may be empty
+   * @param nonKeyColumns the identifiers of the other columns in the table; may not be null but may
+   *                      be empty
+   * @param definition    the table definition; may be null if unknown
+   * @return the INSERT IGNORE statement; may not be null
+   */
+  default String buildInsertIgnoreStatement(
+          TableId table,
+          Collection<ColumnId> keyColumns,
+          Collection<ColumnId> nonKeyColumns,
+          TableDefinition definition
+  ) {
+    return buildInsertIgnoreStatement(table, keyColumns, nonKeyColumns);
+  }
+
+  /**
    * Build the INSERT prepared statement expression for the given table and its columns.
    *
    * <p>This method is only called by the default implementation of

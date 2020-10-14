@@ -131,6 +131,33 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
   }
 
   @Override
+  public String buildInsertIgnoreStatement(
+          TableId table,
+          Collection<ColumnId> keyColumns,
+          Collection<ColumnId> nonKeyColumns
+  ) {
+    ExpressionBuilder builder = expressionBuilder();
+    builder.append("INSERT /*+ ignore_row_on_dupkey_index(");
+    builder.append(table);
+    builder.append(",");
+    builder.appendList()
+            .delimitedBy(",")
+            .transformedBy(ExpressionBuilder.columnNames())
+            .of(keyColumns);
+    builder.append(") */ INTO ");
+    builder.append(table);
+    builder.append("(");
+    builder.appendList()
+            .delimitedBy(",")
+            .transformedBy(ExpressionBuilder.columnNames())
+            .of(keyColumns, nonKeyColumns);
+    builder.append(") VALUES(");
+    builder.appendMultiple(",", "?", keyColumns.size() + nonKeyColumns.size());
+    builder.append(")");
+    return builder.toString();
+  }
+
+  @Override
   public String buildDropTableStatement(
       TableId table,
       DropOptions options

@@ -157,6 +157,14 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
   }
 
   @Test
+  public void shouldBuildInsertIgnoreStatement() {
+    String expected = "INSERT /*+ ignore_row_on_dupkey_index(\"myTable\",\"id1\",\"id2\") */ INTO \"myTable\"(\"id1\",\"id2\"," +
+                      "\"columnA\",\"columnB\",\"columnC\",\"columnD\") VALUES(?,?,?,?,?,?)";
+    String sql = dialect.buildInsertIgnoreStatement(tableId, pkColumns, columnsAtoD);
+    assertEquals(expected, sql);
+  }
+
+  @Test
   public void shouldBuildUpsertStatement() {
     String expected = "merge into \"myTable\" using (select ? \"id1\", ? \"id2\", ? \"columnA\", " +
                       "? \"columnB\", ? \"columnC\", ? \"columnD\" FROM dual) incoming on" +

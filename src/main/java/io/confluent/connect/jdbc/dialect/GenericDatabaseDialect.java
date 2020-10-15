@@ -1460,18 +1460,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           Collection<ColumnId> keyColumns,
           Collection<ColumnId> nonKeyColumns
   ) {
-    ExpressionBuilder builder = expressionBuilder();
-    builder.append("INSERT IGNORE INTO ");
-    builder.append(table);
-    builder.append("(");
-    builder.appendList()
-            .delimitedBy(",")
-            .transformedBy(ExpressionBuilder.columnNames())
-            .of(keyColumns, nonKeyColumns);
-    builder.append(") VALUES(");
-    builder.appendMultiple(",", "?", keyColumns.size() + nonKeyColumns.size());
-    builder.append(")");
-    return builder.toString();
+    throw new UnsupportedOperationException();
   }
 
   @Override

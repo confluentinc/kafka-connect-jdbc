@@ -186,6 +186,14 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
   }
 
   @Test
+  public void shouldBuildInsertIgnoreStatement() {
+    String expected = "INSERT OR IGNORE INTO `myTable`(`id1`,`id2`,`columnA`,`columnB`," +
+            "`columnC`,`columnD`) VALUES(?,?,?,?,?,?)";
+    String sql = dialect.buildInsertIgnoreStatement(tableId, pkColumns, columnsAtoD);
+    assertEquals(expected, sql);
+  }
+
+  @Test
   public void shouldBuildUpsertStatement() {
     String expected = "INSERT OR REPLACE INTO `myTable`(`id1`,`id2`,`columnA`,`columnB`," +
                       "`columnC`,`columnD`) VALUES(?,?,?,?,?,?)";

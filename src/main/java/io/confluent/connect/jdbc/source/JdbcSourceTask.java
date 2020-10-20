@@ -362,11 +362,13 @@ public class JdbcSourceTask extends SourceTask {
           String topicArn = config.getString(JdbcSourceTaskConfig.SNS_TOPIC_ARN_CONFIG);
 
           if (!topicArn.equals("") && !snsEventPushed.get()) {
-            String topicName = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);  
+            String topicName = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
             List<String> tableList = config.getList(
                 JdbcSourceTaskConfig.TABLES_CONFIG);
             if (tableList.size() > 0) {
-              topicName += tableList.get(0).split("\\.")[1].replace("`", "");
+              String[] splittedTableName = tableList.get(0).split("\\.");
+              topicName += splittedTableName[splittedTableName.length - 1].replace("`", "")
+                  .replace("\"", "");
             }
             Map<String, String> payload = new HashMap<String, String>();
             payload.put("status", "success");
@@ -377,7 +379,7 @@ public class JdbcSourceTask extends SourceTask {
             payload.put("runTime", config.getString(JdbcSourceTaskConfig.FEED_RUNTIME_CONFIG));
 
             JSONObject message = new JSONObject(payload);
-            log.trace("Sending event to SNS topic {} {}", topicArn, payload.toString());
+            log.info("Sending event to SNS topic {} {}", topicArn, payload.toString());
             new SNSClient(config).publish(topicArn, message.toJSONString());
             snsEventPushed.set(true);
           }
@@ -419,7 +421,9 @@ public class JdbcSourceTask extends SourceTask {
           String topicName = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
           List<String> tableList = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
           if (tableList.size() > 0) {
-            topicName += tableList.get(0).split("\\.")[1].replace("`", "");
+            String[] splittedTableName = tableList.get(0).split("\\.");
+            topicName += splittedTableName[splittedTableName.length - 1].replace("`", "")
+                .replace("\"", "");;
           }
           Map<String, String> payload = new HashMap<String, String>();
           payload.put("status", "failure");

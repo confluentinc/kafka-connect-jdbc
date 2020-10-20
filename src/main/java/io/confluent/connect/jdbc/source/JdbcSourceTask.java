@@ -367,7 +367,8 @@ public class JdbcSourceTask extends SourceTask {
                 JdbcSourceTaskConfig.TABLES_CONFIG);
             if (tableList.size() > 0) {
               String[] splittedTableName = tableList.get(0).split("\\.");
-              topicName += splittedTableName[splittedTableName.length - 1].replace("`", "");
+              topicName += splittedTableName[splittedTableName.length - 1].replace("`", "")
+                  .replace("\"", "");
             }
             Map<String, String> payload = new HashMap<String, String>();
             payload.put("status", "success");
@@ -421,7 +422,8 @@ public class JdbcSourceTask extends SourceTask {
           List<String> tableList = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
           if (tableList.size() > 0) {
             String[] splittedTableName = tableList.get(0).split("\\.");
-            topicName += splittedTableName[splittedTableName.length - 1].replace("`", "");
+            topicName += splittedTableName[splittedTableName.length - 1].replace("`", "")
+                .replace("\"", "");;
           }
           Map<String, String> payload = new HashMap<String, String>();
           payload.put("status", "failure");

@@ -21,12 +21,12 @@ RUN echo "===> Collecting AWS core" \
 RUN echo "===> Collecting AWS STS" \
   && wget -O /usr/share/java/kafka/aws-java-sdk-sts-1.11.725.jar https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-sts/1.11.725/aws-java-sdk-sts-1.11.725.jar
 
-RUN echo "===> Collection Simple JSON" \
+RUN echo "===> Collecting Simple JSON" \
   && wget -O /usr/share/java/kafka-connect-jdbc/json-simple-1.1.1.jar https://repo1.maven.org/maven2/com/googlecode/json-simple/json-simple/1.1.1/json-simple-1.1.1.jar
 
 RUN echo "===> Updating JDBC jar" \
   && rm -rf /usr/share/java/kafka-connect-jdbc/kafka-connect-jdbc-5.5.1.jar \
-  && rm -rf /usr/share/java/kafka-connect-s3/kafka-connect-s3-5.5.1.jar
+  && rm -rf /usr/share/java/kafka-connect-s3/kafka-connect-s3-5.5.1.jar 
 
 COPY ./target/kafka-connect-jdbc-5.5.1.jar /usr/share/java/kafka-connect-jdbc/
 

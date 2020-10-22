@@ -53,6 +53,8 @@ import io.confluent.connect.jdbc.util.Version;
  * generates Kafka Connect records.
  */
 public class JdbcSourceTask extends SourceTask {
+  // When no results, periodically return control flow to caller to give it a chance to pause us.
+  private static final int CONSECUTIVE_EMPTY_RESULTS_BEFORE_RETURN = 3;
 
   private static final Logger log = LoggerFactory.getLogger(JdbcSourceTask.class);
 
@@ -300,6 +302,7 @@ public class JdbcSourceTask extends SourceTask {
   public List<SourceRecord> poll() throws InterruptedException {
     log.trace("{} Polling for new data");
 
+    int consecutiveEmptyResults = 0;
     while (running.get()) {
       final TableQuerier querier = tableQueue.peek();
 
@@ -309,6 +312,7 @@ public class JdbcSourceTask extends SourceTask {
             + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
         final long now = time.milliseconds();
         final long sleepMs = Math.min(nextUpdate - now, 100);
+
         if (sleepMs > 0) {
           log.trace("Waiting {} ms to poll {} next", nextUpdate - now, querier.toString());
           time.sleep(sleepMs);
@@ -334,8 +338,18 @@ public class JdbcSourceTask extends SourceTask {
         }
 
         if (results.isEmpty()) {
+          consecutiveEmptyResults++;
           log.trace("No updates for {}", querier.toString());
-          continue;
+
+          if (consecutiveEmptyResults >= CONSECUTIVE_EMPTY_RESULTS_BEFORE_RETURN) {
+            log.trace("More than " + CONSECUTIVE_EMPTY_RESULTS_BEFORE_RETURN
+                + " consecutive empty results, returning");
+            return null;
+          } else {
+            continue;
+          }
+        } else {
+          consecutiveEmptyResults = 0;
         }
 
         log.debug("Returning {} records for {}", results.size(), querier.toString());

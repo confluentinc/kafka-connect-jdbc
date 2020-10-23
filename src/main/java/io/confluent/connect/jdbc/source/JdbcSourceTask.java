@@ -379,7 +379,7 @@ public class JdbcSourceTask extends SourceTask {
             payload.put("runTime", config.getString(JdbcSourceTaskConfig.FEED_RUNTIME_CONFIG));
 
             JSONObject message = new JSONObject(payload);
-            log.info("Sending event to SNS topic {} {}", topicArn, payload.toString());
+            log.trace("Sending event to SNS topic {} {}", topicArn, payload.toString());
             new SNSClient(config).publish(topicArn, message.toJSONString());
             snsEventPushed.set(true);
           }

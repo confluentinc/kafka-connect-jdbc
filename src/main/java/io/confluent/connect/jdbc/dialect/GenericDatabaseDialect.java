@@ -1173,16 +1173,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           }
         }
 
-        scale = decimalScale(columnDefn);
-        if (precision >= 19 && scale == 0) {
-          builder.field(fieldName, optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA);
-          break;
-        }
-        SchemaBuilder fieldBuilder = Decimal.builder(scale);
-        if (optional) {
-          fieldBuilder.optional();
-        }
-        builder.field(fieldName, fieldBuilder.build());
+        builder.field(fieldName, optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA);
         break;
       }
 
@@ -1195,20 +1186,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       case Types.CLOB:
       case Types.NCLOB:
       case Types.DATALINK:
-      case Types.SQLXML: {
-        // Some of these types will have fixed size, but we drop this from the schema conversion
-        // since only fixed byte arrays can have a fixed size
-        builder.field(fieldName, optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA);
-        break;
-      }
-
-      // Binary == fixed bytes
-      // BLOB, VARBINARY, LONGVARBINARY == bytes
+      case Types.SQLXML:
       case Types.BINARY:
       case Types.BLOB:
       case Types.VARBINARY:
       case Types.LONGVARBINARY: {
-        builder.field(fieldName, optional ? Schema.OPTIONAL_BYTES_SCHEMA : Schema.BYTES_SCHEMA);
+        // Some of these types will have fixed size, but we drop this from the schema conversion
+        // since only fixed byte arrays can have a fixed size
+        builder.field(fieldName, optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA);
         break;
       }
 
@@ -1356,10 +1341,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           }
         }
         // fallthrough
-        if (precision >= 19 && scale == 0) {
-          return rs -> rs.getString(col);
-        }
-        return rs -> rs.getBigDecimal(col, scale);
+        return rs -> rs.getString(col);
       }
 
       case Types.CHAR:
@@ -1378,7 +1360,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       case Types.BINARY:
       case Types.VARBINARY:
       case Types.LONGVARBINARY: {
-        return rs -> rs.getBytes(col);
+        return rs -> rs.getString(col);
       }
 
       // Date is day + month + year
@@ -1406,23 +1388,24 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
       // BLOB == fixed
       case Types.BLOB: {
-        return rs -> {
-          Blob blob = rs.getBlob(col);
-          if (blob == null) {
-            return null;
-          } else {
-            try {
-              if (blob.length() > Integer.MAX_VALUE) {
-                throw new IOException("Can't process BLOBs longer than " + Integer.MAX_VALUE);
-              }
-              return blob.getBytes(1, (int) blob.length());
-            } finally {
-              if (isJdbc4) {
-                free(blob);
-              }
-            }
-          }
-        };
+        // return rs -> {
+        //   Blob blob = rs.getBlob(col);
+        //   if (blob == null) {
+        //     return null;
+        //   } else {
+        //     try {
+        //       if (blob.length() > Integer.MAX_VALUE) {
+        //         throw new IOException("Can't process BLOBs longer than " + Integer.MAX_VALUE);
+        //       }
+        //       return blob.getBytes(1, (int) blob.length());
+        //     } finally {
+        //       if (isJdbc4) {
+        //         free(blob);
+        //       }
+        //     }
+        //   }
+        // };
+        return rs -> rs.getString(col);
       }
       case Types.CLOB:
         return rs -> {

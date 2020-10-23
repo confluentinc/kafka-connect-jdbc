@@ -39,6 +39,7 @@ import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
@@ -302,7 +303,8 @@ public class JdbcSourceTask extends SourceTask {
   public List<SourceRecord> poll() throws InterruptedException {
     log.trace("{} Polling for new data");
 
-    int consecutiveEmptyResults = 0;
+    Map<String, Integer> consecutiveEmptyResults = tableQueue.stream().collect(
+        Collectors.toMap(TableQuerier::toString, (q) -> 0));
     while (running.get()) {
       final TableQuerier querier = tableQueue.peek();
 
@@ -338,18 +340,19 @@ public class JdbcSourceTask extends SourceTask {
         }
 
         if (results.isEmpty()) {
-          consecutiveEmptyResults++;
+          consecutiveEmptyResults.compute(querier.toString(), (k, v) -> v + 1);
           log.trace("No updates for {}", querier.toString());
 
-          if (consecutiveEmptyResults >= CONSECUTIVE_EMPTY_RESULTS_BEFORE_RETURN) {
+          if (Collections.min(consecutiveEmptyResults.values())
+              >= CONSECUTIVE_EMPTY_RESULTS_BEFORE_RETURN) {
             log.trace("More than " + CONSECUTIVE_EMPTY_RESULTS_BEFORE_RETURN
-                + " consecutive empty results, returning");
+                + " consecutive empty results for all queriers, returning");
             return null;
           } else {
             continue;
           }
         } else {
-          consecutiveEmptyResults = 0;
+          consecutiveEmptyResults.put(querier.toString(), 0);
         }
 
         log.debug("Returning {} records for {}", results.size(), querier.toString());

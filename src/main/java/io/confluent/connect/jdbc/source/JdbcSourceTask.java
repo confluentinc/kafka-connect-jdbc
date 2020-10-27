@@ -304,7 +304,7 @@ public class JdbcSourceTask extends SourceTask {
     log.trace("{} Polling for new data");
 
     Map<String, Integer> consecutiveEmptyResults = tableQueue.stream().collect(
-        Collectors.toMap(TableQuerier::toString, (q) -> 0));
+        Collectors.toMap(Function.identity(), (q) -> 0));
     while (running.get()) {
       final TableQuerier querier = tableQueue.peek();
 

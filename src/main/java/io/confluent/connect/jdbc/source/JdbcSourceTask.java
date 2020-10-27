@@ -352,7 +352,7 @@ public class JdbcSourceTask extends SourceTask {
             continue;
           }
         } else {
-          consecutiveEmptyResults.put(querier.toString(), 0);
+          consecutiveEmptyResults.put(querier, 0);
         }
 
         log.debug("Returning {} records for {}", results.size(), querier.toString());

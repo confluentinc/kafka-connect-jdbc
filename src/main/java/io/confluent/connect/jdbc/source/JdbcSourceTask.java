@@ -303,7 +303,7 @@ public class JdbcSourceTask extends SourceTask {
   public List<SourceRecord> poll() throws InterruptedException {
     log.trace("{} Polling for new data");
 
-    Map<String, Integer> consecutiveEmptyResults = tableQueue.stream().collect(
+    Map<TableQuerier, Integer> consecutiveEmptyResults = tableQueue.stream().collect(
         Collectors.toMap(Function.identity(), (q) -> 0));
     while (running.get()) {
       final TableQuerier querier = tableQueue.peek();

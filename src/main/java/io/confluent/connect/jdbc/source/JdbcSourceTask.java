@@ -340,7 +340,7 @@ public class JdbcSourceTask extends SourceTask {
         }
 
         if (results.isEmpty()) {
-          consecutiveEmptyResults.compute(querier.toString(), (k, v) -> v + 1);
+          consecutiveEmptyResults.compute(querier, (k, v) -> v + 1);
           log.trace("No updates for {}", querier.toString());
 
           if (Collections.min(consecutiveEmptyResults.values())

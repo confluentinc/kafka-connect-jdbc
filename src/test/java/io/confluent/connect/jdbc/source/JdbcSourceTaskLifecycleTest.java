@@ -35,6 +35,7 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
 @RunWith(PowerMockRunner.class)
 @PowerMockIgnore("javax.management.*")
@@ -218,6 +219,16 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
                    time.milliseconds());
       validatePollResultTable(records, 1, SECOND_TABLE_NAME);
     }
+  }
+
+  @Test
+  public void testMultipleTablesNothingToDoReturns() throws Exception {
+    db.createTable(SINGLE_TABLE_NAME, "id", "INT");
+    db.createTable(SECOND_TABLE_NAME, "id", "INT");
+
+    task.start(twoTableConfig());
+
+    assertNull(task.poll());
   }
 
   private static void validatePollResultTable(List<SourceRecord> records,

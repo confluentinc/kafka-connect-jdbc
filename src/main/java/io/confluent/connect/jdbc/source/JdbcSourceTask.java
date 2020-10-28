@@ -39,6 +39,8 @@ import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
@@ -53,6 +55,8 @@ import io.confluent.connect.jdbc.util.Version;
  * generates Kafka Connect records.
  */
 public class JdbcSourceTask extends SourceTask {
+  // When no results, periodically return control flow to caller to give it a chance to pause us.
+  private static final int CONSECUTIVE_EMPTY_RESULTS_BEFORE_RETURN = 3;
 
   private static final Logger log = LoggerFactory.getLogger(JdbcSourceTask.class);
 
@@ -342,6 +346,8 @@ public class JdbcSourceTask extends SourceTask {
   public List<SourceRecord> poll() throws InterruptedException {
     log.trace("{} Polling for new data");
 
+    Map<TableQuerier, Integer> consecutiveEmptyResults = tableQueue.stream().collect(
+        Collectors.toMap(Function.identity(), (q) -> 0));
     while (running.get()) {
       final TableQuerier querier = tableQueue.peek();
 
@@ -351,6 +357,7 @@ public class JdbcSourceTask extends SourceTask {
             + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
         final long now = time.milliseconds();
         final long sleepMs = Math.min(nextUpdate - now, 100);
+
         if (sleepMs > 0) {
           log.trace("Waiting {} ms to poll {} next", nextUpdate - now, querier.toString());
           time.sleep(sleepMs);
@@ -376,8 +383,19 @@ public class JdbcSourceTask extends SourceTask {
         }
 
         if (results.isEmpty()) {
+          consecutiveEmptyResults.compute(querier, (k, v) -> v + 1);
           log.trace("No updates for {}", querier.toString());
-          continue;
+
+          if (Collections.min(consecutiveEmptyResults.values())
+              >= CONSECUTIVE_EMPTY_RESULTS_BEFORE_RETURN) {
+            log.trace("More than " + CONSECUTIVE_EMPTY_RESULTS_BEFORE_RETURN
+                + " consecutive empty results for all queriers, returning");
+            return null;
+          } else {
+            continue;
+          }
+        } else {
+          consecutiveEmptyResults.put(querier, 0);
         }
 
         log.debug("Returning {} records for {}", results.size(), querier.toString());

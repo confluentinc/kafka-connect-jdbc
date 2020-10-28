@@ -952,6 +952,9 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
                               String topic)
       throws Exception {
     List<SourceRecord> records = task.poll();
+    while (records == null) {
+      records = task.poll();
+    }
     assertEquals(numRecords, records.size());
 
     HashMap<T, Integer> valueCounts = new HashMap<>();

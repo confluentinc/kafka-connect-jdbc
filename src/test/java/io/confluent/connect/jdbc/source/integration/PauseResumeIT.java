@@ -92,12 +92,12 @@ public class PauseResumeIT {
 
     Thread.sleep(POLLING_INTERVAL_MS);
 
-    connect.executePut(connect.endpointForResource(String.format("connectors/%s/pause", CONNECTOR_NAME)), "");
+    connect.requestPut(connect.endpointForResource(String.format("connectors/%s/pause", CONNECTOR_NAME)), "");
 
     waitForConnectorState(CONNECTOR_NAME, 1,
         3*POLLING_INTERVAL_MS, State.PAUSED);
 
-    connect.executePut(connect.endpointForResource(String.format("connectors/%s/resume", CONNECTOR_NAME)), "");
+    connect.requestPut(connect.endpointForResource(String.format("connectors/%s/resume", CONNECTOR_NAME)), "");
     waitForConnectorState(CONNECTOR_NAME, 1,
         3*POLLING_INTERVAL_MS, State.RUNNING);
   }

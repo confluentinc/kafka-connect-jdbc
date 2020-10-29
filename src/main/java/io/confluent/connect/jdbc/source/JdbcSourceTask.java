@@ -363,13 +363,7 @@ public class JdbcSourceTask extends SourceTask {
 
           if (!topicArn.equals("") && !snsEventPushed.get()) {
             String topicName = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
-            List<String> tableList = config.getList(
-                JdbcSourceTaskConfig.TABLES_CONFIG);
-            if (tableList.size() > 0) {
-              String[] splittedTableName = tableList.get(0).split("\\.");
-              topicName += splittedTableName[splittedTableName.length - 1].replace("`", "")
-                  .replace("\"", "");
-            }
+            topicName += config.getString(JdbcSourceTaskConfig.TABLE_NAME_CONFIG);
             Map<String, String> payload = new HashMap<String, String>();
             payload.put("status", "success");
             payload.put("topic", topicName);
@@ -419,12 +413,7 @@ public class JdbcSourceTask extends SourceTask {
         String topicArn = config.getString(JdbcSourceTaskConfig.SNS_TOPIC_ARN_CONFIG);
         if (!topicArn.equals("")) {
           String topicName = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
-          List<String> tableList = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
-          if (tableList.size() > 0) {
-            String[] splittedTableName = tableList.get(0).split("\\.");
-            topicName += splittedTableName[splittedTableName.length - 1].replace("`", "")
-                .replace("\"", "");;
-          }
+          topicName += config.getString(JdbcSourceTaskConfig.TABLE_NAME_CONFIG);
           Map<String, String> payload = new HashMap<String, String>();
           payload.put("status", "failure");
           payload.put("error", sqle.getMessage());

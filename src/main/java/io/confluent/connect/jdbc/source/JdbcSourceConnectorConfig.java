@@ -389,6 +389,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String TENANT_DOC = "Tenant";
   public static final String TENANT_DISPLAY = "Tenant";
 
+  public static final String TABLE_NAME_CONFIG = "table.name";
+  public static final String TABLE_NAME_DEFAULT = "";
+  public static final String TABLE_NAME_DOC = "Table that is being queried";
+  public static final String TABLE_NAME_DISPLAY = "Table name";
+
   public static final String CREDENTIALS_PROVIDER_CONFIG_PREFIX =
       CREDENTIALS_PROVIDER_CLASS_CONFIG.substring(
          0,
@@ -935,7 +940,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.LONG,
         TENANT_DISPLAY
-     );
+     ).define(
+       TABLE_NAME_CONFIG,
+       Type.STRING,
+       TABLE_NAME_DEFAULT,
+       Importance.LOW,
+       TABLE_NAME_DOC,
+       CONNECTOR_GROUP,
+       ++orderInGroup,
+       Width.LONG,
+       TABLE_NAME_DISPLAY
+      );
   }
 
   public static final ConfigDef CONFIG_DEF = baseConfigDef();

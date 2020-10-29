@@ -18,10 +18,12 @@ package io.confluent.connect.jdbc.source;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsEqual.equalTo;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.Collections;
@@ -952,9 +954,12 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
                               String topic)
       throws Exception {
     List<SourceRecord> records = task.poll();
-    while (records == null) {
+    int count = 0;
+    while(records == null && count++ < 5) {
       records = task.poll();
+      Thread.sleep(500);
     }
+    assertNotNull(records);
     assertEquals(numRecords, records.size());
 
     HashMap<T, Integer> valueCounts = new HashMap<>();

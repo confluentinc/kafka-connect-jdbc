@@ -112,7 +112,7 @@ public class DbStructure {
       final FieldsMetadata fieldsMetadata
   ) throws SQLException {
     if (!config.autoCreate) {
-      throw new ConnectException(
+      throw new SQLException(
           String.format("Table %s is missing and auto-creation is disabled", tableId)
       );
     }
@@ -164,7 +164,7 @@ public class DbStructure {
         break;
       case VIEW:
       default:
-        throw new ConnectException(
+        throw new SQLException(
             String.format(
                 "%s %s is missing fields (%s) and ALTER %s is unsupported",
                 type.capitalized(),
@@ -177,7 +177,7 @@ public class DbStructure {
 
     for (SinkRecordField missingField: missingFields) {
       if (!missingField.isOptional() && missingField.defaultValue() == null) {
-        throw new ConnectException(String.format(
+        throw new SQLException(String.format(
             "Cannot ALTER %s %s to add missing field %s, as the field is not optional and does "
             + "not have a default value",
             type.jdbcName(),
@@ -188,7 +188,7 @@ public class DbStructure {
     }
 
     if (!config.autoEvolve) {
-      throw new ConnectException(String.format(
+      throw new SQLException(String.format(
           "%s %s is missing fields (%s) and auto-evolution is disabled",
           type.capitalized(),
           tableId,
@@ -208,7 +208,7 @@ public class DbStructure {
       dbDialect.applyDdlStatements(connection, amendTableQueries);
     } catch (SQLException sqle) {
       if (maxRetries <= 0) {
-        throw new ConnectException(
+        throw new SQLException(
             String.format(
                 "Failed to amend %s '%s' to add missing fields: %s",
                 type,

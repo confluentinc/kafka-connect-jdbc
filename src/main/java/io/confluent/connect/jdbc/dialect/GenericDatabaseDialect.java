@@ -1226,6 +1226,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         break;
       }
 
+      case -101:
       case Types.OTHER:
       case Types.CHAR:
       case Types.VARCHAR:
@@ -1238,7 +1239,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       case Types.DATALINK:
       case Types.SQLXML:
       case Types.BINARY:
-      case Types.BLOB:
       case Types.VARBINARY:
       case Types.LONGVARBINARY: {
         // Some of these types will have fixed size, but we drop this from the schema conversion
@@ -1274,6 +1274,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
             columnDefn.typeName());
         builder.field(fieldName, optional ? stringBuilder.optional().build()
             : stringBuilder.build());
+        break;
+      }
+
+      case Types.BLOB: {
+        SchemaBuilder bytesBuilder = SchemaBuilder.bytes().parameter("sqlType",
+            columnDefn.typeName());
+        builder.field(fieldName, optional ? bytesBuilder.optional().build()
+            : bytesBuilder.build());
         break;
       }
 
@@ -1400,6 +1408,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         // fallthrough
         return rs -> rs.getString(col);
       }
+
+      case -101:
       case Types.OTHER:
       case Types.CHAR:
       case Types.VARCHAR:
@@ -1427,7 +1437,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
       // Time is a time of day -- hour, minute, seconds, nanoseconds
       case Types.TIME: {
-        return rs -> rs.getTime(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
+        return rs -> rs.getString(col);
       }
 
       // Timestamp is a date + time
@@ -1445,24 +1455,23 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
       // BLOB == fixed
       case Types.BLOB: {
-        // return rs -> {
-        //   Blob blob = rs.getBlob(col);
-        //   if (blob == null) {
-        //     return null;
-        //   } else {
-        //     try {
-        //       if (blob.length() > Integer.MAX_VALUE) {
-        //         throw new IOException("Can't process BLOBs longer than " + Integer.MAX_VALUE);
-        //       }
-        //       return blob.getBytes(1, (int) blob.length());
-        //     } finally {
-        //       if (isJdbc4) {
-        //         free(blob);
-        //       }
-        //     }
-        //   }
-        // };
-        return rs -> rs.getString(col);
+        return rs -> {
+          Blob blob = rs.getBlob(col);
+          if (blob == null) {
+            return null;
+          } else {
+            try {
+              if (blob.length() > Integer.MAX_VALUE) {
+                throw new IOException("Can't process BLOBs longer than " + Integer.MAX_VALUE);
+              }
+              return blob.getBytes(1, (int) blob.length());
+            } finally {
+              if (isJdbc4) {
+                free(blob);
+              }
+            }
+          }
+        };
       }
       case Types.CLOB:
         return rs -> {

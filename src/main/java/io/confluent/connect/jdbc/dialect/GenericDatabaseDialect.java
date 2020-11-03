@@ -1087,7 +1087,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       // ints <= 8 bits
       case Types.BIT: {
         SchemaBuilder intBuilder = SchemaBuilder.int8().parameter("sqlType",
-            columnDefn.typeName());
+            columnDefn.typeName()).paramater("precision", precision)
+            .paramater("scale", scale);
         builder.field(fieldName, optional ? intBuilder.optional().build() :
             intBuilder.build());
         break;
@@ -1096,12 +1097,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       case Types.TINYINT: {
         if (columnDefn.isSignedNumber()) {
           SchemaBuilder intBuilder = SchemaBuilder.int8().parameter("sqlType",
-              columnDefn.typeName());
+              columnDefn.typeName()).paramater("precision", precision)
+              .paramater("scale", scale);
           builder.field(fieldName, optional ? intBuilder.optional().build()
               : intBuilder.build());
         } else {
           SchemaBuilder intBuilder = SchemaBuilder.int16().parameter("sqlType",
-              columnDefn.typeName());
+              columnDefn.typeName()).paramater("precision", precision)
+              .paramater("scale", scale);
           builder.field(fieldName, optional ? intBuilder.optional().build() :
               intBuilder.build());
         }
@@ -1112,12 +1115,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       case Types.SMALLINT: {
         if (columnDefn.isSignedNumber()) {
           SchemaBuilder intBuilder = SchemaBuilder.int16().parameter("sqlType",
-              columnDefn.typeName());
+              columnDefn.typeName()).paramater("precision", precision)
+              .paramater("scale", scale);
           builder.field(fieldName, optional ? intBuilder.optional().build()
               : intBuilder.build());
         } else {
           SchemaBuilder intBuilder = SchemaBuilder.int32().parameter("sqlType",
-              columnDefn.typeName());
+              columnDefn.typeName()).paramater("precision", precision)
+              .paramater("scale", scale);
           builder.field(fieldName, optional ? intBuilder.optional().build()
               : intBuilder.build());
         }
@@ -1128,12 +1133,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       case Types.INTEGER: {
         if (columnDefn.isSignedNumber()) {
           SchemaBuilder intBuilder = SchemaBuilder.int32().parameter("sqlType",
-              columnDefn.typeName());
+              columnDefn.typeName()).paramater("precision", precision)
+              .paramater("scale", scale);
           builder.field(fieldName, optional ? intBuilder.optional().build()
               : intBuilder.build());
         } else {
           SchemaBuilder intBuilder = SchemaBuilder.int64().parameter("sqlType",
-              columnDefn.typeName());
+              columnDefn.typeName()).paramater("precision", precision)
+              .paramater("scale", scale);
           builder.field(fieldName, optional ? intBuilder.optional().build()
               : intBuilder.build());
         }
@@ -1143,7 +1150,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       // 64 bit ints
       case Types.BIGINT: {
         SchemaBuilder intBuilder = SchemaBuilder.int64().parameter("sqlType",
-            columnDefn.typeName());
+            columnDefn.typeName()).paramater("precision", precision)
+            .paramater("scale", scale);
         builder.field(fieldName, optional ? intBuilder.optional().build()
             : intBuilder.build());
         break;
@@ -1185,7 +1193,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
             } else {
               intBuilder = SchemaBuilder.int8();
             }
-            intBuilder = intBuilder.parameter("sqlType", columnDefn.typeName());
+            intBuilder = intBuilder.parameter("sqlType", columnDefn.typeName())
+                .paramater("precision", precision)
+                .paramater("scale", scale);
             builder.field(fieldName, optional ? intBuilder.optional().build()
                 : intBuilder.build());
             break;
@@ -1204,7 +1214,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
               } else {
                 intBuilder = SchemaBuilder.int8();
               }
-              intBuilder = intBuilder.parameter("sqlType", columnDefn.typeName());
+              intBuilder = intBuilder.parameter("sqlType", columnDefn.typeName())
+                  .paramater("precision", precision)
+                  .paramater("scale", scale);
               builder.field(fieldName, optional ? intBuilder.optional().build()
                   : intBuilder.build());
               break;

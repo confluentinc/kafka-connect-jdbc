@@ -97,10 +97,11 @@ import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
 import com.jcraft.jsch.JSchException;
 
-import com.amazonaws.auth.profile.ProfileCredentialsProvider;
+import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
 import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.GetObjectRequest;
+import com.amazonaws.regions.Regions;
 import java.io.File;
 
 /**
@@ -264,7 +265,10 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       sshProps.put("StrictHostKeyChecking", "no");
       jsch = new JSch();
       if (sshTunnelKey != null) {
-        AmazonS3 s3client = new AmazonS3Client(new ProfileCredentialsProvider());
+        AmazonS3 s3client = AmazonS3ClientBuilder.standard()
+            .withRegion(Regions.EU_WEST_1)
+            .withCredentials(new DefaultAWSCredentialsProviderChain())
+            .build();
         s3client.getObject(new GetObjectRequest(sshKeyBucket,
             tenant + "/jdbc/" + sshTunnelKey), new File(sshTunnelKey));
 

@@ -269,11 +269,12 @@ public class GenericDatabaseDialect implements DatabaseDialect {
             .withRegion(Regions.EU_WEST_1)
             .withCredentials(new DefaultAWSCredentialsProviderChain())
             .build();
+        File sshPublicKey = new File(sshTunnelKey);
         s3client.getObject(new GetObjectRequest(sshKeyBucket,
-            tenant + "/jdbc/" + sshTunnelKey), new File(sshTunnelKey));
+            tenant + "/jdbc/" + sshTunnelKey), sshPublicKey);
 
         log.info("SSH session using ssh key {}", sshTunnelKey);
-        jsch.addIdentity(sshTunnelKey);
+        jsch.addIdentity(sshPublicKey.getAbsolutePath());
         session = jsch.getSession(sshTunnelUser, sshTunnelHost, sshTunnelPort);
       } else {
         log.info("SSH session using ssh password {}", sshTunnelPassword);
@@ -300,7 +301,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         }
       }
       log.info("Remote database details {}, {}", remoteDatabaseHost, remoteDatabasePort + "");
-      int forwardedPort = session.setPortForwardingL(0, remoteDatabaseHost, remoteDatabasePort);
+      int forwardedPort = session.setPortForwardingL(remoteDatabasePort + 1,
+        remoteDatabaseHost, remoteDatabasePort);
       log.info("Port forwarded to: {}", forwardedPort + "");
       this.jdbcUrl = this.jdbcUrl.replace(remoteDatabaseHost, "localhost")
         .replace(remoteDatabasePort + "", "" + forwardedPort);

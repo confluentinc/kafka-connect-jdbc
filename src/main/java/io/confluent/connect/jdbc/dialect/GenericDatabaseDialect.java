@@ -266,7 +266,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       if (sshTunnelKey != null) {
         AmazonS3 s3client = new AmazonS3Client(new ProfileCredentialsProvider());
         s3client.getObject(new GetObjectRequest(sshKeyBucket,
-          tenant + "/jdbc/" + sshTunnelKey), new File(sshTunnelKey));
+            tenant + "/jdbc/" + sshTunnelKey), new File(sshTunnelKey));
 
         log.info("SSH session using ssh key {}", sshTunnelKey);
         jsch.addIdentity(sshTunnelKey);

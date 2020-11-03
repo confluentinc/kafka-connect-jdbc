@@ -76,7 +76,7 @@
             <url>http://packages.confluent.io/maven/</url>
         </repository>
     </repositories>
-    
+
    	<dependencyManagement>
         <dependencies>
             <dependency>
@@ -93,7 +93,7 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
-    
+
 
     <dependencies>
         <!-- For SSH tunnelling -->
@@ -103,17 +103,21 @@
             <version>0.1.55</version>
         </dependency>
 
-		
+
 		<!--  For generating event to SNS topic -->
 		<dependency>
     		<groupId>com.amazonaws</groupId>
     		<artifactId>aws-java-sdk-sns</artifactId>
 		</dependency>
+    <dependency>
+			<groupId>com.amazonaws</groupId>
+			<artifactId>aws-java-sdk-s3</artifactId>
+		</dependency>
     	<dependency>
             <groupId>com.amazonaws</groupId>
             <artifactId>aws-java-sdk-sts</artifactId>
         </dependency>
-        
+
         <!-- For creating a Kafka producer -->
         <dependency>
             <groupId>org.apache.kafka</groupId>
@@ -121,13 +125,13 @@
             <version>2.2.1</version>
         </dependency>
 
-		<!-- For using JSON -->		
+		<!-- For using JSON -->
 		<dependency>
             <groupId>com.googlecode.json-simple</groupId>
             <artifactId>json-simple</artifactId>
             <version>1.1.1</version>
 		</dependency>
-		
+
         <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>connect-api</artifactId>

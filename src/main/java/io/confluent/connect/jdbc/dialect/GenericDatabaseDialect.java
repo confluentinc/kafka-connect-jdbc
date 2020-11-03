@@ -97,6 +97,12 @@ import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
 import com.jcraft.jsch.JSchException;
 
+import com.amazonaws.auth.profile.ProfileCredentialsProvider;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.model.GetObjectRequest;
+import com.amazonaws.services.s3.model.S3Object;
+
 /**
  * A {@link DatabaseDialect} implementation that provides functionality based upon JDBC and SQL.
  *
@@ -146,12 +152,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   private volatile JdbcDriverInfo jdbcDriverInfo;
   private final int batchMaxRows;
   private final TimeZone timeZone;
+  private String tenant;
   private final boolean connectThroughSSH;
   private String sshTunnelHost;
   private Integer sshTunnelPort;
   private String sshTunnelUser;
   private String sshTunnelPassword;
   private String sshTunnelKey;
+  private String sshKeyBucket;
   private Session session;
   private JSch jsch;
 
@@ -187,6 +195,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     this.sshTunnelPassword =  config.getString(
       JdbcSourceConnectorConfig.SSH_TUNNEL_PASSWORD_CONFIG);
     this.sshTunnelKey =  config.getString(JdbcSourceConnectorConfig.SSH_TUNNEL_KEY_CONFIG);
+    this.sshKeyBucket =  config.getString(JdbcSourceConnectorConfig.SSH_KEY_BUCKET_CONFIG);
+    this.tenant =  config.getString(JdbcSourceConnectorConfig.TENANT_CONFIG);
 
     if (config instanceof JdbcSinkConfig) {
       JdbcSinkConfig sinkConfig = (JdbcSinkConfig) config;
@@ -254,6 +264,10 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       sshProps.put("StrictHostKeyChecking", "no");
       jsch = new JSch();
       if (sshTunnelKey != null) {
+        AmazonS3 s3client = new AmazonS3Client(new ProfileCredentialsProvider());
+        s3client.getObject(new GetObjectRequest(sshKeyBucket,
+          tenant + '/jdbc/' + sshTunnelKey), new File(sshTunnelKey));
+
         log.info("SSH session using ssh key {}", sshTunnelKey);
         jsch.addIdentity(sshTunnelKey);
         session = jsch.getSession(sshTunnelUser, sshTunnelHost, sshTunnelPort);

@@ -302,7 +302,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       }
       log.info("Remote database details {}, {}", remoteDatabaseHost, remoteDatabasePort + "");
       int forwardedPort = session.setPortForwardingL(remoteDatabasePort + 1,
-        remoteDatabaseHost, remoteDatabasePort);
+          remoteDatabaseHost, remoteDatabasePort);
       log.info("Port forwarded to: {}", forwardedPort + "");
       this.jdbcUrl = this.jdbcUrl.replace(remoteDatabaseHost, "localhost")
         .replace(remoteDatabasePort + "", "" + forwardedPort);

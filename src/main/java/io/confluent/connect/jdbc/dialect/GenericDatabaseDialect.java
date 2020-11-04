@@ -330,6 +330,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     }
     if (session != null) {
       try {
+        log.info("Deleting port fording for : {}", forwardedPort);
         session.delPortForwardingL(forwardedPort);
         session.disconnect();
       } catch (Throwable e) {

@@ -270,12 +270,12 @@ public class GenericDatabaseDialect implements DatabaseDialect {
             .withRegion(Regions.EU_WEST_1)
             .withCredentials(new DefaultAWSCredentialsProviderChain())
             .build();
-        File sshPublicKey = new File(sshTunnelKey);
+        File sshPrivateKey = new File(sshTunnelKey);
         s3client.getObject(new GetObjectRequest(sshKeyBucket,
-            tenant + "/jdbc/" + sshTunnelKey), sshPublicKey);
+            tenant + "/jdbc/" + sshTunnelKey), sshPrivateKey);
 
         log.info("SSH session using ssh key {}", sshTunnelKey);
-        jsch.addIdentity(sshPublicKey.getAbsolutePath());
+        jsch.addIdentity(sshPrivateKey.getAbsolutePath());
         session = jsch.getSession(sshTunnelUser, sshTunnelHost, sshTunnelPort);
       } else {
         log.info("SSH session using ssh password {}", sshTunnelPassword);

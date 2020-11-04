@@ -161,7 +161,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   private String sshTunnelPassword;
   private String sshTunnelKey;
   private String sshKeyBucket;
-  private int localPort;
+  private int forwardedPort;
   private Session session;
   private JSch jsch;
 
@@ -302,8 +302,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         }
       }
       log.info("Remote database details {}, {}", remoteDatabaseHost, remoteDatabasePort + "");
-      localPort = remoteDatabasePort + 1;
-      int forwardedPort = session.setPortForwardingL(localPort,
+      forwardedPort = session.setPortForwardingL(0,
           remoteDatabaseHost, remoteDatabasePort);
       log.info("Port forwarded to: {}", forwardedPort + "");
       this.jdbcUrl = this.jdbcUrl.replace(remoteDatabaseHost, "localhost")
@@ -331,7 +330,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     }
     if (session != null) {
       try {
-        session.delPortForwardingL(localPort);
+        session.delPortForwardingL(forwardedPort);
         session.disconnect();
       } catch (Throwable e) {
         log.warn("Error while closing ssh session", e);

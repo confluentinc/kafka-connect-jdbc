@@ -15,7 +15,7 @@ RUN echo "===> Collecting Jsch" \
 RUN echo "===> Collecting SNS" \
   && wget -O /usr/share/java/kafka-connect-jdbc/aws-java-sdk-sns-1.11.725.jar https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-sns/1.11.725/aws-java-sdk-sns-1.11.725.jar
 
-RUN echo "===> Collecting SNS" \
+RUN echo "===> Collecting S3" \
   && wget -O /usr/share/java/kafka-connect-jdbc/aws-java-sdk-s3-1.11.725.jar https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-s3/1.11.725/aws-java-sdk-s3-1.11.725.jar
 
 

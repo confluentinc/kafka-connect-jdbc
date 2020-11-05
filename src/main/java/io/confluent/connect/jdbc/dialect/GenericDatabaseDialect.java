@@ -330,8 +330,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     }
     if (session != null) {
       try {
-        log.info("Deleting port fording for : {}", forwardedPort);
-        session.delPortForwardingL(forwardedPort);
+        log.info("Deleting port forwarding for : {}", forwardedPort);
         session.disconnect();
       } catch (Throwable e) {
         log.warn("Error while closing ssh session", e);

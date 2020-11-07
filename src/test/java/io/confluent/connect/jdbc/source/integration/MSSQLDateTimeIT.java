@@ -75,12 +75,7 @@ public class MSSQLDateTimeIT extends BaseConnectorIT {
     private static final int NUM_RECORDS_PRODUCED = 1;
     private static final long CONSUME_MAX_DURATION_MS = TimeUnit.MINUTES.toMillis(2);
     private static final int TASKS_MAX = 3;
-    private static final String MSSQL_IMAGE = "microsoft/mssql-server-linux:latest";
-    private static final String MSSQL_IMAGE_EULA = "ACCEPT_EULA";
-    private static final String MSSQL_IMAGE_EULA_Y = "Y";
-    private static final String MSSQL_IMAGE_SA_PASSWORD = "SA_PASSWORD";
     private static final String MSSQL_URL = "jdbc:sqlserver://0.0.0.0:1433";
-    private static final Integer MSSQL_PORT = 1433;
     private static final String MSSQL_Table = "TestTable";
     private static final String TOPIC_PREFIX = "test-";
     private static final List<String> KAFKA_TOPICS = Collections.singletonList(TOPIC_PREFIX + MSSQL_Table );

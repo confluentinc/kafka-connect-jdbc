@@ -259,9 +259,12 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
         if (field.isPrimaryKey()) {
           // Should be no more than 900 which is the MSSQL constraint
           return "varchar(900)";
-        } else {
-          return "nvarchar(" + (parameters != null && parameters.containsKey("length") ? parameters.get("length") : "max") + ")";
+        } else if (parameters != null &&
+                parameters.containsKey("length") &&
+                Integer.parseInt(parameters.get("length")) <= 4000) {
+          return "nvarchar(" + parameters.get("length") + ")";
         }
+        return "nvarchar(max)";
       case BYTES:
         return "varbinary(max)";
       default:

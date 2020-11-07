@@ -114,6 +114,8 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
     verifyDataTypeMapping("bit", Schema.BOOLEAN_SCHEMA);
     verifyDataTypeMapping("varchar(max)", Schema.STRING_SCHEMA);
     verifyDataTypeMapping("nvarchar(255)", SchemaBuilder.string().parameter("length","255").build());
+    verifyDataTypeMapping("nvarchar(4000)", SchemaBuilder.string().parameter("length","4000").build());
+    verifyDataTypeMapping("nvarchar(max)", SchemaBuilder.string().parameter("length","4001").build());
     verifyDataTypeMapping("varbinary(max)", Schema.BYTES_SCHEMA);
     verifyDataTypeMapping("decimal(38,0)", Decimal.schema(0));
     verifyDataTypeMapping("decimal(38,4)", Decimal.schema(4));

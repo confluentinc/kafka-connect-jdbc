@@ -261,13 +261,16 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "bit";
       case STRING:
+        String length = (parameters != null && parameters.containsKey("length")) ? parameters.get("length") : "";
         if (field.isPrimaryKey()) {
           // Should be no more than 900 which is the MSSQL constraint
+          if (length != "" && Integer.parseInt(length) <= 900) {
+            return "nvarchar(" + length + ")";
+          }
           return "nvarchar(900)";
-        } else if (parameters != null &&
-                parameters.containsKey("length") &&
-                Integer.parseInt(parameters.get("length")) <= 4000) {
-          return "nvarchar(" + parameters.get("length") + ")";
+        } else if (length != "" && Integer.parseInt(length) <= 4000) {
+          // Should be no more than 4000 which is the MSSQL constraint other than max
+          return "nvarchar(" + length + ")";
         }
         return "nvarchar(max)";
       case BYTES:

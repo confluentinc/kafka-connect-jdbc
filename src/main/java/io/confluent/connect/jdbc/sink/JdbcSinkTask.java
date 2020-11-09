@@ -25,6 +25,7 @@ import org.apache.kafka.connect.sink.SinkTask;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.Collections;
@@ -83,7 +84,8 @@ public class JdbcSinkTask extends SinkTask {
     try {
       writer.write(records);
     } catch (SQLException sqle) {
-      if (reporter != null) {
+      Connection connection = writer.cachedConnectionProvider.getConnection();
+      if (reporter != null && connection == null) {
         for (SinkRecord record : records) {
           retryAndSendDLQ(Collections.singletonList(record));
         }

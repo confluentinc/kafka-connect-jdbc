@@ -26,6 +26,7 @@ import static org.junit.Assert.fail;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.ZoneOffset;
@@ -55,6 +56,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 
 public class JdbcSinkTaskTest extends EasyMockSupport {
@@ -367,9 +369,13 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
       }
     };
     task.initialize(ctx);
+    CachedConnectionProvider cachedConnectionProvider = createMock(CachedConnectionProvider.class);
     ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
+    Connection connection = createMock(Connection.class);
     expect(ctx.errantRecordReporter()).andReturn(reporter);
     expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null)).times(batchSize);
+    expect(mockWriter.cachedConnectionProvider).andReturn(cachedConnectionProvider);
+    expect(mockWriter.cachedConnectionProvider.getConnection()).andReturn(null);
     replayAll();
 
     Map<String, String> props = new HashMap<>();

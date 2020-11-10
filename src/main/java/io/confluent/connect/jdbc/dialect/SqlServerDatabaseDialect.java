@@ -264,11 +264,11 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
         String length = parameters != null ? parameters.getOrDefault("length", "") : "";
         if (field.isPrimaryKey()) {
           // Should be no more than 900 which is the MSSQL constraint
-          if (length != "" && Integer.parseInt(length) <= 900) {
+          if (!length.isEmpty() && Integer.parseInt(length) <= 900) {
             return "nvarchar(" + length + ")";
           }
           return "nvarchar(900)";
-        } else if (length != "" && Integer.parseInt(length) <= 4000) {
+        } else if (!length.isEmpty() && Integer.parseInt(length) <= 4000) {
           // Should be no more than 4000 which is the MSSQL constraint other than max
           return "nvarchar(" + length + ")";
         }

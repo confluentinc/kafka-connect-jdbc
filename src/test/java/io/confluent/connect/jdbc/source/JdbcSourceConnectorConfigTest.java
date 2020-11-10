@@ -190,6 +190,68 @@ public class JdbcSourceConnectorConfigTest {
     assertNull(cached.cachedValue(config2, expiry + 1L));
   }
 
+  @Test
+  public void testSpacesInTopicPrefix() {
+    props.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, " withLeadingTailingSpaces ");
+    Map<String, ConfigValue> validatedConfig =
+        JdbcSourceConnectorConfig.baseConfigDef().validateAll(props);
+    ConfigValue connectionAttemptsConfig =
+        validatedConfig.get(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG);
+    assertNotNull(connectionAttemptsConfig);
+    assertTrue(connectionAttemptsConfig.errorMessages().isEmpty());
+
+    props.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, "with spaces");
+    validatedConfig =
+        JdbcSourceConnectorConfig.baseConfigDef().validateAll(props);
+    connectionAttemptsConfig =
+        validatedConfig.get(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG);
+    assertNotNull(connectionAttemptsConfig);
+    assertFalse(connectionAttemptsConfig.errorMessages().isEmpty());
+  }
+
+  @Test
+  public void testInvalidCharsInTopicPrefix() {
+    props.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, "az_-.09");
+    Map<String, ConfigValue> validatedConfig =
+        JdbcSourceConnectorConfig.baseConfigDef().validateAll(props);
+    ConfigValue connectionAttemptsConfig =
+        validatedConfig.get(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG);
+    assertNotNull(connectionAttemptsConfig);
+    assertTrue(connectionAttemptsConfig.errorMessages().isEmpty());
+
+    props.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, "az_-.!@#$%^&*09");
+    validatedConfig =
+        JdbcSourceConnectorConfig.baseConfigDef().validateAll(props);
+    connectionAttemptsConfig =
+        validatedConfig.get(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG);
+    assertNotNull(connectionAttemptsConfig);
+    assertFalse(connectionAttemptsConfig.errorMessages().isEmpty());
+  }
+
+  @Test
+  public void testTooLongTopicPrefix() {
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < 249; i++) {
+      sb.append("a");
+    }
+    props.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, sb.toString());
+    Map<String, ConfigValue> validatedConfig =
+        JdbcSourceConnectorConfig.baseConfigDef().validateAll(props);
+    ConfigValue connectionAttemptsConfig =
+        validatedConfig.get(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG);
+    assertNotNull(connectionAttemptsConfig);
+    assertTrue(connectionAttemptsConfig.errorMessages().isEmpty());
+
+    sb.append("a");
+    props.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, sb.toString());
+    validatedConfig =
+        JdbcSourceConnectorConfig.baseConfigDef().validateAll(props);
+    connectionAttemptsConfig =
+        validatedConfig.get(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG);
+    assertNotNull(connectionAttemptsConfig);
+    assertFalse(connectionAttemptsConfig.errorMessages().isEmpty());
+  }
+
   @SuppressWarnings("unchecked")
   protected <T> void assertContains(Collection<T> actual, T... expected) {
     for (T e : expected) {

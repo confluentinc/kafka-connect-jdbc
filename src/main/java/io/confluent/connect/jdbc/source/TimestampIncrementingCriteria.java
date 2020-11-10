@@ -13,330 +13,330 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package io.confluent.connect.jdbc.source;
+package io.confluent.connect.jdbc.sink;
 
-import java.util.TimeZone;
-import org.apache.kafka.connect.data.Decimal;
-import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
-import org.apache.kafka.connect.errors.DataException;
+import org.apache.kafka.connect.sink.SinkRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.math.BigDecimal;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.Timestamp;
-import java.util.Collections;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.dialect.DatabaseDialect.StatementBinder;
+import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
+import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.util.ColumnId;
-import io.confluent.connect.jdbc.util.DateTimeUtils;
-import io.confluent.connect.jdbc.util.ExpressionBuilder;
+import io.confluent.connect.jdbc.util.TableId;
 
-public class TimestampIncrementingCriteria {
+import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode.INSERT;
+import static java.util.Objects.isNull;
+import static java.util.Objects.nonNull;
 
-  /**
-   * The values that can be used in a statement's WHERE clause.
-   */
-  public interface CriteriaValues {
+public class BufferedRecords {
+  private static final Logger log = LoggerFactory.getLogger(BufferedRecords.class);
 
-    /**
-     * Get the beginning of the time period.
-     *
-     * @return the beginning timestamp; may be null
-     * @throws SQLException if there is a problem accessing the value
-     */
-    Timestamp beginTimetampValue() throws SQLException;
+  private final TableId tableId;
+  private final JdbcSinkConfig config;
+  private final DatabaseDialect dbDialect;
+  private final DbStructure dbStructure;
+  private final Connection connection;
 
-    /**
-     * Get the end of the time period.
-     *
-     * @return the ending timestamp; never null
-     * @throws SQLException if there is a problem accessing the value
-     */
-    Timestamp endTimetampValue() throws SQLException;
+  private List<SinkRecord> records = new ArrayList<>();
+  private Schema keySchema;
+  private Schema valueSchema;
+  private RecordValidator recordValidator;
+  private FieldsMetadata fieldsMetadata;
+  private PreparedStatement updatePreparedStatement;
+  private PreparedStatement deletePreparedStatement;
+  private StatementBinder updateStatementBinder;
+  private StatementBinder deleteStatementBinder;
+  private boolean deletesInBatch = false;
 
-    /**
-     * Get the last incremented value seen.
-     *
-     * @return the last incremented value from one of the rows
-     * @throws SQLException if there is a problem accessing the value
-     */
-    Long lastIncrementedValue() throws SQLException;
-  }
-
-  protected static final BigDecimal LONG_MAX_VALUE_AS_BIGDEC = new BigDecimal(Long.MAX_VALUE);
-
-  protected final Logger log = LoggerFactory.getLogger(getClass());
-  protected final List<ColumnId> timestampColumns;
-  protected final ColumnId incrementingColumn;
-  protected final TimeZone timeZone;
-
-
-  public TimestampIncrementingCriteria(
-      ColumnId incrementingColumn,
-      List<ColumnId> timestampColumns,
-      TimeZone timeZone
+  public BufferedRecords(
+      JdbcSinkConfig config,
+      TableId tableId,
+      DatabaseDialect dbDialect,
+      DbStructure dbStructure,
+      Connection connection
   ) {
-    this.timestampColumns =
-        timestampColumns != null ? timestampColumns : Collections.<ColumnId>emptyList();
-    this.incrementingColumn = incrementingColumn;
-    this.timeZone = timeZone;
+    this.tableId = tableId;
+    this.config = config;
+    this.dbDialect = dbDialect;
+    this.dbStructure = dbStructure;
+    this.connection = connection;
+    this.recordValidator = RecordValidator.create(config);
   }
 
-  protected boolean hasTimestampColumns() {
-    return !timestampColumns.isEmpty();
-  }
+  public List<SinkRecord> add(SinkRecord record) throws SQLException {
+    recordValidator.validate(record);
+    final List<SinkRecord> flushed = new ArrayList<>();
 
-  protected boolean hasIncrementedColumn() {
-    return incrementingColumn != null;
-  }
-
-  /**
-   * Build the WHERE clause for the columns used in this criteria.
-   *
-   * @param builder the string builder to which the WHERE clause should be appended; never null
-   */
-  public void whereClause(ExpressionBuilder builder) {
-    if (hasTimestampColumns() && hasIncrementedColumn()) {
-      timestampIncrementingWhereClause(builder);
-    } else if (hasTimestampColumns()) {
-      timestampWhereClause(builder);
-    } else if (hasIncrementedColumn()) {
-      incrementingWhereClause(builder);
+    boolean schemaChanged = false;
+    if (!Objects.equals(keySchema, record.keySchema())) {
+      keySchema = record.keySchema();
+      schemaChanged = true;
     }
-  }
-
-  /**
-   * Set the query parameters on the prepared statement whose WHERE clause was generated with the
-   * previous call to {@link #whereClause(ExpressionBuilder)}.
-   *
-   * @param stmt   the prepared statement; never null
-   * @param values the values that can be used in the criteria parameters; never null
-   * @throws SQLException if there is a problem using the prepared statement
-   */
-  public void setQueryParameters(
-      PreparedStatement stmt,
-      CriteriaValues values
-  ) throws SQLException {
-    if (hasTimestampColumns() && hasIncrementedColumn()) {
-      setQueryParametersTimestampIncrementing(stmt, values);
-    } else if (hasTimestampColumns()) {
-      setQueryParametersTimestamp(stmt, values);
-    } else if (hasIncrementedColumn()) {
-      setQueryParametersIncrementing(stmt, values);
+    if (isNull(record.valueSchema())) {
+      // For deletes, value and optionally value schema come in as null.
+      // We don't want to treat this as a schema change if key schemas is the same
+      // otherwise we flush unnecessarily.
+      if (config.deleteEnabled) {
+        deletesInBatch = true;
+      }
+    } else if (Objects.equals(valueSchema, record.valueSchema())) {
+      if (config.deleteEnabled && deletesInBatch) {
+        // flush so an insert after a delete of same record isn't lost
+        flushed.addAll(flush());
+      }
+    } else {
+      // value schema is not null and has changed. This is a real schema change.
+      valueSchema = record.valueSchema();
+      schemaChanged = true;
     }
-  }
+    if (schemaChanged || updateStatementBinder == null) {
+      // Each batch needs to have the same schemas, so get the buffered records out
+      flushed.addAll(flush());
 
-  protected void setQueryParametersTimestampIncrementing(
-      PreparedStatement stmt,
-      CriteriaValues values
-  ) throws SQLException {
-    Timestamp beginTime = values.beginTimetampValue();
-    Timestamp endTime = values.endTimetampValue();
-    Long incOffset = values.lastIncrementedValue();
-    stmt.setTimestamp(1, endTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
-    stmt.setTimestamp(2, beginTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
-    stmt.setLong(3, incOffset);
-    stmt.setTimestamp(4, beginTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
-    log.debug(
-        "Executing prepared statement with start time value = {} end time = {} and incrementing"
-        + " value = {}", DateTimeUtils.formatTimestamp(beginTime, timeZone),
-        DateTimeUtils.formatTimestamp(endTime, timeZone), incOffset
-    );
-  }
-
-  protected void setQueryParametersIncrementing(
-      PreparedStatement stmt,
-      CriteriaValues values
-  ) throws SQLException {
-    Long incOffset = values.lastIncrementedValue();
-    stmt.setLong(1, incOffset);
-    log.debug("Executing prepared statement with incrementing value = {}", incOffset);
-  }
-
-  protected void setQueryParametersTimestamp(
-      PreparedStatement stmt,
-      CriteriaValues values
-  ) throws SQLException {
-    Timestamp beginTime = values.beginTimetampValue();
-    Timestamp endTime = values.endTimetampValue();
-    stmt.setTimestamp(1, beginTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
-    stmt.setTimestamp(2, endTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
-    log.debug("Executing prepared statement with timestamp value = {} end time = {}",
-        DateTimeUtils.formatTimestamp(beginTime, timeZone),
-        DateTimeUtils.formatTimestamp(endTime, timeZone)
-    );
-  }
-
-  /**
-   * Extract the offset values from the row.
-   *
-   * @param schema the record's schema; never null
-   * @param record the record's struct; never null
-   * @param previousOffset a previous timestamp offset if the table has timestamp columns
-   * @return the timestamp for this row; may not be null
-   */
-  public TimestampIncrementingOffset extractValues(
-      Schema schema,
-      Struct record,
-      TimestampIncrementingOffset previousOffset
-  ) {
-    Timestamp extractedTimestamp = null;
-    if (hasTimestampColumns()) {
-      extractedTimestamp = extractOffsetTimestamp(schema, record);
-      assert previousOffset == null || (previousOffset.getTimestampOffset() != null
-                                        && previousOffset.getTimestampOffset().compareTo(
-          extractedTimestamp) <= 0
+      // re-initialize everything that depends on the record schema
+      final SchemaPair schemaPair = new SchemaPair(
+          record.keySchema(),
+          record.valueSchema()
       );
-    }
-    Long extractedId = null;
-    if (hasIncrementedColumn()) {
-      extractedId = extractOffsetIncrementedId(schema, record);
-
-      // If we are only using an incrementing column, then this must be incrementing.
-      // If we are also using a timestamp, then we may see updates to older rows.
-      assert previousOffset == null || previousOffset.getIncrementingOffset() == -1L
-             || extractedId > previousOffset.getIncrementingOffset() || hasTimestampColumns();
-    }
-    return new TimestampIncrementingOffset(extractedTimestamp, extractedId);
-  }
-
-  /**
-   * Extract the timestamp from the row.
-   *
-   * @param schema the record's schema; never null
-   * @param record the record's struct; never null
-   * @return the timestamp for this row; may not be null
-   */
-  protected Timestamp extractOffsetTimestamp(
-      Schema schema,
-      Struct record
-  ) {
-    for (ColumnId timestampColumn : timestampColumns) {
-      Timestamp ts = (Timestamp) record.get(timestampColumn.name());
-      if (ts != null) {
-        return ts;
+      fieldsMetadata = FieldsMetadata.extract(
+          tableId.tableName(),
+          config.pkMode,
+          config.pkFields,
+          config.fieldsWhitelist,
+          schemaPair
+      );
+      dbStructure.createOrAmendIfNecessary(
+          config,
+          connection,
+          tableId,
+          fieldsMetadata
+      );
+      final String insertSql = getInsertSql();
+      final String deleteSql = getDeleteSql();
+      log.debug(
+          "{} sql: {} deleteSql: {} meta: {}",
+          config.insertMode,
+          insertSql,
+          deleteSql,
+          fieldsMetadata
+      );
+      close();
+      updatePreparedStatement = dbDialect.createPreparedStatement(connection, insertSql);
+      updateStatementBinder = dbDialect.statementBinder(
+          updatePreparedStatement,
+          config.pkMode,
+          schemaPair,
+          fieldsMetadata,
+          config.insertMode
+      );
+      if (config.deleteEnabled && nonNull(deleteSql)) {
+        deletePreparedStatement = dbDialect.createPreparedStatement(connection, deleteSql);
+        deleteStatementBinder = dbDialect.statementBinder(
+            deletePreparedStatement,
+            config.pkMode,
+            schemaPair,
+            fieldsMetadata,
+            config.insertMode
+        );
       }
     }
-    return null;
+    
+    // set deletesInBatch if schema value is not null
+    if (isNull(record.value()) && config.deleteEnabled) {
+      deletesInBatch = true;
+    }
+
+    records.add(record);
+
+    if (records.size() >= config.batchSize) {
+      flushed.addAll(flush());
+    }
+    return flushed;
+  }
+
+  public List<SinkRecord> flush() throws SQLException {
+    if (records.isEmpty()) {
+      log.debug("Records is empty");
+      return new ArrayList<>();
+    }
+    log.debug("Flushing {} buffered records", records.size());
+    for (SinkRecord record : records) {
+      if (isNull(record.value()) && nonNull(deleteStatementBinder)) {
+        deleteStatementBinder.bindRecord(record);
+      } else {
+        updateStatementBinder.bindRecord(record);
+      }
+    }
+    Optional<Long> totalUpdateCount = executeUpdates();
+    long totalDeleteCount = executeDeletes();
+
+    final long expectedCount = updateRecordCount();
+    log.trace("{} records:{} resulting in totalUpdateCount:{} totalDeleteCount:{}",
+        config.insertMode, records.size(), totalUpdateCount, totalDeleteCount
+    );
+    if (totalUpdateCount.filter(total -> total != expectedCount).isPresent()
+        && config.insertMode == INSERT) {
+      throw new ConnectException(String.format(
+          "Update count (%d) did not sum up to total number of records inserted (%d)",
+          totalUpdateCount.get(),
+          expectedCount
+      ));
+    }
+    if (!totalUpdateCount.isPresent()) {
+      log.info(
+          "{} records:{} , but no count of the number of rows it affected is available",
+          config.insertMode,
+          records.size()
+      );
+    }
+
+    final List<SinkRecord> flushedRecords = records;
+    records = new ArrayList<>();
+    deletesInBatch = false;
+    return flushedRecords;
   }
 
   /**
-   * Extract the incrementing column value from the row.
-   *
-   * @param schema the record's schema; never null
-   * @param record the record's struct; never null
-   * @return the incrementing ID for this row; may not be null
+   * @return an optional count of all updated rows or an empty optional if no info is available
    */
-  protected Long extractOffsetIncrementedId(
-      Schema schema,
-      Struct record
-  ) {
-    final Long extractedId;
-    final Field field = schema.field(incrementingColumn.name());
-    if (field == null) {
-      throw new DataException("Incrementing column " + incrementingColumn.name() + " not found in "
-              + schema.fields().stream().map(f -> f.name()).collect(Collectors.joining(",")));
+  private Optional<Long> executeUpdates() throws SQLException {
+    Optional<Long> count = Optional.empty();
+    for (int updateCount : updatePreparedStatement.executeBatch()) {
+      if (updateCount != Statement.SUCCESS_NO_INFO) {
+        count = count.isPresent()
+            ? count.map(total -> total + updateCount)
+            : Optional.of((long) updateCount);
+      }
     }
+    return count;
+  }
 
-    final Schema incrementingColumnSchema = field.schema();
-    final Object incrementingColumnValue = record.get(incrementingColumn.name());
-    if (incrementingColumnValue == null) {
-      throw new ConnectException(
-          "Null value for incrementing column of type: " + incrementingColumnSchema.type());
-    } else if (isIntegralPrimitiveType(incrementingColumnValue)) {
-      extractedId = ((Number) incrementingColumnValue).longValue();
-    } else if (incrementingColumnSchema.name() != null && incrementingColumnSchema.name().equals(
-        Decimal.LOGICAL_NAME)) {
-      extractedId = extractDecimalId(incrementingColumnValue);
-    } else {
-      throw new ConnectException(
-          "Invalid type for incrementing column: " + incrementingColumnSchema.type());
+  private long executeDeletes() throws SQLException {
+    long totalDeleteCount = 0;
+    if (nonNull(deletePreparedStatement)) {
+      for (int updateCount : deletePreparedStatement.executeBatch()) {
+        if (updateCount != Statement.SUCCESS_NO_INFO) {
+          totalDeleteCount += updateCount;
+        }
+      }
     }
-    log.trace("Extracted incrementing column value: {}", extractedId);
-    return extractedId;
+    return totalDeleteCount;
   }
 
-  protected Long extractDecimalId(Object incrementingColumnValue) {
-    final BigDecimal decimal = ((BigDecimal) incrementingColumnValue);
-    if (decimal.compareTo(LONG_MAX_VALUE_AS_BIGDEC) > 0) {
-      throw new ConnectException("Decimal value for incrementing column exceeded Long.MAX_VALUE");
+  private long updateRecordCount() {
+    return records
+        .stream()
+        // ignore deletes
+        .filter(record -> nonNull(record.value()) || !config.deleteEnabled)
+        .count();
+  }
+
+  public void close() throws SQLException {
+    log.debug(
+        "Closing BufferedRecords with updatePreparedStatement: {} deletePreparedStatement: {}",
+        updatePreparedStatement,
+        deletePreparedStatement
+    );
+    if (nonNull(updatePreparedStatement)) {
+      updatePreparedStatement.close();
+      updatePreparedStatement = null;
     }
-    if (decimal.scale() != 0) {
-      throw new ConnectException("Scale of Decimal value for incrementing column must be 0");
+    if (nonNull(deletePreparedStatement)) {
+      deletePreparedStatement.close();
+      deletePreparedStatement = null;
     }
-    return decimal.longValue();
   }
 
-  protected boolean isIntegralPrimitiveType(Object incrementingColumnValue) {
-    return incrementingColumnValue instanceof Long || incrementingColumnValue instanceof Integer
-           || incrementingColumnValue instanceof Short || incrementingColumnValue instanceof Byte;
-  }
-
-  protected String coalesceTimestampColumns(ExpressionBuilder builder) {
-    if (timestampColumns.size() == 1) {
-      builder.append(timestampColumns.get(0));
-    } else {
-      builder.append("COALESCE(");
-      builder.appendList().delimitedBy(",").of(timestampColumns);
-      builder.append(")");
+  private String getInsertSql() throws SQLException {
+    switch (config.insertMode) {
+      case INSERT:
+        return dbDialect.buildInsertStatement(
+            tableId,
+            asColumns(fieldsMetadata.keyFieldNames),
+            asColumns(fieldsMetadata.nonKeyFieldNames),
+            dbStructure.tableDefinition(connection, tableId)
+        );
+      case UPSERT:
+        if (fieldsMetadata.keyFieldNames.isEmpty()) {
+          throw new ConnectException(String.format(
+              "Write to table '%s' in UPSERT mode requires key field names to be known, check the"
+                  + " primary key configuration",
+              tableId
+          ));
+        }
+        try {
+          return dbDialect.buildUpsertQueryStatement(
+              tableId,
+              asColumns(fieldsMetadata.keyFieldNames),
+              asColumns(fieldsMetadata.nonKeyFieldNames),
+              dbStructure.tableDefinition(connection, tableId)
+          );
+        } catch (UnsupportedOperationException e) {
+          throw new ConnectException(String.format(
+              "Write to table '%s' in UPSERT mode is not supported with the %s dialect.",
+              tableId,
+              dbDialect.name()
+          ));
+        }
+      case UPDATE:
+        return dbDialect.buildUpdateStatement(
+            tableId,
+            asColumns(fieldsMetadata.keyFieldNames),
+            asColumns(fieldsMetadata.nonKeyFieldNames),
+            dbStructure.tableDefinition(connection, tableId)
+        );
+      default:
+        throw new ConnectException("Invalid insert mode");
     }
-    return builder.toString();
   }
 
-  protected void timestampIncrementingWhereClause(ExpressionBuilder builder) {
-    // This version combines two possible conditions. The first checks timestamp == last
-    // timestamp and incrementing > last incrementing. The timestamp alone would include
-    // duplicates, but adding the incrementing condition ensures no duplicates, e.g. you would
-    // get only the row with id = 23:
-    //  timestamp 1234, id 22 <- last
-    //  timestamp 1234, id 23
-    // The second check only uses the timestamp >= last timestamp. This covers everything new,
-    // even if it is an update of the existing row. If we previously had:
-    //  timestamp 1234, id 22 <- last
-    // and then these rows were written:
-    //  timestamp 1235, id 22
-    //  timestamp 1236, id 23
-    // We should capture both id = 22 (an update) and id = 23 (a new row)
-    builder.append(" WHERE ");
-    coalesceTimestampColumns(builder);
-    builder.append(" < ? AND ((");
-    coalesceTimestampColumns(builder);
-    builder.append(" = ? AND ");
-    builder.append(incrementingColumn);
-    builder.append(" > ?");
-    builder.append(") OR ");
-    coalesceTimestampColumns(builder);
-    builder.append(" > ?)");
-    builder.append(" ORDER BY ");
-    coalesceTimestampColumns(builder);
-    builder.append(",");
-    builder.append(incrementingColumn);
-    builder.append(" ASC");
+  private String getDeleteSql() {
+    String sql = null;
+    if (config.deleteEnabled) {
+      switch (config.pkMode) {
+        case RECORD_KEY:
+          if (fieldsMetadata.keyFieldNames.isEmpty()) {
+            throw new ConnectException("Require primary keys to support delete");
+          }
+          try {
+            sql = dbDialect.buildDeleteStatement(
+                tableId,
+                asColumns(fieldsMetadata.keyFieldNames)
+            );
+          } catch (UnsupportedOperationException e) {
+            throw new ConnectException(String.format(
+                "Deletes to table '%s' are not supported with the %s dialect.",
+                tableId,
+                dbDialect.name()
+            ));
+          }
+          break;
+
+        default:
+          throw new ConnectException("Deletes are only supported for pk.mode record_key");
+      }
+    }
+    return sql;
   }
 
-  protected void incrementingWhereClause(ExpressionBuilder builder) {
-    builder.append(" WHERE ");
-    builder.append(incrementingColumn);
-    builder.append(" > ?");
-    builder.append(" ORDER BY ");
-    builder.append(incrementingColumn);
-    builder.append(" ASC");
+  private Collection<ColumnId> asColumns(Collection<String> names) {
+    return names.stream()
+        .map(name -> new ColumnId(tableId, name))
+        .collect(Collectors.toList());
   }
-
-  protected void timestampWhereClause(ExpressionBuilder builder) {
-    builder.append(" WHERE ");
-    coalesceTimestampColumns(builder);
-    builder.append(" > ? AND ");
-    coalesceTimestampColumns(builder);
-    builder.append(" < ? ORDER BY ");
-    coalesceTimestampColumns(builder);
-    builder.append(" ASC");
-  }
-
 }

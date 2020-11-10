@@ -261,7 +261,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "bit";
       case STRING:
-        String length = (parameters != null && parameters.containsKey("length")) ? parameters.get("length") : "";
+        String length = parameters != null ? parameters.getOrDefault("length", "") : "";
         if (field.isPrimaryKey()) {
           // Should be no more than 900 which is the MSSQL constraint
           if (length != "" && Integer.parseInt(length) <= 900) {

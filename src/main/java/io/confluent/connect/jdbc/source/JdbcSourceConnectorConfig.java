@@ -84,6 +84,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final int POLL_INTERVAL_MS_DEFAULT = 5000;
   private static final String POLL_INTERVAL_MS_DISPLAY = "Poll Interval (ms)";
 
+  public static final String POLL_INTERVAL_CRON_CONFIG = "poll.interval.cron";
+  private static final String POLL_INTERVAL_CRON_DOC = "Frequency in cron format to poll for new "
+                                          + "data in each table. Using the QUARTZ cron format: * * * * * * *";
+  private static final String POLL_INTERVAL_CRON_DISPLAY = "Poll Interval (cron)";
+
   public static final String BATCH_MAX_ROWS_CONFIG = "batch.max.rows";
   private static final String BATCH_MAX_ROWS_DOC =
       "Maximum number of rows to include in a single batch when polling for new data. This "
@@ -562,6 +567,15 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.SHORT,
         POLL_INTERVAL_MS_DISPLAY
+    ).define(
+        POLL_INTERVAL_CRON_CONFIG,
+        Type.STRING,
+        Importance.MEDIUM,
+        POLL_INTERVAL_CRON_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        POLL_INTERVAL_CRON_DISPLAY
     ).define(
         BATCH_MAX_ROWS_CONFIG,
         Type.INT,

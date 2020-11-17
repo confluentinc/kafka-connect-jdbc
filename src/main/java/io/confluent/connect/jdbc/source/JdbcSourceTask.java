@@ -15,7 +15,17 @@
 
 package io.confluent.connect.jdbc.source;
 
+import java.time.Duration;
+import java.time.ZonedDateTime;
+import java.util.Optional;
 import java.util.TimeZone;
+
+import com.cronutils.model.Cron;
+import com.cronutils.model.CronType;
+import com.cronutils.model.definition.CronDefinition;
+import com.cronutils.model.definition.CronDefinitionBuilder;
+import com.cronutils.model.time.ExecutionTime;
+import com.cronutils.parser.CronParser;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.common.utils.Time;
@@ -63,6 +73,7 @@ public class JdbcSourceTask extends SourceTask {
   private Time time;
   private JdbcSourceTaskConfig config;
   private DatabaseDialect dialect;
+  private ExecutionTime cronExecutionTime;
   private CachedConnectionProvider cachedConnectionProvider;
   private PriorityQueue<TableQuerier> tableQueue = new PriorityQueue<TableQuerier>();
   private final AtomicBoolean running = new AtomicBoolean(false);
@@ -92,6 +103,7 @@ public class JdbcSourceTask extends SourceTask {
     final String url = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
     final int maxConnAttempts = config.getInt(JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_CONFIG);
     final long retryBackoff = config.getLong(JdbcSourceConnectorConfig.CONNECTION_BACKOFF_CONFIG);
+    final String cronString = config.getString(JdbcSourceConnectorConfig.POLL_INTERVAL_CRON_CONFIG);
 
     final String dialectName = config.getString(JdbcSourceConnectorConfig.DIALECT_NAME_CONFIG);
     if (dialectName != null && !dialectName.trim().isEmpty()) {
@@ -102,6 +114,17 @@ public class JdbcSourceTask extends SourceTask {
     log.info("Using JDBC dialect {}", dialect.name());
 
     cachedConnectionProvider = connectionProvider(maxConnAttempts, retryBackoff);
+
+    if (cronString != null && !cronString.trim().isEmpty()) {
+      CronDefinition cronDefinition = CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ);
+      CronParser parser = new CronParser(cronDefinition);
+      try {
+        Cron unixCron = parser.parse(cronString);
+        cronExecutionTime = ExecutionTime.forCron(unixCron);
+      } catch (IllegalArgumentException e) {
+        throw new ConnectException("Invalid configuration: the poll interval defined in the cron format is invalid.", e);
+      }
+    }
 
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
     String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
@@ -353,13 +376,25 @@ public class JdbcSourceTask extends SourceTask {
 
       if (!querier.querying()) {
         // If not in the middle of an update, wait for next update time
-        final long nextUpdate = querier.getLastUpdate()
-            + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
-        final long now = time.milliseconds();
-        final long sleepMs = Math.min(nextUpdate - now, 100);
+
+        long sleepMs;
+        if (cronExecutionTime != null) {
+          Optional<Duration> optionalDuration = cronExecutionTime.timeToNextExecution(ZonedDateTime.now());
+          if (optionalDuration.isPresent()) {
+            //TODO: add more checks, we might need to increase the min time to sleep
+            sleepMs = Math.min(optionalDuration.get().toMillis(), 100);
+          } else {
+            throw new ConnectException("Cannot compute the next execution time from the poll interval defined in the cron format.");
+          }
+        } else {
+          final long nextUpdate = querier.getLastUpdate()
+              + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
+          final long now = time.milliseconds();
+          sleepMs = Math.min(nextUpdate - now, 100);
+        }
+        log.trace("Waiting {} ms to poll {} next", sleepMs, querier.toString());
 
         if (sleepMs > 0) {
-          log.trace("Waiting {} ms to poll {} next", nextUpdate - now, querier.toString());
           time.sleep(sleepMs);
           continue; // Re-check stop flag before continuing
         }

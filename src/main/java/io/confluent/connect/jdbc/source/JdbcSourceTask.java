@@ -119,8 +119,8 @@ public class JdbcSourceTask extends SourceTask {
       CronDefinition cronDefinition = CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ);
       CronParser parser = new CronParser(cronDefinition);
       try {
-        Cron unixCron = parser.parse(cronString);
-        cronExecutionTime = ExecutionTime.forCron(unixCron);
+        Cron cron = parser.parse(cronString);
+        cronExecutionTime = ExecutionTime.forCron(cron);
       } catch (IllegalArgumentException e) {
         throw new ConnectException("Invalid configuration: the poll interval defined in the cron format is invalid.", e);
       }
@@ -392,9 +392,9 @@ public class JdbcSourceTask extends SourceTask {
           final long now = time.milliseconds();
           sleepMs = Math.min(nextUpdate - now, 100);
         }
-        log.trace("Waiting {} ms to poll {} next", sleepMs, querier.toString());
 
         if (sleepMs > 0) {
+          log.trace("Waiting {} ms to poll {} next", sleepMs, querier.toString());
           time.sleep(sleepMs);
           continue; // Re-check stop flag before continuing
         }

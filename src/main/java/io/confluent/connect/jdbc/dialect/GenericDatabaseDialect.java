@@ -1052,20 +1052,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     return columnDefinition.id().aliasOrName();
   }
 
-  private Schema getIntegerSchema(boolean optional, int precision) {
-    Schema schema;
-    if (precision > 9) {
-      schema = (optional) ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA;
-    } else if (precision > 4) {
-      schema = (optional) ? Schema.OPTIONAL_INT32_SCHEMA : Schema.INT32_SCHEMA;
-    } else if (precision > 2) {
-      schema = (optional) ? Schema.OPTIONAL_INT16_SCHEMA : Schema.INT16_SCHEMA;
-    } else {
-      schema = (optional) ? Schema.OPTIONAL_INT8_SCHEMA : Schema.INT8_SCHEMA;
-    }
-    return schema;
-  }
-
   private ColumnConverter getIntegralValue(int col, int precision) {
     if (precision > 9) {
       return rs -> rs.getLong(col);
@@ -1117,21 +1103,39 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       }
 
       case Types.BOOLEAN: {
-        builder.field(fieldName, optional ? Schema.OPTIONAL_BOOLEAN_SCHEMA : Schema.BOOLEAN_SCHEMA);
+        SchemaBuilder booleanBuilder = SchemaBuilder.bool().parameter("sqlType",
+            columnDefn.typeName());
+        builder.field(fieldName, optional ? booleanBuilder.optional().build()
+            : booleanBuilder.build());
         break;
       }
 
       // ints <= 8 bits
       case Types.BIT: {
-        builder.field(fieldName, optional ? Schema.OPTIONAL_INT8_SCHEMA : Schema.INT8_SCHEMA);
+        SchemaBuilder intBuilder = SchemaBuilder.int8()
+            .parameter("sqlType", columnDefn.typeName())
+            .parameter("precision", Integer.toString(precision))
+            .parameter("scale", Integer.toString(scale));
+        builder.field(fieldName, optional ? intBuilder.optional().build() :
+            intBuilder.build());
         break;
       }
 
       case Types.TINYINT: {
         if (columnDefn.isSignedNumber()) {
-          builder.field(fieldName, optional ? Schema.OPTIONAL_INT8_SCHEMA : Schema.INT8_SCHEMA);
+          SchemaBuilder intBuilder = SchemaBuilder.int8()
+              .parameter("sqlType", columnDefn.typeName())
+              .parameter("precision", Integer.toString(precision))
+              .parameter("scale", Integer.toString(scale));
+          builder.field(fieldName, optional ? intBuilder.optional().build()
+              : intBuilder.build());
         } else {
-          builder.field(fieldName, optional ? Schema.OPTIONAL_INT16_SCHEMA : Schema.INT16_SCHEMA);
+          SchemaBuilder intBuilder = SchemaBuilder.int16()
+              .parameter("sqlType", columnDefn.typeName())
+              .parameter("precision", Integer.toString(precision))
+              .parameter("scale", Integer.toString(scale));
+          builder.field(fieldName, optional ? intBuilder.optional().build() :
+              intBuilder.build());
         }
         break;
       }
@@ -1139,9 +1143,19 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       // 16 bit ints
       case Types.SMALLINT: {
         if (columnDefn.isSignedNumber()) {
-          builder.field(fieldName, optional ? Schema.OPTIONAL_INT16_SCHEMA : Schema.INT16_SCHEMA);
+          SchemaBuilder intBuilder = SchemaBuilder.int16()
+              .parameter("sqlType", columnDefn.typeName())
+              .parameter("precision", Integer.toString(precision))
+              .parameter("scale", Integer.toString(scale));
+          builder.field(fieldName, optional ? intBuilder.optional().build()
+              : intBuilder.build());
         } else {
-          builder.field(fieldName, optional ? Schema.OPTIONAL_INT32_SCHEMA : Schema.INT32_SCHEMA);
+          SchemaBuilder intBuilder = SchemaBuilder.int32()
+              .parameter("sqlType", columnDefn.typeName())
+              .parameter("precision", Integer.toString(precision))
+              .parameter("scale", Integer.toString(scale));
+          builder.field(fieldName, optional ? intBuilder.optional().build()
+              : intBuilder.build());
         }
         break;
       }
@@ -1149,22 +1163,40 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       // 32 bit ints
       case Types.INTEGER: {
         if (columnDefn.isSignedNumber()) {
-          builder.field(fieldName, optional ? Schema.OPTIONAL_INT32_SCHEMA : Schema.INT32_SCHEMA);
+          SchemaBuilder intBuilder = SchemaBuilder.int32()
+              .parameter("sqlType", columnDefn.typeName())
+              .parameter("precision", Integer.toString(precision))
+              .parameter("scale", Integer.toString(scale));
+          builder.field(fieldName, optional ? intBuilder.optional().build()
+              : intBuilder.build());
         } else {
-          builder.field(fieldName, optional ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA);
+          SchemaBuilder intBuilder = SchemaBuilder.int64()
+              .parameter("sqlType", columnDefn.typeName())
+              .parameter("precision", Integer.toString(precision))
+              .parameter("scale", Integer.toString(scale));
+          builder.field(fieldName, optional ? intBuilder.optional().build()
+              : intBuilder.build());
         }
         break;
       }
 
       // 64 bit ints
       case Types.BIGINT: {
-        builder.field(fieldName, optional ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA);
+        SchemaBuilder intBuilder = SchemaBuilder.int64()
+            .parameter("sqlType", columnDefn.typeName())
+            .parameter("precision", Integer.toString(precision))
+            .parameter("scale", Integer.toString(scale));
+        builder.field(fieldName, optional ? intBuilder.optional().build()
+            : intBuilder.build());
         break;
       }
 
       // REAL is a single precision floating point value, i.e. a Java float
       case Types.REAL: {
-        builder.field(fieldName, optional ? Schema.OPTIONAL_FLOAT32_SCHEMA : Schema.FLOAT32_SCHEMA);
+        SchemaBuilder floatBuilder = SchemaBuilder.float32().parameter("sqlType",
+            columnDefn.typeName());
+        builder.field(fieldName, optional ? floatBuilder.optional().build()
+            : floatBuilder.build());
         break;
       }
 
@@ -1172,7 +1204,10 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       // for single precision
       case Types.FLOAT:
       case Types.DOUBLE: {
-        builder.field(fieldName, optional ? Schema.OPTIONAL_FLOAT64_SCHEMA : Schema.FLOAT64_SCHEMA);
+        SchemaBuilder floatBuilder = SchemaBuilder.float64().parameter("sqlType",
+            columnDefn.typeName());
+        builder.field(fieldName, optional ? floatBuilder.optional().build()
+            : floatBuilder.build());
         break;
       }
 
@@ -1182,27 +1217,63 @@ public class GenericDatabaseDialect implements DatabaseDialect {
                 columnDefn.typeName(), precision, scale, mapNumerics);
         if (mapNumerics == NumericMapping.PRECISION_ONLY) {
           if (scale == 0 && precision < 19) { // integer
-            builder.field(fieldName, getIntegerSchema(optional, precision));
+            SchemaBuilder intBuilder = null;
+            if (precision > 9) {
+              intBuilder = SchemaBuilder.int64();
+            } else if (precision > 4) {
+              intBuilder = SchemaBuilder.int32();
+            } else if (precision > 2) {
+              intBuilder = SchemaBuilder.int16();
+            } else {
+              intBuilder = SchemaBuilder.int8();
+            }
+            intBuilder = intBuilder.parameter("sqlType", columnDefn.typeName())
+                .parameter("precision", Integer.toString(precision))
+                .parameter("scale", Integer.toString(scale));
+            builder.field(fieldName, optional ? intBuilder.optional().build()
+                : intBuilder.build());
             break;
           }
         } else if (mapNumerics == NumericMapping.BEST_FIT) {
           if (precision < 19) { // fits in primitive data types.
             if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
               Schema schema;
-              builder.field(fieldName, getIntegerSchema(optional, precision));
+              SchemaBuilder intBuilder = null;
+              if (precision > 9) {
+                intBuilder = SchemaBuilder.int64();
+              } else if (precision > 4) {
+                intBuilder = SchemaBuilder.int32();
+              } else if (precision > 2) {
+                intBuilder = SchemaBuilder.int16();
+              } else {
+                intBuilder = SchemaBuilder.int8();
+              }
+              intBuilder = intBuilder.parameter("sqlType", columnDefn.typeName())
+                  .parameter("precision", Integer.toString(precision))
+                  .parameter("scale", Integer.toString(scale));
+              builder.field(fieldName, optional ? intBuilder.optional().build()
+                  : intBuilder.build());
               break;
             } else if (scale > 0) { // floating point - use double in all cases
-              Schema schema = (optional) ? Schema.OPTIONAL_FLOAT64_SCHEMA : Schema.FLOAT64_SCHEMA;
+              SchemaBuilder floatBuilder = SchemaBuilder.float64().parameter("sqlType",
+                  columnDefn.typeName());
+              Schema schema = (optional) ? floatBuilder.optional().build()
+                  : floatBuilder.build();
               builder.field(fieldName, schema);
               break;
             }
           }
         }
 
-        builder.field(fieldName, optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA);
+        SchemaBuilder stringBuilder = SchemaBuilder.string().parameter("sqlType",
+            columnDefn.typeName());
+        builder.field(fieldName, optional ? stringBuilder.optional().build()
+            : stringBuilder.build());
         break;
       }
 
+      case -101:
+      case Types.OTHER:
       case Types.CHAR:
       case Types.VARCHAR:
       case Types.LONGVARCHAR:
@@ -1214,40 +1285,54 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       case Types.DATALINK:
       case Types.SQLXML:
       case Types.BINARY:
-      case Types.BLOB:
       case Types.VARBINARY:
       case Types.LONGVARBINARY: {
         // Some of these types will have fixed size, but we drop this from the schema conversion
         // since only fixed byte arrays can have a fixed size
-        builder.field(fieldName, optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA);
+        SchemaBuilder stringBuilder = SchemaBuilder.string().parameter("sqlType",
+            columnDefn.typeName());
+        builder.field(fieldName, optional ? stringBuilder.optional().build()
+            : stringBuilder.build());
         break;
       }
 
       // Date is day + moth + year
       case Types.DATE: {
-        builder.field(fieldName, optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA);
+        SchemaBuilder stringBuilder = SchemaBuilder.string().parameter("sqlType",
+            columnDefn.typeName());
+        builder.field(fieldName, optional ? stringBuilder.optional().build()
+            : stringBuilder.build());
         break;
       }
 
       // Time is a time of day -- hour, minute, seconds, nanoseconds
       case Types.TIME: {
-        SchemaBuilder timeSchemaBuilder = Time.builder();
-        if (optional) {
-          timeSchemaBuilder.optional();
-        }
-        builder.field(fieldName, timeSchemaBuilder.build());
+        SchemaBuilder stringBuilder = SchemaBuilder.string().parameter("sqlType",
+            columnDefn.typeName());
+        builder.field(fieldName, optional ? stringBuilder.optional().build()
+            : stringBuilder.build());
         break;
       }
 
       // Timestamp is a date + time
       case Types.TIMESTAMP: {
-        builder.field(fieldName, optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA);
+        SchemaBuilder stringBuilder = SchemaBuilder.string().parameter("sqlType",
+            columnDefn.typeName());
+        builder.field(fieldName, optional ? stringBuilder.optional().build()
+            : stringBuilder.build());
+        break;
+      }
+
+      case Types.BLOB: {
+        SchemaBuilder bytesBuilder = SchemaBuilder.bytes().parameter("sqlType",
+            columnDefn.typeName());
+        builder.field(fieldName, optional ? bytesBuilder.optional().build()
+            : bytesBuilder.build());
         break;
       }
 
       case Types.ARRAY:
       case Types.JAVA_OBJECT:
-      case Types.OTHER:
       case Types.DISTINCT:
       case Types.STRUCT:
       case Types.REF:
@@ -1370,6 +1455,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         return rs -> rs.getString(col);
       }
 
+      case -101:
+      case Types.OTHER:
       case Types.CHAR:
       case Types.VARCHAR:
       case Types.LONGVARCHAR: {
@@ -1396,7 +1483,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
       // Time is a time of day -- hour, minute, seconds, nanoseconds
       case Types.TIME: {
-        return rs -> rs.getTime(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
+        return rs -> rs.getString(col);
       }
 
       // Timestamp is a date + time
@@ -1414,24 +1501,23 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
       // BLOB == fixed
       case Types.BLOB: {
-        // return rs -> {
-        //   Blob blob = rs.getBlob(col);
-        //   if (blob == null) {
-        //     return null;
-        //   } else {
-        //     try {
-        //       if (blob.length() > Integer.MAX_VALUE) {
-        //         throw new IOException("Can't process BLOBs longer than " + Integer.MAX_VALUE);
-        //       }
-        //       return blob.getBytes(1, (int) blob.length());
-        //     } finally {
-        //       if (isJdbc4) {
-        //         free(blob);
-        //       }
-        //     }
-        //   }
-        // };
-        return rs -> rs.getString(col);
+        return rs -> {
+          Blob blob = rs.getBlob(col);
+          if (blob == null) {
+            return null;
+          } else {
+            try {
+              if (blob.length() > Integer.MAX_VALUE) {
+                throw new IOException("Can't process BLOBs longer than " + Integer.MAX_VALUE);
+              }
+              return blob.getBytes(1, (int) blob.length());
+            } finally {
+              if (isJdbc4) {
+                free(blob);
+              }
+            }
+          }
+        };
       }
       case Types.CLOB:
         return rs -> {
@@ -1482,7 +1568,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       case Types.NULL:
       case Types.ARRAY:
       case Types.JAVA_OBJECT:
-      case Types.OTHER:
+
       case Types.DISTINCT:
       case Types.STRUCT:
       case Types.REF:

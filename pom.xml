@@ -248,8 +248,8 @@
                 <inherited>true</inherited>
                 <configuration>
                     <compilerArgs>
-<!--                        <arg>-Xlint:all</arg>-->
-<!--                        <arg>-Werror</arg>-->
+                        <arg>-Xlint:all</arg>
+                        <arg>-Werror</arg>
                     </compilerArgs>
                 </configuration>
             </plugin>

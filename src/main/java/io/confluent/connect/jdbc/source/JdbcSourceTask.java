@@ -458,13 +458,10 @@ public class JdbcSourceTask extends SourceTask {
       Optional<Duration> optionalDuration =
           cronExecutionTime.timeToNextExecution(ZonedDateTime.now(ZoneOffset.UTC));
       if (optionalDuration.isPresent()) {
-        // TODO: add more checks, we might need to increase the min time to sleep
         return optionalDuration.get().toMillis();
       } else {
-        // todo clarify exactly when this may happen
-        throw new ConnectException(
-            "Cannot compute the next execution time from the poll interval defined in the cron"
-                + " format.");
+        log.warn("Cron expression provided does not define a next execution.");
+        return Duration.ofMinutes(10).toMillis();
       }
     }
   }

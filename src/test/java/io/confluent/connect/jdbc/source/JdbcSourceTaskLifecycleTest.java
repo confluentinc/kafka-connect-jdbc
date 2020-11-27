@@ -87,7 +87,7 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
   }
 
   @Test
-  public void testPollInterval() throws Exception {
+  public void testPollIntervalMs() throws Exception {
     // Here we just want to verify behavior of the poll method, not any loading of data, so we
     // specifically want an empty
     db.createTable(SINGLE_TABLE_NAME, "id", "INT");

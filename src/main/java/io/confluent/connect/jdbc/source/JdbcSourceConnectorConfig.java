@@ -78,6 +78,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       = "JDBC connection backoff in milliseconds";
   public static final long CONNECTION_BACKOFF_DEFAULT = 10000L;
 
+  public static final String POLL_INTERVAL_MODE_CONFIG = "poll.interval.mode";
+  private static final String POLL_INTERVAL_MODE_DISPLAY = "Poll Interval Mode";
+  private static final String POLL_INTERVAL_MODE_DOC =
+      "Whether to poll the source DB at ``fixed`` intervals or according to a ``cron`` schedule.\n"
+          + "  * Use ``fixed`` to poll the source DB set in ``poll.interval.ms``.\n"
+          + "  * Use ``cron`` to poll according to the schedule defined in ``poll.interval.cron``."
+          + "\n";
+
+  public static final String POLL_INTERVAL_MODE_FIXED = "fixed";
+  public static final String POLL_INTERVAL_MODE_CRON = "cron";
+
   public static final String POLL_INTERVAL_MS_CONFIG = "poll.interval.ms";
   private static final String POLL_INTERVAL_MS_DOC = "Frequency in ms to poll for new data in "
                                                      + "each table.";
@@ -85,8 +96,9 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final String POLL_INTERVAL_MS_DISPLAY = "Poll Interval (ms)";
 
   public static final String POLL_INTERVAL_CRON_CONFIG = "poll.interval.cron";
-  private static final String POLL_INTERVAL_CRON_DOC = "Frequency in cron format to poll for new "
-                                          + "data in each table. Using the QUARTZ cron format: * * * * * * *";
+  private static final String POLL_INTERVAL_CRON_DOC = "Expression in Quartz cron format to poll "
+      + "for new data in each table. Time zone is UTC. Example: * * * ? * * (every second)";
+  private static final String POLL_INTERVAL_CRON_DEFAULT = "0 * * ? * *";
   private static final String POLL_INTERVAL_CRON_DISPLAY = "Poll Interval (cron)";
 
   public static final String BATCH_MAX_ROWS_CONFIG = "batch.max.rows";
@@ -277,7 +289,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public static final String QUERY_SUFFIX_CONFIG = "query.suffix";
   public static final String QUERY_SUFFIX_DEFAULT = "";
-  public static final String QUERY_SUFFIX_DOC = 
+  public static final String QUERY_SUFFIX_DOC =
       "Suffix to append at the end of the generated query.";
   public static final String QUERY_SUFFIX_DISPLAY = "Query suffix";
 
@@ -289,6 +301,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String CONNECTOR_GROUP = "Connector";
 
   private static final Recommender MODE_DEPENDENTS_RECOMMENDER =  new ModeDependentsRecommender();
+  private static final Recommender POLL_INTERVAL_MODE_DEPENDENTS_RECOMMENDER =  new PollIntervalModeDependentsRecommender();
 
 
   public static final String TABLE_TYPE_DEFAULT = "TABLE";
@@ -558,6 +571,24 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Width.MEDIUM,
         TABLE_TYPE_DISPLAY
     ).define(
+        POLL_INTERVAL_MODE_CONFIG,
+        Type.STRING,
+        POLL_INTERVAL_MODE_FIXED,
+        ConfigDef.ValidString.in(
+            POLL_INTERVAL_MODE_FIXED,
+            POLL_INTERVAL_MODE_CRON
+            ),
+        Importance.MEDIUM,
+        POLL_INTERVAL_MODE_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        POLL_INTERVAL_MODE_DISPLAY,
+        Arrays.asList(
+            POLL_INTERVAL_MS_CONFIG,
+            POLL_INTERVAL_CRON_CONFIG
+        )
+    ).define(
         POLL_INTERVAL_MS_CONFIG,
         Type.INT,
         POLL_INTERVAL_MS_DEFAULT,
@@ -566,16 +597,19 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         CONNECTOR_GROUP,
         ++orderInGroup,
         Width.SHORT,
-        POLL_INTERVAL_MS_DISPLAY
+        POLL_INTERVAL_MS_DISPLAY,
+        POLL_INTERVAL_MODE_DEPENDENTS_RECOMMENDER
     ).define(
         POLL_INTERVAL_CRON_CONFIG,
         Type.STRING,
+        POLL_INTERVAL_CRON_DEFAULT,
         Importance.MEDIUM,
         POLL_INTERVAL_CRON_DOC,
         CONNECTOR_GROUP,
         ++orderInGroup,
         Width.SHORT,
-        POLL_INTERVAL_CRON_DISPLAY
+        POLL_INTERVAL_CRON_DISPLAY,
+        POLL_INTERVAL_MODE_DEPENDENTS_RECOMMENDER
     ).define(
         BATCH_MAX_ROWS_CONFIG,
         Type.INT,
@@ -729,6 +763,27 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
           throw new ConfigException("Query mode must be specified");
         default:
           throw new ConfigException("Invalid mode: " + mode);
+      }
+    }
+  }
+
+  private static class PollIntervalModeDependentsRecommender implements Recommender {
+
+    @Override
+    public List<Object> validValues(String name, Map<String, Object> config) {
+      return new LinkedList<>();
+    }
+
+    @Override
+    public boolean visible(String name, Map<String, Object> config) {
+      String pollIntervalMode = (String) config.get(POLL_INTERVAL_MODE_CONFIG);
+      switch (pollIntervalMode) {
+        case POLL_INTERVAL_MODE_FIXED:
+          return name.equals(POLL_INTERVAL_MS_CONFIG);
+        case POLL_INTERVAL_MODE_CRON:
+          return name.equals(POLL_INTERVAL_CRON_CONFIG);
+        default:
+          throw new ConfigException("Invalid mode: " + pollIntervalMode);
       }
     }
   }

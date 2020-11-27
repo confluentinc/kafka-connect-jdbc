@@ -16,6 +16,7 @@
 package io.confluent.connect.jdbc.source;
 
 import java.time.Duration;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.Optional;
 import java.util.TimeZone;
@@ -103,7 +104,6 @@ public class JdbcSourceTask extends SourceTask {
     final String url = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
     final int maxConnAttempts = config.getInt(JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_CONFIG);
     final long retryBackoff = config.getLong(JdbcSourceConnectorConfig.CONNECTION_BACKOFF_CONFIG);
-    final String cronString = config.getString(JdbcSourceConnectorConfig.POLL_INTERVAL_CRON_CONFIG);
 
     final String dialectName = config.getString(JdbcSourceConnectorConfig.DIALECT_NAME_CONFIG);
     if (dialectName != null && !dialectName.trim().isEmpty()) {
@@ -115,14 +115,20 @@ public class JdbcSourceTask extends SourceTask {
 
     cachedConnectionProvider = connectionProvider(maxConnAttempts, retryBackoff);
 
-    if (cronString != null && !cronString.trim().isEmpty()) {
+    // todo allow to be modified while running?
+    final String pollIntervalMode = config.getString(
+        JdbcSourceConnectorConfig.POLL_INTERVAL_MODE_CONFIG);
+    if (JdbcSourceConnectorConfig.POLL_INTERVAL_MODE_CRON.equals(pollIntervalMode)) {
+      final String cronString = config.getString(
+          JdbcSourceConnectorConfig.POLL_INTERVAL_CRON_CONFIG);
       CronDefinition cronDefinition = CronDefinitionBuilder.instanceDefinitionFor(CronType.QUARTZ);
       CronParser parser = new CronParser(cronDefinition);
       try {
         Cron cron = parser.parse(cronString);
         cronExecutionTime = ExecutionTime.forCron(cron);
       } catch (IllegalArgumentException e) {
-        throw new ConnectException("Invalid configuration: the poll interval defined in the cron format is invalid.", e);
+        throw new ConfigException(
+            "Invalid configuration: the poll interval defined in the cron format is invalid.", e);
       }
     }
 
@@ -130,12 +136,12 @@ public class JdbcSourceTask extends SourceTask {
     String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
     if ((tables.isEmpty() && query.isEmpty()) || (!tables.isEmpty() && !query.isEmpty())) {
       throw new ConnectException("Invalid configuration: each JdbcSourceTask must have at "
-                                        + "least one table assigned to it or one query specified");
+          + "least one table assigned to it or one query specified");
     }
     TableQuerier.QueryMode queryMode = !query.isEmpty() ? TableQuerier.QueryMode.QUERY :
-                                       TableQuerier.QueryMode.TABLE;
+        TableQuerier.QueryMode.TABLE;
     List<String> tablesOrQuery = queryMode == TableQuerier.QueryMode.QUERY
-                                 ? Collections.singletonList(query) : tables;
+        ? Collections.singletonList(query) : tables;
 
     String mode = config.getString(JdbcSourceTaskConfig.MODE_CONFIG);
     //used only in table mode
@@ -158,8 +164,9 @@ public class JdbcSourceTask extends SourceTask {
           break;
         case QUERY:
           log.trace("Starting in QUERY mode");
-          partitions.add(Collections.singletonMap(JdbcSourceConnectorConstants.QUERY_NAME_KEY,
-                                                  JdbcSourceConnectorConstants.QUERY_NAME_VALUE));
+          partitions.add(Collections.singletonMap(
+              JdbcSourceConnectorConstants.QUERY_NAME_KEY,
+              JdbcSourceConnectorConstants.QUERY_NAME_VALUE));
           break;
         default:
           throw new ConnectException("Unknown query mode: " + queryMode);
@@ -225,10 +232,10 @@ public class JdbcSourceTask extends SourceTask {
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(
             new BulkTableQuerier(
-                dialect, 
-                queryMode, 
-                tableOrQuery, 
-                topicPrefix, 
+                dialect,
+                queryMode,
+                tableOrQuery,
+                topicPrefix,
                 suffix
             )
         );
@@ -305,9 +312,9 @@ public class JdbcSourceTask extends SourceTask {
   }
 
   protected Map<String, Object> computeInitialOffset(
-          String tableOrQuery,
-          Map<String, Object> partitionOffset,
-          TimeZone timezone) {
+      String tableOrQuery,
+      Map<String, Object> partitionOffset,
+      TimeZone timezone) {
     if (!(partitionOffset == null)) {
       return partitionOffset;
     } else {
@@ -329,7 +336,7 @@ public class JdbcSourceTask extends SourceTask {
         initialPartitionOffset = new HashMap<String, Object>();
         initialPartitionOffset.put(TimestampIncrementingOffset.TIMESTAMP_FIELD, timestampInitial);
         log.info("No offsets found for '{}', so using configured timestamp {}", tableOrQuery,
-                timestampInitial);
+            timestampInitial);
       }
       return initialPartitionOffset;
     }
@@ -376,22 +383,7 @@ public class JdbcSourceTask extends SourceTask {
 
       if (!querier.querying()) {
         // If not in the middle of an update, wait for next update time
-
-        long sleepMs;
-        if (cronExecutionTime != null) {
-          Optional<Duration> optionalDuration = cronExecutionTime.timeToNextExecution(ZonedDateTime.now());
-          if (optionalDuration.isPresent()) {
-            //TODO: add more checks, we might need to increase the min time to sleep
-            sleepMs = Math.min(optionalDuration.get().toMillis(), 100);
-          } else {
-            throw new ConnectException("Cannot compute the next execution time from the poll interval defined in the cron format.");
-          }
-        } else {
-          final long nextUpdate = querier.getLastUpdate()
-              + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
-          final long now = time.milliseconds();
-          sleepMs = Math.min(nextUpdate - now, 100);
-        }
+        long sleepMs = Math.min(100, getSleepTimeMs(querier.getLastUpdate(), cronExecutionTime));
 
         if (sleepMs > 0) {
           log.trace("Waiting {} ms to poll {} next", sleepMs, querier.toString());
@@ -456,6 +448,30 @@ public class JdbcSourceTask extends SourceTask {
     return null;
   }
 
+  private long getSleepTimeMs(long lastUpdate, ExecutionTime executionTime) {
+    long sleepMs;
+
+    if (executionTime == null) {
+      final long nextUpdate =
+          lastUpdate + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
+      final long now = time.milliseconds();
+      sleepMs = nextUpdate - now;
+    } else {
+      Optional<Duration> optionalDuration =
+          cronExecutionTime.timeToNextExecution(ZonedDateTime.now(ZoneOffset.UTC));
+      if (optionalDuration.isPresent()) {
+        // TODO: add more checks, we might need to increase the min time to sleep
+        sleepMs = optionalDuration.get().toMillis();
+      } else {
+        // todo clarify exactly when this may happen
+        throw new ConnectException(
+            "Cannot compute the next execution time from the poll interval defined in the cron"
+                + " format.");
+      }
+    }
+    return sleepMs;
+  }
+
   private void resetAndRequeueHead(TableQuerier expectedHead) {
     log.debug("Resetting querier {}", expectedHead.toString());
     TableQuerier removedQuerier = tableQueue.poll();
@@ -472,7 +488,7 @@ public class JdbcSourceTask extends SourceTask {
   ) {
     try {
       Set<String> lowercaseTsColumns = new HashSet<>();
-      for (String timestampColumn: timestampColumns) {
+      for (String timestampColumn : timestampColumns) {
         lowercaseTsColumns.add(timestampColumn.toLowerCase(Locale.getDefault()));
       }
 
@@ -501,23 +517,23 @@ public class JdbcSourceTask extends SourceTask {
       // for table-based copying because custom query mode doesn't allow this to be looked up
       // without a query or parsing the query since we don't have a table name.
       if ((incrementalMode.equals(JdbcSourceConnectorConfig.MODE_INCREMENTING)
-           || incrementalMode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING))
+               || incrementalMode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING))
           && incrementingOptional) {
         throw new ConnectException("Cannot make incremental queries using incrementing column "
-                                   + incrementingColumn + " on " + table + " because this column "
-                                   + "is nullable.");
+            + incrementingColumn + " on " + table + " because this column "
+            + "is nullable.");
       }
       if ((incrementalMode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP)
-           || incrementalMode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING))
+               || incrementalMode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING))
           && !atLeastOneTimestampNotOptional) {
         throw new ConnectException("Cannot make incremental queries using timestamp columns "
-                                   + timestampColumns + " on " + table + " because all of these "
-                                   + "columns "
-                                   + "nullable.");
+            + timestampColumns + " on " + table + " because all of these "
+            + "columns "
+            + "nullable.");
       }
     } catch (SQLException e) {
       throw new ConnectException("Failed trying to validate that columns used for offsets are NOT"
-                                 + " NULL", e);
+          + " NULL", e);
     }
   }
 }

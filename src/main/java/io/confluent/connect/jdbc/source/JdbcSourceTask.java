@@ -383,7 +383,10 @@ public class JdbcSourceTask extends SourceTask {
 
       if (!querier.querying()) {
         // If not in the middle of an update, wait for next update time
-        long sleepMs = Math.min(100, getSleepTimeMs(querier.getLastUpdate(), cronExecutionTime));
+        final long nextUpdate = querier.getLastUpdate() +
+            getNextUpdateTime(config.getString(JdbcSourceTaskConfig.POLL_INTERVAL_MODE_CONFIG));
+        final long now = time.milliseconds();
+        final long sleepMs = Math.min(nextUpdate - now, 100);
 
         if (sleepMs > 0) {
           log.trace("Waiting {} ms to poll {} next", sleepMs, querier.toString());
@@ -448,20 +451,15 @@ public class JdbcSourceTask extends SourceTask {
     return null;
   }
 
-  private long getSleepTimeMs(long lastUpdate, ExecutionTime executionTime) {
-    long sleepMs;
-
-    if (executionTime == null) {
-      final long nextUpdate =
-          lastUpdate + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
-      final long now = time.milliseconds();
-      sleepMs = nextUpdate - now;
+  private long getNextUpdateTime(String pollIntervalMode) {
+    if (JdbcSourceTaskConfig.POLL_INTERVAL_MODE_FIXED.equals(pollIntervalMode)) {
+      return config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
     } else {
       Optional<Duration> optionalDuration =
           cronExecutionTime.timeToNextExecution(ZonedDateTime.now(ZoneOffset.UTC));
       if (optionalDuration.isPresent()) {
         // TODO: add more checks, we might need to increase the min time to sleep
-        sleepMs = optionalDuration.get().toMillis();
+        return optionalDuration.get().toMillis();
       } else {
         // todo clarify exactly when this may happen
         throw new ConnectException(
@@ -469,7 +467,6 @@ public class JdbcSourceTask extends SourceTask {
                 + " format.");
       }
     }
-    return sleepMs;
   }
 
   private void resetAndRequeueHead(TableQuerier expectedHead) {

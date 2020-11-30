@@ -128,16 +128,17 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
     configCronInterval.put(JdbcSourceConnectorConfig.POLL_INTERVAL_CRON_CONFIG, "* * * ? * *");
     task.start(configCronInterval);
 
-    // First poll should happen in less than 1s
+    // First poll should happen in 1s
     task.poll();
-    assertEquals(startTime, time.milliseconds());
+    assertEquals(startTime + 1000, time.milliseconds());
 
     // Subsequent polls have to wait for timeout (default 1 second)
     task.poll();
-    assertEquals(startTime + 1000, time.milliseconds());
+    assertEquals(startTime + 2 * 1000, time.milliseconds());
     task.poll();
 
-    assertEquals(startTime + 2 * 1000, time.milliseconds());
+    assertEquals(startTime + 3 * 1000, time.milliseconds());
+
     task.stop();
   }
 

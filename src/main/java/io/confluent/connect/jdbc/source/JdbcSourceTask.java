@@ -16,6 +16,7 @@
 package io.confluent.connect.jdbc.source;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.Optional;
@@ -378,15 +379,15 @@ public class JdbcSourceTask extends SourceTask {
 
     Map<TableQuerier, Integer> consecutiveEmptyResults = tableQueue.stream().collect(
         Collectors.toMap(Function.identity(), (q) -> 0));
+    final long pollStartTime = time.milliseconds();
     while (running.get()) {
       final TableQuerier querier = tableQueue.peek();
 
       if (!querier.querying()) {
         // If not in the middle of an update, wait for next update time
-        final long nextUpdate = querier.getLastUpdate() +
-            getNextUpdateTime(config.getString(JdbcSourceTaskConfig.POLL_INTERVAL_MODE_CONFIG));
-        final long now = time.milliseconds();
-        final long sleepMs = Math.min(nextUpdate - now, 100);
+        long lastUpdate = querier.getLastUpdate();
+        long pollInterval = getPollInterval(lastUpdate, pollStartTime, config.getString(JdbcSourceTaskConfig.POLL_INTERVAL_MODE_CONFIG));
+        final long sleepMs = Math.min(pollInterval, 100);
 
         if (sleepMs > 0) {
           log.trace("Waiting {} ms to poll {} next", sleepMs, querier.toString());
@@ -451,14 +452,20 @@ public class JdbcSourceTask extends SourceTask {
     return null;
   }
 
-  private long getNextUpdateTime(String pollIntervalMode) {
+  private long getPollInterval(long lastUpdate, long pollStartTime, String pollIntervalMode) {
+    final long now = time.milliseconds();
+
     if (JdbcSourceTaskConfig.POLL_INTERVAL_MODE_FIXED.equals(pollIntervalMode)) {
-      return config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
+      return now - lastUpdate + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
     } else {
-      Optional<Duration> optionalDuration =
-          cronExecutionTime.timeToNextExecution(ZonedDateTime.now(ZoneOffset.UTC));
-      if (optionalDuration.isPresent()) {
-        return optionalDuration.get().toMillis();
+      if (lastUpdate == 0) {
+        // first execution
+        lastUpdate = pollStartTime;
+      }
+      Optional<ZonedDateTime> nextExecution =
+          cronExecutionTime.nextExecution(ZonedDateTime.ofInstant(Instant.ofEpochMilli(lastUpdate), ZoneOffset.UTC));
+      if (nextExecution.isPresent()) {
+        return Instant.from(nextExecution.get()).toEpochMilli() - now;
       } else {
         log.warn("Cron expression provided does not define a next execution.");
         return Duration.ofMinutes(10).toMillis();

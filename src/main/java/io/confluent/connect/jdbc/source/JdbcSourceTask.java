@@ -495,7 +495,7 @@ public class JdbcSourceTask extends SourceTask {
   ) {
     try {
       Set<String> lowercaseTsColumns = new HashSet<>();
-      for (String timestampColumn : timestampColumns) {
+      for (String timestampColumn: timestampColumns) {
         lowercaseTsColumns.add(timestampColumn.toLowerCase(Locale.getDefault()));
       }
 

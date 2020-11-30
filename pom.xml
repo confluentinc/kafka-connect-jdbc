@@ -383,7 +383,6 @@
                         <phase>validate</phase>
                         <configuration>
                             <suppressionsLocation>checkstyle/suppressions.xml</suppressionsLocation>
-                            <skip>true</skip>
                         </configuration>
                         <goals>
                             <goal>check</goal>

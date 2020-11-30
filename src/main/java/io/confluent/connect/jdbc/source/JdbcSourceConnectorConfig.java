@@ -301,7 +301,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String CONNECTOR_GROUP = "Connector";
 
   private static final Recommender MODE_DEPENDENTS_RECOMMENDER =  new ModeDependentsRecommender();
-  private static final Recommender POLL_INTERVAL_MODE_DEPENDENTS_RECOMMENDER =  new PollIntervalModeDependentsRecommender();
+  private static final Recommender POLL_INTERVAL_MODE_DEPENDENTS_RECOMMENDER =
+      new PollIntervalModeDependentsRecommender();
 
 
   public static final String TABLE_TYPE_DEFAULT = "TABLE";

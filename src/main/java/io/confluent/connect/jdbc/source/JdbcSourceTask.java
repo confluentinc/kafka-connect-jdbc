@@ -15,19 +15,18 @@
 
 package io.confluent.connect.jdbc.source;
 
-import java.time.Duration;
-import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
-import java.util.Optional;
-import java.util.TimeZone;
-
 import com.cronutils.model.Cron;
 import com.cronutils.model.CronType;
 import com.cronutils.model.definition.CronDefinition;
 import com.cronutils.model.definition.CronDefinitionBuilder;
 import com.cronutils.model.time.ExecutionTime;
 import com.cronutils.parser.CronParser;
+
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.util.Optional;
+import java.util.TimeZone;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.common.utils.Time;
@@ -116,7 +115,6 @@ public class JdbcSourceTask extends SourceTask {
 
     cachedConnectionProvider = connectionProvider(maxConnAttempts, retryBackoff);
 
-    // todo allow to be modified while running?
     final String pollIntervalMode = config.getString(
         JdbcSourceConnectorConfig.POLL_INTERVAL_MODE_CONFIG);
     if (JdbcSourceConnectorConfig.POLL_INTERVAL_MODE_CRON.equals(pollIntervalMode)) {
@@ -128,8 +126,10 @@ public class JdbcSourceTask extends SourceTask {
         Cron cron = parser.parse(cronString);
         cronExecutionTime = ExecutionTime.forCron(cron);
       } catch (IllegalArgumentException e) {
-        throw new ConfigException(
-            "Invalid configuration: the poll interval defined in the cron format is invalid.", e);
+        throw new ConnectException(
+            "Invalid configuration: the poll interval defined in config "
+            + JdbcSourceConnectorConfig.POLL_INTERVAL_MODE_CONFIG
+            + " is invalid.", e);
       }
     }
 
@@ -137,12 +137,12 @@ public class JdbcSourceTask extends SourceTask {
     String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
     if ((tables.isEmpty() && query.isEmpty()) || (!tables.isEmpty() && !query.isEmpty())) {
       throw new ConnectException("Invalid configuration: each JdbcSourceTask must have at "
-          + "least one table assigned to it or one query specified");
+                                        + "least one table assigned to it or one query specified");
     }
     TableQuerier.QueryMode queryMode = !query.isEmpty() ? TableQuerier.QueryMode.QUERY :
-        TableQuerier.QueryMode.TABLE;
+                                       TableQuerier.QueryMode.TABLE;
     List<String> tablesOrQuery = queryMode == TableQuerier.QueryMode.QUERY
-        ? Collections.singletonList(query) : tables;
+                                 ? Collections.singletonList(query) : tables;
 
     String mode = config.getString(JdbcSourceTaskConfig.MODE_CONFIG);
     //used only in table mode
@@ -165,9 +165,8 @@ public class JdbcSourceTask extends SourceTask {
           break;
         case QUERY:
           log.trace("Starting in QUERY mode");
-          partitions.add(Collections.singletonMap(
-              JdbcSourceConnectorConstants.QUERY_NAME_KEY,
-              JdbcSourceConnectorConstants.QUERY_NAME_VALUE));
+          partitions.add(Collections.singletonMap(JdbcSourceConnectorConstants.QUERY_NAME_KEY,
+                                                  JdbcSourceConnectorConstants.QUERY_NAME_VALUE));
           break;
         default:
           throw new ConnectException("Unknown query mode: " + queryMode);
@@ -313,9 +312,9 @@ public class JdbcSourceTask extends SourceTask {
   }
 
   protected Map<String, Object> computeInitialOffset(
-      String tableOrQuery,
-      Map<String, Object> partitionOffset,
-      TimeZone timezone) {
+          String tableOrQuery,
+          Map<String, Object> partitionOffset,
+          TimeZone timezone) {
     if (!(partitionOffset == null)) {
       return partitionOffset;
     } else {
@@ -337,7 +336,7 @@ public class JdbcSourceTask extends SourceTask {
         initialPartitionOffset = new HashMap<String, Object>();
         initialPartitionOffset.put(TimestampIncrementingOffset.TIMESTAMP_FIELD, timestampInitial);
         log.info("No offsets found for '{}', so using configured timestamp {}", tableOrQuery,
-            timestampInitial);
+                timestampInitial);
       }
       return initialPartitionOffset;
     }
@@ -386,7 +385,7 @@ public class JdbcSourceTask extends SourceTask {
       if (!querier.querying()) {
         // If not in the middle of an update, wait for next update time
         long lastUpdate = querier.getLastUpdate();
-        long pollInterval = getPollInterval(lastUpdate, pollStartTime, config.getString(JdbcSourceTaskConfig.POLL_INTERVAL_MODE_CONFIG));
+        long pollInterval = getPollInterval(lastUpdate, pollStartTime);
         final long sleepMs = Math.min(pollInterval, 100);
 
         if (sleepMs > 0) {
@@ -452,24 +451,31 @@ public class JdbcSourceTask extends SourceTask {
     return null;
   }
 
-  private long getPollInterval(long lastUpdate, long pollStartTime, String pollIntervalMode) {
+  private long getPollInterval(long lastUpdate, long pollStartTime) {
     final long now = time.milliseconds();
 
-    if (JdbcSourceTaskConfig.POLL_INTERVAL_MODE_FIXED.equals(pollIntervalMode)) {
-      return now - lastUpdate + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
-    } else {
-      if (lastUpdate == 0) {
-        // first execution
-        lastUpdate = pollStartTime;
-      }
-      Optional<ZonedDateTime> nextExecution =
-          cronExecutionTime.nextExecution(ZonedDateTime.ofInstant(Instant.ofEpochMilli(lastUpdate), ZoneOffset.UTC));
-      if (nextExecution.isPresent()) {
-        return Instant.from(nextExecution.get()).toEpochMilli() - now;
-      } else {
-        log.warn("Cron expression provided does not define a next execution.");
-        return Duration.ofMinutes(10).toMillis();
-      }
+    String pollIntervalMode = config.getString(JdbcSourceTaskConfig.POLL_INTERVAL_MODE_CONFIG);
+    switch (pollIntervalMode) {
+      case JdbcSourceTaskConfig.POLL_INTERVAL_MODE_FIXED:
+        return lastUpdate + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG) - now;
+      case JdbcSourceTaskConfig.POLL_INTERVAL_MODE_CRON:
+        if (lastUpdate == 0) {
+          // first execution
+          lastUpdate = pollStartTime;
+        }
+        Optional<ZonedDateTime> nextExecution = cronExecutionTime.nextExecution(
+            ZonedDateTime.ofInstant(Instant.ofEpochMilli(lastUpdate), ZoneOffset.UTC));
+        if (nextExecution.isPresent()) {
+          return Instant.from(nextExecution.get()).toEpochMilli() - now;
+        } else {
+          log.warn("Cron expression provided does not define a next execution.");
+          return 100L;
+        }
+      default:
+        throw new ConnectException("Unexpected value for configuration "
+            + JdbcSourceTaskConfig.POLL_INTERVAL_MODE_CONFIG
+            + ": "
+            + pollIntervalMode);
     }
   }
 
@@ -518,23 +524,23 @@ public class JdbcSourceTask extends SourceTask {
       // for table-based copying because custom query mode doesn't allow this to be looked up
       // without a query or parsing the query since we don't have a table name.
       if ((incrementalMode.equals(JdbcSourceConnectorConfig.MODE_INCREMENTING)
-               || incrementalMode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING))
+           || incrementalMode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING))
           && incrementingOptional) {
         throw new ConnectException("Cannot make incremental queries using incrementing column "
-            + incrementingColumn + " on " + table + " because this column "
-            + "is nullable.");
+                                   + incrementingColumn + " on " + table + " because this column "
+                                   + "is nullable.");
       }
       if ((incrementalMode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP)
-               || incrementalMode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING))
+           || incrementalMode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING))
           && !atLeastOneTimestampNotOptional) {
         throw new ConnectException("Cannot make incremental queries using timestamp columns "
-            + timestampColumns + " on " + table + " because all of these "
-            + "columns "
-            + "nullable.");
+                                   + timestampColumns + " on " + table + " because all of these "
+                                   + "columns "
+                                   + "nullable.");
       }
     } catch (SQLException e) {
       throw new ConnectException("Failed trying to validate that columns used for offsets are NOT"
-          + " NULL", e);
+                                 + " NULL", e);
     }
   }
 }

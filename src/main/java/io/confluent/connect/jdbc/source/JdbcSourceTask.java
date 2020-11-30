@@ -384,9 +384,9 @@ public class JdbcSourceTask extends SourceTask {
 
       if (!querier.querying()) {
         // If not in the middle of an update, wait for next update time
-        long lastUpdate = querier.getLastUpdate();
-        long pollInterval = getPollInterval(lastUpdate, pollStartTime);
-        final long sleepMs = Math.min(pollInterval, 100);
+        final long nextUpdate = getNextUpdate(querier.getLastUpdate(), pollStartTime);
+        final long now = time.milliseconds();
+        final long sleepMs = Math.min(nextUpdate - now, 100);
 
         if (sleepMs > 0) {
           log.trace("Waiting {} ms to poll {} next", sleepMs, querier.toString());
@@ -451,13 +451,11 @@ public class JdbcSourceTask extends SourceTask {
     return null;
   }
 
-  private long getPollInterval(long lastUpdate, long pollStartTime) {
-    final long now = time.milliseconds();
-
+  private long getNextUpdate(long lastUpdate, long pollStartTime) {
     String pollIntervalMode = config.getString(JdbcSourceTaskConfig.POLL_INTERVAL_MODE_CONFIG);
     switch (pollIntervalMode) {
       case JdbcSourceTaskConfig.POLL_INTERVAL_MODE_FIXED:
-        return lastUpdate + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG) - now;
+        return lastUpdate + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
       case JdbcSourceTaskConfig.POLL_INTERVAL_MODE_CRON:
         if (lastUpdate == 0) {
           // first execution
@@ -466,10 +464,10 @@ public class JdbcSourceTask extends SourceTask {
         Optional<ZonedDateTime> nextExecution = cronExecutionTime.nextExecution(
             ZonedDateTime.ofInstant(Instant.ofEpochMilli(lastUpdate), ZoneOffset.UTC));
         if (nextExecution.isPresent()) {
-          return Instant.from(nextExecution.get()).toEpochMilli() - now;
+          return Instant.from(nextExecution.get()).toEpochMilli();
         } else {
-          log.warn("Cron expression provided does not define a next execution.");
-          return 100L;
+          log.trace("Cron expression provided does not define a next execution.");
+          return lastUpdate + 100L;
         }
       default:
         throw new ConnectException("Unexpected value for configuration "

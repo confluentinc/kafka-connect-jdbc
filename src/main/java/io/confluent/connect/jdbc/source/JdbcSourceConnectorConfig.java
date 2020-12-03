@@ -328,6 +328,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String SSH_TUNNEL_KEY_DOC = "SSH Tunnel Key";
   public static final String SSH_TUNNEL_KEY_DISPLAY = "SSH Key";
 
+  public static final String SSH_KEY_BUCKET_CONFIG = "ssh.key.bucket";
+  public static final String SSH_KEY_BUCKET_DEFAULT = null;
+  public static final String SSH_KEY_BUCKET_DOC = "SSH Key Bucket";
+  public static final String SSH_KEY_BUCKET_DISPLAY = "SSH Key Bucket";
+
   // table list related configuration - broker URL, message key
 
   public static final String STORE_TABLE_LIST_CONFIG = "store.table.list";
@@ -630,6 +635,16 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.MEDIUM,
         SSH_TUNNEL_KEY_DISPLAY
+    ).define(
+        SSH_KEY_BUCKET_CONFIG,
+        Type.STRING,
+        SSH_KEY_BUCKET_DEFAULT,
+        Importance.LOW,
+        SSH_KEY_BUCKET_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        SSH_KEY_BUCKET_DISPLAY
     );
   }
 

@@ -97,6 +97,13 @@ import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
 import com.jcraft.jsch.JSchException;
 
+import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+import com.amazonaws.services.s3.model.GetObjectRequest;
+import com.amazonaws.regions.Regions;
+import java.io.File;
+
 /**
  * A {@link DatabaseDialect} implementation that provides functionality based upon JDBC and SQL.
  *
@@ -146,12 +153,15 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   private volatile JdbcDriverInfo jdbcDriverInfo;
   private final int batchMaxRows;
   private final TimeZone timeZone;
+  private String tenant;
   private final boolean connectThroughSSH;
   private String sshTunnelHost;
   private Integer sshTunnelPort;
   private String sshTunnelUser;
   private String sshTunnelPassword;
   private String sshTunnelKey;
+  private String sshKeyBucket;
+  private int forwardedPort;
   private Session session;
   private JSch jsch;
 
@@ -187,6 +197,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     this.sshTunnelPassword =  config.getString(
       JdbcSourceConnectorConfig.SSH_TUNNEL_PASSWORD_CONFIG);
     this.sshTunnelKey =  config.getString(JdbcSourceConnectorConfig.SSH_TUNNEL_KEY_CONFIG);
+    this.sshKeyBucket =  config.getString(JdbcSourceConnectorConfig.SSH_KEY_BUCKET_CONFIG);
+    this.tenant =  config.getString(JdbcSourceConnectorConfig.TENANT_CONFIG);
 
     if (config instanceof JdbcSinkConfig) {
       JdbcSinkConfig sinkConfig = (JdbcSinkConfig) config;
@@ -254,8 +266,16 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       sshProps.put("StrictHostKeyChecking", "no");
       jsch = new JSch();
       if (sshTunnelKey != null) {
+        AmazonS3 s3client = AmazonS3ClientBuilder.standard()
+            .withRegion(Regions.EU_WEST_1)
+            .withCredentials(new DefaultAWSCredentialsProviderChain())
+            .build();
+        File sshPrivateKey = new File(sshTunnelKey);
+        s3client.getObject(new GetObjectRequest(sshKeyBucket,
+            tenant + "/jdbc/" + sshTunnelKey), sshPrivateKey);
+
         log.info("SSH session using ssh key {}", sshTunnelKey);
-        jsch.addIdentity(sshTunnelKey);
+        jsch.addIdentity(sshPrivateKey.getAbsolutePath());
         session = jsch.getSession(sshTunnelUser, sshTunnelHost, sshTunnelPort);
       } else {
         log.info("SSH session using ssh password {}", sshTunnelPassword);
@@ -282,7 +302,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         }
       }
       log.info("Remote database details {}, {}", remoteDatabaseHost, remoteDatabasePort + "");
-      int forwardedPort = session.setPortForwardingL(0, remoteDatabaseHost, remoteDatabasePort);
+      forwardedPort = session.setPortForwardingL(0,
+          remoteDatabaseHost, remoteDatabasePort);
       log.info("Port forwarded to: {}", forwardedPort + "");
       this.jdbcUrl = this.jdbcUrl.replace(remoteDatabaseHost, "localhost")
         .replace(remoteDatabasePort + "", "" + forwardedPort);
@@ -308,7 +329,12 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       }
     }
     if (session != null) {
-      session.disconnect();
+      try {
+        log.info("Deleting port forwarding for : {}", forwardedPort);
+        session.disconnect();
+      } catch (Throwable e) {
+        log.warn("Error while closing ssh session", e);
+      }
     }
   }
 

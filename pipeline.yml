@@ -256,6 +256,9 @@ Resources:
             Value: !Ref KafkaConnectS3RepoBranch
           - Name: GIT_TOKEN
             Value: !Ref GithubOauthToken
+          - Name: DOCKERHUB_TOKEN
+            Type: SECRETS_MANAGER
+            Value: PeakAuthTokens:DockerToken
       Name: !Sub ${AWS::StackName}
       ServiceRole: !Ref DeployBackendBuildRole
       Source:
@@ -270,6 +273,7 @@ Resources:
               commands:
                 - |
                   eval $(aws ecr get-login --no-include-email --region $AWS_REGION | sed 's|https://||') && echo "Got ECR Login";
+                  printf '%s' $DOCKERHUB_TOKEN | docker login --username peakaiuser --password-stdin >/dev/null 2>&1;
             build:
               commands:
                 - echo Build started on `date`
@@ -362,6 +366,7 @@ Resources:
                   - ecr:UploadLayerPart
                   - ecr:CompleteLayerUpload
                   - ecs:RegisterTaskDefinition
+                  - secretsmanager:GetSecretValue
                 Resource: "*"
       Tags:
         - {Key: tenant, Value: platform}

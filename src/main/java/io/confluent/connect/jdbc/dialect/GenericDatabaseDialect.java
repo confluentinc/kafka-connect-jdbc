@@ -13,591 +13,476 @@
  * specific language governing permissions and limitations under the License.
  */
 
-package io.confluent.connect.jdbc.sink;
+package io.confluent.connect.jdbc.source;
 
-import java.time.ZoneId;
+import java.util.TimeZone;
+import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.utils.SystemTime;
+import org.apache.kafka.common.utils.Time;
+import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.source.SourceRecord;
+import org.apache.kafka.connect.source.SourceTask;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Collections;
-import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.PriorityQueue;
 import java.util.Set;
-import java.util.TimeZone;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.dialect.DatabaseDialects;
+import io.confluent.connect.jdbc.util.CachedConnectionProvider;
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.util.Version;
 
-import io.confluent.connect.jdbc.util.ConfigUtils;
-import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
-import io.confluent.connect.jdbc.util.DeleteEnabledRecommender;
-import io.confluent.connect.jdbc.util.EnumRecommender;
-import io.confluent.connect.jdbc.util.PrimaryKeyModeRecommender;
-import io.confluent.connect.jdbc.util.QuoteMethod;
-import io.confluent.connect.jdbc.util.StringUtils;
-import io.confluent.connect.jdbc.util.TableType;
-import io.confluent.connect.jdbc.util.TimeZoneValidator;
-import org.apache.kafka.common.config.AbstractConfig;
-import org.apache.kafka.common.config.ConfigDef;
-import org.apache.kafka.common.config.ConfigException;
-import org.apache.kafka.common.config.types.Password;
+/**
+ * JdbcSourceTask is a Kafka Connect SourceTask implementation that reads from JDBC databases and
+ * generates Kafka Connect records.
+ */
+public class JdbcSourceTask extends SourceTask {
+  // When no results, periodically return control flow to caller to give it a chance to pause us.
+  private static final int CONSECUTIVE_EMPTY_RESULTS_BEFORE_RETURN = 3;
 
-public class JdbcSinkConfig extends AbstractConfig {
+  private static final Logger log = LoggerFactory.getLogger(JdbcSourceTask.class);
 
-  public enum InsertMode {
-    INSERT,
-    UPSERT,
-    UPDATE;
+  private Time time;
+  private JdbcSourceTaskConfig config;
+  private DatabaseDialect dialect;
+  private CachedConnectionProvider cachedConnectionProvider;
+  private PriorityQueue<TableQuerier> tableQueue = new PriorityQueue<TableQuerier>();
+  private final AtomicBoolean running = new AtomicBoolean(false);
 
+  public JdbcSourceTask() {
+    this.time = new SystemTime();
   }
 
-  public enum PrimaryKeyMode {
-    NONE,
-    KAFKA,
-    RECORD_KEY,
-    RECORD_VALUE;
+  public JdbcSourceTask(Time time) {
+    this.time = time;
   }
 
-  public static final List<String> DEFAULT_KAFKA_PK_NAMES = Collections.unmodifiableList(
-      Arrays.asList(
-          "__connect_topic",
-          "__connect_partition",
-          "__connect_offset"
-      )
-  );
+  @Override
+  public String version() {
+    return Version.getVersion();
+  }
 
-  public static final String CONNECTION_URL = JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG;
-  private static final String CONNECTION_URL_DOC =
-      "JDBC connection URL.\n"
-          + "For example: ``jdbc:oracle:thin:@localhost:1521:orclpdb1``, "
-          + "``jdbc:mysql://localhost/db_name``, "
-          + "``jdbc:sqlserver://localhost;instance=SQLEXPRESS;"
-          + "databaseName=db_name``";
-  private static final String CONNECTION_URL_DISPLAY = "JDBC URL";
+  @Override
+  public void start(Map<String, String> properties) {
+    log.info("Starting JDBC source task");
+    try {
+      config = new JdbcSourceTaskConfig(properties);
+    } catch (ConfigException e) {
+      throw new ConnectException("Couldn't start JdbcSourceTask due to configuration error", e);
+    }
 
-  public static final String CONNECTION_USER = JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG;
-  private static final String CONNECTION_USER_DOC = "JDBC connection user.";
-  private static final String CONNECTION_USER_DISPLAY = "JDBC User";
+    final String url = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
+    final int maxConnAttempts = config.getInt(JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_CONFIG);
+    final long retryBackoff = config.getLong(JdbcSourceConnectorConfig.CONNECTION_BACKOFF_CONFIG);
 
-  public static final String CONNECTION_PASSWORD =
-      JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG;
-  private static final String CONNECTION_PASSWORD_DOC = "JDBC connection password.";
-  private static final String CONNECTION_PASSWORD_DISPLAY = "JDBC Password";
+    final String dialectName = config.getString(JdbcSourceConnectorConfig.DIALECT_NAME_CONFIG);
+    if (dialectName != null && !dialectName.trim().isEmpty()) {
+      dialect = DatabaseDialects.create(dialectName, config);
+    } else {
+      dialect = DatabaseDialects.findBestFor(url, config);
+    }
+    log.info("Using JDBC dialect {}", dialect.name());
 
-  public static final String CONNECTION_ATTEMPTS =
-      JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_CONFIG;
-  private static final String CONNECTION_ATTEMPTS_DOC =
-      JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_DOC;
-  private static final String CONNECTION_ATTEMPTS_DISPLAY =
-      JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_DISPLAY;
-  public static final int CONNECTION_ATTEMPTS_DEFAULT =
-      JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_DEFAULT;
+    cachedConnectionProvider = connectionProvider(maxConnAttempts, retryBackoff);
 
-  public static final String CONNECTION_BACKOFF =
-      JdbcSourceConnectorConfig.CONNECTION_BACKOFF_CONFIG;
-  private static final String CONNECTION_BACKOFF_DOC =
-      JdbcSourceConnectorConfig.CONNECTION_BACKOFF_DOC;
-  private static final String CONNECTION_BACKOFF_DISPLAY =
-      JdbcSourceConnectorConfig.CONNECTION_BACKOFF_DISPLAY;
-  public static final long CONNECTION_BACKOFF_DEFAULT =
-      JdbcSourceConnectorConfig.CONNECTION_BACKOFF_DEFAULT;
+    List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
+    String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
+    if ((tables.isEmpty() && query.isEmpty()) || (!tables.isEmpty() && !query.isEmpty())) {
+      throw new ConnectException("Invalid configuration: each JdbcSourceTask must have at "
+                                        + "least one table assigned to it or one query specified");
+    }
+    TableQuerier.QueryMode queryMode = !query.isEmpty() ? TableQuerier.QueryMode.QUERY :
+                                       TableQuerier.QueryMode.TABLE;
+    List<String> tablesOrQuery = queryMode == TableQuerier.QueryMode.QUERY
+                                 ? Collections.singletonList(query) : tables;
 
-  public static final String TABLE_NAME_FORMAT = "table.name.format";
-  private static final String TABLE_NAME_FORMAT_DEFAULT = "${topic}";
-  private static final String TABLE_NAME_FORMAT_DOC =
-      "A format string for the destination table name, which may contain '${topic}' as a "
-      + "placeholder for the originating topic name.\n"
-      + "For example, ``kafka_${topic}`` for the topic 'orders' will map to the table name "
-      + "'kafka_orders'.";
-  private static final String TABLE_NAME_FORMAT_DISPLAY = "Table Name Format";
+    String mode = config.getString(JdbcSourceTaskConfig.MODE_CONFIG);
+    //used only in table mode
+    Map<String, List<Map<String, String>>> partitionsByTableFqn = new HashMap<>();
+    Map<Map<String, String>, Map<String, Object>> offsets = null;
+    if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)
+        || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)
+        || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
+      List<Map<String, String>> partitions = new ArrayList<>(tables.size());
+      switch (queryMode) {
+        case TABLE:
+          log.trace("Starting in TABLE mode");
+          for (String table : tables) {
+            // Find possible partition maps for different offset protocols
+            // We need to search by all offset protocol partition keys to support compatibility
+            List<Map<String, String>> tablePartitions = possibleTablePartitions(table);
+            partitions.addAll(tablePartitions);
+            partitionsByTableFqn.put(table, tablePartitions);
+          }
+          break;
+        case QUERY:
+          log.trace("Starting in QUERY mode");
+          partitions.add(Collections.singletonMap(JdbcSourceConnectorConstants.QUERY_NAME_KEY,
+                                                  JdbcSourceConnectorConstants.QUERY_NAME_VALUE));
+          break;
+        default:
+          throw new ConnectException("Unknown query mode: " + queryMode);
+      }
+      offsets = context.offsetStorageReader().offsets(partitions);
+      log.trace("The partition offsets are {}", offsets);
+    }
 
-  public static final String MAX_RETRIES = "max.retries";
-  private static final int MAX_RETRIES_DEFAULT = 10;
-  private static final String MAX_RETRIES_DOC =
-      "The maximum number of times to retry on errors before failing the task.";
-  private static final String MAX_RETRIES_DISPLAY = "Maximum Retries";
+    String incrementingColumn
+        = config.getString(JdbcSourceTaskConfig.INCREMENTING_COLUMN_NAME_CONFIG);
+    List<String> timestampColumns
+        = config.getList(JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
+    Long timestampDelayInterval
+        = config.getLong(JdbcSourceTaskConfig.TIMESTAMP_DELAY_INTERVAL_MS_CONFIG);
+    boolean validateNonNulls
+        = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
+    TimeZone timeZone = config.timeZone();
+    String suffix = config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG).trim();
 
-  public static final String RETRY_BACKOFF_MS = "retry.backoff.ms";
-  private static final int RETRY_BACKOFF_MS_DEFAULT = 3000;
-  private static final String RETRY_BACKOFF_MS_DOC =
-      "The time in milliseconds to wait following an error before a retry attempt is made.";
-  private static final String RETRY_BACKOFF_MS_DISPLAY = "Retry Backoff (millis)";
+    for (String tableOrQuery : tablesOrQuery) {
+      final List<Map<String, String>> tablePartitionsToCheck;
+      final Map<String, String> partition;
+      switch (queryMode) {
+        case TABLE:
+          if (validateNonNulls) {
+            validateNonNullable(
+                mode,
+                tableOrQuery,
+                incrementingColumn,
+                timestampColumns
+            );
+          }
+          tablePartitionsToCheck = partitionsByTableFqn.get(tableOrQuery);
+          break;
+        case QUERY:
+          partition = Collections.singletonMap(
+              JdbcSourceConnectorConstants.QUERY_NAME_KEY,
+              JdbcSourceConnectorConstants.QUERY_NAME_VALUE
+          );
+          tablePartitionsToCheck = Collections.singletonList(partition);
+          break;
+        default:
+          throw new ConnectException("Unexpected query mode: " + queryMode);
+      }
 
-  public static final String BATCH_SIZE = "batch.size";
-  private static final int BATCH_SIZE_DEFAULT = 3000;
-  private static final String BATCH_SIZE_DOC =
-      "Specifies how many records to attempt to batch together for insertion into the destination"
-      + " table, when possible.";
-  private static final String BATCH_SIZE_DISPLAY = "Batch Size";
+      // The partition map varies by offset protocol. Since we don't know which protocol each
+      // table's offsets are keyed by, we need to use the different possible partitions
+      // (newest protocol version first) to find the actual offsets for each table.
+      Map<String, Object> offset = null;
+      if (offsets != null) {
+        for (Map<String, String> toCheckPartition : tablePartitionsToCheck) {
+          offset = offsets.get(toCheckPartition);
+          if (offset != null) {
+            log.info("Found offset {} for partition {}", offsets, toCheckPartition);
+            break;
+          }
+        }
+      }
+      offset = computeInitialOffset(tableOrQuery, offset, timeZone);
 
-  public static final String DELETE_ENABLED = "delete.enabled";
-  private static final String DELETE_ENABLED_DEFAULT = "false";
-  private static final String DELETE_ENABLED_DOC =
-      "Whether to treat ``null`` record values as deletes. Requires ``pk.mode`` "
-      + "to be ``record_key``.";
-  private static final String DELETE_ENABLED_DISPLAY = "Enable deletes";
+      String topicPrefix = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
 
-  public static final String AUTO_CREATE = "auto.create";
-  private static final String AUTO_CREATE_DEFAULT = "false";
-  private static final String AUTO_CREATE_DOC =
-      "Whether to automatically create the destination table based on record schema if it is "
-      + "found to be missing by issuing ``CREATE``.";
-  private static final String AUTO_CREATE_DISPLAY = "Auto-Create";
-
-  public static final String AUTO_EVOLVE = "auto.evolve";
-  private static final String AUTO_EVOLVE_DEFAULT = "false";
-  private static final String AUTO_EVOLVE_DOC =
-      "Whether to automatically add columns in the table schema when found to be missing relative "
-      + "to the record schema by issuing ``ALTER``.";
-  private static final String AUTO_EVOLVE_DISPLAY = "Auto-Evolve";
-
-  public static final String INSERT_MODE = "insert.mode";
-  private static final String INSERT_MODE_DEFAULT = "insert";
-  private static final String INSERT_MODE_DOC =
-      "The insertion mode to use. Supported modes are:\n"
-      + "``insert``\n"
-      + "    Use standard SQL ``INSERT`` statements.\n"
-      + "``upsert``\n"
-      + "    Use the appropriate upsert semantics for the target database if it is supported by "
-      + "the connector, e.g. ``INSERT OR IGNORE``.\n"
-      + "``update``\n"
-      + "    Use the appropriate update semantics for the target database if it is supported by "
-      + "the connector, e.g. ``UPDATE``.";
-  private static final String INSERT_MODE_DISPLAY = "Insert Mode";
-
-  public static final String PK_FIELDS = "pk.fields";
-  private static final String PK_FIELDS_DEFAULT = "";
-  private static final String PK_FIELDS_DOC =
-      "List of comma-separated primary key field names. The runtime interpretation of this config"
-      + " depends on the ``pk.mode``:\n"
-      + "``none``\n"
-      + "    Ignored as no fields are used as primary key in this mode.\n"
-      + "``kafka``\n"
-      + "    Must be a trio representing the Kafka coordinates, defaults to ``"
-      + StringUtils.join(DEFAULT_KAFKA_PK_NAMES, ",") + "`` if empty.\n"
-      + "``record_key``\n"
-      + "    If empty, all fields from the key struct will be used, otherwise used to extract the"
-      + " desired fields - for primitive key only a single field name must be configured.\n"
-      + "``record_value``\n"
-      + "    If empty, all fields from the value struct will be used, otherwise used to extract "
-      + "the desired fields.";
-  private static final String PK_FIELDS_DISPLAY = "Primary Key Fields";
-
-  public static final String PK_MODE = "pk.mode";
-  private static final String PK_MODE_DEFAULT = "none";
-  private static final String PK_MODE_DOC =
-      "The primary key mode, also refer to ``" + PK_FIELDS + "`` documentation for interplay. "
-      + "Supported modes are:\n"
-      + "``none``\n"
-      + "    No keys utilized.\n"
-      + "``kafka``\n"
-      + "    Kafka coordinates are used as the PK.\n"
-      + "``record_key``\n"
-      + "    Field(s) from the record key are used, which may be a primitive or a struct.\n"
-      + "``record_value``\n"
-      + "    Field(s) from the record value are used, which must be a struct.";
-  private static final String PK_MODE_DISPLAY = "Primary Key Mode";
-
-  public static final String FIELDS_WHITELIST = "fields.whitelist";
-  private static final String FIELDS_WHITELIST_DEFAULT = "";
-  private static final String FIELDS_WHITELIST_DOC =
-      "List of comma-separated record value field names. If empty, all fields from the record "
-      + "value are utilized, otherwise used to filter to the desired fields.\n"
-      + "Note that ``" + PK_FIELDS + "`` is applied independently in the context of which field"
-      + "(s) form the primary key columns in the destination database,"
-      + " while this configuration is applicable for the other columns.";
-  private static final String FIELDS_WHITELIST_DISPLAY = "Fields Whitelist";
-
-  private static final ConfigDef.Range NON_NEGATIVE_INT_VALIDATOR = ConfigDef.Range.atLeast(0);
-
-  private static final String CONNECTION_GROUP = "Connection";
-  private static final String WRITES_GROUP = "Writes";
-  private static final String DATAMAPPING_GROUP = "Data Mapping";
-  private static final String DDL_GROUP = "DDL Support";
-  private static final String RETRIES_GROUP = "Retries";
-
-  public static final String DIALECT_NAME_CONFIG = "dialect.name";
-  private static final String DIALECT_NAME_DISPLAY = "Database Dialect";
-  public static final String DIALECT_NAME_DEFAULT = "";
-  private static final String DIALECT_NAME_DOC =
-      "The name of the database dialect that should be used for this connector. By default this "
-      + "is empty, and the connector automatically determines the dialect based upon the "
-      + "JDBC connection URL. Use this if you want to override that behavior and use a "
-      + "specific dialect. All properly-packaged dialects in the JDBC connector plugin "
-      + "can be used.";
-
-  public static final String DB_TIMEZONE_CONFIG = "db.timezone";
-  public static final String DB_TIMEZONE_DEFAULT = "UTC";
-  private static final String DB_TIMEZONE_CONFIG_DOC =
-      "Name of the JDBC timezone that should be used in the connector when "
-      + "inserting time-based values. Defaults to UTC.";
-  private static final String DB_TIMEZONE_CONFIG_DISPLAY = "DB Time Zone";
-
-  public static final String QUOTE_SQL_IDENTIFIERS_CONFIG =
-      JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_CONFIG;
-  public static final String QUOTE_SQL_IDENTIFIERS_DEFAULT =
-      JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_DEFAULT;
-  public static final String QUOTE_SQL_IDENTIFIERS_DOC =
-      JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_DOC;
-  private static final String QUOTE_SQL_IDENTIFIERS_DISPLAY =
-      JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_DISPLAY;
-
-  public static final String TABLE_TYPES_CONFIG = "table.types";
-  private static final String TABLE_TYPES_DISPLAY = "Table Types";
-  public static final String TABLE_TYPES_DEFAULT = TableType.TABLE.toString();
-  private static final String TABLE_TYPES_DOC =
-      "The comma-separated types of database tables to which the sink connector can write. "
-      + "By default this is ``" + TableType.TABLE + "``, but any combination of ``"
-      + TableType.TABLE + "`` and ``" + TableType.VIEW + "`` is allowed. Not all databases "
-      + "support writing to views, and when they do the the sink connector will fail if the "
-      + "view definition does not match the records' schemas (regardless of ``"
-      + AUTO_EVOLVE + "``).";
-
-  private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
-      EnumRecommender.in(QuoteMethod.values());
-
-  private static final EnumRecommender TABLE_TYPES_RECOMMENDER =
-      EnumRecommender.in(TableType.values());
-
-  public static final ConfigDef CONFIG_DEF = new ConfigDef()
-        // Connection
-        .define(
-            CONNECTION_URL,
-            ConfigDef.Type.STRING,
-            ConfigDef.NO_DEFAULT_VALUE,
-            ConfigDef.Importance.HIGH,
-            CONNECTION_URL_DOC,
-            CONNECTION_GROUP,
-            1,
-            ConfigDef.Width.LONG,
-            CONNECTION_URL_DISPLAY
-        )
-        .define(
-            CONNECTION_USER,
-            ConfigDef.Type.STRING,
-            null,
-            ConfigDef.Importance.HIGH,
-            CONNECTION_USER_DOC,
-            CONNECTION_GROUP,
-            2,
-            ConfigDef.Width.MEDIUM,
-            CONNECTION_USER_DISPLAY
-        )
-        .define(
-            CONNECTION_PASSWORD,
-            ConfigDef.Type.PASSWORD,
-            null,
-            ConfigDef.Importance.HIGH,
-            CONNECTION_PASSWORD_DOC,
-            CONNECTION_GROUP,
-            3,
-            ConfigDef.Width.MEDIUM,
-            CONNECTION_PASSWORD_DISPLAY
-        )
-        .define(
-            DIALECT_NAME_CONFIG,
-            ConfigDef.Type.STRING,
-            DIALECT_NAME_DEFAULT,
-            DatabaseDialectRecommender.INSTANCE,
-            ConfigDef.Importance.LOW,
-            DIALECT_NAME_DOC,
-            CONNECTION_GROUP,
-            4,
-            ConfigDef.Width.LONG,
-            DIALECT_NAME_DISPLAY,
-            DatabaseDialectRecommender.INSTANCE
-        )
-        .define(
-            CONNECTION_ATTEMPTS,
-            ConfigDef.Type.INT,
-            CONNECTION_ATTEMPTS_DEFAULT,
-            ConfigDef.Range.atLeast(1),
-            ConfigDef.Importance.LOW,
-            CONNECTION_ATTEMPTS_DOC,
-            CONNECTION_GROUP,
-            5,
-            ConfigDef.Width.SHORT,
-            CONNECTION_ATTEMPTS_DISPLAY
-        ).define(
-            CONNECTION_BACKOFF,
-            ConfigDef.Type.LONG,
-            CONNECTION_BACKOFF_DEFAULT,
-            ConfigDef.Importance.LOW,
-            CONNECTION_BACKOFF_DOC,
-            CONNECTION_GROUP,
-            6,
-            ConfigDef.Width.SHORT,
-            CONNECTION_BACKOFF_DISPLAY
-        )
-        // Writes
-        .define(
-            INSERT_MODE,
-            ConfigDef.Type.STRING,
-            INSERT_MODE_DEFAULT,
-            EnumValidator.in(InsertMode.values()),
-            ConfigDef.Importance.HIGH,
-            INSERT_MODE_DOC,
-            WRITES_GROUP,
-            1,
-            ConfigDef.Width.MEDIUM,
-            INSERT_MODE_DISPLAY
-        )
-        .define(
-            BATCH_SIZE,
-            ConfigDef.Type.INT,
-            BATCH_SIZE_DEFAULT,
-            NON_NEGATIVE_INT_VALIDATOR,
-            ConfigDef.Importance.MEDIUM,
-            BATCH_SIZE_DOC, WRITES_GROUP,
-            2,
-            ConfigDef.Width.SHORT,
-            BATCH_SIZE_DISPLAY
-        )
-        .define(
-            DELETE_ENABLED,
-            ConfigDef.Type.BOOLEAN,
-            DELETE_ENABLED_DEFAULT,
-            ConfigDef.Importance.MEDIUM,
-            DELETE_ENABLED_DOC, WRITES_GROUP,
-            3,
-            ConfigDef.Width.SHORT,
-            DELETE_ENABLED_DISPLAY,
-            DeleteEnabledRecommender.INSTANCE
-        )
-        .define(
-            TABLE_TYPES_CONFIG,
-            ConfigDef.Type.LIST,
-            TABLE_TYPES_DEFAULT,
-            TABLE_TYPES_RECOMMENDER,
-            ConfigDef.Importance.LOW,
-            TABLE_TYPES_DOC,
-            WRITES_GROUP,
-            4,
-            ConfigDef.Width.MEDIUM,
-            TABLE_TYPES_DISPLAY
-        )
-        // Data Mapping
-        .define(
-            TABLE_NAME_FORMAT,
-            ConfigDef.Type.STRING,
-            TABLE_NAME_FORMAT_DEFAULT,
-            ConfigDef.Importance.MEDIUM,
-            TABLE_NAME_FORMAT_DOC,
-            DATAMAPPING_GROUP,
-            1,
-            ConfigDef.Width.LONG,
-            TABLE_NAME_FORMAT_DISPLAY
-        )
-        .define(
-            PK_MODE,
-            ConfigDef.Type.STRING,
-            PK_MODE_DEFAULT,
-            EnumValidator.in(PrimaryKeyMode.values()),
-            ConfigDef.Importance.HIGH,
-            PK_MODE_DOC,
-            DATAMAPPING_GROUP,
-            2,
-            ConfigDef.Width.MEDIUM,
-            PK_MODE_DISPLAY,
-            PrimaryKeyModeRecommender.INSTANCE
-        )
-        .define(
-            PK_FIELDS,
-            ConfigDef.Type.LIST,
-            PK_FIELDS_DEFAULT,
-            ConfigDef.Importance.MEDIUM,
-            PK_FIELDS_DOC,
-            DATAMAPPING_GROUP,
-            3,
-            ConfigDef.Width.LONG, PK_FIELDS_DISPLAY
-        )
-        .define(
-            FIELDS_WHITELIST,
-            ConfigDef.Type.LIST,
-            FIELDS_WHITELIST_DEFAULT,
-            ConfigDef.Importance.MEDIUM,
-            FIELDS_WHITELIST_DOC,
-            DATAMAPPING_GROUP,
-            4,
-            ConfigDef.Width.LONG,
-            FIELDS_WHITELIST_DISPLAY
-        ).define(
-          DB_TIMEZONE_CONFIG,
-          ConfigDef.Type.STRING,
-          DB_TIMEZONE_DEFAULT,
-          TimeZoneValidator.INSTANCE,
-          ConfigDef.Importance.MEDIUM,
-          DB_TIMEZONE_CONFIG_DOC,
-          DATAMAPPING_GROUP,
-          5,
-          ConfigDef.Width.MEDIUM,
-          DB_TIMEZONE_CONFIG_DISPLAY
-        )
-        // DDL
-        .define(
-            AUTO_CREATE,
-            ConfigDef.Type.BOOLEAN,
-            AUTO_CREATE_DEFAULT,
-            ConfigDef.Importance.MEDIUM,
-            AUTO_CREATE_DOC, DDL_GROUP,
-            1,
-            ConfigDef.Width.SHORT,
-            AUTO_CREATE_DISPLAY
-        )
-        .define(
-            AUTO_EVOLVE,
-            ConfigDef.Type.BOOLEAN,
-            AUTO_EVOLVE_DEFAULT,
-            ConfigDef.Importance.MEDIUM,
-            AUTO_EVOLVE_DOC, DDL_GROUP,
-            2,
-            ConfigDef.Width.SHORT,
-            AUTO_EVOLVE_DISPLAY
-        ).define(
-            QUOTE_SQL_IDENTIFIERS_CONFIG,
-            ConfigDef.Type.STRING,
-            QUOTE_SQL_IDENTIFIERS_DEFAULT,
-            ConfigDef.Importance.MEDIUM,
-            QUOTE_SQL_IDENTIFIERS_DOC,
-            DDL_GROUP,
-            3,
-            ConfigDef.Width.MEDIUM,
-            QUOTE_SQL_IDENTIFIERS_DISPLAY,
-            QUOTE_METHOD_RECOMMENDER
-        )
-        // Retries
-        .define(
-            MAX_RETRIES,
-            ConfigDef.Type.INT,
-            MAX_RETRIES_DEFAULT,
-            NON_NEGATIVE_INT_VALIDATOR,
-            ConfigDef.Importance.MEDIUM,
-            MAX_RETRIES_DOC,
-            RETRIES_GROUP,
-            1,
-            ConfigDef.Width.SHORT,
-            MAX_RETRIES_DISPLAY
-        )
-        .define(
-            RETRY_BACKOFF_MS,
-            ConfigDef.Type.INT,
-            RETRY_BACKOFF_MS_DEFAULT,
-            NON_NEGATIVE_INT_VALIDATOR,
-            ConfigDef.Importance.MEDIUM,
-            RETRY_BACKOFF_MS_DOC,
-            RETRIES_GROUP,
-            2,
-            ConfigDef.Width.SHORT,
-            RETRY_BACKOFF_MS_DISPLAY
+      if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
+        tableQueue.add(
+            new BulkTableQuerier(
+                dialect, 
+                queryMode, 
+                tableOrQuery, 
+                topicPrefix, 
+                suffix
+            )
         );
-
-  public final String connectorName;
-  public final String connectionUrl;
-  public final String connectionUser;
-  public final String connectionPassword;
-  public final int connectionAttempts;
-  public final long connectionBackoffMs;
-  public final String tableNameFormat;
-  public final int batchSize;
-  public final boolean deleteEnabled;
-  public final int maxRetries;
-  public final int retryBackoffMs;
-  public final boolean autoCreate;
-  public final boolean autoEvolve;
-  public final InsertMode insertMode;
-  public final PrimaryKeyMode pkMode;
-  public final List<String> pkFields;
-  public final Set<String> fieldsWhitelist;
-  public final String dialectName;
-  public final TimeZone timeZone;
-  public final EnumSet<TableType> tableTypes;
-
-  public JdbcSinkConfig(Map<?, ?> props) {
-    super(CONFIG_DEF, props);
-    connectorName = ConfigUtils.connectorName(props);
-    connectionUrl = getString(CONNECTION_URL);
-    connectionUser = getString(CONNECTION_USER);
-    connectionPassword = getPasswordValue(CONNECTION_PASSWORD);
-    connectionAttempts = getInt(CONNECTION_ATTEMPTS);
-    connectionBackoffMs = getLong(CONNECTION_BACKOFF);
-    tableNameFormat = getString(TABLE_NAME_FORMAT).trim();
-    batchSize = getInt(BATCH_SIZE);
-    deleteEnabled = getBoolean(DELETE_ENABLED);
-    maxRetries = getInt(MAX_RETRIES);
-    retryBackoffMs = getInt(RETRY_BACKOFF_MS);
-    autoCreate = getBoolean(AUTO_CREATE);
-    autoEvolve = getBoolean(AUTO_EVOLVE);
-    insertMode = InsertMode.valueOf(getString(INSERT_MODE).toUpperCase());
-    pkMode = PrimaryKeyMode.valueOf(getString(PK_MODE).toUpperCase());
-    pkFields = getList(PK_FIELDS);
-    dialectName = getString(DIALECT_NAME_CONFIG);
-    fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
-    String dbTimeZone = getString(DB_TIMEZONE_CONFIG);
-    timeZone = TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
-
-    if (deleteEnabled && pkMode != PrimaryKeyMode.RECORD_KEY) {
-      throw new ConfigException(
-          "Primary key mode must be 'record_key' when delete support is enabled");
+      } else if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)) {
+        tableQueue.add(
+            new TimestampIncrementingTableQuerier(
+                dialect,
+                queryMode,
+                tableOrQuery,
+                topicPrefix,
+                null,
+                incrementingColumn,
+                offset,
+                timestampDelayInterval,
+                timeZone,
+                suffix
+            )
+        );
+      } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
+        tableQueue.add(
+            new TimestampIncrementingTableQuerier(
+                dialect,
+                queryMode,
+                tableOrQuery,
+                topicPrefix,
+                timestampColumns,
+                null,
+                offset,
+                timestampDelayInterval,
+                timeZone,
+                suffix
+            )
+        );
+      } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
+        tableQueue.add(
+            new TimestampIncrementingTableQuerier(
+                dialect,
+                queryMode,
+                tableOrQuery,
+                topicPrefix,
+                timestampColumns,
+                incrementingColumn,
+                offset,
+                timestampDelayInterval,
+                timeZone,
+                suffix
+            )
+        );
+      }
     }
-    tableTypes = TableType.parse(getList(TABLE_TYPES_CONFIG));
+
+    running.set(true);
+    log.info("Started JDBC source task");
   }
 
-  private String getPasswordValue(String key) {
-    Password password = getPassword(key);
-    if (password != null) {
-      return password.value();
+  protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
+    return new CachedConnectionProvider(dialect, maxConnAttempts, retryBackoff) {
+      @Override
+      protected void onConnect(final Connection connection) throws SQLException {
+        super.onConnect(connection);
+        connection.setAutoCommit(false);
+      }
+    };
+  }
+
+  //This method returns a list of possible partition maps for different offset protocols
+  //This helps with the upgrades
+  private List<Map<String, String>> possibleTablePartitions(String table) {
+    TableId tableId = dialect.parseTableIdentifier(table);
+    return Arrays.asList(
+        OffsetProtocols.sourcePartitionForProtocolV1(tableId),
+        OffsetProtocols.sourcePartitionForProtocolV0(tableId)
+    );
+  }
+
+  protected Map<String, Object> computeInitialOffset(
+          String tableOrQuery,
+          Map<String, Object> partitionOffset,
+          TimeZone timezone) {
+    if (!(partitionOffset == null)) {
+      return partitionOffset;
+    } else {
+      Map<String, Object> initialPartitionOffset = null;
+      // no offsets found
+      Long timestampInitial = config.getLong(JdbcSourceConnectorConfig.TIMESTAMP_INITIAL_CONFIG);
+      if (timestampInitial != null) {
+        // start at the specified timestamp
+        if (timestampInitial == JdbcSourceConnectorConfig.TIMESTAMP_INITIAL_CURRENT) {
+          // use the current time
+          try {
+            final Connection con = cachedConnectionProvider.getConnection();
+            Calendar cal = Calendar.getInstance(timezone);
+            timestampInitial = dialect.currentTimeOnDB(con, cal).getTime();
+          } catch (SQLException e) {
+            throw new ConnectException("Error while getting initial timestamp from database", e);
+          }
+        }
+        initialPartitionOffset = new HashMap<String, Object>();
+        initialPartitionOffset.put(TimestampIncrementingOffset.TIMESTAMP_FIELD, timestampInitial);
+        log.info("No offsets found for '{}', so using configured timestamp {}", tableOrQuery,
+                timestampInitial);
+      }
+      return initialPartitionOffset;
     }
+  }
+
+  @Override
+  public void stop() throws ConnectException {
+    log.info("Stopping JDBC source task");
+    running.set(false);
+    // All resources are closed at the end of 'poll()' when no longer running or
+    // if there is an error
+  }
+
+  protected void closeResources() {
+    log.info("Closing resources for JDBC source task");
+    try {
+      if (cachedConnectionProvider != null) {
+        cachedConnectionProvider.close();
+      }
+    } catch (Throwable t) {
+      log.warn("Error while closing the connections", t);
+    } finally {
+      cachedConnectionProvider = null;
+      try {
+        if (dialect != null) {
+          dialect.close();
+        }
+      } catch (Throwable t) {
+        log.warn("Error while closing the {} dialect: ", dialect.name(), t);
+      } finally {
+        dialect = null;
+      }
+    }
+  }
+
+  @Override
+  public List<SourceRecord> poll() throws InterruptedException {
+    log.trace("{} Polling for new data");
+
+    Map<TableQuerier, Integer> consecutiveEmptyResults = tableQueue.stream().collect(
+        Collectors.toMap(Function.identity(), (q) -> 0));
+    while (running.get()) {
+      final TableQuerier querier = tableQueue.peek();
+
+      if (!querier.querying()) {
+        // If not in the middle of an update, wait for next update time
+        final long nextUpdate = querier.getLastUpdate()
+            + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
+        final long now = time.milliseconds();
+        final long sleepMs = Math.min(nextUpdate - now, 100);
+
+        if (sleepMs > 0) {
+          log.trace("Waiting {} ms to poll {} next", nextUpdate - now, querier.toString());
+          time.sleep(sleepMs);
+          continue; // Re-check stop flag before continuing
+        }
+      }
+
+      final List<SourceRecord> results = new ArrayList<>();
+      try {
+        log.debug("Checking for next block of results from {}", querier.toString());
+        querier.maybeStartQuery(cachedConnectionProvider.getConnection());
+
+        int batchMaxRows = config.getInt(JdbcSourceTaskConfig.BATCH_MAX_ROWS_CONFIG);
+        boolean hadNext = true;
+        while (results.size() < batchMaxRows && (hadNext = querier.next())) {
+          results.add(querier.extractRecord());
+        }
+
+        if (!hadNext) {
+          // If we finished processing the results from the current query, we can reset and send
+          // the querier to the tail of the queue
+          resetAndRequeueHead(querier);
+        }
+
+        if (results.isEmpty()) {
+          consecutiveEmptyResults.compute(querier, (k, v) -> v + 1);
+          log.trace("No updates for {}", querier.toString());
+
+          if (Collections.min(consecutiveEmptyResults.values())
+              >= CONSECUTIVE_EMPTY_RESULTS_BEFORE_RETURN) {
+            log.trace("More than " + CONSECUTIVE_EMPTY_RESULTS_BEFORE_RETURN
+                + " consecutive empty results for all queriers, returning");
+            return null;
+          } else {
+            continue;
+          }
+        } else {
+          consecutiveEmptyResults.put(querier, 0);
+        }
+
+        log.debug("Returning {} records for {}", results.size(), querier.toString());
+        return results;
+      } catch (SQLException sqle) {
+        log.error("Failed to run query for table {}: {}", querier.toString(), sqle);
+        resetAndRequeueHead(querier);
+        return null;
+      } catch (Throwable t) {
+        resetAndRequeueHead(querier);
+        // This task has failed, so close any resources (may be reopened if needed) before throwing
+        closeResources();
+        throw t;
+      }
+    }
+
+    // Only in case of shutdown
+    final TableQuerier querier = tableQueue.peek();
+    if (querier != null) {
+      resetAndRequeueHead(querier);
+    }
+    closeResources();
     return null;
   }
 
-  public String connectorName() {
-    return connectorName;
+  private void resetAndRequeueHead(TableQuerier expectedHead) {
+    log.debug("Resetting querier {}", expectedHead.toString());
+    TableQuerier removedQuerier = tableQueue.poll();
+    assert removedQuerier == expectedHead;
+    expectedHead.reset(time.milliseconds());
+    tableQueue.add(expectedHead);
   }
 
-  public EnumSet<TableType> tableTypes() {
-    return tableTypes;
-  }
-
-  public Set<String> tableTypeNames() {
-    return tableTypes().stream().map(TableType::toString).collect(Collectors.toSet());
-  }
-
-  private static class EnumValidator implements ConfigDef.Validator {
-    private final List<String> canonicalValues;
-    private final Set<String> validValues;
-
-    private EnumValidator(List<String> canonicalValues, Set<String> validValues) {
-      this.canonicalValues = canonicalValues;
-      this.validValues = validValues;
-    }
-
-    public static <E> EnumValidator in(E[] enumerators) {
-      final List<String> canonicalValues = new ArrayList<>(enumerators.length);
-      final Set<String> validValues = new HashSet<>(enumerators.length * 2);
-      for (E e : enumerators) {
-        canonicalValues.add(e.toString().toLowerCase());
-        validValues.add(e.toString().toUpperCase());
-        validValues.add(e.toString().toLowerCase());
+  private void validateNonNullable(
+      String incrementalMode,
+      String table,
+      String incrementingColumn,
+      List<String> timestampColumns
+  ) {
+    try {
+      Set<String> lowercaseTsColumns = new HashSet<>();
+      for (String timestampColumn: timestampColumns) {
+        lowercaseTsColumns.add(timestampColumn.toLowerCase(Locale.getDefault()));
       }
-      return new EnumValidator(canonicalValues, validValues);
-    }
 
-    @Override
-    public void ensureValid(String key, Object value) {
-      if (!validValues.contains(value)) {
-        throw new ConfigException(key, value, "Invalid enumerator");
+      boolean incrementingOptional = false;
+      boolean atLeastOneTimestampNotOptional = false;
+      final Connection conn = cachedConnectionProvider.getConnection();
+      boolean autoCommit = conn.getAutoCommit();
+      try {
+        conn.setAutoCommit(true);
+        Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, table, null);
+        for (ColumnDefinition defn : defnsById.values()) {
+          String columnName = defn.id().name();
+          if (columnName.equalsIgnoreCase(incrementingColumn)) {
+            incrementingOptional = defn.isOptional();
+          } else if (lowercaseTsColumns.contains(columnName.toLowerCase(Locale.getDefault()))) {
+            if (!defn.isOptional()) {
+              atLeastOneTimestampNotOptional = true;
+            }
+          }
+        }
+      } finally {
+        conn.setAutoCommit(autoCommit);
       }
-    }
 
-    @Override
-    public String toString() {
-      return canonicalValues.toString();
+      // Validate that requested columns for offsets are NOT NULL. Currently this is only performed
+      // for table-based copying because custom query mode doesn't allow this to be looked up
+      // without a query or parsing the query since we don't have a table name.
+      if ((incrementalMode.equals(JdbcSourceConnectorConfig.MODE_INCREMENTING)
+           || incrementalMode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING))
+          && incrementingOptional) {
+        throw new ConnectException("Cannot make incremental queries using incrementing column "
+                                   + incrementingColumn + " on " + table + " because this column "
+                                   + "is nullable.");
+      }
+      if ((incrementalMode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP)
+           || incrementalMode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING))
+          && !atLeastOneTimestampNotOptional) {
+        throw new ConnectException("Cannot make incremental queries using timestamp columns "
+                                   + timestampColumns + " on " + table + " because all of these "
+                                   + "columns "
+                                   + "nullable.");
+      }
+    } catch (SQLException e) {
+      throw new ConnectException("Failed trying to validate that columns used for offsets are NOT"
+                                 + " NULL", e);
     }
   }
-
-  public static void main(String... args) {
-    System.out.println(CONFIG_DEF.toEnrichedRst());
-  }
-
 }

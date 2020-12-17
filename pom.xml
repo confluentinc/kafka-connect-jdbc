@@ -258,7 +258,7 @@
                         </goals>
                         <configuration>
                             <title>Kafka Connect JDBC</title>
-                            <documentationUrl>https://docs.confluent.io/${confluent.version}/connect/connect-jdbc/docs/index.html</documentationUrl>
+                            <documentationUrl>https://docs.confluent.io/kafka-connect-jdbc/current/</documentationUrl>
                             <description>
                                 The JDBC source and sink connectors allow you to exchange data between relational databases and Kafka.
 

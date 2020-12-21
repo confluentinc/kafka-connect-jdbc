@@ -19,6 +19,7 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -27,6 +28,7 @@ import java.util.UUID;
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.JdbcSinkTask;
+import io.confluent.connect.jdbc.util.BytesUtil;
 
 import io.zonky.test.db.postgres.junit.EmbeddedPostgresRules;
 import io.zonky.test.db.postgres.junit.SingleInstancePostgresRule;
@@ -44,8 +46,6 @@ import org.slf4j.LoggerFactory;
 
 import static junit.framework.TestCase.assertTrue;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.fail;
 
 /**
  * Integration tests for writing to Postgres with UUID columns.
@@ -116,6 +116,51 @@ public class PostgresDatatypeIT {
     }
   }
 
+  @Test
+  public void testWriteTableWithPrimitiveArray() throws SQLException {
+    createTableWithPrimitiveArray();
+    startTask();
+
+    final Schema schema = SchemaBuilder.struct().name("com.example.Arrays")
+            .field("int8",    SchemaBuilder.array(Schema.INT8_SCHEMA))
+            .field("int16",   SchemaBuilder.array(Schema.INT16_SCHEMA))
+            .field("int32",   SchemaBuilder.array(Schema.INT32_SCHEMA))
+            .field("int64",   SchemaBuilder.array(Schema.INT64_SCHEMA))
+            .field("float32", SchemaBuilder.array(Schema.FLOAT32_SCHEMA))
+            .field("float64", SchemaBuilder.array(Schema.FLOAT64_SCHEMA))
+            .field("string",  SchemaBuilder.array(Schema.STRING_SCHEMA))
+            .field("bool",    SchemaBuilder.array(Schema.BOOLEAN_SCHEMA))
+            .build();
+
+    final Struct struct = new Struct(schema)
+            .put("int8", Arrays.asList( (byte) 42, (byte) 12))
+            .put("int16", Arrays.asList( (short) 42, (short) 12))
+            .put("int32", Arrays.asList(42, 16))
+            .put("int64", Arrays.asList(42L, 16L))
+            .put("float32", Arrays.asList(42.5F, 16.2F))
+            .put("float64", Arrays.asList(42.5D, 16.2D))
+            .put("string", Arrays.asList("42", "16"))
+            .put("bool", Arrays.asList(true, false, true));
+    task.put(Collections.singleton(new SinkRecord(tableName, 1, null, null, schema, struct, 1)));
+
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
+      try (Statement s = c.createStatement()) {
+        try (ResultSet rs = s.executeQuery("SELECT * FROM " + tableName)) {
+          assertTrue(rs.next());
+
+          assertEquals(struct.getArray("int8"), BytesUtil.truncateShortArrayToBytes((Short[]) rs.getArray("int8").getArray()));
+          assertEquals(struct.getArray("int16"), Arrays.asList((Short[]) rs.getArray("int16").getArray()));
+          assertEquals(struct.getArray("int32"), Arrays.asList((Integer[]) rs.getArray("int32").getArray()));
+          assertEquals(struct.getArray("int64"), Arrays.asList((Long[]) rs.getArray("int64").getArray()));
+          assertEquals(struct.getArray("float32"), Arrays.asList((Float[]) rs.getArray("float32").getArray()));
+          assertEquals(struct.getArray("float64"), Arrays.asList((Double[]) rs.getArray("float64").getArray()));
+          assertEquals(struct.getArray("string"), Arrays.asList((String[]) rs.getArray("string").getArray()));
+          assertEquals(struct.getArray("bool"), Arrays.asList((Boolean[]) rs.getArray("bool").getArray()));
+        }
+      }
+    }
+  }
+
   private void createTableWithUuidColumns() throws SQLException {
     log.info("Creating table {} with UUID column", tableName);
     try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
@@ -131,6 +176,32 @@ public class PostgresDatatypeIT {
       }
     }
     log.info("Created table {} with UUID column", tableName);
+  }
+
+  private void createTableWithPrimitiveArray() throws SQLException {
+    log.info("Creating table {} with primitives array columns", tableName);
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
+      c.setAutoCommit(false);
+      try (Statement s = c.createStatement()) {
+        String sql = String.format(
+                "CREATE TABLE %s(" +
+                        "int8    SMALLINT         ARRAY," +
+                        "int16   SMALLINT         ARRAY," +
+                        "int32   INTEGER          ARRAY," +
+                        "int64   BIGINT           ARRAY," +
+                        "float32 REAL             ARRAY," +
+                        "float64 DOUBLE PRECISION ARRAY," +
+                        "string  TEXT             ARRAY," +
+                        "bool    BOOLEAN          ARRAY" +
+                ")",
+                tableName
+        );
+        log.info("Executing statement: {}", sql);
+        s.execute(sql);
+        c.commit();
+      }
+    }
+    log.info("Created table {} with primitives array columns", tableName);
   }
 
   private void startTask() {

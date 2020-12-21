@@ -15,6 +15,10 @@
 
 package io.confluent.connect.jdbc.util;
 
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+
 public class BytesUtil {
 
   private static final char[] hexCode = "0123456789ABCDEF".toCharArray();
@@ -26,5 +30,11 @@ public class BytesUtil {
       r.append(hexCode[(b & 0xF)]);
     }
     return r.toString();
+  }
+
+  public static List<Byte> truncateShortArrayToBytes(Short[] shortArray) {
+    return Arrays.stream(shortArray)
+            .map(shortNumber -> (byte) (shortNumber & 0xff))
+            .collect(Collectors.toList());
   }
 }

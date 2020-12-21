@@ -374,7 +374,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
     switch (schema.type()) {
       case ARRAY: {
-        Class valueClass = value.getClass();
+        Class<?> valueClass = value.getClass();
         Object newValue = null;
         if (valueClass.isArray()) {
           newValue = value;

@@ -15,7 +15,6 @@
 
 package io.confluent.connect.jdbc.source;
 
-import java.util.TimeZone;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
@@ -26,10 +25,12 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.TimeZone;
 import java.util.List;
 import java.util.Map;
 
@@ -111,6 +112,11 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     this.timeZone = timeZone;
   }
 
+  /**
+   * JDBC TypeName constant for SQL Server's DATETIME columns.
+   */
+  private static String DATETIME = "datetime";
+
   @Override
   protected void createPreparedStatement(Connection db) throws SQLException {
     findDefaultAutoIncrementingColumn(db);
@@ -143,6 +149,19 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     recordQuery(queryString);
     log.debug("{} prepared SQL query: {}", this, queryString);
     stmt = dialect.createPreparedStatement(db, queryString);
+  }
+
+  @Override
+  public void maybeStartQuery(Connection db) throws SQLException, ConnectException {
+    if (resultSet == null) {
+      this.db = db;
+      stmt = getOrCreatePreparedStatement(db);
+      resultSet = executeQuery();
+      String schemaName = tableId != null ? tableId.tableName() : null; // backwards compatible
+      ResultSetMetaData metadata = resultSet.getMetaData();
+      dialect.validateSpecificColumnTypes(metadata, timestampColumns);
+      schemaMapping = SchemaMapping.create(schemaName, metadata, dialect);
+    }
   }
 
   private void findDefaultAutoIncrementingColumn(Connection db) throws SQLException {

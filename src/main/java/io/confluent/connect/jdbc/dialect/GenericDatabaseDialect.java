@@ -432,6 +432,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
    * <p>This method can be overridden to exclude certain database tables.
    *
    * @param table the identifier of the table; may be null
+   * @return true if the table should be included; false otherwise
    */
   protected boolean includeTable(TableId table) {
     return true;
@@ -1324,7 +1325,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
       // Date is day + month + year
       case Types.DATE: {
-        return rs -> rs.getDate(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
+        return rs -> rs.getDate(col,
+            DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone(ZoneOffset.UTC)));
       }
 
       // Time is a time of day -- hour, minute, seconds, nanoseconds
@@ -1552,7 +1554,12 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       Object value
   ) throws SQLException {
     if (value == null) {
-      statement.setObject(index, null);
+      Integer type = getSqlTypeForSchema(schema);
+      if (type != null) {
+        statement.setNull(index, type);
+      } else {
+        statement.setObject(index, null);
+      }
     } else {
       boolean bound = maybeBindLogical(statement, index, schema, value);
       if (!bound) {
@@ -1562,6 +1569,18 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         throw new ConnectException("Unsupported source data type: " + schema.type());
       }
     }
+  }
+
+  /**
+   * Dialects not supporting `setObject(index, null)` can override this method
+   * to provide a specific sqlType, as per the JDBC documentation
+   * https://docs.oracle.com/javase/7/docs/api/java/sql/PreparedStatement.html
+   *
+   * @param schema the schema
+   * @return the SQL type
+   */
+  protected Integer getSqlTypeForSchema(Schema schema) {
+    return null;
   }
 
   protected boolean maybeBindPrimitive(
@@ -1720,6 +1739,12 @@ public class GenericDatabaseDialect implements DatabaseDialect {
            .of(fields);
     return Collections.singletonList(builder.toString());
   }
+
+  @Override
+  public void validateSpecificColumnTypes(
+          ResultSetMetaData rsMetadata,
+          List<ColumnId> columns
+  ) throws ConnectException { }
 
   protected List<String> extractPrimaryKeyFieldNames(Collection<SinkRecordField> fields) {
     final List<String> pks = new ArrayList<>();

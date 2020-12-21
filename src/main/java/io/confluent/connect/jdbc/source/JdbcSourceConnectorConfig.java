@@ -15,8 +15,6 @@
 
 package io.confluent.connect.jdbc.source;
 
-import java.sql.Connection;
-import java.sql.SQLException;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -25,15 +23,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TimeZone;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import io.confluent.connect.jdbc.dialect.DatabaseDialect;
-import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
 import io.confluent.connect.jdbc.util.EnumRecommender;
 import io.confluent.connect.jdbc.util.QuoteMethod;
-import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.TimeZoneValidator;
 
 import org.apache.kafka.common.config.AbstractConfig;
@@ -71,16 +65,16 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final String CONNECTION_PASSWORD_DISPLAY = "JDBC Password";
 
   public static final String CONNECTION_ATTEMPTS_CONFIG = CONNECTION_PREFIX + "attempts";
-  private static final String CONNECTION_ATTEMPTS_DOC
+  public static final String CONNECTION_ATTEMPTS_DOC
       = "Maximum number of attempts to retrieve a valid JDBC connection. "
           + "Must be a positive integer.";
-  private static final String CONNECTION_ATTEMPTS_DISPLAY = "JDBC connection attempts";
+  public static final String CONNECTION_ATTEMPTS_DISPLAY = "JDBC connection attempts";
   public static final int CONNECTION_ATTEMPTS_DEFAULT = 3;
 
   public static final String CONNECTION_BACKOFF_CONFIG = CONNECTION_PREFIX + "backoff.ms";
-  private static final String CONNECTION_BACKOFF_DOC
+  public static final String CONNECTION_BACKOFF_DOC
       = "Backoff time in milliseconds between connection attempts.";
-  private static final String CONNECTION_BACKOFF_DISPLAY
+  public static final String CONNECTION_BACKOFF_DISPLAY
       = "JDBC connection backoff in milliseconds";
   public static final long CONNECTION_BACKOFF_DEFAULT = 10000L;
 
@@ -289,13 +283,6 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String MODE_GROUP = "Mode";
   public static final String CONNECTOR_GROUP = "Connector";
 
-  // We want the table recommender to only cache values for a short period of time so that the
-  // blacklist and whitelist config properties can use a single query.
-  private static final Recommender TABLE_RECOMMENDER = new CachingRecommender(
-      new TableRecommender(),
-      Time.SYSTEM,
-      TimeUnit.SECONDS.toMillis(5)
-  );
   private static final Recommender MODE_DEPENDENTS_RECOMMENDER =  new ModeDependentsRecommender();
 
 
@@ -385,8 +372,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         DATABASE_GROUP,
         ++orderInGroup,
         Width.LONG,
-        TABLE_WHITELIST_DISPLAY,
-        TABLE_RECOMMENDER
+        TABLE_WHITELIST_DISPLAY
     ).define(
         TABLE_BLACKLIST_CONFIG,
         Type.LIST,
@@ -396,8 +382,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         DATABASE_GROUP,
         ++orderInGroup,
         Width.LONG,
-        TABLE_BLACKLIST_DISPLAY,
-        TABLE_RECOMMENDER
+        TABLE_BLACKLIST_DISPLAY
     ).define(
         CATALOG_PATTERN_CONFIG,
         Type.STRING,
@@ -636,36 +621,6 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     String mode = getString(JdbcSourceConnectorConfig.MODE_CONFIG);
     if (mode.equals(JdbcSourceConnectorConfig.MODE_UNSPECIFIED)) {
       throw new ConfigException("Query mode must be specified");
-    }
-  }
-
-  private static class TableRecommender implements Recommender {
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public List<Object> validValues(String name, Map<String, Object> config) {
-      String dbUrl = (String) config.get(CONNECTION_URL_CONFIG);
-      if (dbUrl == null) {
-        throw new ConfigException(CONNECTION_URL_CONFIG + " cannot be null.");
-      }
-      // Create the dialect to get the tables ...
-      AbstractConfig jdbcConfig = new AbstractConfig(CONFIG_DEF, config);
-      DatabaseDialect dialect = DatabaseDialects.findBestFor(dbUrl, jdbcConfig);
-      try (Connection db = dialect.getConnection()) {
-        List<Object> result = new LinkedList<>();
-        for (TableId id : dialect.tableIds(db)) {
-          // Just add the unqualified table name
-          result.add(id.tableName());
-        }
-        return result;
-      } catch (SQLException e) {
-        throw new ConfigException("Couldn't open connection to " + dbUrl, e);
-      }
-    }
-
-    @Override
-    public boolean visible(String name, Map<String, Object> config) {
-      return true;
     }
   }
 

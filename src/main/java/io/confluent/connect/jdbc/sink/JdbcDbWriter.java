@@ -43,9 +43,16 @@ public class JdbcDbWriter {
     this.dbDialect = dbDialect;
     this.dbStructure = dbStructure;
 
-    this.cachedConnectionProvider = new CachedConnectionProvider(this.dbDialect) {
+    this.cachedConnectionProvider = connectionProvider(
+        config.connectionAttempts,
+        config.connectionBackoffMs
+    );
+  }
+
+  protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
+    return new CachedConnectionProvider(this.dbDialect, maxConnAttempts, retryBackoff) {
       @Override
-      protected void onConnect(Connection connection) throws SQLException {
+      protected void onConnect(final Connection connection) throws SQLException {
         log.info("JdbcDbWriter Connected");
         connection.setAutoCommit(false);
       }

@@ -30,6 +30,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
@@ -416,10 +417,11 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     );
   }
 
-  @Test
   @Override
   public void bindFieldArrayUnsupported() throws SQLException {
-      // Overridden simply to dummy out the test.
+    //Complex arrays are still not supported
+    Schema arraySchema = SchemaBuilder.array(SchemaBuilder.array(Schema.INT8_SCHEMA));
+    dialect.bindField(mock(PreparedStatement.class), 1, arraySchema, Collections.emptyList());
   }
 
   @Test

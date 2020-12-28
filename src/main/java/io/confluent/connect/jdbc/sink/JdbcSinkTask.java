@@ -31,6 +31,7 @@ import java.util.Map;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
+import io.confluent.connect.jdbc.util.Version;
 
 public class JdbcSinkTask extends SinkTask {
   private static final Logger log = LoggerFactory.getLogger(JdbcSinkTask.class);
@@ -123,7 +124,7 @@ public class JdbcSinkTask extends SinkTask {
 
   @Override
   public String version() {
-    return getClass().getPackage().getImplementationVersion();
+    return Version.getVersion();
   }
 
 }

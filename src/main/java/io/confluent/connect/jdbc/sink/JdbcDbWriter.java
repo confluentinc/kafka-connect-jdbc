@@ -64,7 +64,7 @@ public class JdbcDbWriter {
 
     final Map<TableId, BufferedRecords> bufferByTable = new HashMap<>();
     for (SinkRecord record : records) {
-      final TableId tableId = destinationTable(record.topic());
+      final TableId tableId = destinationTable(connection, record.topic());
       BufferedRecords buffer = bufferByTable.get(tableId);
       if (buffer == null) {
         buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
@@ -86,7 +86,7 @@ public class JdbcDbWriter {
     cachedConnectionProvider.close();
   }
 
-  TableId destinationTable(String topic) {
+  TableId destinationTable(Connection connection, String topic) {
     final String tableName = config.tableNameFormat.replace("${topic}", topic);
     if (tableName.isEmpty()) {
       throw new ConnectException(String.format(
@@ -95,6 +95,6 @@ public class JdbcDbWriter {
           config.tableNameFormat
       ));
     }
-    return dbDialect.parseTableIdentifier(tableName);
+    return dbDialect.parseTableIdentifier(connection, tableName);
   }
 }

@@ -198,10 +198,11 @@ public class JdbcSourceTask extends SourceTask {
       offset = computeInitialOffset(tableOrQuery, offset, timeZone);
 
       String topicPrefix = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
-
+      Connection connection = cachedConnectionProvider.getConnection();
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(
             new BulkTableQuerier(
+                connection,
                 dialect, 
                 queryMode, 
                 tableOrQuery, 
@@ -212,6 +213,7 @@ public class JdbcSourceTask extends SourceTask {
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)) {
         tableQueue.add(
             new TimestampIncrementingTableQuerier(
+                connection,
                 dialect,
                 queryMode,
                 tableOrQuery,
@@ -227,6 +229,7 @@ public class JdbcSourceTask extends SourceTask {
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
         tableQueue.add(
             new TimestampIncrementingTableQuerier(
+                connection,
                 dialect,
                 queryMode,
                 tableOrQuery,
@@ -242,6 +245,7 @@ public class JdbcSourceTask extends SourceTask {
       } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
         tableQueue.add(
             new TimestampIncrementingTableQuerier(
+                connection,
                 dialect,
                 queryMode,
                 tableOrQuery,
@@ -274,7 +278,10 @@ public class JdbcSourceTask extends SourceTask {
   //This method returns a list of possible partition maps for different offset protocols
   //This helps with the upgrades
   private List<Map<String, String>> possibleTablePartitions(String table) {
-    TableId tableId = dialect.parseTableIdentifier(table);
+    TableId tableId = dialect.parseTableIdentifier(
+        cachedConnectionProvider.getConnection(),
+        table
+    );
     return Arrays.asList(
         OffsetProtocols.sourcePartitionForProtocolV1(tableId),
         OffsetProtocols.sourcePartitionForProtocolV0(tableId)

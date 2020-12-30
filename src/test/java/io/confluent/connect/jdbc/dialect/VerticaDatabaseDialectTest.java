@@ -21,6 +21,7 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.junit.Before;
 import org.junit.Test;
 
 import io.confluent.connect.jdbc.util.QuoteMethod;
@@ -28,6 +29,12 @@ import io.confluent.connect.jdbc.util.QuoteMethod;
 import static org.junit.Assert.assertEquals;
 
 public class VerticaDatabaseDialectTest extends BaseDialectTest<VerticaDatabaseDialect> {
+
+  @Before
+  public void setup() throws Exception {
+    super.setup();
+    initDefaultIdentifierRules(dialect);
+  }
 
   @Override
   protected VerticaDatabaseDialect createDialect() {
@@ -90,7 +97,7 @@ public class VerticaDatabaseDialectTest extends BaseDialectTest<VerticaDatabaseD
   }
 
   @Test
-  public void shouldBuildCreateQueryStatement() {
+  public void shouldBuildCreateQueryStatement() throws Exception {
     assertEquals(
         "CREATE TABLE \"myTable\" (\n"
         + "\"c1\" INT NOT NULL,\n"
@@ -108,6 +115,7 @@ public class VerticaDatabaseDialectTest extends BaseDialectTest<VerticaDatabaseD
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     assertEquals(
         "CREATE TABLE myTable (\n"
         + "c1 INT NOT NULL,\n"
@@ -125,7 +133,7 @@ public class VerticaDatabaseDialectTest extends BaseDialectTest<VerticaDatabaseD
   }
 
   @Test
-  public void shouldBuildAlterTableStatement() {
+  public void shouldBuildAlterTableStatement() throws Exception {
     assertStatements(
         new String[]{
             "ALTER TABLE \"myTable\" ADD \"c1\" INT NOT NULL",
@@ -143,6 +151,7 @@ public class VerticaDatabaseDialectTest extends BaseDialectTest<VerticaDatabaseD
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     assertStatements(
         new String[]{
             "ALTER TABLE myTable ADD c1 INT NOT NULL",
@@ -179,7 +188,7 @@ public class VerticaDatabaseDialectTest extends BaseDialectTest<VerticaDatabaseD
   }
 
   @Test
-  public void createThreeColTwoPk() {
+  public void createThreeColTwoPk() throws Exception {
     verifyCreateThreeColTwoPk(
         "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "\"pk1\" INT NOT NULL," +
         System.lineSeparator() + "\"pk2\" INT NOT NULL," + System.lineSeparator() +
@@ -187,6 +196,7 @@ public class VerticaDatabaseDialectTest extends BaseDialectTest<VerticaDatabaseD
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     verifyCreateThreeColTwoPk(
         "CREATE TABLE myTable (" + System.lineSeparator() + "pk1 INT NOT NULL," +
         System.lineSeparator() + "pk2 INT NOT NULL," + System.lineSeparator() +

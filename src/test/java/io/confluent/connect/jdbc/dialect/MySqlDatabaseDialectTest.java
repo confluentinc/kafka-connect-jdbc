@@ -21,6 +21,7 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.List;
@@ -31,6 +32,12 @@ import io.confluent.connect.jdbc.util.TableId;
 import static org.junit.Assert.assertEquals;
 
 public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDialect> {
+
+  @Before
+  public void setup() throws Exception {
+    super.setup();
+    initDefaultIdentifierRules(dialect);
+  }
 
   @Override
   protected MySqlDatabaseDialect createDialect() {
@@ -128,13 +135,13 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
   }
 
   @Test
-  public void createOneColNoPk() {
+  public void createOneColNoPk() throws Exception {
     verifyCreateOneColNoPk(
         "CREATE TABLE `myTable` (" + System.lineSeparator() + "`col1` INT NOT NULL)");
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
-
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     verifyCreateOneColNoPk(
         "CREATE TABLE myTable (" + System.lineSeparator() + "col1 INT NOT NULL)");
   }
@@ -147,7 +154,7 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
   }
 
   @Test
-  public void createThreeColTwoPk() {
+  public void createThreeColTwoPk() throws  Exception {
     verifyCreateThreeColTwoPk(
         "CREATE TABLE `myTable` (" + System.lineSeparator() + "`pk1` INT NOT NULL," +
         System.lineSeparator() + "`pk2` INT NOT NULL," + System.lineSeparator() +
@@ -155,7 +162,7 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
-
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     verifyCreateThreeColTwoPk(
         "CREATE TABLE myTable (" + System.lineSeparator() + "pk1 INT NOT NULL," +
         System.lineSeparator() + "pk2 INT NOT NULL," + System.lineSeparator() +
@@ -175,7 +182,7 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
   }
 
   @Test
-  public void upsert() {
+  public void upsert() throws Exception {
     TableId actor = tableId("actor");
     String expected = "insert into `actor`(`actor_id`,`first_name`,`last_name`,`score`) " +
                       "values(?,?,?,?) on duplicate key update `first_name`=values(`first_name`)," +
@@ -187,7 +194,7 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
-
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     expected = "insert into actor(actor_id,first_name,last_name,score) " +
                "values(?,?,?,?) on duplicate key update first_name=values(first_name)," +
                "last_name=values(last_name),score=values(score)";

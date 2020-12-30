@@ -76,15 +76,20 @@ public class BufferedRecordsTest {
   }
 
   @Test
-  public void correctBatching() throws SQLException {
+  public void correctBatching() throws Exception {
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
     final String url = sqliteHelper.sqliteUri();
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+    Connection connection = dbDialect.getConnection();
+//    Method method = dbDialect.getClass().getSuperclass().getDeclaredMethod("setIdentifierRules", Connection.class);
+//    method.setAccessible(true);
+//    method.invoke(dbDialect, sqliteHelper.connection);
+
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
     final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
 
     final Schema schemaA = SchemaBuilder.struct()
         .field("name", Schema.STRING_SCHEMA)
@@ -133,10 +138,11 @@ public class BufferedRecordsTest {
 
     final String url = sqliteHelper.sqliteUri();
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+    Connection connection = dbDialect.getConnection();
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
     final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
 
     final Schema keySchemaA = SchemaBuilder.struct()
         .field("id", Schema.INT64_SCHEMA)
@@ -187,10 +193,11 @@ public class BufferedRecordsTest {
 
 	    final String url = sqliteHelper.sqliteUri();
 	    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+        Connection connection = dbDialect.getConnection();
 	    final DbStructure dbStructure = new DbStructure(dbDialect);
 
 	    final TableId tableId = new TableId(null, null, "dummy");
-	    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+	    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
 
 	    final Schema keySchemaA = SchemaBuilder.struct()
 	        .field("id", Schema.INT64_SCHEMA)
@@ -226,7 +233,7 @@ public class BufferedRecordsTest {
 
 	    // delete should not cause a flush (i.e. not treated as a schema change)
 	    assertEquals(Collections.emptyList(), buffer.add(recordADelete));
-	    
+
 	    // schema change and/or previous deletes should trigger flush
 	    assertEquals(Arrays.asList(recordA, recordA, recordADeleteWithSchema, recordADelete), buffer.add(recordB));
 
@@ -235,7 +242,7 @@ public class BufferedRecordsTest {
 
 	    assertEquals(Collections.singletonList(recordA), buffer.flush());
   }
-  
+
   @Test
   public void insertThenDeleteThenInsertInBatchFlush() throws SQLException {
     props.put("delete.enabled", true);
@@ -245,10 +252,11 @@ public class BufferedRecordsTest {
 
     final String url = sqliteHelper.sqliteUri();
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+    Connection connection = dbDialect.getConnection();
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
     final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
 
     final Schema keySchemaA = SchemaBuilder.struct()
         .field("id", Schema.INT64_SCHEMA)
@@ -299,10 +307,11 @@ public class BufferedRecordsTest {
 
 	    final String url = sqliteHelper.sqliteUri();
 	    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+        Connection connection = dbDialect.getConnection();
 	    final DbStructure dbStructure = new DbStructure(dbDialect);
 
 	    final TableId tableId = new TableId(null, null, "dummy");
-	    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+	    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
 
 	    final Schema keySchemaA = SchemaBuilder.struct()
 	        .field("id", Schema.INT64_SCHEMA)
@@ -343,7 +352,7 @@ public class BufferedRecordsTest {
 
 	    assertEquals(Collections.singletonList(recordA), buffer.flush());
   }
-  
+
   @Test
   public void testMultipleDeletesBatchedTogether() throws SQLException {
     props.put("delete.enabled", true);
@@ -353,10 +362,11 @@ public class BufferedRecordsTest {
 
     final String url = sqliteHelper.sqliteUri();
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+    Connection connection = dbDialect.getConnection();
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
     final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
 
     final Schema keySchemaA = SchemaBuilder.struct()
         .field("id", Schema.INT64_SCHEMA)
@@ -405,10 +415,11 @@ public class BufferedRecordsTest {
 
 	    final String url = sqliteHelper.sqliteUri();
 	    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+        Connection connection = dbDialect.getConnection();
 	    final DbStructure dbStructure = new DbStructure(dbDialect);
 
 	    final TableId tableId = new TableId(null, null, "dummy");
-	    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+	    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
 
 	    final Schema keySchemaA = SchemaBuilder.struct()
 	        .field("id", Schema.INT64_SCHEMA)
@@ -440,7 +451,7 @@ public class BufferedRecordsTest {
 
 	    // schema change should trigger flush
 	    assertEquals(Collections.singletonList(recordB), buffer.add(recordADeleteWithSchema));
-	    
+
 	    // schema change should trigger flush
 	    assertEquals(Collections.singletonList(recordADeleteWithSchema), buffer.add(recordBDeleteWithSchema));
 
@@ -449,14 +460,14 @@ public class BufferedRecordsTest {
 
 	    assertEquals(Collections.singletonList(recordB), buffer.flush());
   }
-  
+
   @Test
   public void testFlushSuccessNoInfo() throws SQLException {
     final String url = sqliteHelper.sqliteUri();
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
-
+    Connection connection = dbDialect.getConnection();
     int[] batchResponse = new int[2];
     batchResponse[0] = Statement.SUCCESS_NO_INFO;
     batchResponse[1] = Statement.SUCCESS_NO_INFO;
@@ -499,6 +510,7 @@ public class BufferedRecordsTest {
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+    Connection connection = dbDialect.getConnection();
     assertTrue(dbDialect instanceof SqliteDatabaseDialect);
     final DbStructure dbStructureMock = mock(DbStructure.class);
     when(dbStructureMock.createOrAmendIfNecessary(Matchers.any(JdbcSinkConfig.class),
@@ -775,10 +787,11 @@ public class BufferedRecordsTest {
 
     final String url = sqliteHelper.sqliteUri();
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+    Connection connection = dbDialect.getConnection();
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
     final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
 
     List<SinkRecord> flushed = buffer.add(record);
     assertEquals(Collections.emptyList(), flushed);

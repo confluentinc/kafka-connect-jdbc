@@ -29,6 +29,7 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.junit.Before;
 import org.junit.Test;
 
 import io.confluent.connect.jdbc.util.QuoteMethod;
@@ -37,6 +38,12 @@ import io.confluent.connect.jdbc.util.TableId;
 import static org.junit.Assert.assertEquals;
 
 public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDialect> {
+
+  @Before
+  public void setup() throws Exception {
+    super.setup();
+    initDefaultIdentifierRules(dialect);
+  }
 
   @Override
   protected OracleDatabaseDialect createDialect() {
@@ -119,7 +126,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
   }
 
   @Test
-  public void shouldBuildAlterTableStatement() {
+  public void shouldBuildAlterTableStatement() throws Exception {
     assertStatements(
         new String[]{
             "ALTER TABLE \"myTable\" ADD(\n" +
@@ -138,7 +145,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
-
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     assertStatements(
         new String[]{
             "ALTER TABLE myTable ADD(\n" +
@@ -187,7 +194,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
   }
 
   @Test
-  public void createThreeColTwoPk() {
+  public void createThreeColTwoPk() throws Exception {
     verifyCreateThreeColTwoPk(
         "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "\"pk1\" NUMBER(10,0) NOT NULL," +
         System.lineSeparator() + "\"pk2\" NUMBER(10,0) NOT NULL," + System.lineSeparator() +
@@ -196,7 +203,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
-
+    initDefaultIdentifierRules(dialect); //init IdentifierRules
     verifyCreateThreeColTwoPk(
         "CREATE TABLE myTable (" + System.lineSeparator() + "pk1 NUMBER(10,0) NOT NULL," +
         System.lineSeparator() + "pk2 NUMBER(10,0) NOT NULL," + System.lineSeparator() +

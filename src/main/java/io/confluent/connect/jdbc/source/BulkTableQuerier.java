@@ -40,13 +40,14 @@ public class BulkTableQuerier extends TableQuerier {
   private static final Logger log = LoggerFactory.getLogger(BulkTableQuerier.class);
 
   public BulkTableQuerier(
+      Connection connection,
       DatabaseDialect dialect,
       QueryMode mode,
       String name,
       String topicPrefix,
       String suffix
   ) {
-    super(dialect, mode, name, topicPrefix, suffix);
+    super(connection, dialect, mode, name, topicPrefix, suffix);
   }
 
   @Override

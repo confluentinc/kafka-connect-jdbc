@@ -194,7 +194,7 @@ public class JdbcSourceTask extends SourceTask {
         }
       }
 
-      String topicPrefix = config.getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG);
+      String topicPrefix = config.topicPrefix();
 
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(

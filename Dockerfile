@@ -10,7 +10,7 @@ RUN echo "===> Installing SQL Server connector" \
   && wget https://repo1.maven.org/maven2/com/microsoft/sqlserver/mssql-jdbc/6.4.0.jre8/mssql-jdbc-6.4.0.jre8.jar -O /usr/share/java/kafka-connect-jdbc/mssql-jdbc-6.4.0.jre8.jar
 
 RUN echo "===> Installing Redshift connector" \
-  && wget https://repository.mulesoft.org/nexus/content/repositories/public/com/amazon/redshift/redshift-jdbc42/1.2.1.1001/redshift-jdbc42-1.2.1.1001.jar --output /usr/share/java/kafka-connect-jdbc/redshift-jdbc42-1.2.1.1001.jar
+  && wget https://repository.mulesoft.org/nexus/content/repositories/public/com/amazon/redshift/redshift-jdbc42/1.2.1.1001/redshift-jdbc42-1.2.1.1001.jar -O /usr/share/java/kafka-connect-jdbc/redshift-jdbc42-1.2.1.1001.jar
 
 RUN echo "===> Collecting Jsch" \
   && wget -O /usr/share/java/kafka-connect-jdbc/jsch-0.1.51.jar https://repo1.maven.org/maven2/com/jcraft/jsch/0.1.55/jsch-0.1.55.jar

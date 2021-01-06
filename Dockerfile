@@ -9,6 +9,9 @@ RUN echo "===> Installing Oracle connector" \
 RUN echo "===> Installing SQL Server connector" \
   && wget https://repo1.maven.org/maven2/com/microsoft/sqlserver/mssql-jdbc/6.4.0.jre8/mssql-jdbc-6.4.0.jre8.jar -O /usr/share/java/kafka-connect-jdbc/mssql-jdbc-6.4.0.jre8.jar
 
+RUN echo "===> Installing Redshift connector" \
+  && wget https://mvnrepository.com/artifact/com.amazon.redshift/redshift-jdbc42/1.2.1.1001
+
 RUN echo "===> Collecting Jsch" \
   && wget -O /usr/share/java/kafka-connect-jdbc/jsch-0.1.51.jar https://repo1.maven.org/maven2/com/jcraft/jsch/0.1.55/jsch-0.1.55.jar
 
@@ -17,7 +20,6 @@ RUN echo "===> Collecting SNS" \
 
 RUN echo "===> Collecting S3" \
   && wget -O /usr/share/java/kafka-connect-jdbc/aws-java-sdk-s3-1.11.725.jar https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-s3/1.11.725/aws-java-sdk-s3-1.11.725.jar
-
 
 RUN echo "===> Collecting AWS core" \
   && wget -O /usr/share/java/kafka/aws-java-sdk-core-1.11.725.jar https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-core/1.11.725/aws-java-sdk-core-1.11.725.jar

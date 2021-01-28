@@ -15,6 +15,8 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import static org.easymock.EasyMock.anyObject;
+import static org.easymock.EasyMock.expect;
 import static org.easymock.EasyMock.expectLastCall;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -26,12 +28,15 @@ import java.io.StringWriter;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.concurrent.CompletableFuture;
 
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -39,6 +44,7 @@ import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.RetriableException;
+import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.easymock.EasyMockSupport;
@@ -291,4 +297,170 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     verifyAll();
   }
 
+  @Test
+  public void errorReporting() throws SQLException {
+    final int maxRetries = 0;
+    final int retryBackoffMs = 1000;
+
+    Set<SinkRecord> records = Collections.singleton(new SinkRecord("stub", 0, null, null, null, null, 0));
+    final JdbcDbWriter mockWriter = createMock(JdbcDbWriter.class);
+    SinkTaskContext ctx = createMock(SinkTaskContext.class);
+
+    mockWriter.write(records);
+    SQLException exception = new SQLException("cause 1");
+    expectLastCall().andThrow(exception);
+    mockWriter.write(anyObject());
+    expectLastCall().andThrow(exception);
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(ctx);
+    ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
+    expect(ctx.errantRecordReporter()).andReturn(reporter);
+    expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null));
+    replayAll();
+
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSinkConfig.CONNECTION_URL, "stub");
+    props.put(JdbcSinkConfig.MAX_RETRIES, String.valueOf(maxRetries));
+    props.put(JdbcSinkConfig.RETRY_BACKOFF_MS, String.valueOf(retryBackoffMs));
+    task.start(props);
+
+    task.put(records);
+
+    verifyAll();
+  }
+
+  @Test
+  public void errorReportingSchemaMisMatchException() throws SQLException {
+    final int maxRetries = 0;
+    final int retryBackoffMs = 1000;
+
+    Set<SinkRecord> records = Collections.singleton(new SinkRecord("stub", 0, null, null, null, null, 0));
+    final JdbcDbWriter mockWriter = createMock(JdbcDbWriter.class);
+    SinkTaskContext ctx = createMock(SinkTaskContext.class);
+
+    mockWriter.write(records);
+    SQLException exception = new SchemaMismatchException("cause 1");
+    expectLastCall().andThrow(exception);
+    mockWriter.write(anyObject());
+    expectLastCall().andThrow(exception);
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(ctx);
+    ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
+    expect(ctx.errantRecordReporter()).andReturn(reporter);
+    expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null));
+    replayAll();
+
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSinkConfig.CONNECTION_URL, "stub");
+    props.put(JdbcSinkConfig.MAX_RETRIES, String.valueOf(maxRetries));
+    props.put(JdbcSinkConfig.RETRY_BACKOFF_MS, String.valueOf(retryBackoffMs));
+    task.start(props);
+
+    task.put(records);
+
+    verifyAll();
+  }
+
+  @Test
+  public void batchErrorReporting() throws SQLException {
+    final int maxRetries = 0;
+    final int retryBackoffMs = 1000;
+    final int batchSize = 3;
+
+    List<SinkRecord> records = new ArrayList<>();
+    SinkRecord record = new SinkRecord("stub", 0, null, null, null, null, 0);
+
+    for (int i = 0; i < batchSize; i++) {
+      records.add(record);
+    }
+
+    final JdbcDbWriter mockWriter = createMock(JdbcDbWriter.class);
+    SinkTaskContext ctx = createMock(SinkTaskContext.class);
+
+    mockWriter.write(records);
+    SQLException exception = new SQLException("cause 1");
+    expectLastCall().andThrow(exception);
+    mockWriter.write(anyObject());
+    expectLastCall().andThrow(exception).times(batchSize);
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(ctx);
+    ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
+    expect(ctx.errantRecordReporter()).andReturn(reporter);
+    expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null)).times(batchSize);
+    replayAll();
+
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSinkConfig.CONNECTION_URL, "stub");
+    props.put(JdbcSinkConfig.MAX_RETRIES, String.valueOf(maxRetries));
+    props.put(JdbcSinkConfig.RETRY_BACKOFF_MS, String.valueOf(retryBackoffMs));
+    task.start(props);
+
+    task.put(records);
+
+    verifyAll();
+  }
+
+  @Test
+  public void oneInBatchErrorReporting() throws SQLException {
+    final int maxRetries = 0;
+    final int retryBackoffMs = 1000;
+    final int batchSize = 3;
+
+    List<SinkRecord> records = new ArrayList<>();
+    SinkRecord record = new SinkRecord("stub", 0, null, null, null, null, 0);
+
+    for (int i = 0; i < batchSize; i++) {
+      records.add(record);
+    }
+
+    final JdbcDbWriter mockWriter = createMock(JdbcDbWriter.class);
+    SinkTaskContext ctx = createMock(SinkTaskContext.class);
+
+    mockWriter.write(records);
+    SQLException exception = new SQLException("cause 1");
+    expectLastCall().andThrow(exception);
+    mockWriter.write(anyObject());
+    expectLastCall().times(2);
+    expectLastCall().andThrow(exception);
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(ctx);
+    ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
+    expect(ctx.errantRecordReporter()).andReturn(reporter);
+    expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null));
+    replayAll();
+
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSinkConfig.CONNECTION_URL, "stub");
+    props.put(JdbcSinkConfig.MAX_RETRIES, String.valueOf(maxRetries));
+    props.put(JdbcSinkConfig.RETRY_BACKOFF_MS, String.valueOf(retryBackoffMs));
+    task.start(props);
+
+    task.put(records);
+
+    verifyAll();
+  }
 }

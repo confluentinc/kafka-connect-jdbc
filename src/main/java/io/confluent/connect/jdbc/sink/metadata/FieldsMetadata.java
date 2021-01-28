@@ -56,6 +56,10 @@ public class FieldsMetadata {
     this.allFields = allFields;
   }
 
+  public Map<String, SinkRecordField> getAllFields() {
+    return allFields;
+  }
+
   public static FieldsMetadata extract(
       final String tableName,
       final JdbcSinkConfig.PrimaryKeyMode pkMode,

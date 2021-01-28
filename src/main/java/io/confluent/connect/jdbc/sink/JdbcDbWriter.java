@@ -59,7 +59,7 @@ public class JdbcDbWriter {
     };
   }
 
-  void write(final Collection<SinkRecord> records) throws SQLException {
+  void write(final Collection<SinkRecord> records) throws SQLException, SchemaMismatchException {
     final Connection connection = cachedConnectionProvider.getConnection();
 
     final Map<TableId, BufferedRecords> bufferByTable = new HashMap<>();

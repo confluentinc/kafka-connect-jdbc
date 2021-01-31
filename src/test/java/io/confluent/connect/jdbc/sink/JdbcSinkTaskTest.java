@@ -241,14 +241,14 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
       }
     };
     task.initialize(ctx);
+    expect(ctx.errantRecordReporter()).andReturn(null);
+    replayAll();
 
     Map<String, String> props = new HashMap<>();
     props.put(JdbcSinkConfig.CONNECTION_URL, "stub");
     props.put(JdbcSinkConfig.MAX_RETRIES, String.valueOf(maxRetries));
     props.put(JdbcSinkConfig.RETRY_BACKOFF_MS, String.valueOf(retryBackoffMs));
     task.start(props);
-
-    replayAll();
 
     try {
       task.put(records);

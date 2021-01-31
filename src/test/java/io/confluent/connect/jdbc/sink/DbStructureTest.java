@@ -73,7 +73,7 @@ public class DbStructureTest {
     when(tableDefinition.type()).thenReturn(TableType.TABLE);
 
     FieldsMetadata fieldsMetadata = mock(FieldsMetadata.class);
-    when(fieldsMetadata.getAllFields()).thenReturn(mock(Map.class));
+    when(fieldsMetadata.getAllFields()).thenReturn(new HashMap<>());
 
     SinkRecordField sinkRecordField = new SinkRecordField(
         Schema.OPTIONAL_INT32_SCHEMA,
@@ -110,7 +110,7 @@ public class DbStructureTest {
     when(tableDefinition.type()).thenReturn(TableType.TABLE);
 
     FieldsMetadata fieldsMetadata = mock(FieldsMetadata.class);
-    when(fieldsMetadata.getAllFields()).thenReturn(mock(Map.class));
+    when(fieldsMetadata.getAllFields()).thenReturn(new HashMap<>());
 
     SinkRecordField sinkRecordField = new SinkRecordField(
         Schema.INT32_SCHEMA,
@@ -133,7 +133,7 @@ public class DbStructureTest {
     when(tableDefinition.type()).thenReturn(TableType.TABLE);
 
     FieldsMetadata fieldsMetadata = mock(FieldsMetadata.class);
-    when(fieldsMetadata.getAllFields()).thenReturn(mock(Map.class));
+    when(fieldsMetadata.getAllFields()).thenReturn(new HashMap<>());
 
     SinkRecordField sinkRecordField = new SinkRecordField(
         Schema.OPTIONAL_INT32_SCHEMA,

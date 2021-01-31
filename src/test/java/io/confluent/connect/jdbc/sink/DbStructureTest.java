@@ -1,9 +1,7 @@
 package io.confluent.connect.jdbc.sink;
 
 import org.apache.kafka.connect.data.Schema;
-import org.eclipse.jetty.util.Fields;
 import org.junit.Test;
-import sun.tools.jconsole.Tab;
 
 import java.sql.Connection;
 import java.sql.SQLException;

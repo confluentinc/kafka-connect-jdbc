@@ -15,28 +15,29 @@
 
 package io.confluent.connect.jdbc.sink.integration;
 
-import static junit.framework.TestCase.assertTrue;
+import static org.apache.kafka.connect.runtime.ConnectorConfig.ERRORS_TOLERANCE_CONFIG;
+import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_NAME_CONFIG;
+import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_REPLICATION_FACTOR_CONFIG;
+import static org.apache.kafka.test.TestUtils.waitForCondition;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.fail;
 
 import io.confluent.common.utils.IntegrationTest;
+import io.confluent.connect.jdbc.integration.BaseConnectorIT;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
-import io.confluent.connect.jdbc.sink.JdbcSinkTask;
 import io.zonky.test.db.postgres.junit.EmbeddedPostgresRules;
 import io.zonky.test.db.postgres.junit.SingleInstancePostgresRule;
+
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.Optional;
+
+import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
-import org.apache.kafka.connect.errors.ConnectException;
-import org.apache.kafka.connect.sink.SinkRecord;
+import org.apache.kafka.connect.runtime.errors.ToleranceType;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -49,23 +50,23 @@ import org.slf4j.LoggerFactory;
  * Integration tests for writing to Postgres views.
  */
 @Category(IntegrationTest.class)
-public class PostgresViewIT {
+public class PostgresViewIT extends BaseConnectorIT  {
 
   private static Logger log = LoggerFactory.getLogger(PostgresViewIT.class);
 
   @Rule
   public SingleInstancePostgresRule pg = EmbeddedPostgresRules.singleInstance();
 
-  private Map<String, String> props;
   private String tableName;
   private String topic;
-  private JdbcSinkTask task;
 
   @Before
   public void before() {
+    startConnect();
+    setUpForSinkIt();
+
     tableName = "test";
     topic = tableName + "_view";
-    props = new HashMap<>();
     String jdbcURL = String
         .format("jdbc:postgresql://localhost:%s/postgres", pg.getEmbeddedPostgres().getPort());
     props.put(JdbcSinkConfig.CONNECTION_URL, jdbcURL);
@@ -73,11 +74,14 @@ public class PostgresViewIT {
     props.put(JdbcSinkConfig.TABLE_TYPES_CONFIG, "VIEW");
     props.put("pk.mode", "none");
     props.put("topics", topic);
+
+    // create topic in Kafka
+    connect.kafka().createTopic(topic, 1);
   }
 
   @After
   public void after() throws SQLException {
-    stopTask();
+   stopConnect();
     try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
       try (Statement s = c.createStatement()) {
         s.execute("DROP VIEW " + topic);
@@ -88,9 +92,15 @@ public class PostgresViewIT {
   }
 
   @Test
-  public void testRecordSchemaMoreFieldsThanViewFails() throws SQLException {
+  public void testRecordSchemaMoreFieldsThanViewSendsToErrorReporter() throws Exception {
+    props.put(ERRORS_TOLERANCE_CONFIG, ToleranceType.ALL.value());
+    props.put(DLQ_TOPIC_NAME_CONFIG, DLQ_TOPIC_NAME);
+    props.put(DLQ_TOPIC_REPLICATION_FACTOR_CONFIG, "1");
+
+    connect.configureConnector("jdbc-sink-connector", props);
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+
     createTestTableAndView("firstName");
-    startTask();
     final Schema schema = SchemaBuilder.struct().name("com.example.Person")
         .field("firstname", Schema.STRING_SCHEMA)
         .field("lastname", Schema.STRING_SCHEMA)
@@ -100,39 +110,54 @@ public class PostgresViewIT {
         .put("firstname", "Christina")
         .put("lastname", "Brams")
         .put("age", 20);
-    try {
-      task.put(Collections.singleton(new SinkRecord(topic, 1, null, null, schema, struct, 1)));
-      fail();
-    } catch (ConnectException e) {
-      assertTrue(e.getMessage().contains("View \"" + topic + "\" is missing fields"));
-    }
+
+    String kafkaValue = new String(jsonConverter.fromConnectData(topic, schema, struct));
+    connect.kafka().produce(topic, null, kafkaValue);
+
+    ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(1, CONSUME_MAX_DURATION_MS, DLQ_TOPIC_NAME);
+
+    assertEquals(1, records.count());
   }
 
   @Test
-  public void testRecordSchemaLessFieldsThanView() throws SQLException {
+  public void testRecordSchemaLessFieldsThanView() throws Exception {
+    connect.configureConnector("jdbc-sink-connector", props);
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+
     createTestTableAndView("firstName, lastName");
-    startTask();
     final Schema schema = SchemaBuilder.struct().name("com.example.Person")
         .field("firstname", Schema.STRING_SCHEMA)
         .build();
     final Struct struct = new Struct(schema)
         .put("firstname", "Christina");
-    task.put(Collections.singleton(new SinkRecord(topic, 1, null, null, schema, struct, 1)));
-    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
-      try (Statement s = c.createStatement()) {
-        try (ResultSet rs = s.executeQuery("SELECT * FROM " + topic)) {
-          assertTrue(rs.next());
-          assertEquals(struct.getString("firstname"), rs.getString("firstname"));
-          assertNull(rs.getString("lastname"));
-        }
-      }
-    }
+
+    String kafkaValue = new String(jsonConverter.fromConnectData(topic, schema, struct));
+    connect.kafka().produce(topic, null, kafkaValue);
+
+    waitForCondition(
+        () -> {
+          try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
+            try (Statement s = c.createStatement()) {
+              try (ResultSet rs = s.executeQuery("SELECT * FROM " + topic)) {
+                boolean result = rs.next()
+                    && struct.getString("firstname").equals(rs.getString("firstname"))
+                    && rs.getString("lastname") == null;
+                return Optional.of(result).orElse(false);
+              }
+            }
+          }
+        },
+        VERIFY_MAX_DURATION_MS,
+        "The database content did not match the record's content."
+    );
   }
 
   @Test
-  public void testWriteToView() throws SQLException {
+  public void testWriteToView() throws Exception {
+    connect.configureConnector("jdbc-sink-connector", props);
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+
     createTestTableAndView("firstName, lastName");
-    startTask();
     final Schema schema = SchemaBuilder.struct().name("com.example.Person")
         .field("firstname", Schema.STRING_SCHEMA)
         .field("lastname", Schema.STRING_SCHEMA)
@@ -140,16 +165,26 @@ public class PostgresViewIT {
     final Struct struct = new Struct(schema)
         .put("firstname", "Christina")
         .put("lastname", "Brams");
-    task.put(Collections.singleton(new SinkRecord(topic, 1, null, null, schema, struct, 1)));
-    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
-      try (Statement s = c.createStatement()) {
-        try (ResultSet rs = s.executeQuery("SELECT * FROM " + topic)) {
-          assertTrue(rs.next());
-          assertEquals(struct.getString("firstname"), rs.getString("firstname"));
-          assertEquals(struct.getString("lastname"), rs.getString("lastname"));
-        }
-      }
-    }
+
+    String kafkaValue = new String(jsonConverter.fromConnectData(topic, schema, struct));
+    connect.kafka().produce(topic, null, kafkaValue);
+
+    waitForCondition(
+        () -> {
+          try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
+            try (Statement s = c.createStatement()) {
+              try (ResultSet rs = s.executeQuery("SELECT * FROM " + topic)) {
+                boolean result = rs.next()
+                    && struct.getString("firstname").equals(rs.getString("firstname"))
+                    && struct.getString("lastname").equals(rs.getString("lastname"));
+                return Optional.of(result).orElse(false);
+              }
+            }
+          }
+        },
+        VERIFY_MAX_DURATION_MS,
+        "The database content did not match the record's content."
+    );
   }
 
   private void createTestTableAndView(String viewFields) throws SQLException {
@@ -163,16 +198,5 @@ public class PostgresViewIT {
       }
     }
     log.info("Created table and view");
-  }
-
-  private void startTask() {
-    task = new JdbcSinkTask();
-    task.start(props);
-  }
-
-  public void stopTask() {
-    if (task != null) {
-      task.stop();
-    }
   }
 }

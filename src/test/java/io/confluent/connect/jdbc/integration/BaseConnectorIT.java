@@ -15,11 +15,18 @@
 
 package io.confluent.connect.jdbc.integration;
 
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.runtime.AbstractStatus;
 import org.apache.kafka.connect.runtime.rest.entities.ConnectorStateInfo;
+import org.apache.kafka.connect.storage.ConverterConfig;
+import org.apache.kafka.connect.storage.ConverterType;
+import org.apache.kafka.connect.storage.StringConverter;
 import org.apache.kafka.connect.util.clusters.EmbeddedConnectCluster;
 import org.apache.kafka.test.IntegrationTest;
 import org.apache.kafka.test.TestUtils;
@@ -27,14 +34,26 @@ import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.kafka.connect.runtime.ConnectorConfig.CONNECTOR_CLASS_CONFIG;
+import static org.apache.kafka.connect.runtime.ConnectorConfig.KEY_CONVERTER_CLASS_CONFIG;
+import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
+
 @Category(IntegrationTest.class)
 public abstract class BaseConnectorIT {
+
+    public static final String DLQ_TOPIC_NAME = "dlq-topic";
+    public static final long CONSUME_MAX_DURATION_MS = 30000;
+    public static final long VERIFY_MAX_DURATION_MS = 20000;
 
     private static final Logger log = LoggerFactory.getLogger(BaseConnectorIT.class);
 
     protected static final long CONNECTOR_STARTUP_DURATION_MS = TimeUnit.SECONDS.toMillis(60);
 
     protected EmbeddedConnectCluster connect;
+
+    public JsonConverter jsonConverter;
+    public Map<String, String> props;
+
 
     protected void startConnect() {
         connect = new EmbeddedConnectCluster.Builder()
@@ -43,6 +62,24 @@ public abstract class BaseConnectorIT {
 
         // start the clusters
         connect.start();
+    }
+
+    protected void setUpForSinkIt() {
+        jsonConverter = new JsonConverter();
+        jsonConverter.configure(Collections.singletonMap(
+            ConverterConfig.TYPE_CONFIG,
+            ConverterType.VALUE.getName()
+        ));
+
+        props = new HashMap<>();
+        props.put(CONNECTOR_CLASS_CONFIG, "JdbcSinkConnector");
+        // converters
+        props.put(KEY_CONVERTER_CLASS_CONFIG, StringConverter.class.getName());
+        props.put(VALUE_CONVERTER_CLASS_CONFIG, JsonConverter.class.getName());
+        // license properties
+        props.put("confluent.topic.bootstrap.servers", connect.kafka().bootstrapServers());
+        props.put("confluent.topic.replication.factor", "1");
+
     }
 
     protected void stopConnect() {

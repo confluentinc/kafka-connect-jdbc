@@ -90,7 +90,9 @@ public class JdbcSinkTask extends SinkTask {
       SQLException sqlAllMessagesException = new SQLException(sqleAllMessages);
       sqlAllMessagesException.setNextException(sqle);
       if (remainingRetries == 0) {
-        log.error("Failing task after exhausting retries; encountered {} exceptions on last write attempt", totalExceptions);
+        log.error(
+          "Failing task after exhausting retries; encountered {} exceptions on last write attempt",
+          totalExceptions);
         int exceptionCount = 1;
         for (Throwable e : sqle) {
           log.error("Exception {}:", exceptionCount++, e);

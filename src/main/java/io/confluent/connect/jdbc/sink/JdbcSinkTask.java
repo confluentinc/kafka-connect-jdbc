@@ -82,12 +82,23 @@ public class JdbcSinkTask extends SinkTask {
           sqle
       );
       String sqleAllMessages = "Exception chain:" + System.lineSeparator();
+      int totalExceptions = 0;
       for (Throwable e : sqle) {
         sqleAllMessages += e + System.lineSeparator();
+        totalExceptions++;
       }
       SQLException sqlAllMessagesException = new SQLException(sqleAllMessages);
       sqlAllMessagesException.setNextException(sqle);
       if (remainingRetries == 0) {
+        log.error(
+            "Failing task after exhausting retries; "
+              + "encountered {} exceptions on last write attempt. "
+              + "For complete details on each exception, please enable DEBUG logging.",
+            totalExceptions);
+        int exceptionCount = 1;
+        for (Throwable e : sqle) {
+          log.debug("Exception {}:", exceptionCount++, e);
+        }
         throw new ConnectException(sqlAllMessagesException);
       } else {
         writer.closeQuietly();

@@ -83,13 +83,13 @@ public class GenericDatabaseDialectTypeTest extends BaseDialectTypeTest<GenericD
             {Schema.Type.BYTES, BIG_DECIMAL, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NULLABLE, Types.NUMERIC, 19, -1 },
 
             // floating point - fitting - non optional
-            {Schema.Type.FLOAT64, DOUBLE, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NOT_NULLABLE, Types.NUMERIC, 18, 127 },
-            {Schema.Type.FLOAT64, DOUBLE, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NOT_NULLABLE, Types.NUMERIC, 8, 1 },
+            {Schema.Type.BYTES, BIG_DECIMAL, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NOT_NULLABLE, Types.NUMERIC, 18, 127 },
+            {Schema.Type.BYTES, BIG_DECIMAL, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NOT_NULLABLE, Types.NUMERIC, 8, 1 },
             {Schema.Type.BYTES, BIG_DECIMAL, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NOT_NULLABLE, Types.NUMERIC, 19, 1 },
 
             // floating point - fitting - optional
-            {Schema.Type.FLOAT64, DOUBLE, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NULLABLE, Types.NUMERIC, 18, 127 },
-            {Schema.Type.FLOAT64, DOUBLE, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NULLABLE, Types.NUMERIC, 8, 1 },
+            {Schema.Type.BYTES, BIG_DECIMAL, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NULLABLE, Types.NUMERIC, 18, 127 },
+            {Schema.Type.BYTES, BIG_DECIMAL, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NULLABLE, Types.NUMERIC, 8, 1 },
             {Schema.Type.BYTES, BIG_DECIMAL, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NULLABLE, Types.NUMERIC, 19, 1 },
 
             }

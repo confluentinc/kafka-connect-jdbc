@@ -120,7 +120,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     }
   }
 
-  protected final Logger log = LoggerFactory.getLogger(getClass());
+  private final Logger log = LoggerFactory.getLogger(GenericDatabaseDialect.class);
   protected final AbstractConfig config;
 
   /**

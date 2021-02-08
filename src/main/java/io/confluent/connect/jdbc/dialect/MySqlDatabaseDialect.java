@@ -35,11 +35,16 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.TableId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A {@link DatabaseDialect} for MySQL.
  */
 public class MySqlDatabaseDialect extends GenericDatabaseDialect {
+
+  private final Logger log = LoggerFactory.getLogger(MySqlDatabaseDialect.class);
+
   /**
    * The provider for {@link MySqlDatabaseDialect}.
    */

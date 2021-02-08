@@ -120,7 +120,12 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     }
   }
 
-  private final Logger log = LoggerFactory.getLogger(GenericDatabaseDialect.class);
+  // This field should be private as it should only be used by this class and subclasses should
+  // instantiate their own loggers. However, it was originally declared as protected, and changing
+  // it to private now would break existing dialects that inherit from this class and rely on this
+  // field. So we leave it as protected now, but strongly recommend that all dialects use their own
+  // loggers (as all dialects in this code base do).
+  protected final Logger log = LoggerFactory.getLogger(GenericDatabaseDialect.class);
   protected final AbstractConfig config;
 
   /**

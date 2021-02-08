@@ -97,10 +97,10 @@ public class PostgresViewIT extends BaseConnectorIT  {
     props.put(DLQ_TOPIC_NAME_CONFIG, DLQ_TOPIC_NAME);
     props.put(DLQ_TOPIC_REPLICATION_FACTOR_CONFIG, "1");
 
+    createTestTableAndView("firstName");
     connect.configureConnector("jdbc-sink-connector", props);
     waitForConnectorToStart("jdbc-sink-connector", 1);
 
-    createTestTableAndView("firstName");
     final Schema schema = SchemaBuilder.struct().name("com.example.Person")
         .field("firstname", Schema.STRING_SCHEMA)
         .field("lastname", Schema.STRING_SCHEMA)
@@ -121,10 +121,10 @@ public class PostgresViewIT extends BaseConnectorIT  {
 
   @Test
   public void testRecordSchemaLessFieldsThanView() throws Exception {
+    createTestTableAndView("firstName, lastName");
     connect.configureConnector("jdbc-sink-connector", props);
     waitForConnectorToStart("jdbc-sink-connector", 1);
 
-    createTestTableAndView("firstName, lastName");
     final Schema schema = SchemaBuilder.struct().name("com.example.Person")
         .field("firstname", Schema.STRING_SCHEMA)
         .build();
@@ -154,10 +154,10 @@ public class PostgresViewIT extends BaseConnectorIT  {
 
   @Test
   public void testWriteToView() throws Exception {
+    createTestTableAndView("firstName, lastName");
     connect.configureConnector("jdbc-sink-connector", props);
     waitForConnectorToStart("jdbc-sink-connector", 1);
 
-    createTestTableAndView("firstName, lastName");
     final Schema schema = SchemaBuilder.struct().name("com.example.Person")
         .field("firstname", Schema.STRING_SCHEMA)
         .field("lastname", Schema.STRING_SCHEMA)

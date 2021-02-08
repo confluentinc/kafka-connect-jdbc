@@ -96,10 +96,10 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     props.put(DLQ_TOPIC_NAME_CONFIG, DLQ_TOPIC_NAME);
     props.put(DLQ_TOPIC_REPLICATION_FACTOR_CONFIG, "1");
 
+    createTableWithLessFields();
     connect.configureConnector("jdbc-sink-connector", props);
     waitForConnectorToStart("jdbc-sink-connector", 1);
 
-    createTableWithLessFields();
     final Schema schema = SchemaBuilder.struct().name("com.example.Person")
         .field("firstname", Schema.STRING_SCHEMA)
         .field("lastname", Schema.STRING_SCHEMA)
@@ -124,10 +124,10 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
 
   @Test
   public void testWriteToTableWithUuidColumn() throws Exception {
+    createTableWithUuidColumns();
     connect.configureConnector("jdbc-sink-connector", props);
     waitForConnectorToStart("jdbc-sink-connector", 1);
 
-    createTableWithUuidColumns();
     final Schema schema = SchemaBuilder.struct().name("com.example.Person")
                                        .field("firstname", Schema.STRING_SCHEMA)
                                        .field("lastname", Schema.STRING_SCHEMA)

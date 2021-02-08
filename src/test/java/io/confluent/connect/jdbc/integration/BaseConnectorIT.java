@@ -79,7 +79,6 @@ public abstract class BaseConnectorIT {
         // license properties
         props.put("confluent.topic.bootstrap.servers", connect.kafka().bootstrapServers());
         props.put("confluent.topic.replication.factor", "1");
-
     }
 
     protected void stopConnect() {

@@ -404,6 +404,7 @@ public interface DatabaseDialect extends ConnectionProvider {
       JdbcSinkConfig.PrimaryKeyMode pkMode,
       SchemaPair schemaPair,
       FieldsMetadata fieldsMetadata,
+      TableDefinition tableDefinition,
       JdbcSinkConfig.InsertMode insertMode
   );
 
@@ -422,7 +423,8 @@ public interface DatabaseDialect extends ConnectionProvider {
       PreparedStatement statement,
       int index,
       Schema schema,
-      Object value
+      Object value,
+      ColumnDefinition colDef
   ) throws SQLException;
 
   /**

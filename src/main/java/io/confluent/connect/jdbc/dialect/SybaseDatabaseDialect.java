@@ -16,6 +16,7 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.util.ColumnDefinition;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -85,6 +86,7 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
     return "SELECT 1";
   }
 
+  @SuppressWarnings("checkstyle:CyclomaticComplexity")
   @Override
   protected String getSqlType(SinkRecordField field) {
     if (field.schemaName() != null) {
@@ -141,7 +143,8 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
       PreparedStatement statement,
       int index,
       Schema schema,
-      Object value
+      Object value,
+      ColumnDefinition colDef
   ) throws SQLException {
     // First handle non-standard bindings ...
     switch (schema.type()) {
@@ -154,7 +157,7 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
       default:
         break;
     }
-    return super.maybeBindPrimitive(statement, index, schema, value);
+    return super.maybeBindPrimitive(statement, index, schema, value, colDef);
   }
 
   @Override

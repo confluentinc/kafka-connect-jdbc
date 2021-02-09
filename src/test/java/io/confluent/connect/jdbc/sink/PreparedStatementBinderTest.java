@@ -16,7 +16,13 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.TableDefinition;
+import io.confluent.connect.jdbc.util.TableId;
+import java.sql.Types;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.TimeZone;
 import org.apache.kafka.connect.data.Date;
@@ -54,6 +60,7 @@ import io.confluent.connect.jdbc.util.DateTimeUtils;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class PreparedStatementBinderTest {
 
@@ -114,6 +121,56 @@ public class PreparedStatementBinderTest {
     FieldsMetadata fieldsMetadata = FieldsMetadata.extract("people", pkMode, pkFields, Collections.<String>emptySet(), schemaPair);
 
     PreparedStatement statement = mock(PreparedStatement.class);
+    TableId tabId = new TableId("ORCL", "ADMIN", "people");
+    List<ColumnDefinition> colDefs = new ArrayList<>();
+    for (int i = 0; i < 14; i++) {
+      colDefs.add(mock(ColumnDefinition.class));
+    }
+    when(colDefs.get(0).type()).thenReturn(Types.NVARCHAR);
+    when(colDefs.get(0).id()).thenReturn(new ColumnId(tabId, "firstName"));
+    when(colDefs.get(0).isPrimaryKey()).thenReturn(false);
+    when(colDefs.get(1).type()).thenReturn(Types.NVARCHAR);
+    when(colDefs.get(1).id()).thenReturn(new ColumnId(tabId, "lastName"));
+    when(colDefs.get(1).isPrimaryKey()).thenReturn(false);
+    when(colDefs.get(2).type()).thenReturn(Types.NUMERIC);
+    when(colDefs.get(2).id()).thenReturn(new ColumnId(tabId, "age"));
+    when(colDefs.get(2).isPrimaryKey()).thenReturn(false);
+    when(colDefs.get(3).type()).thenReturn(Types.NUMERIC);
+    when(colDefs.get(3).id()).thenReturn(new ColumnId(tabId, "bool"));
+    when(colDefs.get(3).isPrimaryKey()).thenReturn(false);
+    when(colDefs.get(4).type()).thenReturn(Types.NUMERIC);
+    when(colDefs.get(4).id()).thenReturn(new ColumnId(tabId, "short"));
+    when(colDefs.get(4).isPrimaryKey()).thenReturn(false);
+    when(colDefs.get(5).type()).thenReturn(Types.NUMERIC);
+    when(colDefs.get(5).id()).thenReturn(new ColumnId(tabId, "byte"));
+    when(colDefs.get(5).isPrimaryKey()).thenReturn(false);
+    when(colDefs.get(6).type()).thenReturn(Types.NUMERIC);
+    when(colDefs.get(6).id()).thenReturn(new ColumnId(tabId, "long"));
+    when(colDefs.get(6).isPrimaryKey()).thenReturn(true);
+    // BINARY_FLOAT = 100
+    when(colDefs.get(7).type()).thenReturn(100);
+    when(colDefs.get(7).id()).thenReturn(new ColumnId(tabId, "float"));
+    when(colDefs.get(7).isPrimaryKey()).thenReturn(false);
+    // BINARY_DOUBLE = 101
+    when(colDefs.get(8).type()).thenReturn(101);
+    when(colDefs.get(8).id()).thenReturn(new ColumnId(tabId, "double"));
+    when(colDefs.get(8).isPrimaryKey()).thenReturn(false);
+    when(colDefs.get(9).type()).thenReturn(Types.BLOB);
+    when(colDefs.get(9).id()).thenReturn(new ColumnId(tabId, "bytes"));
+    when(colDefs.get(9).isPrimaryKey()).thenReturn(false);
+    when(colDefs.get(10).type()).thenReturn(Types.NUMERIC);
+    when(colDefs.get(10).id()).thenReturn(new ColumnId(tabId, "decimal"));
+    when(colDefs.get(10).isPrimaryKey()).thenReturn(false);
+    when(colDefs.get(11).type()).thenReturn(Types.DATE);
+    when(colDefs.get(11).id()).thenReturn(new ColumnId(tabId, "date"));
+    when(colDefs.get(11).isPrimaryKey()).thenReturn(false);
+    when(colDefs.get(12).type()).thenReturn(Types.DATE);
+    when(colDefs.get(12).id()).thenReturn(new ColumnId(tabId, "time"));
+    when(colDefs.get(12).isPrimaryKey()).thenReturn(false);
+    when(colDefs.get(13).type()).thenReturn(Types.TIMESTAMP);
+    when(colDefs.get(13).id()).thenReturn(new ColumnId(tabId, "timestamp"));
+    when(colDefs.get(13).isPrimaryKey()).thenReturn(false);
+    TableDefinition tabDef = new TableDefinition(tabId, colDefs);
 
     PreparedStatementBinder binder = new PreparedStatementBinder(
         dialect,
@@ -121,6 +178,7 @@ public class PreparedStatementBinderTest {
         pkMode,
         schemaPair,
         fieldsMetadata,
+        tabDef,
         JdbcSinkConfig.InsertMode.INSERT
     );
 
@@ -159,80 +217,104 @@ public class PreparedStatementBinderTest {
 
     @Test
     public void bindRecordUpsertMode() throws SQLException, ParseException {
-        Schema valueSchema = SchemaBuilder.struct().name("com.example.Person")
-                .field("firstName", Schema.STRING_SCHEMA)
-                .field("long", Schema.INT64_SCHEMA)
-                .build();
+      Schema valueSchema = SchemaBuilder.struct().name("com.example.Person")
+              .field("firstName", Schema.STRING_SCHEMA)
+              .field("long", Schema.INT64_SCHEMA)
+              .build();
 
-        Struct valueStruct = new Struct(valueSchema)
-                .put("firstName", "Alex")
-                .put("long", (long) 12425436);
+      Struct valueStruct = new Struct(valueSchema)
+              .put("firstName", "Alex")
+              .put("long", (long) 12425436);
 
-        SchemaPair schemaPair = new SchemaPair(null, valueSchema);
+      SchemaPair schemaPair = new SchemaPair(null, valueSchema);
 
-        JdbcSinkConfig.PrimaryKeyMode pkMode = JdbcSinkConfig.PrimaryKeyMode.RECORD_VALUE;
+      JdbcSinkConfig.PrimaryKeyMode pkMode = JdbcSinkConfig.PrimaryKeyMode.RECORD_VALUE;
 
-        List<String> pkFields = Collections.singletonList("long");
+      List<String> pkFields = Collections.singletonList("long");
 
-        FieldsMetadata fieldsMetadata = FieldsMetadata.extract("people", pkMode, pkFields, Collections.<String>emptySet(), schemaPair);
+      FieldsMetadata fieldsMetadata = FieldsMetadata.extract("people", pkMode, pkFields, Collections.<String>emptySet(), schemaPair);
 
-        PreparedStatement statement = mock(PreparedStatement.class);
+      PreparedStatement statement = mock(PreparedStatement.class);
+      TableId tabId = new TableId("ORCL", "ADMIN", "people");
+      List<ColumnDefinition> colDefs = new ArrayList<>();
+      for (int i = 0; i < 2; i++) {
+        colDefs.add(mock(ColumnDefinition.class));
+      }
+      when(colDefs.get(0).type()).thenReturn(Types.NVARCHAR);
+      when(colDefs.get(0).id()).thenReturn(new ColumnId(tabId, "firstName"));
+      when(colDefs.get(0).isPrimaryKey()).thenReturn(false);
+      when(colDefs.get(1).type()).thenReturn(Types.NUMERIC);
+      when(colDefs.get(1).id()).thenReturn(new ColumnId(tabId, "long"));
+      when(colDefs.get(1).isPrimaryKey()).thenReturn(true);
+      TableDefinition tabDef = new TableDefinition(tabId, colDefs);
 
-        PreparedStatementBinder binder = new PreparedStatementBinder(
-                dialect,
-                statement,
-                pkMode,
-                schemaPair,
-                fieldsMetadata, JdbcSinkConfig.InsertMode.UPSERT
-        );
+      PreparedStatementBinder binder = new PreparedStatementBinder(
+              dialect,
+              statement,
+              pkMode,
+              schemaPair,
+              fieldsMetadata, tabDef, JdbcSinkConfig.InsertMode.UPSERT
+      );
 
-        binder.bindRecord(new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));
+      binder.bindRecord(new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));
 
-        int index = 1;
-        // key field first
-        verify(statement, times(1)).setLong(index++, valueStruct.getInt64("long"));
-        // rest in order of schema def
-        verify(statement, times(1)).setString(index++, valueStruct.getString("firstName"));
+      int index = 1;
+      // key field first
+      verify(statement, times(1)).setLong(index++, valueStruct.getInt64("long"));
+      // rest in order of schema def
+      verify(statement, times(1)).setString(index++, valueStruct.getString("firstName"));
     }
 
     @Test
     public void bindRecordUpdateMode() throws SQLException, ParseException {
-        Schema valueSchema = SchemaBuilder.struct().name("com.example.Person")
-                .field("firstName", Schema.STRING_SCHEMA)
-                .field("long", Schema.INT64_SCHEMA)
-                .build();
+      Schema valueSchema = SchemaBuilder.struct().name("com.example.Person")
+              .field("firstName", Schema.STRING_SCHEMA)
+              .field("long", Schema.INT64_SCHEMA)
+              .build();
 
-        Struct valueStruct = new Struct(valueSchema)
-                .put("firstName", "Alex")
-                .put("long", (long) 12425436);
+      Struct valueStruct = new Struct(valueSchema)
+              .put("firstName", "Alex")
+              .put("long", (long) 12425436);
 
-        SchemaPair schemaPair = new SchemaPair(null, valueSchema);
+      SchemaPair schemaPair = new SchemaPair(null, valueSchema);
 
-        JdbcSinkConfig.PrimaryKeyMode pkMode = JdbcSinkConfig.PrimaryKeyMode.RECORD_VALUE;
+      JdbcSinkConfig.PrimaryKeyMode pkMode = JdbcSinkConfig.PrimaryKeyMode.RECORD_VALUE;
 
-        List<String> pkFields = Collections.singletonList("long");
+      List<String> pkFields = Collections.singletonList("long");
 
-        FieldsMetadata fieldsMetadata = FieldsMetadata.extract("people", pkMode, pkFields,
-                Collections.<String>emptySet(), schemaPair);
+      FieldsMetadata fieldsMetadata = FieldsMetadata.extract("people", pkMode, pkFields,
+              Collections.<String>emptySet(), schemaPair);
 
-        PreparedStatement statement = mock(PreparedStatement.class);
+      PreparedStatement statement = mock(PreparedStatement.class);
+      TableId tabId = new TableId("ORCL", "ADMIN", "people");
+      List<ColumnDefinition> colDefs = new ArrayList<>();
+      for (int i = 0; i < 2; i++) {
+        colDefs.add(mock(ColumnDefinition.class));
+      }
+      when(colDefs.get(0).type()).thenReturn(Types.NVARCHAR);
+      when(colDefs.get(0).id()).thenReturn(new ColumnId(tabId, "firstName"));
+      when(colDefs.get(0).isPrimaryKey()).thenReturn(false);
+      when(colDefs.get(1).type()).thenReturn(Types.NUMERIC);
+      when(colDefs.get(1).id()).thenReturn(new ColumnId(tabId, "long"));
+      when(colDefs.get(1).isPrimaryKey()).thenReturn(true);
+      TableDefinition tabDef = new TableDefinition(tabId, colDefs);
 
-        PreparedStatementBinder binder = new PreparedStatementBinder(
-                dialect,
-                statement,
-                pkMode,
-                schemaPair,
-                fieldsMetadata, JdbcSinkConfig.InsertMode.UPDATE
-        );
+      PreparedStatementBinder binder = new PreparedStatementBinder(
+              dialect,
+              statement,
+              pkMode,
+              schemaPair,
+              fieldsMetadata, tabDef, JdbcSinkConfig.InsertMode.UPDATE
+      );
 
-        binder.bindRecord(new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));
+      binder.bindRecord(new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));
 
-        int index = 1;
+      int index = 1;
 
-        // non key first
-        verify(statement, times(1)).setString(index++, valueStruct.getString("firstName"));
-        // last the keys
-        verify(statement, times(1)).setLong(index++, valueStruct.getInt64("long"));
+      // non key first
+      verify(statement, times(1)).setString(index++, valueStruct.getString("firstName"));
+      // last the keys
+      verify(statement, times(1)).setLong(index++, valueStruct.getInt64("long"));
     }
 
 }

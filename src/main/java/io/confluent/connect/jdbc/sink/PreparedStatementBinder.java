@@ -16,6 +16,8 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.TableDefinition;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
@@ -38,6 +40,7 @@ public class PreparedStatementBinder implements StatementBinder {
   private final FieldsMetadata fieldsMetadata;
   private final JdbcSinkConfig.InsertMode insertMode;
   private final DatabaseDialect dialect;
+  private final TableDefinition tableDef;
 
   public PreparedStatementBinder(
       DatabaseDialect dialect,
@@ -45,6 +48,7 @@ public class PreparedStatementBinder implements StatementBinder {
       JdbcSinkConfig.PrimaryKeyMode pkMode,
       SchemaPair schemaPair,
       FieldsMetadata fieldsMetadata,
+      TableDefinition tableDef,
       JdbcSinkConfig.InsertMode insertMode
   ) {
     this.dialect = dialect;
@@ -53,6 +57,7 @@ public class PreparedStatementBinder implements StatementBinder {
     this.schemaPair = schemaPair;
     this.fieldsMetadata = fieldsMetadata;
     this.insertMode = insertMode;
+    this.tableDef = tableDef;
   }
 
   @Override
@@ -93,20 +98,21 @@ public class PreparedStatementBinder implements StatementBinder {
 
       case KAFKA: {
         assert fieldsMetadata.keyFieldNames.size() == 3;
-        bindField(index++, Schema.STRING_SCHEMA, record.topic());
-        bindField(index++, Schema.INT32_SCHEMA, record.kafkaPartition());
-        bindField(index++, Schema.INT64_SCHEMA, record.kafkaOffset());
+        bindField(index++, Schema.STRING_SCHEMA, record.topic(), null);
+        bindField(index++, Schema.INT32_SCHEMA, record.kafkaPartition(), null);
+        bindField(index++, Schema.INT64_SCHEMA, record.kafkaOffset(), null);
       }
       break;
 
       case RECORD_KEY: {
         if (schemaPair.keySchema.type().isPrimitive()) {
           assert fieldsMetadata.keyFieldNames.size() == 1;
-          bindField(index++, schemaPair.keySchema, record.key());
+          bindField(index++, schemaPair.keySchema, record.key(), null);
         } else {
           for (String fieldName : fieldsMetadata.keyFieldNames) {
             final Field field = schemaPair.keySchema.field(fieldName);
-            bindField(index++, field.schema(), ((Struct) record.key()).get(field));
+            bindField(index++, field.schema(), ((Struct) record.key()).get(field),
+                tableDef.definitionForColumn(fieldName));
           }
         }
       }
@@ -115,7 +121,8 @@ public class PreparedStatementBinder implements StatementBinder {
       case RECORD_VALUE: {
         for (String fieldName : fieldsMetadata.keyFieldNames) {
           final Field field = schemaPair.valueSchema.field(fieldName);
-          bindField(index++, field.schema(), ((Struct) record.value()).get(field));
+          bindField(index++, field.schema(), ((Struct) record.value()).get(field),
+              tableDef.definitionForColumn(fieldName));
         }
       }
       break;
@@ -133,12 +140,14 @@ public class PreparedStatementBinder implements StatementBinder {
   ) throws SQLException {
     for (final String fieldName : fieldsMetadata.nonKeyFieldNames) {
       final Field field = record.valueSchema().field(fieldName);
-      bindField(index++, field.schema(), valueStruct.get(field));
+      bindField(index++, field.schema(), valueStruct.get(field),
+          tableDef.definitionForColumn(fieldName));
     }
     return index;
   }
 
-  protected void bindField(int index, Schema schema, Object value) throws SQLException {
-    dialect.bindField(statement, index, schema, value);
+  protected void bindField(int index, Schema schema, Object value, ColumnDefinition colDef)
+      throws SQLException {
+    dialect.bindField(statement, index, schema, value, colDef);
   }
 }

@@ -16,8 +16,13 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import java.io.ByteArrayInputStream;
+import java.io.StringReader;
+import java.nio.ByteBuffer;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Types;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -37,6 +42,7 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.TableId;
+import org.apache.kafka.connect.errors.ConnectException;
 
 /**
  * A {@link DatabaseDialect} for Oracle.
@@ -81,13 +87,38 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       PreparedStatement statement,
       int index,
       Schema schema,
-      Object value
+      Object value,
+      ColumnDefinition colDef
   ) throws SQLException {
+    if (colDef == null) {
+      return super.maybeBindPrimitive(statement, index, schema, value, colDef);
+    }
+
     if (schema.type() == Type.STRING) {
-      statement.setNString(index, (String) value);
+      if (colDef.type() == Types.CLOB || colDef.type() == Types.NCLOB) {
+        statement.setCharacterStream(index, new StringReader((String) value));
+        return true;
+      } else if (colDef.type() == Types.NVARCHAR) {
+        statement.setNString(index, (String) value);
+        return true;
+      } else {
+        return super.maybeBindPrimitive(statement, index, schema, value, colDef);
+      }
+    }
+
+    if (schema.type() == Type.BYTES && colDef.type() == Types.BLOB) {
+      if (value instanceof ByteBuffer) {
+        statement.setBlob(index, new ByteArrayInputStream(((ByteBuffer) value).array()));
+      } else if (value instanceof byte[]) {
+        statement.setBlob(index, new ByteArrayInputStream((byte[]) value));
+      } else {
+        throw new ConnectException(
+            "Binary column can only take value of byte array or byte buffer"
+        );
+      }
       return true;
     }
-    return super.maybeBindPrimitive(statement, index, schema, value);
+    return super.maybeBindPrimitive(statement, index, schema, value, colDef);
   }
 
   @SuppressWarnings("checkstyle:CyclomaticComplexity")
@@ -98,7 +129,6 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
         case Decimal.LOGICAL_NAME:
           return "NUMBER(*," + field.schemaParameters().get(Decimal.SCALE_FIELD) + ")";
         case Date.LOGICAL_NAME:
-          return "DATE";
         case Time.LOGICAL_NAME:
           return "DATE";
         case Timestamp.LOGICAL_NAME:

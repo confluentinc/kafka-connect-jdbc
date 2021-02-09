@@ -103,6 +103,7 @@ public class BufferedRecords {
           config.pkMode,
           schemaPair,
           fieldsMetadata,
+          dbStructure.tableDefinition(connection, tableId),
           config.insertMode
       );
     }
@@ -130,6 +131,7 @@ public class BufferedRecords {
     return flushed;
   }
 
+  @SuppressWarnings("checkstyle:CyclomaticComplexity")
   public List<SinkRecord> flush() throws SQLException {
     if (records.isEmpty()) {
       log.debug("Records is empty");

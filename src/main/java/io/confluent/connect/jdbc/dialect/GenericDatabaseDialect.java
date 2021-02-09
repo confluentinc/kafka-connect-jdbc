@@ -98,6 +98,7 @@ import io.confluent.connect.jdbc.util.TableId;
  * how a column value is converted to a field value for use in a {@link Struct}. To also change the
  * field's type or schema, also override the {@link #addFieldToSchema} method.
  */
+@SuppressWarnings("checkstyle:ClassDataAbstractionCoupling")
 public class GenericDatabaseDialect implements DatabaseDialect {
 
   protected static final int NUMERIC_TYPE_SCALE_LOW = -84;
@@ -816,6 +817,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
    * @param isPrimaryKey     true if the column is part of the primary key; null if not known known
    * @return the column definition; never null
    */
+  @SuppressWarnings("checkstyle:ParameterNumber")
   protected ColumnDefinition columnDefinition(
       ResultSet resultSet,
       ColumnId id,
@@ -893,7 +895,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
    * @param optional   true if the field is to be optional as obtained from the column definition
    * @return the name of the field, or null if no field was added
    */
-  @SuppressWarnings("fallthrough")
+  @SuppressWarnings({"fallthrough", "checkstyle:CyclomaticComplexity"})
   protected String addFieldToSchema(
       final ColumnDefinition columnDefn,
       final SchemaBuilder builder,
@@ -1434,6 +1436,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       PrimaryKeyMode pkMode,
       SchemaPair schemaPair,
       FieldsMetadata fieldsMetadata,
+      TableDefinition tableDef,
       InsertMode insertMode
   ) {
     return new PreparedStatementBinder(
@@ -1442,6 +1445,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         pkMode,
         schemaPair,
         fieldsMetadata,
+        tableDef,
         insertMode
     );
   }
@@ -1451,14 +1455,15 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       PreparedStatement statement,
       int index,
       Schema schema,
-      Object value
+      Object value,
+      ColumnDefinition colDef
   ) throws SQLException {
     if (value == null) {
       statement.setObject(index, null);
     } else {
       boolean bound = maybeBindLogical(statement, index, schema, value);
       if (!bound) {
-        bound = maybeBindPrimitive(statement, index, schema, value);
+        bound = maybeBindPrimitive(statement, index, schema, value, colDef);
       }
       if (!bound) {
         throw new ConnectException("Unsupported source data type: " + schema.type());
@@ -1466,11 +1471,13 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     }
   }
 
+  @SuppressWarnings("checkstyle:CyclomaticComplexity")
   protected boolean maybeBindPrimitive(
       PreparedStatement statement,
       int index,
       Schema schema,
-      Object value
+      Object value,
+      ColumnDefinition colDef
   ) throws SQLException {
     switch (schema.type()) {
       case INT8:
@@ -1672,6 +1679,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     return field.isOptional();
   }
 
+  @SuppressWarnings("checkstyle:CyclomaticComplexity")
   protected void formatColumnValue(
       ExpressionBuilder builder,
       String schemaName,

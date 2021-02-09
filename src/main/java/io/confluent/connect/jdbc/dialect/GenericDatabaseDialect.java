@@ -393,7 +393,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     DatabaseMetaData metadata = conn.getMetaData();
     String[] tableTypes = tableTypes(metadata, this.tableTypes);
     String tableTypeDisplay = displayableTableTypes(tableTypes, ", ");
-    log.debug("Using {} dialect to get {}", this, tableTypeDisplay);
+    glog.debug("Using {} dialect to get {}", this, tableTypeDisplay);
 
     try (ResultSet rs = metadata.getTables(catalogPattern(), schemaPattern(), "%", tableTypes)) {
       List<TableId> tableIds = new ArrayList<>();
@@ -406,7 +406,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           tableIds.add(tableId);
         }
       }
-      log.debug("Used {} dialect to find {} {}", this, tableIds.size(), tableTypeDisplay);
+      glog.debug("Used {} dialect to find {} {}", this, tableIds.size(), tableTypeDisplay);
       return tableIds;
     }
   }
@@ -444,7 +444,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       DatabaseMetaData metadata,
       Set<String> types
   ) throws SQLException {
-    log.debug("Using {} dialect to check support for {}", this, types);
+    glog.debug("Using {} dialect to check support for {}", this, types);
     // Compute the uppercase form of the desired types ...
     Set<String> uppercaseTypes = new HashSet<>();
     for (String type : types) {
@@ -463,7 +463,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       }
     }
     String[] result = matchingTableTypes.toArray(new String[matchingTableTypes.size()]);
-    log.debug("Used {} dialect to find table types: {}", this, result);
+    glog.debug("Used {} dialect to find table types: {}", this, result);
     return result;
   }
 
@@ -822,7 +822,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     DatabaseMetaData metadata = connection.getMetaData();
     String[] tableTypes = tableTypes(metadata, this.tableTypes);
     String tableTypeDisplay = displayableTableTypes(tableTypes, "/");
-    log.info("Checking {} dialect for type of {} {}", this, tableTypeDisplay, tableId);
+    glog.info("Checking {} dialect for type of {} {}", this, tableTypeDisplay, tableId);
     try (ResultSet rs = connection.getMetaData().getTables(
         tableId.catalogName(),
         tableId.schemaName(),
@@ -837,7 +837,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         try {
           return TableType.get(tableType);
         } catch (IllegalArgumentException e) {
-          log.warn(
+          glog.warn(
               "{} dialect found unknown type '{}' for {} {}; using TABLE",
               this,
               tableType,
@@ -848,7 +848,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         }
       }
     }
-    log.warn(
+    glog.warn(
         "{} dialect did not find type for {} {}; using TABLE",
         this,
         tableTypeDisplay,

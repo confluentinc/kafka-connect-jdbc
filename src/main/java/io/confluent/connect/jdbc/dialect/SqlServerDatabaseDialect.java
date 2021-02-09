@@ -46,6 +46,8 @@ import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.ColumnDefinition.Mutability;
 import io.confluent.connect.jdbc.util.ColumnDefinition.Nullability;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG;
 
@@ -53,6 +55,8 @@ import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TIMESTA
  * A {@link DatabaseDialect} for SQL Server.
  */
 public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
+
+  private static final Logger log = LoggerFactory.getLogger(SqlServerDatabaseDialect.class);
 
   /**
    * JDBC Type constant for SQL Server's custom data types.

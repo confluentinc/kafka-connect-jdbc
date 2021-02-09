@@ -82,6 +82,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     return "SELECT 1 FROM DUAL";
   }
 
+  @SuppressWarnings("checkstyle:CyclomaticComplexity")
   @Override
   protected boolean maybeBindPrimitive(
       PreparedStatement statement,
@@ -98,7 +99,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       if (colDef.type() == Types.CLOB || colDef.type() == Types.NCLOB) {
         statement.setCharacterStream(index, new StringReader((String) value));
         return true;
-      } else if (colDef.type() == Types.NVARCHAR) {
+      } else if (colDef.type() == Types.NVARCHAR || colDef.type() == Types.NCHAR) {
         statement.setNString(index, (String) value);
         return true;
       } else {

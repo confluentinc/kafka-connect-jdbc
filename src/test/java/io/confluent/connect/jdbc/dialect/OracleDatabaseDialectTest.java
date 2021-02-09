@@ -317,22 +317,33 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
     int index = ThreadLocalRandom.current().nextInt();
     String value = "random text";
     Schema schema = Schema.STRING_SCHEMA;
-    PreparedStatement statement = mock(PreparedStatement.class);
+    PreparedStatement stmtVarchar = mock(PreparedStatement.class);
     ColumnDefinition colDefVarchar = mock(ColumnDefinition.class);
     when(colDefVarchar.type()).thenReturn(Types.VARCHAR);
+
+    PreparedStatement stmtNchar = mock(PreparedStatement.class);
+    ColumnDefinition colDefNchar = mock(ColumnDefinition.class);
+    when(colDefNchar.type()).thenReturn(Types.NCHAR);
+
+    PreparedStatement stmtNvarchar = mock(PreparedStatement.class);
     ColumnDefinition colDefNvarchar = mock(ColumnDefinition.class);
     when(colDefNvarchar.type()).thenReturn(Types.NVARCHAR);
+
+    PreparedStatement stmtClob = mock(PreparedStatement.class);
     ColumnDefinition colDefClob = mock(ColumnDefinition.class);
     when(colDefClob.type()).thenReturn(Types.CLOB);
 
-    dialect.bindField(statement, index, schema, value, colDefVarchar);
-    verify(statement, times(1)).setString(index, value);
+    dialect.bindField(stmtVarchar, index, schema, value, colDefVarchar);
+    verify(stmtVarchar, times(1)).setString(index, value);
 
-    dialect.bindField(statement, index, schema, value, colDefNvarchar);
-    verify(statement, times(1)).setNString(index, value);
+    dialect.bindField(stmtNchar, index, schema, value, colDefNchar);
+    verify(stmtNchar, times(1)).setNString(index, value);
 
-    dialect.bindField(statement, index, schema, value, colDefClob);
-    verify(statement, times(1)).setCharacterStream(eq(index), any(StringReader.class));
+    dialect.bindField(stmtNvarchar, index, schema, value, colDefNvarchar);
+    verify(stmtNvarchar, times(1)).setNString(index, value);
+
+    dialect.bindField(stmtClob, index, schema, value, colDefClob);
+    verify(stmtClob, times(1)).setCharacterStream(eq(index), any(StringReader.class));
   }
 
   @Test

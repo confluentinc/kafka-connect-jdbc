@@ -46,11 +46,15 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A {@link DatabaseDialect} for PostgreSQL.
  */
 public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
+
+  private final Logger log = LoggerFactory.getLogger(PostgreSqlDatabaseDialect.class);
 
   /**
    * The provider for {@link PostgreSqlDatabaseDialect}.

@@ -21,6 +21,8 @@ import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -53,6 +55,8 @@ import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TIMESTA
  * A {@link DatabaseDialect} for SQL Server.
  */
 public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
+
+  private static final Logger log = LoggerFactory.getLogger(SqlServerDatabaseDialect.class);
 
   /**
    * JDBC Type constant for SQL Server's custom data types.

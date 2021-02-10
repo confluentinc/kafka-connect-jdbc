@@ -98,16 +98,16 @@ public class PreparedStatementBinder implements StatementBinder {
 
       case KAFKA: {
         assert fieldsMetadata.keyFieldNames.size() == 3;
-        bindField(index++, Schema.STRING_SCHEMA, record.topic(), null);
-        bindField(index++, Schema.INT32_SCHEMA, record.kafkaPartition(), null);
-        bindField(index++, Schema.INT64_SCHEMA, record.kafkaOffset(), null);
+        bindField(index++, Schema.STRING_SCHEMA, record.topic());
+        bindField(index++, Schema.INT32_SCHEMA, record.kafkaPartition());
+        bindField(index++, Schema.INT64_SCHEMA, record.kafkaOffset());
       }
       break;
 
       case RECORD_KEY: {
         if (schemaPair.keySchema.type().isPrimitive()) {
           assert fieldsMetadata.keyFieldNames.size() == 1;
-          bindField(index++, schemaPair.keySchema, record.key(), null);
+          bindField(index++, schemaPair.keySchema, record.key());
         } else {
           for (String fieldName : fieldsMetadata.keyFieldNames) {
             final Field field = schemaPair.keySchema.field(fieldName);
@@ -144,6 +144,11 @@ public class PreparedStatementBinder implements StatementBinder {
           tableDef.definitionForColumn(fieldName));
     }
     return index;
+  }
+
+  protected void bindField(int index, Schema schema, Object value)
+      throws SQLException {
+    dialect.bindField(statement, index, schema, value);
   }
 
   protected void bindField(int index, Schema schema, Object value, ColumnDefinition colDef)

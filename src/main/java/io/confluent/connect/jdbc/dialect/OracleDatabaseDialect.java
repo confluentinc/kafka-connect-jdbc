@@ -82,6 +82,27 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     return "SELECT 1 FROM DUAL";
   }
 
+  @Override
+  public void bindField(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
+      Object value,
+      ColumnDefinition colDef
+  ) throws SQLException {
+    if (value == null) {
+      statement.setObject(index, null);
+    } else {
+      boolean bound = maybeBindLogical(statement, index, schema, value);
+      if (!bound) {
+        bound = maybeBindPrimitive(statement, index, schema, value, colDef);
+      }
+      if (!bound) {
+        throw new ConnectException("Unsupported source data type: " + schema.type());
+      }
+    }
+  }
+
   @SuppressWarnings("checkstyle:CyclomaticComplexity")
   @Override
   protected boolean maybeBindPrimitive(
@@ -92,18 +113,21 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       ColumnDefinition colDef
   ) throws SQLException {
     if (colDef == null) {
-      return super.maybeBindPrimitive(statement, index, schema, value, colDef);
+      return super.maybeBindPrimitive(statement, index, schema, value);
     }
 
     if (schema.type() == Type.STRING) {
-      if (colDef.type() == Types.CLOB || colDef.type() == Types.NCLOB) {
+      if (colDef.type() == Types.CLOB) {
         statement.setCharacterStream(index, new StringReader((String) value));
+        return true;
+      } else if (colDef.type() == Types.NCLOB) {
+        statement.setNCharacterStream(index, new StringReader((String) value));
         return true;
       } else if (colDef.type() == Types.NVARCHAR || colDef.type() == Types.NCHAR) {
         statement.setNString(index, (String) value);
         return true;
       } else {
-        return super.maybeBindPrimitive(statement, index, schema, value, colDef);
+        return super.maybeBindPrimitive(statement, index, schema, value);
       }
     }
 
@@ -113,13 +137,11 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       } else if (value instanceof byte[]) {
         statement.setBlob(index, new ByteArrayInputStream((byte[]) value));
       } else {
-        throw new ConnectException(
-            "Binary column can only take value of byte array or byte buffer"
-        );
+        return super.maybeBindPrimitive(statement, index, schema, value);
       }
       return true;
     }
-    return super.maybeBindPrimitive(statement, index, schema, value, colDef);
+    return super.maybeBindPrimitive(statement, index, schema, value);
   }
 
   @SuppressWarnings("checkstyle:CyclomaticComplexity")
@@ -130,6 +152,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
         case Decimal.LOGICAL_NAME:
           return "NUMBER(*," + field.schemaParameters().get(Decimal.SCALE_FIELD) + ")";
         case Date.LOGICAL_NAME:
+          return "DATE";
         case Time.LOGICAL_NAME:
           return "DATE";
         case Timestamp.LOGICAL_NAME:

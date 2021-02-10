@@ -1116,7 +1116,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     );
   }
 
-  @SuppressWarnings({"deprecation", "fallthrough"})
+  @SuppressWarnings({"deprecation", "fallthrough", "checkstyle:CyclomaticComplexity"})
   protected ColumnConverter columnConverterFor(
       final ColumnMapping mapping,
       final ColumnDefinition defn,
@@ -1455,6 +1455,15 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       PreparedStatement statement,
       int index,
       Schema schema,
+      Object value
+  ) throws SQLException {
+    bindField(statement, index, schema, value, null);
+  }
+
+  public void bindField(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
       Object value,
       ColumnDefinition colDef
   ) throws SQLException {
@@ -1463,7 +1472,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     } else {
       boolean bound = maybeBindLogical(statement, index, schema, value);
       if (!bound) {
-        bound = maybeBindPrimitive(statement, index, schema, value, colDef);
+        bound = maybeBindPrimitive(statement, index, schema, value);
       }
       if (!bound) {
         throw new ConnectException("Unsupported source data type: " + schema.type());
@@ -1476,8 +1485,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       PreparedStatement statement,
       int index,
       Schema schema,
-      Object value,
-      ColumnDefinition colDef
+      Object value
   ) throws SQLException {
     switch (schema.type()) {
       case INT8:
@@ -1519,6 +1527,16 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         return false;
     }
     return true;
+  }
+
+  protected boolean maybeBindPrimitive(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
+      Object value,
+      ColumnDefinition colDef
+  ) throws SQLException {
+    return maybeBindPrimitive(statement, index, schema, value);
   }
 
   protected boolean maybeBindLogical(

@@ -423,6 +423,25 @@ public interface DatabaseDialect extends ConnectionProvider {
       PreparedStatement statement,
       int index,
       Schema schema,
+      Object value
+  ) throws SQLException;
+
+  /**
+   * Method that binds a value with the given schema at the specified variable within a prepared
+   * statement.
+   *
+   * @param statement the prepared statement; may not be null
+   * @param index     the 1-based index of the variable within the prepared statement
+   * @param schema    the schema for the value; may be null only if the value is null
+   * @param value     the value to be bound to the variable; may be null
+   * @param colDef    the Definition of the column to be bound; may be null
+   * @throws SQLException if there is a problem binding the value into the statement
+   * @see #statementBinder
+   */
+  void bindField(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
       Object value,
       ColumnDefinition colDef
   ) throws SQLException;

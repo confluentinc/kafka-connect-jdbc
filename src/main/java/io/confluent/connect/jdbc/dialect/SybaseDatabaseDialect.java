@@ -16,7 +16,6 @@
 
 package io.confluent.connect.jdbc.dialect;
 
-import io.confluent.connect.jdbc.util.ColumnDefinition;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -143,8 +142,7 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
       PreparedStatement statement,
       int index,
       Schema schema,
-      Object value,
-      ColumnDefinition colDef
+      Object value
   ) throws SQLException {
     // First handle non-standard bindings ...
     switch (schema.type()) {
@@ -157,7 +155,7 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
       default:
         break;
     }
-    return super.maybeBindPrimitive(statement, index, schema, value, colDef);
+    return super.maybeBindPrimitive(statement, index, schema, value);
   }
 
   @Override

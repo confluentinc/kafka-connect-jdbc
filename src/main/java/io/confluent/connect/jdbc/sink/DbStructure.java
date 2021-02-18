@@ -153,7 +153,7 @@ public class DbStructure {
     //    }
 
     final Set<SinkRecordField> missingFields = missingFields(
-        fieldsMetadata.getAllFields().values(),
+        fieldsMetadata.allFields.values(),
         tableDefn.columnNames()
     );
 

@@ -37,6 +37,7 @@ public class DbStructureTest {
   DatabaseDialect dbDialect = mock(DatabaseDialect.class);
   DbStructure structure = new DbStructure(dbDialect, tableDefinitions);
   DbStructure spyStructure = spy(structure);
+  FieldsMetadata fieldsMetadata = new FieldsMetadata(new HashSet<>(), new HashSet<>(), new HashMap<>());
 
   @Test
   public void testNoMissingFields() {
@@ -63,7 +64,7 @@ public class DbStructureTest {
   @Test (expected = SchemaMismatchException.class)
   public void testMissingTableNoAutoCreate() throws Exception {
     structure.create(mock(JdbcSinkConfig.class), mock(Connection.class), mock(TableId.class),
-        mock(FieldsMetadata.class));
+        fieldsMetadata);
   }
 
   @Test (expected = SchemaMismatchException.class)
@@ -71,9 +72,6 @@ public class DbStructureTest {
     TableDefinition tableDefinition = mock(TableDefinition.class);
     when(tableDefinitions.get(any(), any())).thenReturn(tableDefinition);
     when(tableDefinition.type()).thenReturn(TableType.TABLE);
-
-    FieldsMetadata fieldsMetadata = mock(FieldsMetadata.class);
-    when(fieldsMetadata.getAllFields()).thenReturn(new HashMap<>());
 
     SinkRecordField sinkRecordField = new SinkRecordField(
         Schema.OPTIONAL_INT32_SCHEMA,
@@ -95,8 +93,6 @@ public class DbStructureTest {
     when(tableDefinitions.get(any(), any())).thenReturn(tableDefinition);
     when(tableDefinition.type()).thenReturn(TableType.VIEW);
 
-    FieldsMetadata fieldsMetadata = mock(FieldsMetadata.class);
-
     doReturn(mock(Set.class)).when(spyStructure).missingFields(any(), any());
 
     spyStructure.amendIfNecessary(mock(JdbcSinkConfig.class), mock(Connection.class), mock(TableId.class),
@@ -108,9 +104,6 @@ public class DbStructureTest {
     TableDefinition tableDefinition = mock(TableDefinition.class);
     when(tableDefinitions.get(any(), any())).thenReturn(tableDefinition);
     when(tableDefinition.type()).thenReturn(TableType.TABLE);
-
-    FieldsMetadata fieldsMetadata = mock(FieldsMetadata.class);
-    when(fieldsMetadata.getAllFields()).thenReturn(new HashMap<>());
 
     SinkRecordField sinkRecordField = new SinkRecordField(
         Schema.INT32_SCHEMA,
@@ -131,10 +124,7 @@ public class DbStructureTest {
     TableDefinition tableDefinition = mock(TableDefinition.class);
     when(tableDefinitions.get(any(), any())).thenReturn(tableDefinition);
     when(tableDefinition.type()).thenReturn(TableType.TABLE);
-
-    FieldsMetadata fieldsMetadata = mock(FieldsMetadata.class);
-    when(fieldsMetadata.getAllFields()).thenReturn(new HashMap<>());
-
+    
     SinkRecordField sinkRecordField = new SinkRecordField(
         Schema.OPTIONAL_INT32_SCHEMA,
         "test",

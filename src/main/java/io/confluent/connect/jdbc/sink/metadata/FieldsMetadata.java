@@ -37,7 +37,8 @@ public class FieldsMetadata {
   public final Set<String> nonKeyFieldNames;
   public final Map<String, SinkRecordField> allFields;
 
-  private FieldsMetadata(
+  // visible for testing
+  public FieldsMetadata(
       Set<String> keyFieldNames,
       Set<String> nonKeyFieldNames,
       Map<String, SinkRecordField> allFields
@@ -54,10 +55,6 @@ public class FieldsMetadata {
     this.keyFieldNames = keyFieldNames;
     this.nonKeyFieldNames = nonKeyFieldNames;
     this.allFields = allFields;
-  }
-
-  public Map<String, SinkRecordField> getAllFields() {
-    return allFields;
   }
 
   public static FieldsMetadata extract(

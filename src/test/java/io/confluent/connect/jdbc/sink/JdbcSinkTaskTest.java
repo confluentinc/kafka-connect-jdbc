@@ -322,6 +322,8 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
     expect(ctx.errantRecordReporter()).andReturn(reporter);
     expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null));
+    mockWriter.closeQuietly();
+    expectLastCall();
     replayAll();
 
     Map<String, String> props = new HashMap<>();
@@ -360,6 +362,8 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
     expect(ctx.errantRecordReporter()).andReturn(reporter);
     expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null));
+    mockWriter.closeQuietly();
+    expectLastCall();
     replayAll();
 
     Map<String, String> props = new HashMap<>();
@@ -405,6 +409,10 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
     expect(ctx.errantRecordReporter()).andReturn(reporter);
     expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null)).times(batchSize);
+    for (int i = 0; i < 3; i++) {
+      mockWriter.closeQuietly();
+      expectLastCall();
+    }
     replayAll();
 
     Map<String, String> props = new HashMap<>();
@@ -451,6 +459,8 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
     expect(ctx.errantRecordReporter()).andReturn(reporter);
     expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null));
+    mockWriter.closeQuietly();
+    expectLastCall();
     replayAll();
 
     Map<String, String> props = new HashMap<>();

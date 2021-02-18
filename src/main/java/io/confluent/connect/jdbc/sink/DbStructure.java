@@ -136,7 +136,7 @@ public class DbStructure {
       final TableId tableId,
       final FieldsMetadata fieldsMetadata,
       final int maxRetries
-  ) throws SQLException {
+  ) throws SQLException, SchemaMismatchException {
     // NOTE:
     //   The table might have extra columns defined (hopefully with default values), which is not
     //   a case we check for here.

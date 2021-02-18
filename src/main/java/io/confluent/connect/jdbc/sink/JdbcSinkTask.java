@@ -32,6 +32,7 @@ import java.util.Map;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
+import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.Version;
 
 public class JdbcSinkTask extends SinkTask {
@@ -86,7 +87,7 @@ public class JdbcSinkTask extends SinkTask {
       if (reporter != null) {
         unrollAndRetry(records);
       } else {
-        throw new ConnectException(sme);
+        throw sme;
       }
     } catch (SQLException sqle) {
       log.warn(
@@ -133,6 +134,9 @@ public class JdbcSinkTask extends SinkTask {
     for (SinkRecord record : records) {
       try {
         writer.write(Collections.singletonList(record));
+      } catch (SchemaMismatchException sme) {
+        reporter.report(record, sme);
+        writer.closeQuietly();
       } catch (SQLException sqle) {
         String sqleAllMessages = "Exception chain:" + System.lineSeparator();
         for (Throwable e : sqle) {
@@ -141,6 +145,7 @@ public class JdbcSinkTask extends SinkTask {
         SQLException sqlAllMessagesException = new SQLException(sqleAllMessages);
         sqlAllMessagesException.setNextException(sqle);
         reporter.report(record, sqlAllMessagesException);
+        writer.closeQuietly();
       }
     }
   }

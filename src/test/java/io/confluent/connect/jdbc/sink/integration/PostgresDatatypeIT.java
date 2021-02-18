@@ -42,6 +42,7 @@ import org.junit.experimental.categories.Category;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.MAX_RETRIES;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.ERRORS_TOLERANCE_CONFIG;
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_NAME_CONFIG;
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_REPLICATION_FACTOR_CONFIG;
@@ -88,6 +89,52 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
       }
     }
     log.info("Dropped table");
+  }
+
+  /**
+   * Verifies that even when the connector encounters exceptions that would cause a connection
+   * with an invalid transaction, the connector sends only the errant record to the error
+   * reporter and establishes a valid transaction for subsequent correct records to be sent to
+   * the actual database.
+   *
+   * @throws Exception
+   */
+  @Test
+  public void testPrimaryKeyConstraintsSendsToErrorReporter() throws Exception {
+    props.put(ERRORS_TOLERANCE_CONFIG, ToleranceType.ALL.value());
+    props.put(DLQ_TOPIC_NAME_CONFIG, DLQ_TOPIC_NAME);
+    props.put(DLQ_TOPIC_REPLICATION_FACTOR_CONFIG, "1");
+    props.put(MAX_RETRIES, "2");
+
+    createTableWithPrimaryKey();
+    connect.configureConnector("jdbc-sink-connector", props);
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+
+    final Schema schema = SchemaBuilder.struct().name("com.example.Person")
+        .field("firstname", Schema.STRING_SCHEMA)
+        .field("lastname", Schema.STRING_SCHEMA)
+        .build();
+    final Struct struct = new Struct(schema)
+        .put("firstname", "Christina")
+        .put("lastname", "Brams");
+
+    String kafkaValue = new String(jsonConverter.fromConnectData(tableName, schema, struct));
+    connect.kafka().produce(tableName, null, kafkaValue);
+    // Send the same record for a PK collision
+    connect.kafka().produce(tableName, null, kafkaValue);
+
+    // Now, create and send another normal record
+    Struct struct2 = new Struct(schema)
+        .put("firstname", "Brams")
+        .put("lastname", "Christina");
+
+    kafkaValue = new String(jsonConverter.fromConnectData(tableName, schema, struct2));
+    connect.kafka().produce(tableName, null, kafkaValue);
+
+    ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(1, CONSUME_MAX_DURATION_MS,
+        DLQ_TOPIC_NAME);
+
+    assertEquals(1, records.count());
   }
 
   @Test
@@ -198,5 +245,20 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
       }
     }
     log.info("Created table {} with UUID column", tableName);
+  }
+
+  private void createTableWithPrimaryKey() throws SQLException {
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
+      c.setAutoCommit(false);
+      try (Statement s = c.createStatement()) {
+        String sql = String.format(
+            "CREATE TABLE %s(firstName TEXT PRIMARY KEY, lastName TEXT)",
+            tableName
+        );
+        log.info("Executing statement: {}", sql);
+        s.execute(sql);
+        c.commit();
+      }
+    }
   }
 }

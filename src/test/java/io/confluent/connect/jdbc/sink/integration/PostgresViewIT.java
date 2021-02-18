@@ -91,32 +91,57 @@ public class PostgresViewIT extends BaseConnectorIT  {
     log.info("Dropped table");
   }
 
+  /**
+   * Verifies that when sending records with more fields than the view has, these errant records
+   * are sent to the error reporter. The test also intersperses correct schema records to verify
+   * that only the errant records are being sent to the error reporter.
+   *
+   * @throws Exception
+   */
   @Test
   public void testRecordSchemaMoreFieldsThanViewSendsToErrorReporter() throws Exception {
     props.put(ERRORS_TOLERANCE_CONFIG, ToleranceType.ALL.value());
     props.put(DLQ_TOPIC_NAME_CONFIG, DLQ_TOPIC_NAME);
     props.put(DLQ_TOPIC_REPLICATION_FACTOR_CONFIG, "1");
 
-    createTestTableAndView("firstName");
+    createTestTableAndView("firstName, lastName");
     connect.configureConnector("jdbc-sink-connector", props);
     waitForConnectorToStart("jdbc-sink-connector", 1);
 
-    final Schema schema = SchemaBuilder.struct().name("com.example.Person")
+    final Schema correctSchema = SchemaBuilder.struct().name("com.example.Person")
+        .field("firstname", Schema.STRING_SCHEMA)
+        .field("lastname", Schema.STRING_SCHEMA)
+        .build();
+    final Struct correctStruct = new Struct(correctSchema)
+        .put("firstname", "Christina")
+        .put("lastname", "Brams");
+
+    final Schema errorSchema = SchemaBuilder.struct().name("com.example.Person")
         .field("firstname", Schema.STRING_SCHEMA)
         .field("lastname", Schema.STRING_SCHEMA)
         .field("age", Schema.INT32_SCHEMA)
         .build();
-    final Struct struct = new Struct(schema)
+    final Struct errorStruct = new Struct(errorSchema)
         .put("firstname", "Christina")
         .put("lastname", "Brams")
         .put("age", 20);
 
-    String kafkaValue = new String(jsonConverter.fromConnectData(topic, schema, struct));
-    connect.kafka().produce(topic, null, kafkaValue);
+    String kafkaValue;
 
-    ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(1, CONSUME_MAX_DURATION_MS, DLQ_TOPIC_NAME);
+    for (int i = 0; i < 6; i++) {
+      if (i % 2 == 0) {
+        kafkaValue = new String(jsonConverter.fromConnectData(topic, correctSchema, correctStruct));
+        connect.kafka().produce(topic, null, kafkaValue);
+      } else {
+        kafkaValue = new String(jsonConverter.fromConnectData(topic, errorSchema, errorStruct));
+        connect.kafka().produce(topic, null, kafkaValue);
+      }
+    }
 
-    assertEquals(1, records.count());
+    ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(3, CONSUME_MAX_DURATION_MS,
+        DLQ_TOPIC_NAME);
+
+    assertEquals(3, records.count());
   }
 
   @Test

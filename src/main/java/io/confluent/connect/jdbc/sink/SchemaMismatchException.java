@@ -15,16 +15,16 @@
 
 package io.confluent.connect.jdbc.sink;
 
-import java.sql.SQLException;
+import org.apache.kafka.connect.errors.ConnectException;
 
-public class SchemaMismatchException extends SQLException {
+public class SchemaMismatchException extends ConnectException {
 
   public SchemaMismatchException(String reason) {
     super(reason);
   }
 
-  public SchemaMismatchException(String reason, Throwable cause) {
-    super(reason, cause);
+  public SchemaMismatchException(String reason, Throwable throwable) {
+    super(reason, throwable);
   }
 }
 

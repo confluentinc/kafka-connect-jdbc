@@ -345,7 +345,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     SinkTaskContext ctx = createMock(SinkTaskContext.class);
 
     mockWriter.write(records);
-    SQLException exception = new SchemaMismatchException("cause 1");
+    SchemaMismatchException exception = new SchemaMismatchException("cause 1");
     expectLastCall().andThrow(exception);
     mockWriter.write(anyObject());
     expectLastCall().andThrow(exception);

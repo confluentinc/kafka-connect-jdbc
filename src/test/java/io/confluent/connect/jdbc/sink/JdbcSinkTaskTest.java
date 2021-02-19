@@ -338,7 +338,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
   }
 
   @Test
-  public void errorReportingSchemaMisMatchException() throws SQLException {
+  public void errorReportingSchemaMismatchException() throws SQLException {
     final int maxRetries = 0;
     final int retryBackoffMs = 1000;
 

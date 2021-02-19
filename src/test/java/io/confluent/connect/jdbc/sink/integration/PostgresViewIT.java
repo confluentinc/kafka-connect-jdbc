@@ -138,10 +138,16 @@ public class PostgresViewIT extends BaseConnectorIT  {
       }
     }
 
-    ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(3, CONSUME_MAX_DURATION_MS,
-        DLQ_TOPIC_NAME);
-
-    assertEquals(3, records.count());
+    try {
+      // Consume the number of records produced since this is the upper bound of records that
+      // could be sent to the error reporter.
+      ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(6,
+          CONSUME_MAX_DURATION_MS, DLQ_TOPIC_NAME);
+    } catch (RuntimeException e) {
+      // Check that the amount of records that were actually found by the consumer matches the
+      // number of records expected to be sent to the error reporter.
+      assertEquals("3", e.toString().substring(65, 66));
+    }
   }
 
   @Test

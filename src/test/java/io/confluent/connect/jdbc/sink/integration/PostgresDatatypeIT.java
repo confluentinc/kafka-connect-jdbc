@@ -131,10 +131,16 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     kafkaValue = new String(jsonConverter.fromConnectData(tableName, schema, struct2));
     connect.kafka().produce(tableName, null, kafkaValue);
 
-    ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(1, CONSUME_MAX_DURATION_MS,
-        DLQ_TOPIC_NAME);
-
-    assertEquals(1, records.count());
+    try {
+      // Consume the number of records produced since this is the upper bound of records that
+      // could be sent to the error reporter.
+      ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(3,
+          CONSUME_MAX_DURATION_MS, DLQ_TOPIC_NAME);
+    } catch (RuntimeException e) {
+      // Check that the amount of records that were actually found by the consumer matches the
+      // number of records expected to be sent to the error reporter.
+      assertEquals("1", e.toString().substring(65, 66));
+    }
   }
 
   @Test
@@ -231,7 +237,7 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
   }
 
   private void createTableWithLessFields() throws SQLException {
-    log.info("Creating table {} with UUID column", tableName);
+    log.info("Creating table {} with less fields", tableName);
     try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
       c.setAutoCommit(false);
       try (Statement s = c.createStatement()) {
@@ -244,10 +250,11 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
         c.commit();
       }
     }
-    log.info("Created table {} with UUID column", tableName);
+    log.info("Created table {} with less fields", tableName);
   }
 
   private void createTableWithPrimaryKey() throws SQLException {
+    log.info("Creating table {} with a primary key", tableName);
     try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
       c.setAutoCommit(false);
       try (Statement s = c.createStatement()) {
@@ -260,5 +267,6 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
         c.commit();
       }
     }
+    log.info("Created table {} with a primary key", tableName);
   }
 }

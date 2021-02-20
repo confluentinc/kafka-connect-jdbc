@@ -8,6 +8,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -23,12 +24,10 @@ import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.TableType;
 
 import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
 public class DbStructureTest {
@@ -36,7 +35,6 @@ public class DbStructureTest {
   TableDefinitions tableDefinitions = mock(TableDefinitions.class);
   DatabaseDialect dbDialect = mock(DatabaseDialect.class);
   DbStructure structure = new DbStructure(dbDialect, tableDefinitions);
-  DbStructure spyStructure = spy(structure);
   FieldsMetadata fieldsMetadata = new FieldsMetadata(new HashSet<>(), new HashSet<>(), new HashMap<>());
 
   @Test
@@ -78,12 +76,13 @@ public class DbStructureTest {
         "test",
         false
     );
-    Set<SinkRecordField> missingFields = new HashSet<>();
-    missingFields.add(sinkRecordField);
 
-    doReturn(missingFields).when(spyStructure).missingFields(any(), any());
+    fieldsMetadata = new FieldsMetadata(
+        Collections.emptySet(),
+        Collections.singleton(sinkRecordField.name()),
+        Collections.singletonMap(sinkRecordField.name(), sinkRecordField));
 
-    spyStructure.amendIfNecessary(mock(JdbcSinkConfig.class), mock(Connection.class), mock(TableId.class),
+    structure.amendIfNecessary(mock(JdbcSinkConfig.class), mock(Connection.class), mock(TableId.class),
         fieldsMetadata, 5);
   }
 
@@ -93,9 +92,17 @@ public class DbStructureTest {
     when(tableDefinitions.get(any(), any())).thenReturn(tableDefinition);
     when(tableDefinition.type()).thenReturn(TableType.VIEW);
 
-    doReturn(mock(Set.class)).when(spyStructure).missingFields(any(), any());
+    SinkRecordField sinkRecordField = new SinkRecordField(
+        Schema.INT32_SCHEMA,
+        "test",
+        true
+    );
+    fieldsMetadata = new FieldsMetadata(
+        Collections.emptySet(),
+        Collections.singleton(sinkRecordField.name()),
+        Collections.singletonMap(sinkRecordField.name(), sinkRecordField));
 
-    spyStructure.amendIfNecessary(mock(JdbcSinkConfig.class), mock(Connection.class), mock(TableId.class),
+    structure.amendIfNecessary(mock(JdbcSinkConfig.class), mock(Connection.class), mock(TableId.class),
         fieldsMetadata, 5);
   }
 
@@ -110,12 +117,12 @@ public class DbStructureTest {
         "test",
         true
     );
-    Set<SinkRecordField> missingFields = new HashSet<>();
-    missingFields.add(sinkRecordField);
+    fieldsMetadata = new FieldsMetadata(
+        Collections.emptySet(),
+        Collections.singleton(sinkRecordField.name()),
+        Collections.singletonMap(sinkRecordField.name(), sinkRecordField));
 
-    doReturn(missingFields).when(spyStructure).missingFields(any(), any());
-
-    spyStructure.amendIfNecessary(mock(JdbcSinkConfig.class), mock(Connection.class), mock(TableId.class),
+    structure.amendIfNecessary(mock(JdbcSinkConfig.class), mock(Connection.class), mock(TableId.class),
         fieldsMetadata, 5);
   }
 
@@ -130,10 +137,10 @@ public class DbStructureTest {
         "test",
         false
     );
-    Set<SinkRecordField> missingFields = new HashSet<>();
-    missingFields.add(sinkRecordField);
-
-    doReturn(missingFields).when(spyStructure).missingFields(any(), any());
+    fieldsMetadata = new FieldsMetadata(
+        Collections.emptySet(),
+        Collections.singleton(sinkRecordField.name()),
+        Collections.singletonMap(sinkRecordField.name(), sinkRecordField));
 
     Map<String, String> props = new HashMap<>();
 
@@ -148,7 +155,7 @@ public class DbStructureTest {
 
     doThrow(new SQLException()).when(dbDialect).applyDdlStatements(any(), any());
 
-    spyStructure.amendIfNecessary(config, mock(Connection.class), mock(TableId.class),
+    structure.amendIfNecessary(config, mock(Connection.class), mock(TableId.class),
         fieldsMetadata, 0);
   }
 

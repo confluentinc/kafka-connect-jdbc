@@ -24,23 +24,16 @@ import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
-import org.apache.kafka.connect.errors.ConnectException;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Types;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.Calendar;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TimeZone;
 import java.util.UUID;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
@@ -48,14 +41,11 @@ import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
-import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
-import io.confluent.connect.jdbc.util.ColumnDefinition.Mutability;
-import io.confluent.connect.jdbc.util.ColumnDefinition.Nullability;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -265,7 +255,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       case STRING:
         String length = parameters != null ? parameters.getOrDefault("length", "") : "";
         if (field.isPrimaryKey()) {
-          // Should be no more than 2712 which is the PostgreSQL B-Tree Index 1/3 Page size constraint
+          // Should be no more than the 2712 PostgreSQL B-Tree Index 1/3 Page size constraint
           if (!length.isEmpty() && Integer.parseInt(length) <= 2712) {
             return "VARCHAR(" + length + ")";
           }

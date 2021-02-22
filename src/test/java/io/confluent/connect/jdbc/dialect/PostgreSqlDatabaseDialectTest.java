@@ -39,6 +39,14 @@ import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableDefinitionBuilder;
 import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.util.ColumnDefinition.Mutability;
+import io.confluent.connect.jdbc.util.ColumnDefinition.Nullability;
+import org.apache.kafka.connect.errors.ConnectException;
+
+import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.junit.Assert.assertEquals;
 

@@ -16,7 +16,13 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig.PrimaryKeyMode;
+import io.confluent.connect.jdbc.sink.PreparedStatementBinder;
+import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
+import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.TableDefinition;
 import java.io.ByteArrayInputStream;
 import java.io.StringReader;
 import java.nio.ByteBuffer;
@@ -83,6 +89,26 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
   }
 
   @Override
+  public StatementBinder statementBinder(
+      PreparedStatement statement,
+      PrimaryKeyMode pkMode,
+      SchemaPair schemaPair,
+      FieldsMetadata fieldsMetadata,
+      TableDefinition tableDefinition,
+      InsertMode insertMode
+  ) {
+    return new PreparedStatementBinder(
+        this,
+        statement,
+        pkMode,
+        schemaPair,
+        fieldsMetadata,
+        tableDefinition,
+        insertMode
+    );
+  }
+
+  @Override
   public void bindField(
       PreparedStatement statement,
       int index,
@@ -103,8 +129,6 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     }
   }
 
-  @SuppressWarnings("checkstyle:CyclomaticComplexity")
-  @Override
   protected boolean maybeBindPrimitive(
       PreparedStatement statement,
       int index,

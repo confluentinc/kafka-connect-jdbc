@@ -16,6 +16,7 @@ package io.confluent.connect.jdbc.util;
 
 import org.apache.kafka.connect.errors.ConnectException;
 import org.easymock.EasyMock;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.powermock.api.easymock.PowerMock;

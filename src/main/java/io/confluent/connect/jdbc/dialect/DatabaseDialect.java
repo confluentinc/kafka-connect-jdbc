@@ -390,7 +390,6 @@ public interface DatabaseDialect extends ConnectionProvider {
 
   /**
    * Create a component that can bind record values into the supplied prepared statement.
-   *
    * @param statement      the prepared statement
    * @param pkMode         the primary key mode; may not be null
    * @param schemaPair     the key and value schemas; may not be null
@@ -399,19 +398,44 @@ public interface DatabaseDialect extends ConnectionProvider {
    * @return the statement binder; may not be null
    * @see #bindField(PreparedStatement, int, Schema, Object)
    */
+  @Deprecated
   StatementBinder statementBinder(
+      PreparedStatement statement,
+      JdbcSinkConfig.PrimaryKeyMode pkMode,
+      SchemaPair schemaPair,
+      FieldsMetadata fieldsMetadata,
+      JdbcSinkConfig.InsertMode insertMode
+  );
+
+  /**
+   * Create a component that can bind record values into the supplied prepared statement. By
+   * default, the behavior is the same as the other overloaded method with the extra parameter
+   * tableDefinition. This overloading method is introduced to deprecate the other overloaded
+   * method eventually.
+   *
+   * @param statement      the prepared statement
+   * @param pkMode         the primary key mode; may not be null
+   * @param schemaPair     the key and value schemas; may not be null
+   * @param fieldsMetadata the field metadata; may not be null
+   * @param tableDefinition the table definition; may be null
+   * @param insertMode     the insert mode; may not be null
+   * @return the statement binder; may not be null
+   * @see #bindField(PreparedStatement, int, Schema, Object)
+   */
+  default StatementBinder statementBinder(
       PreparedStatement statement,
       JdbcSinkConfig.PrimaryKeyMode pkMode,
       SchemaPair schemaPair,
       FieldsMetadata fieldsMetadata,
       TableDefinition tableDefinition,
       JdbcSinkConfig.InsertMode insertMode
-  );
+  ) {
+    return statementBinder(statement, pkMode, schemaPair, fieldsMetadata, insertMode);
+  }
 
   /**
    * Method that binds a value with the given schema at the specified variable within a prepared
    * statement.
-   *
    * @param statement the prepared statement; may not be null
    * @param index     the 1-based index of the variable within the prepared statement
    * @param schema    the schema for the value; may be null only if the value is null
@@ -419,6 +443,7 @@ public interface DatabaseDialect extends ConnectionProvider {
    * @throws SQLException if there is a problem binding the value into the statement
    * @see #statementBinder
    */
+  @Deprecated
   void bindField(
       PreparedStatement statement,
       int index,
@@ -428,7 +453,9 @@ public interface DatabaseDialect extends ConnectionProvider {
 
   /**
    * Method that binds a value with the given schema at the specified variable within a prepared
-   * statement.
+   * statement. By default, the behavior is the same as the other overloaded method with the extra
+   * parameter colDef. This overloading method is introduced to deprecate the other overloaded
+   * method eventually.
    *
    * @param statement the prepared statement; may not be null
    * @param index     the 1-based index of the variable within the prepared statement
@@ -438,13 +465,15 @@ public interface DatabaseDialect extends ConnectionProvider {
    * @throws SQLException if there is a problem binding the value into the statement
    * @see #statementBinder
    */
-  void bindField(
+  default void bindField(
       PreparedStatement statement,
       int index,
       Schema schema,
       Object value,
       ColumnDefinition colDef
-  ) throws SQLException;
+  ) throws SQLException {
+    bindField(statement, index, schema, value);
+  }
 
   /**
    * A function to bind the values from a sink record into a prepared statement.

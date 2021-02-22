@@ -85,7 +85,6 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
     return "SELECT 1";
   }
 
-  @SuppressWarnings("checkstyle:CyclomaticComplexity")
   @Override
   protected String getSqlType(SinkRecordField field) {
     if (field.schemaName() != null) {

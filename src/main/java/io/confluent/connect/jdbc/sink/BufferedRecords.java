@@ -131,7 +131,6 @@ public class BufferedRecords {
     return flushed;
   }
 
-  @SuppressWarnings("checkstyle:CyclomaticComplexity")
   public List<SinkRecord> flush() throws SQLException {
     if (records.isEmpty()) {
       log.debug("Records is empty");

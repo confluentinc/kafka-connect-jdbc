@@ -122,7 +122,7 @@ public class PostgresDatatypeIT {
       c.setAutoCommit(false);
       try (Statement s = c.createStatement()) {
         String sql = String.format(
-            "CREATE TABLE %s(firstName TEXT, lastName TEXT, jsonid json, userid UUID)",
+            "CREATE TABLE %s(firstName VARCHAR, lastName VARCHAR, jsonid json, userid UUID)",
             tableName
         );
         log.info("Executing statement: {}", sql);

@@ -73,7 +73,7 @@ public class PostgresOOMIT extends BaseOOMIntegrationTest {
     log.info("Creating test table");
     try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
       try (Statement s = c.createStatement()) {
-        s.execute("CREATE TABLE test_table ( c1 text )");
+        s.execute("CREATE TABLE test_table ( c1 VARCHAR )");
         s.execute("INSERT INTO test_table VALUES ( 'Hello World' )");
       }
     }

@@ -157,7 +157,7 @@ public class PostgresViewIT {
     try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
       c.setAutoCommit(false);
       try (Statement s = c.createStatement()) {
-        s.execute("CREATE TABLE " + tableName + "(firstName TEXT, lastName TEXT, age INTEGER)");
+        s.execute("CREATE TABLE " + tableName + "(firstName VARCHAR, lastName VARCHAR, age INTEGER)");
         s.execute("CREATE VIEW " + topic + " AS SELECT " + viewFields + " FROM " + tableName);
         c.commit();
       }

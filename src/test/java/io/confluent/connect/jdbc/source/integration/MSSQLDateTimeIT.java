@@ -88,6 +88,7 @@ public class MSSQLDateTimeIT extends BaseConnectorIT {
     private Connection connection;
 
     @ClassRule
+    @SuppressWarnings("rawtypes")
     public static final FixedHostPortGenericContainer mssqlServer =
             new FixedHostPortGenericContainer<>("microsoft/mssql-server-linux:latest")
                 .withEnv("ACCEPT_EULA","Y")

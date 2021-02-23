@@ -27,6 +27,7 @@ import io.confluent.connect.jdbc.util.ColumnId;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
@@ -96,7 +97,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
     assertPrimitiveMapping(Type.FLOAT64, "float");
     assertPrimitiveMapping(Type.BOOLEAN, "bit");
     assertPrimitiveMapping(Type.BYTES, "varbinary(max)");
-    assertPrimitiveMapping(Type.STRING, "varchar(max)");
+    assertPrimitiveMapping(Type.STRING, "nvarchar(max)");
   }
 
   @Test
@@ -116,7 +117,10 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
     verifyDataTypeMapping("real", Schema.FLOAT32_SCHEMA);
     verifyDataTypeMapping("float", Schema.FLOAT64_SCHEMA);
     verifyDataTypeMapping("bit", Schema.BOOLEAN_SCHEMA);
-    verifyDataTypeMapping("varchar(max)", Schema.STRING_SCHEMA);
+    verifyDataTypeMapping("nvarchar(max)", Schema.STRING_SCHEMA);
+    verifyDataTypeMapping("nvarchar(255)", SchemaBuilder.string().parameter("length","255").build());
+    verifyDataTypeMapping("nvarchar(4000)", SchemaBuilder.string().parameter("length","4000").build());
+    verifyDataTypeMapping("nvarchar(max)", SchemaBuilder.string().parameter("length","4001").build());
     verifyDataTypeMapping("varbinary(max)", Schema.BYTES_SCHEMA);
     verifyDataTypeMapping("decimal(38,0)", Decimal.schema(0));
     verifyDataTypeMapping("decimal(38,4)", Decimal.schema(4));
@@ -146,8 +150,8 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
         "CREATE TABLE [myTable] (\n"
         + "[c1] int NOT NULL,\n"
         + "[c2] bigint NOT NULL,\n"
-        + "[c3] varchar(max) NOT NULL,\n"
-        + "[c4] varchar(max) NULL,\n"
+        + "[c3] nvarchar(max) NOT NULL,\n"
+        + "[c4] nvarchar(max) NULL,\n"
         + "[c5] date DEFAULT '2001-03-15',\n"
         + "[c6] time DEFAULT '00:00:00.000',\n"
         + "[c7] datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
@@ -163,8 +167,8 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
         "CREATE TABLE myTable (\n"
         + "c1 int NOT NULL,\n"
         + "c2 bigint NOT NULL,\n"
-        + "c3 varchar(max) NOT NULL,\n"
-        + "c4 varchar(max) NULL,\n"
+        + "c3 nvarchar(max) NOT NULL,\n"
+        + "c4 nvarchar(max) NULL,\n"
         + "c5 date DEFAULT '2001-03-15',\n"
         + "c6 time DEFAULT '00:00:00.000',\n"
         + "c7 datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
@@ -182,8 +186,8 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
             "ALTER TABLE [myTable] ADD\n"
             + "[c1] int NOT NULL,\n"
             + "[c2] bigint NOT NULL,\n"
-            + "[c3] varchar(max) NOT NULL,\n"
-            + "[c4] varchar(max) NULL,\n"
+            + "[c3] nvarchar(max) NOT NULL,\n"
+            + "[c4] nvarchar(max) NULL,\n"
             + "[c5] date DEFAULT '2001-03-15',\n"
             + "[c6] time DEFAULT '00:00:00.000',\n"
             + "[c7] datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
@@ -200,8 +204,8 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
             "ALTER TABLE myTable ADD\n"
             + "c1 int NOT NULL,\n"
             + "c2 bigint NOT NULL,\n"
-            + "c3 varchar(max) NOT NULL,\n"
-            + "c4 varchar(max) NULL,\n"
+            + "c3 nvarchar(max) NOT NULL,\n"
+            + "c4 nvarchar(max) NULL,\n"
             + "c5 date DEFAULT '2001-03-15',\n"
             + "c6 time DEFAULT '00:00:00.000',\n"
             + "c7 datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
@@ -259,7 +263,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
   @Test
   public void createOneColOnePkInString() {
     verifyCreateOneColOnePkAsString(
-        "CREATE TABLE [myTable] (" + System.lineSeparator() + "[pk1] varchar(900) NOT NULL," +
+        "CREATE TABLE [myTable] (" + System.lineSeparator() + "[pk1] nvarchar(900) NOT NULL," +
           System.lineSeparator() + "PRIMARY KEY([pk1]))");
   }
 

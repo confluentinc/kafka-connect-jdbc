@@ -17,12 +17,15 @@ package io.confluent.connect.jdbc.dialect;
 
 import java.sql.JDBCType;
 import java.sql.Types;
+
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -36,6 +39,14 @@ import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableDefinitionBuilder;
 import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.util.ColumnDefinition.Mutability;
+import io.confluent.connect.jdbc.util.ColumnDefinition.Nullability;
+import org.apache.kafka.connect.errors.ConnectException;
+
+import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static org.junit.Assert.assertEquals;
 
@@ -43,7 +54,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
   @Override
   protected PostgreSqlDatabaseDialect createDialect() {
-    return new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something"));
+    return new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:some:db"));
   }
 
   @Test
@@ -56,7 +67,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     assertPrimitiveMapping(Type.FLOAT64, "DOUBLE PRECISION");
     assertPrimitiveMapping(Type.BOOLEAN, "BOOLEAN");
     assertPrimitiveMapping(Type.BYTES, "BYTEA");
-    assertPrimitiveMapping(Type.STRING, "TEXT");
+    assertPrimitiveMapping(Type.STRING, "VARCHAR");
   }
 
   @Test
@@ -83,7 +94,9 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     verifyDataTypeMapping("REAL", Schema.FLOAT32_SCHEMA);
     verifyDataTypeMapping("DOUBLE PRECISION", Schema.FLOAT64_SCHEMA);
     verifyDataTypeMapping("BOOLEAN", Schema.BOOLEAN_SCHEMA);
-    verifyDataTypeMapping("TEXT", Schema.STRING_SCHEMA);
+    verifyDataTypeMapping("VARCHAR", Schema.STRING_SCHEMA);
+    verifyDataTypeMapping("VARCHAR(2712)", SchemaBuilder.string().parameter("length","2712").build());
+    verifyDataTypeMapping("VARCHAR(4000)", SchemaBuilder.string().parameter("length","4000").build());
     verifyDataTypeMapping("BYTEA", Schema.BYTES_SCHEMA);
     verifyDataTypeMapping("DECIMAL", Decimal.schema(0));
     verifyDataTypeMapping("DATE", Date.SCHEMA);
@@ -112,8 +125,8 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         "CREATE TABLE \"myTable\" (\n"
         + "\"c1\" INT NOT NULL,\n"
         + "\"c2\" BIGINT NOT NULL,\n"
-        + "\"c3\" TEXT NOT NULL,\n"
-        + "\"c4\" TEXT NULL,\n"
+        + "\"c3\" VARCHAR NOT NULL,\n"
+        + "\"c4\" VARCHAR NULL,\n"
         + "\"c5\" DATE DEFAULT '2001-03-15',\n"
         + "\"c6\" TIME DEFAULT '00:00:00.000',\n"
         + "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
@@ -130,8 +143,8 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         "CREATE TABLE myTable (\n"
         + "c1 INT NOT NULL,\n"
         + "c2 BIGINT NOT NULL,\n"
-        + "c3 TEXT NOT NULL,\n"
-        + "c4 TEXT NULL,\n"
+        + "c3 VARCHAR NOT NULL,\n"
+        + "c4 VARCHAR NULL,\n"
         + "c5 DATE DEFAULT '2001-03-15',\n"
         + "c6 TIME DEFAULT '00:00:00.000',\n"
         + "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
@@ -149,8 +162,8 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
             "ALTER TABLE \"myTable\" \n"
             + "ADD \"c1\" INT NOT NULL,\n"
             + "ADD \"c2\" BIGINT NOT NULL,\n"
-            + "ADD \"c3\" TEXT NOT NULL,\n"
-            + "ADD \"c4\" TEXT NULL,\n"
+            + "ADD \"c3\" VARCHAR NOT NULL,\n"
+            + "ADD \"c4\" VARCHAR NULL,\n"
             + "ADD \"c5\" DATE DEFAULT '2001-03-15',\n"
             + "ADD \"c6\" TIME DEFAULT '00:00:00.000',\n"
             + "ADD \"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
@@ -168,8 +181,8 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
             "ALTER TABLE myTable \n"
             + "ADD c1 INT NOT NULL,\n"
             + "ADD c2 BIGINT NOT NULL,\n"
-            + "ADD c3 TEXT NOT NULL,\n"
-            + "ADD c4 TEXT NULL,\n"
+            + "ADD c3 VARCHAR NOT NULL,\n"
+            + "ADD c4 VARCHAR NULL,\n"
             + "ADD c5 DATE DEFAULT '2001-03-15',\n"
             + "ADD c6 TIME DEFAULT '00:00:00.000',\n"
             + "ADD c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
@@ -306,6 +319,13 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     verifyCreateOneColOnePk(
         "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "\"pk1\" INT NOT NULL," +
         System.lineSeparator() + "PRIMARY KEY(\"pk1\"))");
+  }
+
+  @Test
+  public void createOneColOnePkInString() {
+    verifyCreateOneColOnePkAsString(
+            "CREATE TABLE \"myTable\" (" + System.lineSeparator() + "\"pk1\" VARCHAR(2712) NOT NULL," +
+                    System.lineSeparator() + "PRIMARY KEY(\"pk1\"))");
   }
 
   @Test

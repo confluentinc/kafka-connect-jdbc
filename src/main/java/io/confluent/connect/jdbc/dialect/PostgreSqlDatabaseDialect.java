@@ -15,8 +15,6 @@
 
 package io.confluent.connect.jdbc.dialect;
 
-import java.util.Collections;
-import java.util.Map;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.connect.data.Date;
@@ -33,6 +31,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -46,6 +46,7 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -221,6 +222,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
   @Override
   protected String getSqlType(SinkRecordField field) {
+    Map<String, String> parameters = field.schemaParameters();
     if (field.schemaName() != null) {
       switch (field.schemaName()) {
         case Decimal.LOGICAL_NAME:
@@ -251,7 +253,17 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "BOOLEAN";
       case STRING:
-        return "TEXT";
+        String length = parameters != null ? parameters.getOrDefault("length", "") : "";
+        if (field.isPrimaryKey()) {
+          // Should be no more than the 2712 PostgreSQL B-Tree Index 1/3 Page size constraint
+          if (!length.isEmpty() && Integer.parseInt(length) <= 2712) {
+            return "VARCHAR(" + length + ")";
+          }
+          return "VARCHAR(2712)";
+        } else if (!length.isEmpty() && Integer.parseInt(length) > 0) {
+          return "VARCHAR(" + length + ")";
+        }
+        return "VARCHAR";
       case BYTES:
         return "BYTEA";
       default:

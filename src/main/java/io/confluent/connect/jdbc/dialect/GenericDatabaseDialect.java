@@ -1517,6 +1517,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     return builder.toString();
   }
 
+  @SuppressWarnings("deprecation")
   @Override
   public StatementBinder statementBinder(
       PreparedStatement statement,
@@ -1535,6 +1536,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     );
   }
 
+  @SuppressWarnings("deprecation")
   @Override
   public void bindField(
       PreparedStatement statement,

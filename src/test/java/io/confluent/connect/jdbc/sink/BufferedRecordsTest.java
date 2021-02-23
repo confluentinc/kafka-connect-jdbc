@@ -16,6 +16,9 @@
 package io.confluent.connect.jdbc.sink;
 
 import org.apache.kafka.common.config.ConfigException;
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.TableDefinition;
+import java.sql.Types;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -37,7 +40,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
@@ -48,6 +50,7 @@ import io.confluent.connect.jdbc.util.TableId;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -461,12 +464,19 @@ public class BufferedRecordsTest {
     batchResponse[0] = Statement.SUCCESS_NO_INFO;
     batchResponse[1] = Statement.SUCCESS_NO_INFO;
 
+    final ColumnDefinition colDefMock = mock(ColumnDefinition.class);
+    when(colDefMock.type()).thenReturn(Types.VARCHAR);
+    final TableDefinition tabDefMock = mock(TableDefinition.class);
+    when(tabDefMock.definitionForColumn("name")).thenReturn(colDefMock);
+
+
     final DbStructure dbStructureMock = mock(DbStructure.class);
     when(dbStructureMock.createOrAmendIfNecessary(Matchers.any(JdbcSinkConfig.class),
                                                   Matchers.any(Connection.class),
                                                   Matchers.any(TableId.class),
                                                   Matchers.any(FieldsMetadata.class)))
         .thenReturn(true);
+    when(dbStructureMock.tableDefinition(any(), any())).thenReturn(tabDefMock);
 
     PreparedStatement preparedStatementMock = mock(PreparedStatement.class);
     when(preparedStatementMock.executeBatch()).thenReturn(batchResponse);

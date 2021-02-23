@@ -1434,6 +1434,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     throw new UnsupportedOperationException();
   }
 
+  @SuppressWarnings("deprecation")
   @Override
   public StatementBinder statementBinder(
       PreparedStatement statement,
@@ -1452,6 +1453,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     );
   }
 
+  @SuppressWarnings("deprecation")
   @Override
   public void bindField(
       PreparedStatement statement,

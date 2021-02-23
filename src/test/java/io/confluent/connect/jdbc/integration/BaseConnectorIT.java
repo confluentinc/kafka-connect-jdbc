@@ -51,10 +51,6 @@ public abstract class BaseConnectorIT {
 
     protected EmbeddedConnectCluster connect;
 
-    public JsonConverter jsonConverter;
-    public Map<String, String> props;
-
-
     protected void startConnect() {
         connect = new EmbeddedConnectCluster.Builder()
                 .name("jdbc-connect-cluster")
@@ -64,14 +60,18 @@ public abstract class BaseConnectorIT {
         connect.start();
     }
 
-    protected void setUpForSinkIt() {
-        jsonConverter = new JsonConverter();
+    protected JsonConverter jsonConverter() {
+        JsonConverter jsonConverter = new JsonConverter();
         jsonConverter.configure(Collections.singletonMap(
             ConverterConfig.TYPE_CONFIG,
             ConverterType.VALUE.getName()
         ));
 
-        props = new HashMap<>();
+        return jsonConverter;
+    }
+
+    protected Map<String, String> baseSinkProps() {
+        Map<String, String> props = new HashMap<>();
         props.put(CONNECTOR_CLASS_CONFIG, "JdbcSinkConnector");
         // converters
         props.put(KEY_CONVERTER_CLASS_CONFIG, StringConverter.class.getName());
@@ -79,6 +79,7 @@ public abstract class BaseConnectorIT {
         // license properties
         props.put("confluent.topic.bootstrap.servers", connect.kafka().bootstrapServers());
         props.put("confluent.topic.replication.factor", "1");
+        return props;
     }
 
     protected void stopConnect() {

@@ -59,13 +59,13 @@ public class DbStructureTest {
     assertTrue(missingFields(sinkRecords("AaA", "bBb"), columns("aAa", "BbB")).isEmpty());
   }
 
-  @Test (expected = SchemaMismatchException.class)
+  @Test (expected = TableAlterOrCreateException.class)
   public void testMissingTableNoAutoCreate() throws Exception {
     structure.create(mock(JdbcSinkConfig.class), mock(Connection.class), mock(TableId.class),
         fieldsMetadata);
   }
 
-  @Test (expected = SchemaMismatchException.class)
+  @Test (expected = TableAlterOrCreateException.class)
   public void testAlterNoAutoEvolve() throws Exception {
     TableDefinition tableDefinition = mock(TableDefinition.class);
     when(tableDefinitions.get(any(), any())).thenReturn(tableDefinition);
@@ -86,7 +86,7 @@ public class DbStructureTest {
         fieldsMetadata, 5);
   }
 
-  @Test (expected = SchemaMismatchException.class)
+  @Test (expected = TableAlterOrCreateException.class)
   public void testAlterNotSupported() throws Exception {
     TableDefinition tableDefinition = mock(TableDefinition.class);
     when(tableDefinitions.get(any(), any())).thenReturn(tableDefinition);
@@ -106,7 +106,7 @@ public class DbStructureTest {
         fieldsMetadata, 5);
   }
 
-  @Test (expected = SchemaMismatchException.class)
+  @Test (expected = TableAlterOrCreateException.class)
   public void testCannotAlterBecauseFieldNotOptionalAndNoDefaultValue() throws Exception {
     TableDefinition tableDefinition = mock(TableDefinition.class);
     when(tableDefinitions.get(any(), any())).thenReturn(tableDefinition);
@@ -126,7 +126,7 @@ public class DbStructureTest {
         fieldsMetadata, 5);
   }
 
-  @Test (expected = SchemaMismatchException.class)
+  @Test (expected = TableAlterOrCreateException.class)
   public void testFailedToAmendExhaustedRetry() throws Exception {
     TableDefinition tableDefinition = mock(TableDefinition.class);
     when(tableDefinitions.get(any(), any())).thenReturn(tableDefinition);

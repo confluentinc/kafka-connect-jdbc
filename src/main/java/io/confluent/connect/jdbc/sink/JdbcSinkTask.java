@@ -82,11 +82,11 @@ public class JdbcSinkTask extends SinkTask {
     );
     try {
       writer.write(records);
-    } catch (SchemaMismatchException sme) {
+    } catch (TableAlterOrCreateException tace) {
       if (reporter != null) {
         unrollAndRetry(records);
       } else {
-        throw sme;
+        throw tace;
       }
     } catch (SQLException sqle) {
       log.warn(
@@ -133,8 +133,8 @@ public class JdbcSinkTask extends SinkTask {
     for (SinkRecord record : records) {
       try {
         writer.write(Collections.singletonList(record));
-      } catch (SchemaMismatchException sme) {
-        reporter.report(record, sme);
+      } catch (TableAlterOrCreateException tace) {
+        reporter.report(record, tace);
         writer.closeQuietly();
       } catch (SQLException sqle) {
         String sqleAllMessages = "Exception chain:" + System.lineSeparator();

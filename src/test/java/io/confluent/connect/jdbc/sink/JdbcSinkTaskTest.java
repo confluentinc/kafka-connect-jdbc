@@ -338,7 +338,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
   }
 
   @Test
-  public void errorReportingSchemaMismatchException() throws SQLException {
+  public void errorReportingTableAlterOrCreateException() throws SQLException {
     final int maxRetries = 0;
     final int retryBackoffMs = 1000;
 
@@ -347,7 +347,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     SinkTaskContext ctx = createMock(SinkTaskContext.class);
 
     mockWriter.write(records);
-    SchemaMismatchException exception = new SchemaMismatchException("cause 1");
+    TableAlterOrCreateException exception = new TableAlterOrCreateException("cause 1");
     expectLastCall().andThrow(exception);
     mockWriter.write(anyObject());
     expectLastCall().andThrow(exception);

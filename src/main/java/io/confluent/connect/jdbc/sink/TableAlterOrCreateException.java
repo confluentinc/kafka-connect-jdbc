@@ -17,13 +17,13 @@ package io.confluent.connect.jdbc.sink;
 
 import org.apache.kafka.connect.errors.ConnectException;
 
-public class SchemaMismatchException extends ConnectException {
+public class TableAlterOrCreateException extends ConnectException {
 
-  public SchemaMismatchException(String reason) {
+  public TableAlterOrCreateException(String reason) {
     super(reason);
   }
 
-  public SchemaMismatchException(String reason, Throwable throwable) {
+  public TableAlterOrCreateException(String reason, Throwable throwable) {
     super(reason, throwable);
   }
 }

@@ -20,6 +20,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -33,6 +34,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.runtime.errors.ToleranceType;
 import org.junit.After;
 import org.junit.Before;
@@ -54,7 +56,7 @@ import static org.junit.Assert.assertEquals;
  * Integration tests for writing to Postgres with UUID columns.
  */
 @Category(IntegrationTest.class)
-public class PostgresDatatypeIT extends BaseConnectorIT {
+public final class PostgresDatatypeIT extends BaseConnectorIT {
 
   private static Logger log = LoggerFactory.getLogger(PostgresDatatypeIT.class);
 
@@ -62,11 +64,14 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
   public SingleInstancePostgresRule pg = EmbeddedPostgresRules.singleInstance();
 
   private String tableName;
+  private JsonConverter jsonConverter;
+  private Map<String, String> props;
 
   @Before
   public void before() {
     startConnect();
-    setUpForSinkIt();
+    jsonConverter = jsonConverter();
+    props = baseSinkProps();
 
     tableName = "test";
     String jdbcURL = String
@@ -82,13 +87,13 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
 
   @After
   public void after() throws SQLException {
-    stopConnect();
     try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
       try (Statement s = c.createStatement()) {
         s.execute("DROP TABLE IF EXISTS " + tableName);
       }
     }
     log.info("Dropped table");
+    stopConnect();
   }
 
   /**
@@ -96,10 +101,8 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
    * with an invalid transaction, the connector sends only the errant record to the error
    * reporter and establishes a valid transaction for subsequent correct records to be sent to
    * the actual database.
-   *
-   * @throws Exception
    */
-  @Test
+  @Test (expected = RuntimeException.class)
   public void testPrimaryKeyConstraintsSendsToErrorReporter() throws Exception {
     props.put(ERRORS_TOLERANCE_CONFIG, ToleranceType.ALL.value());
     props.put(DLQ_TOPIC_NAME_CONFIG, DLQ_TOPIC_NAME);
@@ -114,33 +117,27 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
         .field("firstname", Schema.STRING_SCHEMA)
         .field("lastname", Schema.STRING_SCHEMA)
         .build();
-    final Struct struct = new Struct(schema)
+    final Struct firstStruct = new Struct(schema)
         .put("firstname", "Christina")
         .put("lastname", "Brams");
 
-    String kafkaValue = new String(jsonConverter.fromConnectData(tableName, schema, struct));
-    connect.kafka().produce(tableName, null, kafkaValue);
+    produceRecord(schema, firstStruct);
     // Send the same record for a PK collision
-    connect.kafka().produce(tableName, null, kafkaValue);
+    produceRecord(schema, firstStruct);
 
     // Now, create and send another normal record
-    Struct struct2 = new Struct(schema)
+    Struct secondStruct = new Struct(schema)
         .put("firstname", "Brams")
         .put("lastname", "Christina");
 
-    kafkaValue = new String(jsonConverter.fromConnectData(tableName, schema, struct2));
-    connect.kafka().produce(tableName, null, kafkaValue);
+    produceRecord(schema, secondStruct);
 
-    try {
-      // Consume the number of records produced since this is the upper bound of records that
-      // could be sent to the error reporter.
-      ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(3,
-          CONSUME_MAX_DURATION_MS, DLQ_TOPIC_NAME);
-    } catch (RuntimeException e) {
-      // Check that the amount of records that were actually found by the consumer matches the
-      // number of records expected to be sent to the error reporter.
-      assertEquals("1", e.toString().substring(65, 66));
-    }
+
+    // Consume the expected number of records that should be sent to the error reporter.
+    connect.kafka().consume(1, CONSUME_MAX_DURATION_MS, DLQ_TOPIC_NAME);
+
+    // Try to consume one more record than expected from the topic, which should fail.
+    connect.kafka().consume(2, 5000, DLQ_TOPIC_NAME);
   }
 
   @Test
@@ -159,13 +156,11 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
         .field("jsonid", Schema.STRING_SCHEMA)
         .field("userid", Schema.STRING_SCHEMA)
         .build();
-    UUID uuid = UUID.randomUUID();
-    String jsonid = "5";
     final Struct struct = new Struct(schema)
         .put("firstname", "Christina")
         .put("lastname", "Brams")
-        .put("jsonid", jsonid)
-        .put("userid", uuid.toString());
+        .put("jsonid", "5")
+        .put("userid", UUID.randomUUID().toString());
 
     String kafkaValue = new String(jsonConverter.fromConnectData(tableName, schema, struct));
     connect.kafka().produce(tableName, null, kafkaValue);
@@ -187,13 +182,11 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
                                        .field("jsonid", Schema.STRING_SCHEMA)
                                        .field("userid", Schema.STRING_SCHEMA)
                                        .build();
-    UUID uuid = UUID.randomUUID();
-    String jsonid = "5";
     final Struct struct = new Struct(schema)
         .put("firstname", "Christina")
         .put("lastname", "Brams")
-        .put("jsonid", jsonid)
-        .put("userid", uuid.toString());
+        .put("jsonid", "5")
+        .put("userid", UUID.randomUUID().toString());
 
     String kafkaValue = new String(jsonConverter.fromConnectData(tableName, schema, struct));
     connect.kafka().produce(tableName, null, kafkaValue);
@@ -219,13 +212,12 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     );
   }
 
-  private void createTableWithUuidColumns() throws SQLException {
-    log.info("Creating table {} with UUID column", tableName);
+  private void createTable(String columnsSql) throws SQLException {
     try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
       c.setAutoCommit(false);
       try (Statement s = c.createStatement()) {
         String sql = String.format(
-            "CREATE TABLE %s(firstName TEXT, lastName TEXT, jsonid json, userid UUID)",
+            columnsSql,
             tableName
         );
         log.info("Executing statement: {}", sql);
@@ -233,40 +225,28 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
         c.commit();
       }
     }
+  }
+
+  private void createTableWithUuidColumns() throws SQLException {
+    log.info("Creating table {} with UUID column", tableName);
+    createTable("CREATE TABLE %s(firstName TEXT, lastName TEXT, jsonid json, userid UUID)");
     log.info("Created table {} with UUID column", tableName);
   }
 
   private void createTableWithLessFields() throws SQLException {
     log.info("Creating table {} with less fields", tableName);
-    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
-      c.setAutoCommit(false);
-      try (Statement s = c.createStatement()) {
-        String sql = String.format(
-            "CREATE TABLE %s(firstName TEXT, jsonid json, userid UUID)",
-            tableName
-        );
-        log.info("Executing statement: {}", sql);
-        s.execute(sql);
-        c.commit();
-      }
-    }
+    createTable("CREATE TABLE %s(firstName TEXT, jsonid json, userid UUID)");
     log.info("Created table {} with less fields", tableName);
   }
 
   private void createTableWithPrimaryKey() throws SQLException {
     log.info("Creating table {} with a primary key", tableName);
-    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
-      c.setAutoCommit(false);
-      try (Statement s = c.createStatement()) {
-        String sql = String.format(
-            "CREATE TABLE %s(firstName TEXT PRIMARY KEY, lastName TEXT)",
-            tableName
-        );
-        log.info("Executing statement: {}", sql);
-        s.execute(sql);
-        c.commit();
-      }
-    }
+    createTable("CREATE TABLE %s(firstName TEXT PRIMARY KEY, lastName TEXT)");
     log.info("Created table {} with a primary key", tableName);
+  }
+
+  private void produceRecord(Schema schema, Struct struct) {
+    String kafkaValue = new String(jsonConverter.fromConnectData(tableName, schema, struct));
+    connect.kafka().produce(tableName, null, kafkaValue);
   }
 }

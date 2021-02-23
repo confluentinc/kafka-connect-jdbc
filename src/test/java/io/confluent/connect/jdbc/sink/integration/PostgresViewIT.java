@@ -19,7 +19,6 @@ import static org.apache.kafka.connect.runtime.ConnectorConfig.ERRORS_TOLERANCE_
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_NAME_CONFIG;
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_REPLICATION_FACTOR_CONFIG;
 import static org.apache.kafka.test.TestUtils.waitForCondition;
-import static org.junit.Assert.assertEquals;
 
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.jdbc.integration.BaseConnectorIT;
@@ -31,12 +30,13 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Map;
 import java.util.Optional;
 
-import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.runtime.errors.ToleranceType;
 import org.junit.After;
 import org.junit.Before;
@@ -50,7 +50,7 @@ import org.slf4j.LoggerFactory;
  * Integration tests for writing to Postgres views.
  */
 @Category(IntegrationTest.class)
-public class PostgresViewIT extends BaseConnectorIT  {
+public final class PostgresViewIT extends BaseConnectorIT  {
 
   private static Logger log = LoggerFactory.getLogger(PostgresViewIT.class);
 
@@ -59,11 +59,14 @@ public class PostgresViewIT extends BaseConnectorIT  {
 
   private String tableName;
   private String topic;
+  private JsonConverter jsonConverter;
+  private Map<String, String> props;
 
   @Before
   public void before() {
     startConnect();
-    setUpForSinkIt();
+    jsonConverter = jsonConverter();
+    props = baseSinkProps();
 
     tableName = "test";
     topic = tableName + "_view";
@@ -81,7 +84,6 @@ public class PostgresViewIT extends BaseConnectorIT  {
 
   @After
   public void after() throws SQLException {
-   stopConnect();
     try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
       try (Statement s = c.createStatement()) {
         s.execute("DROP VIEW " + topic);
@@ -89,16 +91,15 @@ public class PostgresViewIT extends BaseConnectorIT  {
       }
     }
     log.info("Dropped table");
+    stopConnect();
   }
 
   /**
    * Verifies that when sending records with more fields than the view has, these errant records
    * are sent to the error reporter. The test also intersperses correct schema records to verify
    * that only the errant records are being sent to the error reporter.
-   *
-   * @throws Exception
    */
-  @Test
+  @Test (expected = RuntimeException.class)
   public void testRecordSchemaMoreFieldsThanViewSendsToErrorReporter() throws Exception {
     props.put(ERRORS_TOLERANCE_CONFIG, ToleranceType.ALL.value());
     props.put(DLQ_TOPIC_NAME_CONFIG, DLQ_TOPIC_NAME);
@@ -126,28 +127,19 @@ public class PostgresViewIT extends BaseConnectorIT  {
         .put("lastname", "Brams")
         .put("age", 20);
 
-    String kafkaValue;
-
     for (int i = 0; i < 6; i++) {
       if (i % 2 == 0) {
-        kafkaValue = new String(jsonConverter.fromConnectData(topic, correctSchema, correctStruct));
-        connect.kafka().produce(topic, null, kafkaValue);
+        produceRecord(correctSchema, correctStruct);
       } else {
-        kafkaValue = new String(jsonConverter.fromConnectData(topic, errorSchema, errorStruct));
-        connect.kafka().produce(topic, null, kafkaValue);
+        produceRecord(errorSchema, errorStruct);
       }
     }
 
-    try {
-      // Consume the number of records produced since this is the upper bound of records that
-      // could be sent to the error reporter.
-      ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(6,
-          CONSUME_MAX_DURATION_MS, DLQ_TOPIC_NAME);
-    } catch (RuntimeException e) {
-      // Check that the amount of records that were actually found by the consumer matches the
-      // number of records expected to be sent to the error reporter.
-      assertEquals("3", e.toString().substring(65, 66));
-    }
+    // Consume the expected number of records that should be sent to the error reporter.
+    connect.kafka().consume(3, CONSUME_MAX_DURATION_MS, DLQ_TOPIC_NAME);
+
+    // Try to consume one more record than expected from the topic, which should fail.
+    connect.kafka().consume(4, 5000, DLQ_TOPIC_NAME);
   }
 
   @Test
@@ -162,8 +154,7 @@ public class PostgresViewIT extends BaseConnectorIT  {
     final Struct struct = new Struct(schema)
         .put("firstname", "Christina");
 
-    String kafkaValue = new String(jsonConverter.fromConnectData(topic, schema, struct));
-    connect.kafka().produce(topic, null, kafkaValue);
+    produceRecord(schema, struct);
 
     waitForCondition(
         () -> {
@@ -197,8 +188,7 @@ public class PostgresViewIT extends BaseConnectorIT  {
         .put("firstname", "Christina")
         .put("lastname", "Brams");
 
-    String kafkaValue = new String(jsonConverter.fromConnectData(topic, schema, struct));
-    connect.kafka().produce(topic, null, kafkaValue);
+    produceRecord(schema, struct);
 
     waitForCondition(
         () -> {
@@ -229,5 +219,10 @@ public class PostgresViewIT extends BaseConnectorIT  {
       }
     }
     log.info("Created table and view");
+  }
+
+  private void produceRecord(Schema schema, Struct struct) {
+    String kafkaValue = new String(jsonConverter.fromConnectData(tableName, schema, struct));
+    connect.kafka().produce(topic, null, kafkaValue);
   }
 }

@@ -103,6 +103,7 @@ public class BufferedRecords {
           config.pkMode,
           schemaPair,
           fieldsMetadata,
+          dbStructure.tableDefinition(connection, tableId),
           config.insertMode
       );
     }

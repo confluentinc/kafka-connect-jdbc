@@ -14,10 +14,15 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
+import java.io.ByteArrayInputStream;
+import java.io.StringReader;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.time.ZoneOffset;
 import java.util.Calendar;
 import java.util.TimeZone;
@@ -34,6 +39,12 @@ import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDialect> {
 
@@ -46,7 +57,15 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
   @Test
   public void bindFieldStringValue() throws SQLException {
     int index = ThreadLocalRandom.current().nextInt();
-    verifyBindField(++index, Schema.STRING_SCHEMA, "yep").setNString(index, "yep");
+    verifyBindField(++index, Schema.STRING_SCHEMA, "yep").setCharacterStream(eq(index), any(StringReader.class));
+  }
+
+  @Override
+  @Test
+  public void bindFieldBytesValue() throws SQLException {
+    int index = ThreadLocalRandom.current().nextInt();
+    verifyBindField(++index, Schema.BYTES_SCHEMA, new byte[]{42}).setBlob(eq(index), any(ByteArrayInputStream.class));
+    verifyBindField(++index, Schema.BYTES_SCHEMA, ByteBuffer.wrap(new byte[]{42})).setBlob(eq(index), any(ByteArrayInputStream.class));
   }
 
   @Test
@@ -259,37 +278,88 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
   public void shouldSanitizeUrlWithKerberosCredentialsInUrlProperties() {
     assertSanitizedUrl(
         "jdbc:oracle:thin:@myhost:1111/db?"
-        + "password=secret&"
-        + "javax.net.ssl.keyStorePassword=secret2&"
-        + "key1=value1&"
-        + "key2=value2&"
-        + "key3=value3&"
-        + "user=smith&"
-        + "password=secret&"
-        + "passworNotSanitized=not-secret&"
-        + "passwordShouldBeSanitized=value3&"
-        + "javax.net.ssl.trustStorePassword=superSecret&"
-        + "OCINewPassword=secret2&"
-        + "oracle.net.wallet_password=secret3&"
-        + "proxy_password=secret4&"
-        + "PROXY_USER_PASSWORD=secret5&"
-        + "other=value",
+            + "password=secret&"
+            + "javax.net.ssl.keyStorePassword=secret2&"
+            + "key1=value1&"
+            + "key2=value2&"
+            + "key3=value3&"
+            + "user=smith&"
+            + "password=secret&"
+            + "passworNotSanitized=not-secret&"
+            + "passwordShouldBeSanitized=value3&"
+            + "javax.net.ssl.trustStorePassword=superSecret&"
+            + "OCINewPassword=secret2&"
+            + "oracle.net.wallet_password=secret3&"
+            + "proxy_password=secret4&"
+            + "PROXY_USER_PASSWORD=secret5&"
+            + "other=value",
         "jdbc:oracle:thin:@myhost:1111/db?"
-        + "password=****&"
-        + "javax.net.ssl.keyStorePassword=****&"
-        + "key1=value1&"
-        + "key2=value2&"
-        + "key3=value3&"
-        + "user=smith&"
-        + "password=****&"
-        + "passworNotSanitized=not-secret&"
-        + "passwordShouldBeSanitized=****&"
-        + "javax.net.ssl.trustStorePassword=****&"
-        + "OCINewPassword=****&"
-        + "oracle.net.wallet_password=****&"
-        + "proxy_password=****&"
-        + "PROXY_USER_PASSWORD=****&"
-        + "other=value"
+            + "password=****&"
+            + "javax.net.ssl.keyStorePassword=****&"
+            + "key1=value1&"
+            + "key2=value2&"
+            + "key3=value3&"
+            + "user=smith&"
+            + "password=****&"
+            + "passworNotSanitized=not-secret&"
+            + "passwordShouldBeSanitized=****&"
+            + "javax.net.ssl.trustStorePassword=****&"
+            + "OCINewPassword=****&"
+            + "oracle.net.wallet_password=****&"
+            + "proxy_password=****&"
+            + "PROXY_USER_PASSWORD=****&"
+            + "other=value"
     );
+  }
+
+  @Test
+  public void shouldBindStringAccordingToColumnDef() throws SQLException {
+    int index = ThreadLocalRandom.current().nextInt();
+    String value = "random text";
+    Schema schema = Schema.STRING_SCHEMA;
+    PreparedStatement stmtVarchar = mock(PreparedStatement.class);
+    ColumnDefinition colDefVarchar = mock(ColumnDefinition.class);
+    when(colDefVarchar.type()).thenReturn(Types.VARCHAR);
+
+    PreparedStatement stmtNchar = mock(PreparedStatement.class);
+    ColumnDefinition colDefNchar = mock(ColumnDefinition.class);
+    when(colDefNchar.type()).thenReturn(Types.NCHAR);
+
+    PreparedStatement stmtNvarchar = mock(PreparedStatement.class);
+    ColumnDefinition colDefNvarchar = mock(ColumnDefinition.class);
+    when(colDefNvarchar.type()).thenReturn(Types.NVARCHAR);
+
+    PreparedStatement stmtClob = mock(PreparedStatement.class);
+    ColumnDefinition colDefClob = mock(ColumnDefinition.class);
+    when(colDefClob.type()).thenReturn(Types.CLOB);
+
+    dialect.bindField(stmtVarchar, index, schema, value, colDefVarchar);
+    verify(stmtVarchar, times(1)).setString(index, value);
+
+    dialect.bindField(stmtNchar, index, schema, value, colDefNchar);
+    verify(stmtNchar, times(1)).setNString(index, value);
+
+    dialect.bindField(stmtNvarchar, index, schema, value, colDefNvarchar);
+    verify(stmtNvarchar, times(1)).setNString(index, value);
+
+    dialect.bindField(stmtClob, index, schema, value, colDefClob);
+    verify(stmtClob, times(1)).setCharacterStream(eq(index), any(StringReader.class));
+  }
+
+  @Test
+  public void shouldBindBytesAccordingToColumnDef() throws SQLException {
+    int index = ThreadLocalRandom.current().nextInt();
+    byte[] value = new byte[]{42};
+    Schema schema = Schema.BYTES_SCHEMA;
+    PreparedStatement statement = mock(PreparedStatement.class);
+    ColumnDefinition colDefBlob = mock(ColumnDefinition.class);
+    when(colDefBlob.type()).thenReturn(Types.BLOB);
+    ColumnDefinition colDefBinary = mock(ColumnDefinition.class);
+    when(colDefBinary.type()).thenReturn(Types.BINARY);
+
+    dialect.bindField(statement, index, schema, value, colDefBlob);
+    verify(statement, times(1)).setBlob(eq(index), any(ByteArrayInputStream.class));
+    dialect.bindField(statement, index, schema, value, colDefBinary);
+    verify(statement, times(1)).setBytes(index, value);
   }
 }

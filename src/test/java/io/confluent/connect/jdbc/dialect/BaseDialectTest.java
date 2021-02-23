@@ -64,6 +64,7 @@ import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
 
@@ -401,9 +402,8 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
   }
 
   @Test
-  public void bindFieldPrimitiveValuesExceptString() throws SQLException {
+  public void bindFieldPrimitiveValuesExceptByteAndStringAndBytes() throws SQLException {
     int index = ThreadLocalRandom.current().nextInt();
-    verifyBindField(++index, Schema.INT8_SCHEMA, (byte) 42).setByte(index, (byte) 42);
     verifyBindField(++index, Schema.INT16_SCHEMA, (short) 42).setShort(index, (short) 42);
     verifyBindField(++index, Schema.INT32_SCHEMA, 42).setInt(index, 42);
     verifyBindField(++index, Schema.INT64_SCHEMA, 42L).setLong(index, 42L);
@@ -411,8 +411,6 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     verifyBindField(++index, Schema.BOOLEAN_SCHEMA, true).setBoolean(index, true);
     verifyBindField(++index, Schema.FLOAT32_SCHEMA, -42f).setFloat(index, -42f);
     verifyBindField(++index, Schema.FLOAT64_SCHEMA, 42d).setDouble(index, 42d);
-    verifyBindField(++index, Schema.BYTES_SCHEMA, new byte[]{42}).setBytes(index, new byte[]{42});
-    verifyBindField(++index, Schema.BYTES_SCHEMA, ByteBuffer.wrap(new byte[]{42})).setBytes(index, new byte[]{42});
 
     verifyBindField(
         ++index,
@@ -438,9 +436,22 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
   }
 
   @Test
+  public void bindFieldByteValue() throws SQLException {
+    int index = ThreadLocalRandom.current().nextInt();
+    verifyBindField(++index, Schema.INT8_SCHEMA, (byte) 42).setByte(index, (byte) 42);
+  }
+
+  @Test
   public void bindFieldStringValue() throws SQLException {
     int index = ThreadLocalRandom.current().nextInt();
     verifyBindField(++index, Schema.STRING_SCHEMA, "yep").setString(index, "yep");
+  }
+
+  @Test
+  public void bindFieldBytesValue() throws SQLException {
+    int index = ThreadLocalRandom.current().nextInt();
+    verifyBindField(++index, Schema.BYTES_SCHEMA, new byte[]{42}).setBytes(index, new byte[]{42});
+    verifyBindField(++index, Schema.BYTES_SCHEMA, ByteBuffer.wrap(new byte[]{42})).setBytes(index, new byte[]{42});
   }
 
   @Test
@@ -469,19 +480,25 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
   @Test(expected = ConnectException.class)
   public void bindFieldStructUnsupported() throws SQLException {
     Schema structSchema = SchemaBuilder.struct().field("test", Schema.BOOLEAN_SCHEMA).build();
-    dialect.bindField(mock(PreparedStatement.class), 1, structSchema, new Struct(structSchema));
+    ColumnDefinition colDef = mock(ColumnDefinition.class);
+    when(colDef.type()).thenReturn(Types.BOOLEAN);
+    dialect.bindField(mock(PreparedStatement.class), 1, structSchema, new Struct(structSchema), colDef);
   }
 
   @Test(expected = ConnectException.class)
   public void bindFieldArrayUnsupported() throws SQLException {
     Schema arraySchema = SchemaBuilder.array(Schema.INT8_SCHEMA);
-    dialect.bindField(mock(PreparedStatement.class), 1, arraySchema, Collections.emptyList());
+    ColumnDefinition colDef = mock(ColumnDefinition.class);
+    when(colDef.type()).thenReturn(Types.ARRAY);
+    dialect.bindField(mock(PreparedStatement.class), 1, arraySchema, Collections.emptyList(), colDef);
   }
 
   @Test(expected = ConnectException.class)
   public void bindFieldMapUnsupported() throws SQLException {
     Schema mapSchema = SchemaBuilder.map(Schema.INT8_SCHEMA, Schema.INT8_SCHEMA);
-    dialect.bindField(mock(PreparedStatement.class), 1, mapSchema, Collections.emptyMap());
+    ColumnDefinition colDef = mock(ColumnDefinition.class);
+    when(colDef.type()).thenReturn(Types.STRUCT);
+    dialect.bindField(mock(PreparedStatement.class), 1, mapSchema, Collections.emptyMap(), colDef);
   }
 
   protected void assertSanitizedUrl(String url, String expectedSanitizedUrl) {
@@ -491,7 +508,51 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
   protected PreparedStatement verifyBindField(int index, Schema schema, Object value)
       throws SQLException {
     PreparedStatement statement = mock(PreparedStatement.class);
-    dialect.bindField(statement, index, schema, value);
+    ColumnDefinition colDef = mock(ColumnDefinition.class);
+    if (schema.name() != null) {
+      switch (schema.name()) {
+        case Decimal.LOGICAL_NAME:
+          when(colDef.type()).thenReturn(Types.NUMERIC);
+          break;
+        case Date.LOGICAL_NAME:
+        case Time.LOGICAL_NAME:
+          when(colDef.type()).thenReturn(Types.DATE);
+          break;
+        case Timestamp.LOGICAL_NAME:
+          when(colDef.type()).thenReturn(Types.TIMESTAMP);
+          break;
+        default:
+          when(colDef.type()).thenReturn(null);
+      }
+    } else {
+      switch (schema.type()) {
+        case INT8:
+        case INT16:
+        case INT32:
+        case INT64:
+        case BOOLEAN:
+          when(colDef.type()).thenReturn(Types.NUMERIC);
+          break;
+        case FLOAT32:
+          // BINARY_FLOAT = 100
+          when(colDef.type()).thenReturn(100);
+          break;
+        case FLOAT64:
+          // BINARY_DOUBLE = 101
+          when(colDef.type()).thenReturn(101);
+          break;
+        case STRING:
+          when(colDef.type()).thenReturn(Types.CLOB);
+          break;
+        case BYTES:
+          when(colDef.type()).thenReturn(Types.BLOB);
+          break;
+        default:
+          when(colDef.type()).thenReturn(null);
+      }
+    }
+
+    dialect.bindField(statement, index, schema, value, colDef);
     return verify(statement, times(1));
   }
 }

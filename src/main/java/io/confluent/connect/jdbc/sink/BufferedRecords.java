@@ -139,6 +139,7 @@ public class BufferedRecords {
           config.pkMode,
           schemaPair,
           fieldsMetadata,
+          dbStructure.tableDefinition(connection, tableId),
           config.insertMode
       );
       if (config.deleteEnabled && nonNull(deleteSql)) {
@@ -148,6 +149,7 @@ public class BufferedRecords {
             config.pkMode,
             schemaPair,
             fieldsMetadata,
+            dbStructure.tableDefinition(connection, tableId),
             config.insertMode
         );
       }

@@ -280,9 +280,4 @@ public class DbStructure {
 
     return missingFieldsIgnoreCase;
   }
-
-  protected TableDefinition tableDefinition(Connection connection, TableId tableId)
-      throws SQLException {
-    return tableDefns.get(connection, tableId);
-  }
 }

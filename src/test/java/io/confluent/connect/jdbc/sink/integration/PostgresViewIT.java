@@ -18,7 +18,8 @@ package io.confluent.connect.jdbc.sink.integration;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.ERRORS_TOLERANCE_CONFIG;
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_NAME_CONFIG;
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_REPLICATION_FACTOR_CONFIG;
-import static org.apache.kafka.test.TestUtils.waitForCondition;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.jdbc.integration.BaseConnectorIT;
@@ -30,9 +31,13 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Duration;
+import java.util.Collections;
 import java.util.Map;
-import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
+import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -99,7 +104,7 @@ public final class PostgresViewIT extends BaseConnectorIT  {
    * are sent to the error reporter. The test also intersperses correct schema records to verify
    * that only the errant records are being sent to the error reporter.
    */
-  @Test (expected = RuntimeException.class)
+  @Test
   public void testRecordSchemaMoreFieldsThanViewSendsToErrorReporter() throws Exception {
     props.put(ERRORS_TOLERANCE_CONFIG, ToleranceType.ALL.value());
     props.put(DLQ_TOPIC_NAME_CONFIG, DLQ_TOPIC_NAME);
@@ -135,11 +140,16 @@ public final class PostgresViewIT extends BaseConnectorIT  {
       }
     }
 
-    // Consume the expected number of records that should be sent to the error reporter.
-    connect.kafka().consume(3, CONSUME_MAX_DURATION_MS, DLQ_TOPIC_NAME);
+    waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(topic), 6, 1,
+        TimeUnit.MINUTES.toMillis(4));
 
-    // Try to consume one more record than expected from the topic, which should fail.
-    connect.kafka().consume(4, 5000, DLQ_TOPIC_NAME);
+    KafkaConsumer<byte[], byte[]> consumer =
+        connect.kafka().createConsumerAndSubscribeTo(Collections.emptyMap(), DLQ_TOPIC_NAME);
+
+    ConsumerRecords<byte[], byte[]> records =
+        consumer.poll(Duration.ofMillis(CONSUME_MAX_DURATION_MS));
+
+    assertEquals(3, records.count());
   }
 
   @Test
@@ -156,22 +166,18 @@ public final class PostgresViewIT extends BaseConnectorIT  {
 
     produceRecord(schema, struct);
 
-    waitForCondition(
-        () -> {
-          try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
-            try (Statement s = c.createStatement()) {
-              try (ResultSet rs = s.executeQuery("SELECT * FROM " + topic)) {
-                boolean result = rs.next()
-                    && struct.getString("firstname").equals(rs.getString("firstname"))
-                    && rs.getString("lastname") == null;
-                return Optional.of(result).orElse(false);
-              }
-            }
-          }
-        },
-        VERIFY_MAX_DURATION_MS,
-        "The database content did not match the record's content."
-    );
+    waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(topic), 1, 1,
+        TimeUnit.MINUTES.toMillis(2));
+
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
+      try (Statement s = c.createStatement()) {
+        try (ResultSet rs = s.executeQuery("SELECT * FROM " + topic)) {
+          assertTrue(rs.next()
+              && struct.getString("firstname").equals(rs.getString("firstname"))
+              && rs.getString("lastname") == null);
+        }
+      }
+    }
   }
 
   @Test
@@ -190,22 +196,18 @@ public final class PostgresViewIT extends BaseConnectorIT  {
 
     produceRecord(schema, struct);
 
-    waitForCondition(
-        () -> {
-          try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
-            try (Statement s = c.createStatement()) {
-              try (ResultSet rs = s.executeQuery("SELECT * FROM " + topic)) {
-                boolean result = rs.next()
-                    && struct.getString("firstname").equals(rs.getString("firstname"))
-                    && struct.getString("lastname").equals(rs.getString("lastname"));
-                return Optional.of(result).orElse(false);
-              }
-            }
-          }
-        },
-        VERIFY_MAX_DURATION_MS,
-        "The database content did not match the record's content."
-    );
+    waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(topic), 1, 1,
+        TimeUnit.MINUTES.toMillis(2));
+
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
+      try (Statement s = c.createStatement()) {
+        try (ResultSet rs = s.executeQuery("SELECT * FROM " + topic)) {
+          assertTrue(rs.next()
+              && struct.getString("firstname").equals(rs.getString("firstname"))
+              && struct.getString("lastname").equals(rs.getString("lastname")));
+        }
+      }
+    }
   }
 
   private void createTestTableAndView(String viewFields) throws SQLException {

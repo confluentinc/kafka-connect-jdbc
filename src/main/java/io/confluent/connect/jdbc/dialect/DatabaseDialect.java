@@ -470,12 +470,38 @@ public interface DatabaseDialect extends ConnectionProvider {
    *                      but may be empty
    * @return the delete statement; may not be null
    * @throws UnsupportedOperationException if the dialect does not support deletes
+   * @deprecated use {@link #buildDeleteStatement(TableId, Collection, TableDefinition)}
    */
-  default String buildDeleteStatement(
+  @Deprecated
+  String buildDeleteStatement(
       TableId table,
       Collection<ColumnId> keyColumns
+  );
+
+
+  /**
+   * Build the DELETE prepared statement expression for the given table and its columns. Variables
+   * for each key column should also appear in the WHERE clause of the statement.
+   *
+   * <p>By default this method calls
+   * {@link #buildDeleteStatement(TableId, Collection)}, since
+   * many dialects implement this variant of the method. However, overriding
+   * {@link #buildDeleteStatement(TableId, Collection, TableDefinition)} is suggested.
+   *
+   *
+   * @param table         the identifier of the table; may not be null
+   * @param keyColumns    the identifiers of the columns in the primary/unique key; may not be null
+   *                      but may be empty
+   * @param definition    the table definition; may be null if unknown
+   * @return the delete statement; may not be null
+   * @throws UnsupportedOperationException if the dialect does not support deletes
+   */
+  default String buildDeleteStatement(
+          TableId table,
+          Collection<ColumnId> keyColumns,
+          TableDefinition definition
   ) {
-    throw new UnsupportedOperationException();
+    return buildDeleteStatement(table, keyColumns);
   }
 
   /**

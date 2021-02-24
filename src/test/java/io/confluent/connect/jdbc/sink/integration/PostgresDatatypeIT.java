@@ -23,6 +23,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.Arrays;
 
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
@@ -44,8 +45,7 @@ import org.slf4j.LoggerFactory;
 
 import static junit.framework.TestCase.assertTrue;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.assertFalse;
 
 /**
  * Integration tests for writing to Postgres with UUID columns.
@@ -70,7 +70,11 @@ public class PostgresDatatypeIT {
         .format("jdbc:postgresql://localhost:%s/postgres", pg.getEmbeddedPostgres().getPort());
     props.put(JdbcSinkConfig.CONNECTION_URL, jdbcURL);
     props.put(JdbcSinkConfig.CONNECTION_USER, "postgres");
-    props.put("pk.mode", "none");
+    props.put("pk.mode", "record_key");
+    props.put("pk.fields", "userid");
+    props.put("delete.enabled", "true");
+    props.put("errors.log.enable", "true");
+    props.put("errors.log.include.messages", "true");
     props.put("topics", tableName);
   }
 
@@ -89,6 +93,7 @@ public class PostgresDatatypeIT {
   public void testWriteToTableWithUuidColumn() throws SQLException {
     createTableWithUuidColumns();
     startTask();
+    final Schema keySchema = SchemaBuilder.STRING_SCHEMA;
     final Schema schema = SchemaBuilder.struct().name("com.example.Person")
                                        .field("firstname", Schema.STRING_SCHEMA)
                                        .field("lastname", Schema.STRING_SCHEMA)
@@ -102,7 +107,7 @@ public class PostgresDatatypeIT {
         .put("lastname", "Brams")
         .put("jsonid", jsonid)
         .put("userid", uuid.toString());
-    task.put(Collections.singleton(new SinkRecord(tableName, 1, null, null, schema, struct, 1)));
+    task.put(Collections.singleton(new SinkRecord(tableName, 1, keySchema, uuid.toString(), schema, struct, 1)));
     try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
       try (Statement s = c.createStatement()) {
         try (ResultSet rs = s.executeQuery("SELECT * FROM " + tableName)) {
@@ -116,13 +121,46 @@ public class PostgresDatatypeIT {
     }
   }
 
+  @Test
+  public void testDeleteFromTableWithUuidColumn() throws SQLException {
+    createTableWithUuidColumns();
+    startTask();
+    final Schema keySchema = SchemaBuilder.STRING_SCHEMA;
+    final Schema schema = SchemaBuilder.struct().name("com.example.Person")
+            .field("firstname", Schema.STRING_SCHEMA)
+            .field("lastname", Schema.STRING_SCHEMA)
+            .field("jsonid", Schema.STRING_SCHEMA)
+            .field("userid", Schema.STRING_SCHEMA)
+            .build();
+    UUID uuid = UUID.randomUUID();
+    String jsonid = "5";
+    final Struct insertStruct = new Struct(schema)
+            .put("firstname", "Steve")
+            .put("lastname", "Stevenson")
+            .put("jsonid", jsonid)
+            .put("userid", uuid.toString());
+
+    task.put(Arrays.asList(
+            new SinkRecord(tableName, 1, keySchema, uuid.toString(), schema, insertStruct, 1),
+            new SinkRecord(tableName, 1, keySchema, uuid.toString(), schema, null, 2)
+    ));
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
+      try (Statement s = c.createStatement()) {
+        try (ResultSet rs = s.executeQuery("SELECT * FROM " + tableName)) {
+          assertFalse(rs.next());
+        }
+      }
+    }
+  }
+
+
   private void createTableWithUuidColumns() throws SQLException {
     log.info("Creating table {} with UUID column", tableName);
     try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
       c.setAutoCommit(false);
       try (Statement s = c.createStatement()) {
         String sql = String.format(
-            "CREATE TABLE %s(firstName TEXT, lastName TEXT, jsonid json, userid UUID)",
+            "CREATE TABLE %s(userid UUID PRIMARY KEY, firstName TEXT, lastName TEXT, jsonid json)",
             tableName
         );
         log.info("Executing statement: {}", sql);

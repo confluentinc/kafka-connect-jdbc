@@ -307,7 +307,7 @@ public class BufferedRecords {
     }
   }
 
-  private String getDeleteSql() {
+  private String getDeleteSql() throws SQLException {
     String sql = null;
     if (config.deleteEnabled) {
       switch (config.pkMode) {
@@ -318,7 +318,8 @@ public class BufferedRecords {
           try {
             sql = dbDialect.buildDeleteStatement(
                 tableId,
-                asColumns(fieldsMetadata.keyFieldNames)
+                asColumns(fieldsMetadata.keyFieldNames),
+                dbStructure.tableDefinition(connection, tableId)
             );
           } catch (UnsupportedOperationException e) {
             throw new ConnectException(String.format(

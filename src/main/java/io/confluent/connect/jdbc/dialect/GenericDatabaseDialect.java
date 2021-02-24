@@ -1518,7 +1518,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   @Override
-  public final String buildDeleteStatement(
+  @SuppressWarnings("deprecation")
+  public String buildDeleteStatement(
       TableId table,
       Collection<ColumnId> keyColumns
   ) {

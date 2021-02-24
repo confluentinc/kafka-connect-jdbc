@@ -30,7 +30,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
-import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
@@ -223,6 +222,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         dialect.buildInsertStatement(tableId, pkColumns, nonPkColumns, tableDefn)
     );
   }
+
   @Test
   public void shouldBuildUpsertStatement() {
     TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("myTable");
@@ -337,6 +337,43 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
+  public void update() {
+    TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("Customer");
+    builder.withColumn("id").type("uuid", JDBCType.OTHER, UUID.class);
+    builder.withColumn("name").type("varchar", JDBCType.VARCHAR, String.class);
+    builder.withColumn("salary").type("real", JDBCType.FLOAT, String.class);
+    builder.withColumn("address").type("varchar", JDBCType.VARCHAR, String.class);
+    TableDefinition tableDefn = builder.build();
+    TableId customer = tableDefn.id();
+    assertEquals(
+        "UPDATE \"Customer\" SET \"name\" = ?, " +
+        "\"salary\" = ?, \"address\" = ? " +
+        "WHERE \"id\" = ?::uuid",
+        dialect.buildUpdateStatement(
+          customer,
+          columns(customer, "id"),
+          columns(customer, "name", "salary", "address"),
+          tableDefn
+        )
+    );
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+
+    assertEquals(
+       "UPDATE Customer SET name = ?, " +
+        "salary = ?, address = ? " +
+        "WHERE id = ?::uuid",
+         dialect.buildUpdateStatement(
+            customer,
+            columns(customer, "id"),
+            columns(customer, "name", "salary", "address"),
+            tableDefn
+          )
+    );
+  }
+
+  @Test
   public void upsert() {
     TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("Customer");
     builder.withColumn("id").type("int", JDBCType.INTEGER, Integer.class);
@@ -392,6 +429,32 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
                     columns(customer),
                     tableDefn
             )
+    );
+  }
+
+  @Test
+  public void shouldBuildDeleteQueryStatement() {
+    TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("myTable");
+    builder = new TableDefinitionBuilder().withTable("myTable");
+    builder.withColumn("id1").type("int", JDBCType.INTEGER, Integer.class);
+    builder.withColumn("id2").type("uuid", JDBCType.OTHER, UUID.class);
+    TableDefinition tableDefn = builder.build();
+    List<ColumnId> nonPkColumns = new ArrayList<>();
+    nonPkColumns.add(new ColumnId(tableId, "columnA"));
+    nonPkColumns.add(new ColumnId(tableId, "uuidColumn"));
+    nonPkColumns.add(new ColumnId(tableId, "dateColumn"));
+
+    assertEquals(
+        "DELETE FROM \"myTable\" WHERE \"id1\" = ? AND \"id2\" = ?::uuid",
+      dialect.buildDeleteStatement(tableId, pkColumns, tableDefn)
+    );
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+
+    assertEquals(
+        "DELETE FROM myTable WHERE id1 = ? AND id2 = ?::uuid",
+         dialect.buildDeleteStatement(tableId, pkColumns, tableDefn)
     );
   }
 

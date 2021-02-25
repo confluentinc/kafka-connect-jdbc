@@ -67,6 +67,17 @@ public class JdbcSinkConfigTest {
   }
 
   @Test
+  public void shouldCreateConfigWithDropConditions() {
+    props.put("update.drop.if.fields.older", "columnA,columnB");
+    createConfig();
+    assertEquals(2, config.updateDropConditions.size());
+    assertEquals("columnA", config.updateDropConditions.get(0).field().name());
+    assertEquals("columnB", config.updateDropConditions.get(1).field().name());
+    assertEquals("<",config.updateDropConditions.get(0).operator());
+    assertEquals("<",config.updateDropConditions.get(1).operator());
+  }
+
+  @Test
   public void shouldCreateConfigWithViewOnly() {
     props.put("table.types", "view");
     createConfig();

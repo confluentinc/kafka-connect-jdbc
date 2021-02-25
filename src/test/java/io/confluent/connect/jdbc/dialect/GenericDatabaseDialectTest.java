@@ -274,6 +274,19 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
   }
 
   @Test
+  public void testBuildUpdateStatement() {
+    newDialectFor(TABLE_TYPES, null);
+    Collection<UpdateDropCondition> conditions =
+            Collections.singletonList(new UpdateDropCondition(columnA));
+    assertEquals(
+            "UPDATE \"myTable\" SET \"columnA\" = ?, \"columnB\" = ?, " +
+            "\"columnC\" = ?, \"columnD\" = ? WHERE \"columnA\" < ?" +
+            " AND \"id1\" = ? AND \"id2\" = ?",
+            dialect.buildUpdateStatement(tableId, pkColumns, columnsAtoD, conditions));
+  }
+
+
+  @Test
   public void testBuildDeleteStatement() {
     newDialectFor(TABLE_TYPES, null);
     assertEquals(

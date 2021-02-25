@@ -38,6 +38,7 @@ import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.StringUtils;
 import io.confluent.connect.jdbc.util.TableType;
 import io.confluent.connect.jdbc.util.TimeZoneValidator;
+import io.confluent.connect.jdbc.util.UpdateDropCondition;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
@@ -254,6 +255,20 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "view definition does not match the records' schemas (regardless of ``"
       + AUTO_EVOLVE + "``).";
 
+  public static final String UPDATE_DROP_CONDITIONS = "update.drop.if.fields.older";
+  private static final String UPDATE_DROP_CONDITIONS_DEFAULT = "";
+  private static final String UPDATE_DROP_CONDITIONS_DOC =
+          "List of comma-separated timestamp fields. All of these need to be newer in the "
+          + "new record to update/upsert in order for the operation to succeed."
+          + "The runtime interpretation of this config depends on the ``insert.mode``:\n"
+          + "``update``\n"
+          + "    will update only records in the table that have older timestamps.\n"
+          + "``upsert``\n"
+          + "    will update when matching the upsert condition AND having older timestamps "
+          + "than the table record. If empty, no conditions are enforced\n"
+          + "NOTE: Currently only supported for MS SQL Server and MySQL";
+  private static final String UPDATE_DROP_CONDITIONS_DISPLAY = "Update/Upsert Drop Conditions";
+
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
 
@@ -376,6 +391,16 @@ public class JdbcSinkConfig extends AbstractConfig {
             4,
             ConfigDef.Width.MEDIUM,
             TABLE_TYPES_DISPLAY
+        )
+        .define(
+            UPDATE_DROP_CONDITIONS,
+            ConfigDef.Type.LIST,
+            UPDATE_DROP_CONDITIONS_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            UPDATE_DROP_CONDITIONS_DOC,
+            WRITES_GROUP,
+            5,
+            ConfigDef.Width.LONG, UPDATE_DROP_CONDITIONS_DISPLAY
         )
         // Data Mapping
         .define(
@@ -508,6 +533,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final InsertMode insertMode;
   public final PrimaryKeyMode pkMode;
   public final List<String> pkFields;
+  public final List<UpdateDropCondition> updateDropConditions;
   public final Set<String> fieldsWhitelist;
   public final String dialectName;
   public final TimeZone timeZone;
@@ -535,6 +561,10 @@ public class JdbcSinkConfig extends AbstractConfig {
     fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
     String dbTimeZone = getString(DB_TIMEZONE_CONFIG);
     timeZone = TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
+    updateDropConditions = getList(UPDATE_DROP_CONDITIONS)
+            .stream()
+            .map(c -> new UpdateDropCondition(c))
+            .collect(Collectors.toList());
 
     if (deleteEnabled && pkMode != PrimaryKeyMode.RECORD_KEY) {
       throw new ConfigException(

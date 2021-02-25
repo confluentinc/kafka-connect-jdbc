@@ -34,6 +34,7 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.util.UpdateDropCondition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -131,14 +132,48 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
 
   @Override
   public String buildUpsertQueryStatement(
+          TableId table,
+          Collection<ColumnId> keyColumns,
+          Collection<ColumnId> nonKeyColumns
+  ) {
+    return buildUpsertQueryStatement(table, keyColumns, nonKeyColumns,
+            (Collection<UpdateDropCondition>) null);
+  }
+
+  @Override
+  public String buildUpsertQueryStatement(
       TableId table,
       Collection<ColumnId> keyColumns,
-      Collection<ColumnId> nonKeyColumns
+      Collection<ColumnId> nonKeyColumns,
+      Collection<UpdateDropCondition> conditions
   ) {
     //MySql doesn't support SQL 2003:merge so here how the upsert is handled
     final Transform<ColumnId> transform = (builder, col) -> {
       builder.appendColumnName(col.name());
       builder.append("=values(");
+      builder.appendColumnName(col.name());
+      builder.append(")");
+    };
+
+    final Transform<UpdateDropCondition> transformCondition = (bld, con) -> {
+      bld.appendColumnName(con.field().name())
+         .append(" ")
+         .append(con.operator())
+         .append(" values(")
+         .appendColumnName(con.field().name())
+         .append(")");
+    };
+
+    final Transform<ColumnId> transformWithConditions = (builder, col) -> {
+      builder.appendColumnName(col.name());
+      builder.append(" = IF(");
+      builder.appendList()
+             .delimitedBy(" and ")
+             .transformedBy(transformCondition)
+             .of(conditions);
+      builder.append(", values(");
+      builder.appendColumnName(col.name());
+      builder.append("), ");
       builder.appendColumnName(col.name());
       builder.append(")");
     };
@@ -156,7 +191,8 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
     builder.append(") on duplicate key update ");
     builder.appendList()
            .delimitedBy(",")
-           .transformedBy(transform)
+           .transformedBy(conditions != null && !conditions.isEmpty()
+                   ? transformWithConditions : transform)
            .of(nonKeyColumns.isEmpty() ? keyColumns : nonKeyColumns);
     return builder.toString();
   }

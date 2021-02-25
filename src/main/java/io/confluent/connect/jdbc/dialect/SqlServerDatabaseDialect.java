@@ -30,11 +30,10 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Calendar;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.TimeZone;
+import java.util.Collections;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
@@ -47,6 +46,7 @@ import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.ColumnDefinition.Mutability;
 import io.confluent.connect.jdbc.util.ColumnDefinition.Nullability;
+import io.confluent.connect.jdbc.util.UpdateDropCondition;
 import org.apache.kafka.connect.errors.ConnectException;
 
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG;
@@ -312,6 +312,17 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       Collection<ColumnId> keyColumns,
       Collection<ColumnId> nonKeyColumns
   ) {
+    return buildUpsertQueryStatement(table, keyColumns, nonKeyColumns,
+            (Collection<UpdateDropCondition>) null);
+  }
+
+  @Override
+  public String buildUpsertQueryStatement(
+      TableId table,
+      Collection<ColumnId> keyColumns,
+      Collection<ColumnId> nonKeyColumns,
+      Collection<UpdateDropCondition> conditions
+  ) {
     ExpressionBuilder builder = expressionBuilder();
     builder.append("merge into ");
     builder.append(table);
@@ -327,7 +338,16 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
            .of(keyColumns);
     builder.append(")");
     if (nonKeyColumns != null && !nonKeyColumns.isEmpty()) {
-      builder.append(" when matched then update set ");
+      builder.append(" when matched");
+
+      if (conditions != null && !conditions.isEmpty()) {
+        builder.append(" and ");
+        builder.appendList()
+               .delimitedBy(" and ")
+               .transformedBy(this::transformCondition)
+               .of(conditions);
+      }
+      builder.append(" then update set ");
       builder.appendList()
              .delimitedBy(",")
              .transformedBy(this::transformUpdate)
@@ -445,6 +465,16 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       currency,
       isPrimaryKey
     );
+  }
+
+  private void transformCondition(ExpressionBuilder builder, UpdateDropCondition con) {
+    builder.append("target.")
+           .appendColumnName(con.field().name())
+           .append(" ")
+           .append(con.operator())
+           .append(" ")
+           .append("incoming.")
+           .appendColumnName(con.field().name());
   }
 
   private void transformAs(ExpressionBuilder builder, ColumnId col) {

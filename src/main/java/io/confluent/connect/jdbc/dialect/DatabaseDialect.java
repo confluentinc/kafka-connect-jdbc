@@ -40,6 +40,7 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.util.UpdateDropCondition;
 
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
@@ -389,21 +390,77 @@ public interface DatabaseDialect extends ConnectionProvider {
    * compatibility with older versions. Subclasses that override this method do not need to
    * override {@link #buildUpdateStatement(TableId, Collection, Collection)}.
    *
+   * @param table             the identifier of the table; may not be null
+   * @param keyColumns        the identifiers of the columns in the primary/unique key; may not be
+   *                          null but may be empty
+   * @param nonKeyColumns     the identifiers of the other columns in the table; may not be null
+   *                          but may be empty
+   * @param definition        the table definition; may be null if unknown
+   * @return the UPDATE statement; may not be null
+   */
+  default String buildUpdateStatement(
+          TableId table,
+          Collection<ColumnId> keyColumns,
+          Collection<ColumnId> nonKeyColumns,
+          TableDefinition definition
+  ) {
+    return buildUpdateStatement(table, keyColumns, nonKeyColumns);
+  }
+
+  /**
+   * Build the UPDATE prepared statement expression for the given table and its columns. Variables
+   * for each key column should also appear in the WHERE clause of the statement.
+   *
+   * <p>This method is only called by the default implementation of
+   * {@link #buildUpdateStatement(TableId, Collection, Collection, TableDefinition)}, since
+   * many dialects implement this variant of the method. However, overriding
+   * {@link #buildUpdateStatement(TableId, Collection, Collection, TableDefinition)} is suggested.
+   *
    * @param table         the identifier of the table; may not be null
    * @param keyColumns    the identifiers of the columns in the primary/unique key; may not be null
    *                      but may be empty
    * @param nonKeyColumns the identifiers of the other columns in the table; may not be null but may
    *                      be empty
-   * @param definition    the table definition; may be null if unknown
+   * @param updateDropConditions    the string conditions when to drop messages when updating the
+   *                               table
+   * @return the UPDATE statement; may not be null
+   * @deprecated use {@link #buildUpdateStatement(TableId, Collection, Collection, TableDefinition)}
+   */
+  @Deprecated
+  String buildUpdateStatement(
+          TableId table,
+          Collection<ColumnId> keyColumns,
+          Collection<ColumnId> nonKeyColumns,
+          Collection<UpdateDropCondition> updateDropConditions
+  );
+
+  /**
+   * Build the UPDATE prepared statement expression for the given table and its columns. Variables
+   * for each key column should also appear in the WHERE clause of the statement.
+   *
+   * <p>By default this method calls
+   * {@link #buildUpdateStatement(TableId, Collection, Collection)} to maintain backward
+   * compatibility with older versions. Subclasses that override this method do not need to
+   * override {@link #buildUpdateStatement(TableId, Collection, Collection)}.
+   *
+   * @param table             the identifier of the table; may not be null
+   * @param keyColumns        the identifiers of the columns in the primary/unique key; may not
+   *                          be null but may be empty
+   * @param nonKeyColumns     the identifiers of the other columns in the table; may not be null
+   *                          but may be empty
+   * @param definition        the table definition; may be null if unknown
+   * @param updateDropConditions    the string conditions when to drop messages when updating the
+   *                               table
    * @return the UPDATE statement; may not be null
    */
   default String buildUpdateStatement(
       TableId table,
       Collection<ColumnId> keyColumns,
       Collection<ColumnId> nonKeyColumns,
-      TableDefinition definition
+      TableDefinition definition,
+      Collection<UpdateDropCondition> updateDropConditions
   ) {
-    return buildUpdateStatement(table, keyColumns, nonKeyColumns);
+    return buildUpdateStatement(table, keyColumns, nonKeyColumns, updateDropConditions);
   }
 
   /**
@@ -418,10 +475,39 @@ public interface DatabaseDialect extends ConnectionProvider {
    * is suggested.
    *
    * @param table         the identifier of the table; may not be null
-   * @param keyColumns    the identifiers of the columns in the primary/unique key; may not be null
+   * @param keyColumns    the identifiers of the columns in the primary/unique key; may not
    *                      but may be empty
-   * @param nonKeyColumns the identifiers of the other columns in the table; may not be null but may
-   *                      be empty
+   * @param nonKeyColumns the identifiers of the other columns in the table; may not be null
+   *                      but may be empty
+   * @return the upsert/merge statement; may not be null
+   * @throws UnsupportedOperationException if the dialect does not support upserts
+   * @deprecated use {@link #buildUpsertQueryStatement(TableId, Collection, Collection)}
+   */
+  @Deprecated
+  String buildUpsertQueryStatement(
+          TableId table,
+          Collection<ColumnId> keyColumns,
+          Collection<ColumnId> nonKeyColumns
+  );
+
+  /**
+   * Build the UPSERT or MERGE prepared statement expression to either insert a new record into the
+   * given table or update an existing record in that table Variables for each key column should
+   * also appear in the WHERE clause of the statement.
+   *
+   * <p>This method is only called by the default implementation of
+   * {@link #buildUpsertQueryStatement(TableId, Collection, Collection, TableDefinition)}, since
+   * many dialects implement this variant of the method. However, overriding
+   * {@link #buildUpsertQueryStatement(TableId, Collection, Collection, TableDefinition)}
+   * is suggested.
+   *
+   * @param table             the identifier of the table; may not be null
+   * @param keyColumns        the identifiers of the columns in the primary/unique key; may not
+   *                          be null but may be empty
+   * @param nonKeyColumns     the identifiers of the other columns in the table; may not be null
+   *                          but may be empty
+   * @param updateDropConditions    the string conditions when to drop messages when updating the
+   *                               table
    * @return the upsert/merge statement; may not be null
    * @throws UnsupportedOperationException if the dialect does not support upserts
    * @deprecated use {@link #buildUpsertQueryStatement(TableId, Collection, Collection)}
@@ -430,7 +516,8 @@ public interface DatabaseDialect extends ConnectionProvider {
   String buildUpsertQueryStatement(
       TableId table,
       Collection<ColumnId> keyColumns,
-      Collection<ColumnId> nonKeyColumns
+      Collection<ColumnId> nonKeyColumns,
+      Collection<UpdateDropCondition> updateDropConditions
   );
 
   /**
@@ -444,11 +531,40 @@ public interface DatabaseDialect extends ConnectionProvider {
    * override {@link #buildUpsertQueryStatement(TableId, Collection, Collection)}.
    *
    * @param table         the identifier of the table; may not be null
-   * @param keyColumns    the identifiers of the columns in the primary/unique key; may not be null
+   * @param keyColumns    the identifiers of the columns in the primary/unique key; may not
+   *                      be null but may be empty
+   * @param nonKeyColumns the identifiers of the other columns in the table; may not be null
    *                      but may be empty
-   * @param nonKeyColumns the identifiers of the other columns in the table; may not be null but may
-   *                      be empty
    * @param definition    the table definition; may be null if unknown
+   * @return the upsert/merge statement; may not be null
+   * @throws UnsupportedOperationException if the dialect does not support upserts
+   */
+  default String buildUpsertQueryStatement(
+          TableId table,
+          Collection<ColumnId> keyColumns,
+          Collection<ColumnId> nonKeyColumns,
+          TableDefinition definition
+  ) {
+    return buildUpsertQueryStatement(table, keyColumns, nonKeyColumns);
+  }
+
+  /**
+   * Build the UPSERT or MERGE prepared statement expression to either insert a new record into the
+   * given table or update an existing record in that table Variables for each key column should
+   * also appear in the WHERE clause of the statement.
+   *
+   * <p>By default this method calls
+   * {@link #buildUpsertQueryStatement(TableId, Collection, Collection)} to maintain backward
+   * compatibility with older versions. Subclasses that override this method do not need to
+   * override {@link #buildUpsertQueryStatement(TableId, Collection, Collection)}.
+   *
+   * @param table             the identifier of the table; may not be null
+   * @param keyColumns        the identifiers of the columns in the primary/unique key; may not
+   *                          be null but may be empty
+   * @param nonKeyColumns     the identifiers of the other columns in the table; may not be null
+   *                          but may be empty
+   * @param updateDropConditions    the string conditions when to drop messages when updating the
+   *                               table
    * @return the upsert/merge statement; may not be null
    * @throws UnsupportedOperationException if the dialect does not support upserts
    */
@@ -456,9 +572,10 @@ public interface DatabaseDialect extends ConnectionProvider {
       TableId table,
       Collection<ColumnId> keyColumns,
       Collection<ColumnId> nonKeyColumns,
-      TableDefinition definition
+      TableDefinition definition,
+      Collection<UpdateDropCondition> updateDropConditions
   ) {
-    return buildUpsertQueryStatement(table, keyColumns, nonKeyColumns);
+    return buildUpsertQueryStatement(table, keyColumns, nonKeyColumns, updateDropConditions);
   }
 
   /**

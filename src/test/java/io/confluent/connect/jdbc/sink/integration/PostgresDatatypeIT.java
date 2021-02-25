@@ -211,11 +211,11 @@ public final class PostgresDatatypeIT extends BaseConnectorIT {
     try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
       try (Statement s = c.createStatement()) {
         try (ResultSet rs = s.executeQuery("SELECT * FROM " + tableName)) {
-          assertTrue(rs.next()
-              && struct.getString("firstname").equals(rs.getString("firstname"))
-              && struct.getString("lastname").equals(rs.getString("lastname"))
-              && struct.getString("jsonid").equals(rs.getString("jsonid"))
-              && struct.getString("userid").equals(rs.getString("userid")));
+          assertTrue(rs.next());
+          assertEquals(struct.getString("firstname"), rs.getString("firstname"));
+          assertEquals(struct.getString("lastname"), rs.getString("lastname"));
+          assertEquals(struct.getString("jsonid"), rs.getString("jsonid"));
+          assertEquals(struct.getString("userid"), rs.getString("userid"));
         }
       }
     }

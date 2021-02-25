@@ -19,6 +19,7 @@ import static org.apache.kafka.connect.runtime.ConnectorConfig.ERRORS_TOLERANCE_
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_NAME_CONFIG;
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_REPLICATION_FACTOR_CONFIG;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import io.confluent.common.utils.IntegrationTest;
@@ -172,9 +173,9 @@ public final class PostgresViewIT extends BaseConnectorIT  {
     try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
       try (Statement s = c.createStatement()) {
         try (ResultSet rs = s.executeQuery("SELECT * FROM " + topic)) {
-          assertTrue(rs.next()
-              && struct.getString("firstname").equals(rs.getString("firstname"))
-              && rs.getString("lastname") == null);
+          assertTrue(rs.next());
+          assertEquals(struct.getString("firstname"), rs.getString("firstname"));
+          assertNull(rs.getString("lastname"));
         }
       }
     }
@@ -202,9 +203,9 @@ public final class PostgresViewIT extends BaseConnectorIT  {
     try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
       try (Statement s = c.createStatement()) {
         try (ResultSet rs = s.executeQuery("SELECT * FROM " + topic)) {
-          assertTrue(rs.next()
-              && struct.getString("firstname").equals(rs.getString("firstname"))
-              && struct.getString("lastname").equals(rs.getString("lastname")));
+          assertTrue(rs.next());
+          assertEquals(struct.getString("firstname"), rs.getString("firstname"));
+          assertEquals(struct.getString("lastname"), rs.getString("lastname"));
         }
       }
     }

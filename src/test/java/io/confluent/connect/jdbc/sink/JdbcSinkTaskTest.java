@@ -34,7 +34,6 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.TimeZone;
 import java.util.concurrent.CompletableFuture;
 
@@ -56,6 +55,8 @@ import io.confluent.connect.jdbc.util.DateTimeUtils;
 
 public class JdbcSinkTaskTest extends EasyMockSupport {
   private final SqliteHelper sqliteHelper = new SqliteHelper(getClass().getSimpleName());
+  private final JdbcDbWriter mockWriter = createMock(JdbcDbWriter.class);
+  private final SinkTaskContext ctx = createMock(SinkTaskContext.class);
 
   private static final Schema SCHEMA = SchemaBuilder.struct().name("com.example.Person")
       .field("firstName", Schema.STRING_SCHEMA)
@@ -69,6 +70,15 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
       .field("double", Schema.OPTIONAL_FLOAT64_SCHEMA)
       .field("modified", Timestamp.SCHEMA)
       .build();
+  private static final SinkRecord RECORD = new SinkRecord(
+      "stub",
+      0,
+      null,
+      null,
+      null,
+      null,
+      0
+  );
 
   @Before
   public void setUp() throws IOException, SQLException {
@@ -218,9 +228,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     final int maxRetries = 2;
     final int retryBackoffMs = 1000;
 
-    Set<SinkRecord> records = Collections.singleton(new SinkRecord("stub", 0, null, null, null, null, 0));
-    final JdbcDbWriter mockWriter = createMock(JdbcDbWriter.class);
-    SinkTaskContext ctx = createMock(SinkTaskContext.class);
+    List<SinkRecord> records = createRecordsList(1);
 
     mockWriter.write(records);
     SQLException chainedException = new SQLException("cause 1");
@@ -244,10 +252,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     expect(ctx.errantRecordReporter()).andReturn(null);
     replayAll();
 
-    Map<String, String> props = new HashMap<>();
-    props.put(JdbcSinkConfig.CONNECTION_URL, "stub");
-    props.put(JdbcSinkConfig.MAX_RETRIES, String.valueOf(maxRetries));
-    props.put(JdbcSinkConfig.RETRY_BACKOFF_MS, String.valueOf(retryBackoffMs));
+    Map<String, String> props = setupBasicProps(maxRetries, retryBackoffMs);
     task.start(props);
 
     try {
@@ -299,12 +304,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
 
   @Test
   public void errorReporting() throws SQLException {
-    final int maxRetries = 0;
-    final int retryBackoffMs = 1000;
-
-    Set<SinkRecord> records = Collections.singleton(new SinkRecord("stub", 0, null, null, null, null, 0));
-    final JdbcDbWriter mockWriter = createMock(JdbcDbWriter.class);
-    SinkTaskContext ctx = createMock(SinkTaskContext.class);
+    List<SinkRecord> records = createRecordsList(1);
 
     mockWriter.write(records);
     SQLException exception = new SQLException("cause 1");
@@ -326,25 +326,15 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     expectLastCall();
     replayAll();
 
-    Map<String, String> props = new HashMap<>();
-    props.put(JdbcSinkConfig.CONNECTION_URL, "stub");
-    props.put(JdbcSinkConfig.MAX_RETRIES, String.valueOf(maxRetries));
-    props.put(JdbcSinkConfig.RETRY_BACKOFF_MS, String.valueOf(retryBackoffMs));
+    Map<String, String> props = setupBasicProps(0, 0);
     task.start(props);
-
     task.put(records);
-
     verifyAll();
   }
 
   @Test
   public void errorReportingTableAlterOrCreateException() throws SQLException {
-    final int maxRetries = 0;
-    final int retryBackoffMs = 1000;
-
-    Set<SinkRecord> records = Collections.singleton(new SinkRecord("stub", 0, null, null, null, null, 0));
-    final JdbcDbWriter mockWriter = createMock(JdbcDbWriter.class);
-    SinkTaskContext ctx = createMock(SinkTaskContext.class);
+    List<SinkRecord> records = createRecordsList(1);
 
     mockWriter.write(records);
     TableAlterOrCreateException exception = new TableAlterOrCreateException("cause 1");
@@ -366,32 +356,17 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     expectLastCall();
     replayAll();
 
-    Map<String, String> props = new HashMap<>();
-    props.put(JdbcSinkConfig.CONNECTION_URL, "stub");
-    props.put(JdbcSinkConfig.MAX_RETRIES, String.valueOf(maxRetries));
-    props.put(JdbcSinkConfig.RETRY_BACKOFF_MS, String.valueOf(retryBackoffMs));
+    Map<String, String> props = setupBasicProps(0, 0);
     task.start(props);
-
     task.put(records);
-
     verifyAll();
   }
 
   @Test
   public void batchErrorReporting() throws SQLException {
-    final int maxRetries = 0;
-    final int retryBackoffMs = 1000;
     final int batchSize = 3;
 
-    List<SinkRecord> records = new ArrayList<>();
-    SinkRecord record = new SinkRecord("stub", 0, null, null, null, null, 0);
-
-    for (int i = 0; i < batchSize; i++) {
-      records.add(record);
-    }
-
-    final JdbcDbWriter mockWriter = createMock(JdbcDbWriter.class);
-    SinkTaskContext ctx = createMock(SinkTaskContext.class);
+    List<SinkRecord> records = createRecordsList(batchSize);
 
     mockWriter.write(records);
     SQLException exception = new SQLException("cause 1");
@@ -415,38 +390,23 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     }
     replayAll();
 
-    Map<String, String> props = new HashMap<>();
-    props.put(JdbcSinkConfig.CONNECTION_URL, "stub");
-    props.put(JdbcSinkConfig.MAX_RETRIES, String.valueOf(maxRetries));
-    props.put(JdbcSinkConfig.RETRY_BACKOFF_MS, String.valueOf(retryBackoffMs));
+    Map<String, String> props = setupBasicProps(0, 0);
     task.start(props);
-
     task.put(records);
-
     verifyAll();
   }
 
   @Test
   public void oneInBatchErrorReporting() throws SQLException {
-    final int maxRetries = 0;
-    final int retryBackoffMs = 1000;
     final int batchSize = 3;
 
-    List<SinkRecord> records = new ArrayList<>();
-    SinkRecord record = new SinkRecord("stub", 0, null, null, null, null, 0);
-
-    for (int i = 0; i < batchSize; i++) {
-      records.add(record);
-    }
-
-    final JdbcDbWriter mockWriter = createMock(JdbcDbWriter.class);
-    SinkTaskContext ctx = createMock(SinkTaskContext.class);
+    List<SinkRecord> records = createRecordsList(batchSize);
 
     mockWriter.write(records);
     SQLException exception = new SQLException("cause 1");
     expectLastCall().andThrow(exception);
     mockWriter.write(anyObject());
-    expectLastCall().times(batchSize - 1);
+    expectLastCall().times(2);
     expectLastCall().andThrow(exception);
 
     JdbcSinkTask task = new JdbcSinkTask() {
@@ -463,32 +423,17 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     expectLastCall();
     replayAll();
 
-    Map<String, String> props = new HashMap<>();
-    props.put(JdbcSinkConfig.CONNECTION_URL, "stub");
-    props.put(JdbcSinkConfig.MAX_RETRIES, String.valueOf(maxRetries));
-    props.put(JdbcSinkConfig.RETRY_BACKOFF_MS, String.valueOf(retryBackoffMs));
+    Map<String, String> props = setupBasicProps(0, 0);
     task.start(props);
-
     task.put(records);
-
     verifyAll();
   }
 
   @Test
   public void oneInMiddleBatchErrorReporting() throws SQLException {
-    final int maxRetries = 0;
-    final int retryBackoffMs = 1000;
     final int batchSize = 3;
 
-    List<SinkRecord> records = new ArrayList<>();
-    SinkRecord record = new SinkRecord("stub", 0, null, null, null, null, 0);
-
-    for (int i = 0; i < batchSize; i++) {
-      records.add(record);
-    }
-
-    final JdbcDbWriter mockWriter = createMock(JdbcDbWriter.class);
-    SinkTaskContext ctx = createMock(SinkTaskContext.class);
+    List<SinkRecord> records = createRecordsList(batchSize);
 
     mockWriter.write(records);
     SQLException exception = new SQLException("cause 1");
@@ -514,14 +459,25 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     expectLastCall();
     replayAll();
 
+    Map<String, String> props = setupBasicProps(0, 0);
+    task.start(props);
+    task.put(records);
+    verifyAll();
+  }
+
+  private List<SinkRecord> createRecordsList(int batchSize) {
+    List<SinkRecord> records = new ArrayList<>();
+    for (int i = 0; i < batchSize; i++) {
+      records.add(RECORD);
+    }
+    return records;
+  }
+
+  private Map<String, String> setupBasicProps(int maxRetries, long retryBackoffMs) {
     Map<String, String> props = new HashMap<>();
     props.put(JdbcSinkConfig.CONNECTION_URL, "stub");
     props.put(JdbcSinkConfig.MAX_RETRIES, String.valueOf(maxRetries));
     props.put(JdbcSinkConfig.RETRY_BACKOFF_MS, String.valueOf(retryBackoffMs));
-    task.start(props);
-
-    task.put(records);
-
-    verifyAll();
+    return props;
   }
 }

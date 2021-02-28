@@ -95,14 +95,11 @@ public class JdbcSinkTask extends SinkTask {
           remainingRetries,
           sqle
       );
-      String sqleAllMessages = "Exception chain:" + System.lineSeparator();
       int totalExceptions = 0;
-      for (Throwable e : sqle) {
-        sqleAllMessages += e + System.lineSeparator();
+      for (Throwable e :sqle) {
         totalExceptions++;
       }
-      SQLException sqlAllMessagesException = new SQLException(sqleAllMessages);
-      sqlAllMessagesException.setNextException(sqle);
+      SQLException sqlAllMessagesException = getAllMessagesException(sqle);
       if (remainingRetries > 0) {
         writer.closeQuietly();
         initWriter();
@@ -137,16 +134,21 @@ public class JdbcSinkTask extends SinkTask {
         reporter.report(record, tace);
         writer.closeQuietly();
       } catch (SQLException sqle) {
-        String sqleAllMessages = "Exception chain:" + System.lineSeparator();
-        for (Throwable e : sqle) {
-          sqleAllMessages += e + System.lineSeparator();
-        }
-        SQLException sqlAllMessagesException = new SQLException(sqleAllMessages);
-        sqlAllMessagesException.setNextException(sqle);
+        SQLException sqlAllMessagesException = getAllMessagesException(sqle);
         reporter.report(record, sqlAllMessagesException);
         writer.closeQuietly();
       }
     }
+  }
+
+  private SQLException getAllMessagesException(SQLException sqle) {
+    String sqleAllMessages = "Exception chain:" + System.lineSeparator();
+    for (Throwable e : sqle) {
+      sqleAllMessages += e + System.lineSeparator();
+    }
+    SQLException sqlAllMessagesException = new SQLException(sqleAllMessages);
+    sqlAllMessagesException.setNextException(sqle);
+    return sqlAllMessagesException;
   }
 
   @Override

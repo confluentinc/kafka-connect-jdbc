@@ -166,8 +166,7 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
         .put("jsonid", "5")
         .put("userid", UUID.randomUUID().toString());
 
-    String kafkaValue = new String(jsonConverter.fromConnectData(tableName, schema, struct));
-    connect.kafka().produce(tableName, null, kafkaValue);
+    produceRecord(schema, struct);
 
     waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 1, 1,
         TimeUnit.MINUTES.toMillis(2));
@@ -196,8 +195,7 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
         .put("jsonid", "5")
         .put("userid", UUID.randomUUID().toString());
 
-    String kafkaValue = new String(jsonConverter.fromConnectData(tableName, schema, struct));
-    connect.kafka().produce(tableName, null, kafkaValue);
+    produceRecord(schema, struct);
 
     waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 1, 1,
         TimeUnit.MINUTES.toMillis(2));

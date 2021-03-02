@@ -45,12 +45,6 @@ public class DbStructure {
     this.tableDefns = new TableDefinitions(dbDialect);
   }
 
-  // For testing
-  public DbStructure(DatabaseDialect dbDialect, TableDefinitions tableDefns) {
-    this.dbDialect = dbDialect;
-    this.tableDefns = tableDefns;
-  }
-
   /**
    * Create or amend table.
    *

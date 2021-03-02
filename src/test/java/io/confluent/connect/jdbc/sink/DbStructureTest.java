@@ -19,7 +19,6 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.util.TableDefinition;
-import io.confluent.connect.jdbc.util.TableDefinitions;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.TableType;
 
@@ -32,9 +31,11 @@ import static org.mockito.Mockito.when;
 
 public class DbStructureTest {
 
-  TableDefinitions tableDefinitions = mock(TableDefinitions.class);
   DatabaseDialect dbDialect = mock(DatabaseDialect.class);
-  DbStructure structure = new DbStructure(dbDialect, tableDefinitions);
+  DbStructure structure = new DbStructure(dbDialect);
+  Connection connection = mock(Connection.class);
+  TableId tableId = mock(TableId.class);
+  JdbcSinkConfig config = mock(JdbcSinkConfig.class);
   FieldsMetadata fieldsMetadata = new FieldsMetadata(new HashSet<>(), new HashSet<>(), new HashMap<>());
 
   @Test
@@ -61,15 +62,16 @@ public class DbStructureTest {
 
   @Test (expected = TableAlterOrCreateException.class)
   public void testMissingTableNoAutoCreate() throws Exception {
-    structure.create(mock(JdbcSinkConfig.class), mock(Connection.class), mock(TableId.class),
+    structure.create(config, connection, tableId,
         fieldsMetadata);
   }
 
   @Test (expected = TableAlterOrCreateException.class)
   public void testAlterNoAutoEvolve() throws Exception {
     TableDefinition tableDefinition = mock(TableDefinition.class);
-    when(tableDefinitions.get(any(), any())).thenReturn(tableDefinition);
-    when(tableDefinition.type()).thenReturn(TableType.TABLE);
+    when(dbDialect.tableExists(any(), any())).thenReturn(true);
+    when(dbDialect.describeTable(any(), any())).thenReturn(tableDefinition);
+    when(tableDefinition.type()).thenReturn(TableType.VIEW);
 
     SinkRecordField sinkRecordField = new SinkRecordField(
         Schema.OPTIONAL_INT32_SCHEMA,
@@ -82,14 +84,15 @@ public class DbStructureTest {
         Collections.singleton(sinkRecordField.name()),
         Collections.singletonMap(sinkRecordField.name(), sinkRecordField));
 
-    structure.amendIfNecessary(mock(JdbcSinkConfig.class), mock(Connection.class), mock(TableId.class),
+    structure.amendIfNecessary(config, connection, tableId,
         fieldsMetadata, 5);
   }
 
   @Test (expected = TableAlterOrCreateException.class)
   public void testAlterNotSupported() throws Exception {
     TableDefinition tableDefinition = mock(TableDefinition.class);
-    when(tableDefinitions.get(any(), any())).thenReturn(tableDefinition);
+    when(dbDialect.tableExists(any(), any())).thenReturn(true);
+    when(dbDialect.describeTable(any(), any())).thenReturn(tableDefinition);
     when(tableDefinition.type()).thenReturn(TableType.VIEW);
 
     SinkRecordField sinkRecordField = new SinkRecordField(
@@ -102,15 +105,16 @@ public class DbStructureTest {
         Collections.singleton(sinkRecordField.name()),
         Collections.singletonMap(sinkRecordField.name(), sinkRecordField));
 
-    structure.amendIfNecessary(mock(JdbcSinkConfig.class), mock(Connection.class), mock(TableId.class),
+    structure.amendIfNecessary(config, connection, tableId,
         fieldsMetadata, 5);
   }
 
   @Test (expected = TableAlterOrCreateException.class)
   public void testCannotAlterBecauseFieldNotOptionalAndNoDefaultValue() throws Exception {
     TableDefinition tableDefinition = mock(TableDefinition.class);
-    when(tableDefinitions.get(any(), any())).thenReturn(tableDefinition);
-    when(tableDefinition.type()).thenReturn(TableType.TABLE);
+    when(dbDialect.tableExists(any(), any())).thenReturn(true);
+    when(dbDialect.describeTable(any(), any())).thenReturn(tableDefinition);
+    when(tableDefinition.type()).thenReturn(TableType.VIEW);
 
     SinkRecordField sinkRecordField = new SinkRecordField(
         Schema.INT32_SCHEMA,
@@ -122,15 +126,16 @@ public class DbStructureTest {
         Collections.singleton(sinkRecordField.name()),
         Collections.singletonMap(sinkRecordField.name(), sinkRecordField));
 
-    structure.amendIfNecessary(mock(JdbcSinkConfig.class), mock(Connection.class), mock(TableId.class),
+    structure.amendIfNecessary(config, connection, tableId,
         fieldsMetadata, 5);
   }
 
   @Test (expected = TableAlterOrCreateException.class)
   public void testFailedToAmendExhaustedRetry() throws Exception {
     TableDefinition tableDefinition = mock(TableDefinition.class);
-    when(tableDefinitions.get(any(), any())).thenReturn(tableDefinition);
-    when(tableDefinition.type()).thenReturn(TableType.TABLE);
+    when(dbDialect.tableExists(any(), any())).thenReturn(true);
+    when(dbDialect.describeTable(any(), any())).thenReturn(tableDefinition);
+    when(tableDefinition.type()).thenReturn(TableType.VIEW);
 
     SinkRecordField sinkRecordField = new SinkRecordField(
         Schema.OPTIONAL_INT32_SCHEMA,
@@ -155,7 +160,7 @@ public class DbStructureTest {
 
     doThrow(new SQLException()).when(dbDialect).applyDdlStatements(any(), any());
 
-    structure.amendIfNecessary(config, mock(Connection.class), mock(TableId.class),
+    structure.amendIfNecessary(config, connection, tableId,
         fieldsMetadata, 0);
   }
 

@@ -20,7 +20,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
-import java.time.Duration;
 import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
@@ -33,7 +32,6 @@ import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.zonky.test.db.postgres.junit.EmbeddedPostgresRules;
 import io.zonky.test.db.postgres.junit.SingleInstancePostgresRule;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -59,9 +57,9 @@ import static org.junit.Assert.assertTrue;
  * Integration tests for writing to Postgres with UUID columns.
  */
 @Category(IntegrationTest.class)
-public final class PostgresDatatypeIT extends BaseConnectorIT {
+public class PostgresDatatypeIT extends BaseConnectorIT {
 
-  private static Logger log = LoggerFactory.getLogger(PostgresDatatypeIT.class);
+  private static final Logger LOG = LoggerFactory.getLogger(PostgresDatatypeIT.class);
 
   @Rule
   public SingleInstancePostgresRule pg = EmbeddedPostgresRules.singleInstance();
@@ -94,9 +92,11 @@ public final class PostgresDatatypeIT extends BaseConnectorIT {
       try (Statement s = c.createStatement()) {
         s.execute("DROP TABLE IF EXISTS " + tableName);
       }
+      LOG.info("Dropped table");
+    } finally {
+      pg = null;
+      stopConnect();
     }
-    log.info("Dropped table");
-    stopConnect();
   }
 
   /**
@@ -110,7 +110,7 @@ public final class PostgresDatatypeIT extends BaseConnectorIT {
     props.put(ERRORS_TOLERANCE_CONFIG, ToleranceType.ALL.value());
     props.put(DLQ_TOPIC_NAME_CONFIG, DLQ_TOPIC_NAME);
     props.put(DLQ_TOPIC_REPLICATION_FACTOR_CONFIG, "1");
-    props.put(MAX_RETRIES, "2");
+    props.put(MAX_RETRIES, "0");
 
     createTableWithPrimaryKey();
     connect.configureConnector("jdbc-sink-connector", props);
@@ -138,11 +138,8 @@ public final class PostgresDatatypeIT extends BaseConnectorIT {
     waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 3, 1,
         TimeUnit.MINUTES.toMillis(3));
 
-    KafkaConsumer<byte[], byte[]> consumer =
-        connect.kafka().createConsumerAndSubscribeTo(Collections.emptyMap(), DLQ_TOPIC_NAME);
-
-    ConsumerRecords<byte[], byte[]> records =
-        consumer.poll(Duration.ofMillis(CONSUME_MAX_DURATION_MS));
+    ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(1, CONSUME_MAX_DURATION_MS,
+        DLQ_TOPIC_NAME);
 
     assertEquals(1, records.count());
   }
@@ -175,11 +172,8 @@ public final class PostgresDatatypeIT extends BaseConnectorIT {
     waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 1, 1,
         TimeUnit.MINUTES.toMillis(2));
 
-    KafkaConsumer<byte[], byte[]> consumer =
-        connect.kafka().createConsumerAndSubscribeTo(Collections.emptyMap(), DLQ_TOPIC_NAME);
-
-    ConsumerRecords<byte[], byte[]> records =
-        consumer.poll(Duration.ofMillis(CONSUME_MAX_DURATION_MS));
+    ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(1, CONSUME_MAX_DURATION_MS,
+        DLQ_TOPIC_NAME);
 
     assertEquals(1, records.count());
   }
@@ -229,7 +223,7 @@ public final class PostgresDatatypeIT extends BaseConnectorIT {
             columnsSql,
             tableName
         );
-        log.info("Executing statement: {}", sql);
+        LOG.info("Executing statement: {}", sql);
         s.execute(sql);
         c.commit();
       }
@@ -237,21 +231,21 @@ public final class PostgresDatatypeIT extends BaseConnectorIT {
   }
 
   private void createTableWithUuidColumns() throws SQLException {
-    log.info("Creating table {} with UUID column", tableName);
+    LOG.info("Creating table {} with UUID column", tableName);
     createTable("CREATE TABLE %s(firstName TEXT, lastName TEXT, jsonid json, userid UUID)");
-    log.info("Created table {} with UUID column", tableName);
+    LOG.info("Created table {} with UUID column", tableName);
   }
 
   private void createTableWithLessFields() throws SQLException {
-    log.info("Creating table {} with less fields", tableName);
+    LOG.info("Creating table {} with less fields", tableName);
     createTable("CREATE TABLE %s(firstName TEXT, jsonid json, userid UUID)");
-    log.info("Created table {} with less fields", tableName);
+    LOG.info("Created table {} with less fields", tableName);
   }
 
   private void createTableWithPrimaryKey() throws SQLException {
-    log.info("Creating table {} with a primary key", tableName);
+    LOG.info("Creating table {} with a primary key", tableName);
     createTable("CREATE TABLE %s(firstName TEXT PRIMARY KEY, lastName TEXT)");
-    log.info("Created table {} with a primary key", tableName);
+    LOG.info("Created table {} with a primary key", tableName);
   }
 
   private void produceRecord(Schema schema, Struct struct) {

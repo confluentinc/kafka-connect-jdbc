@@ -56,9 +56,9 @@ import org.slf4j.LoggerFactory;
  * Integration tests for writing to Postgres views.
  */
 @Category(IntegrationTest.class)
-public final class PostgresViewIT extends BaseConnectorIT  {
+public class PostgresViewIT extends BaseConnectorIT  {
 
-  private static Logger log = LoggerFactory.getLogger(PostgresViewIT.class);
+  private static final Logger LOG = LoggerFactory.getLogger(PostgresViewIT.class);
 
   @Rule
   public SingleInstancePostgresRule pg = EmbeddedPostgresRules.singleInstance();
@@ -95,9 +95,11 @@ public final class PostgresViewIT extends BaseConnectorIT  {
         s.execute("DROP VIEW " + topic);
         s.execute("DROP TABLE " + tableName);
       }
+      LOG.info("Dropped table");
+    } finally {
+      pg = null;
+      stopConnect();
     }
-    log.info("Dropped table");
-    stopConnect();
   }
 
   /**
@@ -144,11 +146,8 @@ public final class PostgresViewIT extends BaseConnectorIT  {
     waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(topic), 6, 1,
         TimeUnit.MINUTES.toMillis(4));
 
-    KafkaConsumer<byte[], byte[]> consumer =
-        connect.kafka().createConsumerAndSubscribeTo(Collections.emptyMap(), DLQ_TOPIC_NAME);
-
-    ConsumerRecords<byte[], byte[]> records =
-        consumer.poll(Duration.ofMillis(CONSUME_MAX_DURATION_MS));
+    ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(3, CONSUME_MAX_DURATION_MS,
+        DLQ_TOPIC_NAME);
 
     assertEquals(3, records.count());
   }
@@ -212,7 +211,7 @@ public final class PostgresViewIT extends BaseConnectorIT  {
   }
 
   private void createTestTableAndView(String viewFields) throws SQLException {
-    log.info("Creating test table and view");
+    LOG.info("Creating test table and view");
     try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
       c.setAutoCommit(false);
       try (Statement s = c.createStatement()) {
@@ -221,7 +220,7 @@ public final class PostgresViewIT extends BaseConnectorIT  {
         c.commit();
       }
     }
-    log.info("Created table and view");
+    LOG.info("Created table and view");
   }
 
   private void produceRecord(Schema schema, Struct struct) {

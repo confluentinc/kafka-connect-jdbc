@@ -71,7 +71,7 @@ public class DbStructureTest {
     TableDefinition tableDefinition = mock(TableDefinition.class);
     when(dbDialect.tableExists(any(), any())).thenReturn(true);
     when(dbDialect.describeTable(any(), any())).thenReturn(tableDefinition);
-    when(tableDefinition.type()).thenReturn(TableType.VIEW);
+    when(tableDefinition.type()).thenReturn(TableType.TABLE);
 
     SinkRecordField sinkRecordField = new SinkRecordField(
         Schema.OPTIONAL_INT32_SCHEMA,
@@ -96,7 +96,7 @@ public class DbStructureTest {
     when(tableDefinition.type()).thenReturn(TableType.VIEW);
 
     SinkRecordField sinkRecordField = new SinkRecordField(
-        Schema.INT32_SCHEMA,
+        Schema.OPTIONAL_INT32_SCHEMA,
         "test",
         true
     );

@@ -309,6 +309,8 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     mockWriter.write(records);
     SQLException exception = new SQLException("cause 1");
     expectLastCall().andThrow(exception);
+    mockWriter.closeQuietly();
+    expectLastCall();
     mockWriter.write(anyObject());
     expectLastCall().andThrow(exception);
 
@@ -339,6 +341,8 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     mockWriter.write(records);
     TableAlterOrCreateException exception = new TableAlterOrCreateException("cause 1");
     expectLastCall().andThrow(exception);
+    mockWriter.closeQuietly();
+    expectLastCall();
     mockWriter.write(anyObject());
     expectLastCall().andThrow(exception);
 
@@ -371,6 +375,8 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     mockWriter.write(records);
     SQLException exception = new SQLException("cause 1");
     expectLastCall().andThrow(exception);
+    mockWriter.closeQuietly();
+    expectLastCall();
     mockWriter.write(anyObject());
     expectLastCall().andThrow(exception).times(batchSize);
 
@@ -405,6 +411,8 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     mockWriter.write(records);
     SQLException exception = new SQLException("cause 1");
     expectLastCall().andThrow(exception);
+    mockWriter.closeQuietly();
+    expectLastCall();
     mockWriter.write(anyObject());
     expectLastCall().times(2);
     expectLastCall().andThrow(exception);
@@ -438,6 +446,8 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     mockWriter.write(records);
     SQLException exception = new SQLException("cause 1");
     expectLastCall().andThrow(exception);
+    mockWriter.closeQuietly();
+    expectLastCall();
     mockWriter.write(anyObject());
     expectLastCall();
     mockWriter.write(anyObject());

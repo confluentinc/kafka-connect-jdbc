@@ -15,7 +15,6 @@
 
 package io.confluent.connect.jdbc.sink;
 
-import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -112,7 +111,7 @@ public class DbStructure {
       final FieldsMetadata fieldsMetadata
   ) throws SQLException {
     if (!config.autoCreate) {
-      throw new ConnectException(
+      throw new TableAlterOrCreateException(
           String.format("Table %s is missing and auto-creation is disabled", tableId)
       );
     }
@@ -131,7 +130,7 @@ public class DbStructure {
       final TableId tableId,
       final FieldsMetadata fieldsMetadata,
       final int maxRetries
-  ) throws SQLException {
+  ) throws SQLException, TableAlterOrCreateException {
     // NOTE:
     //   The table might have extra columns defined (hopefully with default values), which is not
     //   a case we check for here.
@@ -164,7 +163,7 @@ public class DbStructure {
         break;
       case VIEW:
       default:
-        throw new ConnectException(
+        throw new TableAlterOrCreateException(
             String.format(
                 "%s %s is missing fields (%s) and ALTER %s is unsupported",
                 type.capitalized(),
@@ -177,7 +176,7 @@ public class DbStructure {
 
     for (SinkRecordField missingField: missingFields) {
       if (!missingField.isOptional() && missingField.defaultValue() == null) {
-        throw new ConnectException(String.format(
+        throw new TableAlterOrCreateException(String.format(
             "Cannot ALTER %s %s to add missing field %s, as the field is not optional and does "
             + "not have a default value",
             type.jdbcName(),
@@ -188,7 +187,7 @@ public class DbStructure {
     }
 
     if (!config.autoEvolve) {
-      throw new ConnectException(String.format(
+      throw new TableAlterOrCreateException(String.format(
           "%s %s is missing fields (%s) and auto-evolution is disabled",
           type.capitalized(),
           tableId,
@@ -208,7 +207,7 @@ public class DbStructure {
       dbDialect.applyDdlStatements(connection, amendTableQueries);
     } catch (SQLException sqle) {
       if (maxRetries <= 0) {
-        throw new ConnectException(
+        throw new TableAlterOrCreateException(
             String.format(
                 "Failed to amend %s '%s' to add missing fields: %s",
                 type,

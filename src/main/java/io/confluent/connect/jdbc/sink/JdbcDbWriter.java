@@ -15,20 +15,22 @@
 
 package io.confluent.connect.jdbc.sink;
 
-import org.apache.kafka.connect.errors.ConnectException;
-import org.apache.kafka.connect.sink.SinkRecord;
-
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.sink.SinkRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.TableId;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class JdbcDbWriter {
   private static final Logger log = LoggerFactory.getLogger(JdbcDbWriter.class);
@@ -64,6 +66,13 @@ public class JdbcDbWriter {
 
     final Map<TableId, BufferedRecords> bufferByTable = new HashMap<>();
     for (SinkRecord record : records) {
+
+      // apply ddl statements
+      if (applyDdlStatementsIfApplicable(record, connection)) {
+        // skip this sink record from buffer
+        continue;
+      }
+
       final TableId tableId = destinationTable(record.topic());
       BufferedRecords buffer = bufferByTable.get(tableId);
       if (buffer == null) {
@@ -96,5 +105,35 @@ public class JdbcDbWriter {
       ));
     }
     return dbDialect.parseTableIdentifier(tableName);
+  }
+
+  boolean applyDdlStatementsIfApplicable(SinkRecord record, Connection connection) {
+    if (record.valueSchema() == null) {
+      return false;
+    }
+
+    String valueSchemaName = record.valueSchema().name();
+
+    if ((valueSchemaName != null) && (valueSchemaName.equalsIgnoreCase("io.debezium.connector.mysql.SchemaChangeValue"))) {
+      Struct valueStruct = (Struct) record.value();
+      String ddlStatement = valueStruct.get("ddl").toString().trim();
+      
+      log.info("DDL Statement: {}", ddlStatement);
+
+      if (ddlStatement.toLowerCase().startsWith("create") || ddlStatement.toLowerCase().startsWith("alter")) {
+        try {
+          Statement stmt = connection.createStatement();
+          stmt.execute(ddlStatement);
+          log.info("Applied DDL: {}", ddlStatement);
+        } catch (java.sql.SQLException e) {
+          log.error("Failed to apply DDL statement {}: {}", ddlStatement, e);
+        }
+      }
+
+      // return true since we also need to skip other ddl statements present in this topic
+      return true;
+    }
+
+    return false;
   }
 }

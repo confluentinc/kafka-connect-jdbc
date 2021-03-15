@@ -137,7 +137,8 @@ public class DbStructure {
     //   a case we check for here.
     //   We also don't check if the data types for columns that do line-up are compatible.
 
-    final TableDefinition tableDefn = tableDefns.get(connection, tableId);
+    // do not get the table definition from cache, this is just to validate if alters were applied successfully
+    final TableDefinition tableDefn = tableDefns.refresh(connection, tableId);
 
     // FIXME: SQLite JDBC driver seems to not always return the PK column names?
     //    if (!tableMetadata.getPrimaryKeyColumnNames().equals(fieldsMetadata.keyFieldNames)) {
@@ -155,6 +156,8 @@ public class DbStructure {
     if (missingFields.isEmpty()) {
       return false;
     }
+
+    // should not reach here if alters were applied successfully
 
     // At this point there are missing fields
     TableType type = tableDefn.type();

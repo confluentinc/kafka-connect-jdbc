@@ -21,6 +21,9 @@
     <suppress checks="MethodLength"
               files="(DataConverter|GenericDatabaseDialect|JdbcSourceTask).java"/>
 
+    <suppress checks="LineLength"
+              files="(JdbcDbWriter).java"/>
+
     <suppress checks="ParameterNumber"
               files="(ColumnDefinition|GenericDatabaseDialect|SqlServerDatabaseDialect|PostgreSqlDatabaseDialect).java"/>
 </suppressions>

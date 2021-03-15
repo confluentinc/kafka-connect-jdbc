@@ -137,7 +137,8 @@ public class DbStructure {
     //   a case we check for here.
     //   We also don't check if the data types for columns that do line-up are compatible.
 
-    // do not get the table definition from cache, this is just to validate if alters were applied successfully
+    // do not get the table definition from cache, 
+    // this is just to validate if alters were applied successfully
     final TableDefinition tableDefn = tableDefns.refresh(connection, tableId);
 
     // FIXME: SQLite JDBC driver seems to not always return the PK column names?

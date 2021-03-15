@@ -125,13 +125,13 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
 
   @Test
   public void shouldBuildCreateQueryStatement() {
-    String expected = "CREATE TABLE \"myTable\" (\n" + "\"c1\" NUMBER(10,0) NOT NULL,\n" +
-                      "\"c2\" NUMBER(19,0) NOT NULL,\n" + "\"c3\" CLOB NOT NULL,\n" +
-                      "\"c4\" CLOB NULL,\n" + "\"c5\" DATE DEFAULT '2001-03-15',\n" +
-                      "\"c6\" DATE DEFAULT '00:00:00.000',\n" +
-                      "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" +
-                      "\"c8\" NUMBER(*,4) NULL,\n" +
-                      "\"c9\" NUMBER(1,0) DEFAULT 1,\n" +
+    String expected = "CREATE TABLE \"myTable\" ("+System.lineSeparator() + "\"c1\" NUMBER(10,0) NOT NULL,"+System.lineSeparator() +
+                      "\"c2\" NUMBER(19,0) NOT NULL,"+System.lineSeparator() + "\"c3\" CLOB NOT NULL,"+System.lineSeparator() +
+                      "\"c4\" CLOB NULL,"+System.lineSeparator() + "\"c5\" DATE DEFAULT '2001-03-15',"+System.lineSeparator() +
+                      "\"c6\" DATE DEFAULT '00:00:00.000',"+System.lineSeparator() +
+                      "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',"+System.lineSeparator() +
+                      "\"c8\" NUMBER(*,4) NULL,"+System.lineSeparator() +
+                      "\"c9\" NUMBER(1,0) DEFAULT 1,"+System.lineSeparator() +
                       "PRIMARY KEY(\"c1\"))";
     String sql = dialect.buildCreateTableStatement(tableId, sinkRecordFields);
     assertEquals(expected, sql);
@@ -141,15 +141,15 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
   public void shouldBuildAlterTableStatement() {
     assertStatements(
         new String[]{
-            "ALTER TABLE \"myTable\" ADD(\n" +
-            "\"c1\" NUMBER(10,0) NOT NULL,\n" +
-            "\"c2\" NUMBER(19,0) NOT NULL,\n" +
-            "\"c3\" CLOB NOT NULL,\n" +
-            "\"c4\" CLOB NULL,\n" +
-            "\"c5\" DATE DEFAULT '2001-03-15',\n" +
-            "\"c6\" DATE DEFAULT '00:00:00.000',\n" +
-            "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" +
-            "\"c8\" NUMBER(*,4) NULL,\n" +
+            "ALTER TABLE \"myTable\" ADD("+System.lineSeparator() +
+            "\"c1\" NUMBER(10,0) NOT NULL,"+System.lineSeparator() +
+            "\"c2\" NUMBER(19,0) NOT NULL,"+System.lineSeparator() +
+            "\"c3\" CLOB NOT NULL,"+System.lineSeparator() +
+            "\"c4\" CLOB NULL,"+System.lineSeparator() +
+            "\"c5\" DATE DEFAULT '2001-03-15',"+System.lineSeparator() +
+            "\"c6\" DATE DEFAULT '00:00:00.000',"+System.lineSeparator() +
+            "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',"+System.lineSeparator() +
+            "\"c8\" NUMBER(*,4) NULL,"+System.lineSeparator() +
             "\"c9\" NUMBER(1,0) DEFAULT 1)"
         },
         dialect.buildAlterTable(tableId, sinkRecordFields)
@@ -160,15 +160,15 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
 
     assertStatements(
         new String[]{
-            "ALTER TABLE myTable ADD(\n" +
-            "c1 NUMBER(10,0) NOT NULL,\n" +
-            "c2 NUMBER(19,0) NOT NULL,\n" +
-            "c3 CLOB NOT NULL,\n" +
-            "c4 CLOB NULL,\n" +
-            "c5 DATE DEFAULT '2001-03-15',\n" +
-            "c6 DATE DEFAULT '00:00:00.000',\n" +
-            "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" +
-            "c8 NUMBER(*,4) NULL,\n" +
+            "ALTER TABLE myTable ADD("+System.lineSeparator() +
+            "c1 NUMBER(10,0) NOT NULL,"+System.lineSeparator() +
+            "c2 NUMBER(19,0) NOT NULL,"+System.lineSeparator() +
+            "c3 CLOB NOT NULL,"+System.lineSeparator() +
+            "c4 CLOB NULL,"+System.lineSeparator() +
+            "c5 DATE DEFAULT '2001-03-15',"+System.lineSeparator() +
+            "c6 DATE DEFAULT '00:00:00.000',"+System.lineSeparator() +
+            "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',"+System.lineSeparator() +
+            "c8 NUMBER(*,4) NULL,"+System.lineSeparator() +
             "c9 NUMBER(1,0) DEFAULT 1)"
         },
         dialect.buildAlterTable(tableId, sinkRecordFields)

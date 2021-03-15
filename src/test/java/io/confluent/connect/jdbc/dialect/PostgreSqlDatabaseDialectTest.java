@@ -109,16 +109,16 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   @Test
   public void shouldBuildCreateQueryStatement() {
     assertEquals(
-        "CREATE TABLE \"myTable\" (\n"
-        + "\"c1\" INT NOT NULL,\n"
-        + "\"c2\" BIGINT NOT NULL,\n"
-        + "\"c3\" TEXT NOT NULL,\n"
-        + "\"c4\" TEXT NULL,\n"
-        + "\"c5\" DATE DEFAULT '2001-03-15',\n"
-        + "\"c6\" TIME DEFAULT '00:00:00.000',\n"
-        + "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "\"c8\" DECIMAL NULL,\n"
-        + "\"c9\" BOOLEAN DEFAULT TRUE,\n"
+        "CREATE TABLE \"myTable\" ("+System.lineSeparator()
+        + "\"c1\" INT NOT NULL,"+System.lineSeparator()
+        + "\"c2\" BIGINT NOT NULL,"+System.lineSeparator()
+        + "\"c3\" TEXT NOT NULL,"+System.lineSeparator()
+        + "\"c4\" TEXT NULL,"+System.lineSeparator()
+        + "\"c5\" DATE DEFAULT '2001-03-15',"+System.lineSeparator()
+        + "\"c6\" TIME DEFAULT '00:00:00.000',"+System.lineSeparator()
+        + "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',"+System.lineSeparator()
+        + "\"c8\" DECIMAL NULL,"+System.lineSeparator()
+        + "\"c9\" BOOLEAN DEFAULT TRUE,"+System.lineSeparator()
         + "PRIMARY KEY(\"c1\"))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
@@ -127,16 +127,16 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     dialect = createDialect();
 
     assertEquals(
-        "CREATE TABLE myTable (\n"
-        + "c1 INT NOT NULL,\n"
-        + "c2 BIGINT NOT NULL,\n"
-        + "c3 TEXT NOT NULL,\n"
-        + "c4 TEXT NULL,\n"
-        + "c5 DATE DEFAULT '2001-03-15',\n"
-        + "c6 TIME DEFAULT '00:00:00.000',\n"
-        + "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "c8 DECIMAL NULL,\n"
-        + "c9 BOOLEAN DEFAULT TRUE,\n"
+        "CREATE TABLE myTable ("+System.lineSeparator()
+        + "c1 INT NOT NULL,"+System.lineSeparator()
+        + "c2 BIGINT NOT NULL,"+System.lineSeparator()
+        + "c3 TEXT NOT NULL,"+System.lineSeparator()
+        + "c4 TEXT NULL,"+System.lineSeparator()
+        + "c5 DATE DEFAULT '2001-03-15',"+System.lineSeparator()
+        + "c6 TIME DEFAULT '00:00:00.000',"+System.lineSeparator()
+        + "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',"+System.lineSeparator()
+        + "c8 DECIMAL NULL,"+System.lineSeparator()
+        + "c9 BOOLEAN DEFAULT TRUE,"+System.lineSeparator()
         + "PRIMARY KEY(c1))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
@@ -146,15 +146,15 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   public void shouldBuildAlterTableStatement() {
     assertEquals(
         Arrays.asList(
-            "ALTER TABLE \"myTable\" \n"
-            + "ADD \"c1\" INT NOT NULL,\n"
-            + "ADD \"c2\" BIGINT NOT NULL,\n"
-            + "ADD \"c3\" TEXT NOT NULL,\n"
-            + "ADD \"c4\" TEXT NULL,\n"
-            + "ADD \"c5\" DATE DEFAULT '2001-03-15',\n"
-            + "ADD \"c6\" TIME DEFAULT '00:00:00.000',\n"
-            + "ADD \"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
-            + "ADD \"c8\" DECIMAL NULL,\n"
+            "ALTER TABLE \"myTable\" "+System.lineSeparator()
+            + "ADD \"c1\" INT NOT NULL,"+System.lineSeparator()
+            + "ADD \"c2\" BIGINT NOT NULL,"+System.lineSeparator()
+            + "ADD \"c3\" TEXT NOT NULL,"+System.lineSeparator()
+            + "ADD \"c4\" TEXT NULL,"+System.lineSeparator()
+            + "ADD \"c5\" DATE DEFAULT '2001-03-15',"+System.lineSeparator()
+            + "ADD \"c6\" TIME DEFAULT '00:00:00.000',"+System.lineSeparator()
+            + "ADD \"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',"+System.lineSeparator()
+            + "ADD \"c8\" DECIMAL NULL,"+System.lineSeparator()
             + "ADD \"c9\" BOOLEAN DEFAULT TRUE"
         ),
         dialect.buildAlterTable(tableId, sinkRecordFields)
@@ -165,15 +165,15 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
     assertEquals(
         Arrays.asList(
-            "ALTER TABLE myTable \n"
-            + "ADD c1 INT NOT NULL,\n"
-            + "ADD c2 BIGINT NOT NULL,\n"
-            + "ADD c3 TEXT NOT NULL,\n"
-            + "ADD c4 TEXT NULL,\n"
-            + "ADD c5 DATE DEFAULT '2001-03-15',\n"
-            + "ADD c6 TIME DEFAULT '00:00:00.000',\n"
-            + "ADD c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n"
-            + "ADD c8 DECIMAL NULL,\n"
+            "ALTER TABLE myTable "+System.lineSeparator()
+            + "ADD c1 INT NOT NULL,"+System.lineSeparator()
+            + "ADD c2 BIGINT NOT NULL,"+System.lineSeparator()
+            + "ADD c3 TEXT NOT NULL,"+System.lineSeparator()
+            + "ADD c4 TEXT NULL,"+System.lineSeparator()
+            + "ADD c5 DATE DEFAULT '2001-03-15',"+System.lineSeparator()
+            + "ADD c6 TIME DEFAULT '00:00:00.000',"+System.lineSeparator()
+            + "ADD c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',"+System.lineSeparator()
+            + "ADD c8 DECIMAL NULL,"+System.lineSeparator()
             + "ADD c9 BOOLEAN DEFAULT TRUE"
         ),
         dialect.buildAlterTable(tableId, sinkRecordFields)

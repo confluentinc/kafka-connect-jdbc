@@ -34,6 +34,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -435,4 +436,34 @@ public class JdbcDbWriterTest {
     );
   }
 
+  @Test
+  public void testQuerySplit() {
+    Map<String, String> props = new HashMap<>();
+    props.put("connection.url", sqliteHelper.sqliteUri());
+    props.put("auto.create", "true");
+    props.put("auto.evolve", "true");
+    props.put("pk.mode", "record_key");
+    props.put("pk.fields", "id"); // assigned name for the primitive key
+
+    writer = newWriter(props);
+
+    String tableName = writer.getTableNameFromDdlStatement("ALTER TABLE test_table ADD COLUMN ENUM(A, B, C)");
+    assertEquals("test_table", tableName);
+
+    List<String> splitDdlStatements1 = writer.getSplitDdlStatements("ALTER TABLE test_table ADD COLUMN ENUM(A, B, C), ADD COLUMN F VARCHAR(14), DROP COLUMN G, ADD INDEX (C, F) TestIndex, ADD COLUMN R CHAR(14);");
+    
+    assertArrayEquals(new String[]{
+      "ALTER TABLE test_table ADD COLUMN ENUM(A, B, C)",
+      "ALTER TABLE test_table  ADD COLUMN F VARCHAR(14)",
+      "ALTER TABLE test_table  DROP COLUMN G",
+      "ALTER TABLE test_table  ADD COLUMN R CHAR(14);"
+    }, splitDdlStatements1.toArray());
+
+
+    List<String> splitDdlStatements2 = writer.getSplitDdlStatements("RENAME TABLE old_table TO new_table;");
+    assertArrayEquals(new String[]{}, splitDdlStatements2.toArray());
+
+    List<String> splitDdlStatements3 = writer.getSplitDdlStatements("ALTER TABLE old_table RENAME new_table;");
+    assertArrayEquals(new String[]{}, splitDdlStatements3.toArray());
+  }
 }

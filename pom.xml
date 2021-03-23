@@ -26,7 +26,7 @@
     <groupId>io.confluent</groupId>
     <artifactId>kafka-connect-jdbc</artifactId>
     <packaging>jar</packaging>
-    <version>10.1.0-SNAPSHOT</version>
+    <version>10.2.0-SNAPSHOT</version>
     <name>kafka-connect-jdbc</name>
     <organization>
         <name>Confluent, Inc.</name>
@@ -49,7 +49,7 @@
         <connection>scm:git:git://github.com/confluentinc/kafka-connect-jdbc.git</connection>
         <developerConnection>scm:git:git@github.com:confluentinc/kafka-connect-jdbc.git</developerConnection>
         <url>https://github.com/confluentinc/kafka-connect-jdbc</url>
-        <tag>10.1.x</tag>
+        <tag>HEAD</tag>
     </scm>
 
     <properties>

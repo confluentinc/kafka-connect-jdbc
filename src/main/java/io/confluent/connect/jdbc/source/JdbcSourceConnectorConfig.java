@@ -285,6 +285,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       "Suffix to append at the end of the generated query.";
   public static final String QUERY_SUFFIX_DISPLAY = "Query suffix";
 
+  public static final String QUERY_WHERE_CONFIG = "query.where";
+  public static final String QUERY_WHERE_DEFAULT = "";
+  public static final String QUERY_WHERE_DOC = 
+      "Filtering options as used in WHERE clause to include in the generated query.";
+  public static final String QUERY_WHERE_DISPLAY = "WHERE clause";
+  
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
 
@@ -546,7 +552,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         MODE_GROUP,
         ++orderInGroup,
         Width.MEDIUM,
-        QUERY_SUFFIX_DISPLAY);
+        QUERY_SUFFIX_DISPLAY
+    ).define(
+        QUERY_WHERE_CONFIG,
+        Type.STRING,
+        QUERY_WHERE_DEFAULT,
+        Importance.MEDIUM,
+        QUERY_WHERE_DOC,
+        MODE_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        QUERY_WHERE_DISPLAY);
   }
 
   private static final void addConnectorOptions(ConfigDef config) {

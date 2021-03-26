@@ -152,7 +152,7 @@ public class TimestampIncrementingCriteriaTest {
     builder = builder();
     criteriaInc.incrementingWhereClause(builder);
     assertEquals(
-        " WHERE \"myTable\".\"id\" > ? ORDER BY \"myTable\".\"id\" ASC",
+        "\"myTable\".\"id\" > ? ORDER BY \"myTable\".\"id\" ASC",
         builder.toString()
     );
 
@@ -160,7 +160,7 @@ public class TimestampIncrementingCriteriaTest {
     builder = builder();
     criteriaInc.incrementingWhereClause(builder);
     assertEquals(
-        " WHERE myTable.id > ? ORDER BY myTable.id ASC",
+        "myTable.id > ? ORDER BY myTable.id ASC",
         builder.toString()
     );
   }
@@ -170,8 +170,7 @@ public class TimestampIncrementingCriteriaTest {
     builder = builder();
     criteriaTs.timestampWhereClause(builder);
     assertEquals(
-        " WHERE "
-        + "COALESCE(\"myTable\".\"ts1\",\"myTable\".\"ts2\") > ? "
+        "COALESCE(\"myTable\".\"ts1\",\"myTable\".\"ts2\") > ? "
         + "AND "
         + "COALESCE(\"myTable\".\"ts1\",\"myTable\".\"ts2\") < ? "
         + "ORDER BY "
@@ -184,8 +183,7 @@ public class TimestampIncrementingCriteriaTest {
     builder = builder();
     criteriaTs.timestampWhereClause(builder);
     assertEquals(
-        " WHERE "
-        + "COALESCE(myTable.ts1,myTable.ts2) > ? "
+        "COALESCE(myTable.ts1,myTable.ts2) > ? "
         + "AND "
         + "COALESCE(myTable.ts1,myTable.ts2) < ? "
         + "ORDER BY "
@@ -200,8 +198,7 @@ public class TimestampIncrementingCriteriaTest {
     builder = builder();
     criteriaIncTs.timestampIncrementingWhereClause(builder);
     assertEquals(
-        " WHERE "
-        + "COALESCE(\"myTable\".\"ts1\",\"myTable\".\"ts2\") < ? "
+        "COALESCE(\"myTable\".\"ts1\",\"myTable\".\"ts2\") < ? "
         + "AND ("
         + "(COALESCE(\"myTable\".\"ts1\",\"myTable\".\"ts2\") = ? AND \"myTable\".\"id\" > ?) "
         + "OR "
@@ -215,8 +212,7 @@ public class TimestampIncrementingCriteriaTest {
     builder = builder();
     criteriaIncTs.timestampIncrementingWhereClause(builder);
     assertEquals(
-        " WHERE "
-        + "COALESCE(myTable.ts1,myTable.ts2) < ? "
+        "COALESCE(myTable.ts1,myTable.ts2) < ? "
         + "AND ("
         + "(COALESCE(myTable.ts1,myTable.ts2) = ? AND myTable.id > ?) "
         + "OR "

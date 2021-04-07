@@ -219,12 +219,12 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   }
 
   @Override
-  public Timestamp beginTimetampValue() {
+  public Timestamp beginTimestampValue() {
     return offset.getTimestampOffset();
   }
 
   @Override
-  public Timestamp endTimetampValue()  throws SQLException {
+  public Timestamp endTimestampValue()  throws SQLException {
     final long currentDbTime = dialect.currentTimeOnDB(
         stmt.getConnection(),
         DateTimeUtils.getTimeZoneCalendar(timeZone)

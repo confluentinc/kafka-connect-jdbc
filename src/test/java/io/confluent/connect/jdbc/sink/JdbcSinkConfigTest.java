@@ -51,6 +51,12 @@ public class JdbcSinkConfigTest {
     createConfig();
   }
 
+  @Test(expected = ConfigException.class)
+  public void shouldFailToCreateConfigWithEmptyTableNameFormat() {
+    props.put(JdbcSinkConfig.TABLE_NAME_FORMAT, "");
+    createConfig();
+  }
+
   @Test
   public void shouldCreateConfigWithMinimalConfigs() {
     createConfig();

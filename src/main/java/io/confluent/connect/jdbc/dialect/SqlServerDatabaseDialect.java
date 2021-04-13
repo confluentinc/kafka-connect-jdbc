@@ -108,6 +108,25 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     jtdsDriver = jdbcUrlInfo == null ? false : jdbcUrlInfo.subprotocol().matches("jtds");
   }
 
+  @Override
+  public TableId parseTableIdentifier(String fqn) {
+    List<String> parts = identifierRules().parseQualifiedIdentifier(fqn);
+    if (parts.isEmpty()) {
+      throw new IllegalArgumentException("Invalid fully qualified name: '" + fqn + "'");
+    }
+    if (parts.size() == 1) {
+      return new TableId(null, "dbo", parts.get(0));
+    }
+    if (parts.size() == 3) {
+      return new TableId(parts.get(0), parts.get(1), parts.get(2));
+    }
+    assert parts.size() >= 2;
+    if (useCatalog()) {
+      return new TableId(parts.get(0), null, parts.get(1));
+    }
+    return new TableId(null, parts.get(0), parts.get(1));
+  }
+
   /**
    * Check if the mssql server instance, the connector is configured, to is an mssql version with
    * the breaking Datetime change (MSSQL Server version 2016 or newer). If unable to get version

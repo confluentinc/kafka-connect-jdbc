@@ -110,21 +110,11 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
 
   @Override
   public TableId parseTableIdentifier(String fqn) {
-    List<String> parts = identifierRules().parseQualifiedIdentifier(fqn);
-    if (parts.isEmpty()) {
-      throw new IllegalArgumentException("Invalid fully qualified name: '" + fqn + "'");
+    TableId tableId = super.parseTableIdentifier(fqn);
+    if (tableId.schemaName() == null) {
+      return new TableId(tableId.catalogName(), "dbo", tableId.tableName());
     }
-    if (parts.size() == 1) {
-      return new TableId(null, "dbo", parts.get(0));
-    }
-    if (parts.size() == 3) {
-      return new TableId(parts.get(0), parts.get(1), parts.get(2));
-    }
-    assert parts.size() >= 2;
-    if (useCatalog()) {
-      return new TableId(parts.get(0), null, parts.get(1));
-    }
-    return new TableId(null, parts.get(0), parts.get(1));
+    return tableId;
   }
 
   /**

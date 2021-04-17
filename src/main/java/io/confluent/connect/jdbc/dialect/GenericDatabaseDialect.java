@@ -105,6 +105,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   protected static final int NUMERIC_TYPE_SCALE_HIGH = 127;
   protected static final int NUMERIC_TYPE_SCALE_UNSET = -127;
 
+  // The maximum precision that can be achieved in a signed 64-bit integer is 2^63 ~= 9.223372e+18
+  private static final int MAX_INTEGER_TYPE_PRECISION = 18;
+
   /**
    * The provider for {@link GenericDatabaseDialect}.
    */
@@ -1058,7 +1061,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       case Types.NUMERIC:
         if (mapNumerics == NumericMapping.PRECISION_ONLY) {
           glog.debug("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
-          if (scale == 0 && precision < 19) { // integer
+          if (scale == 0 && precision <= MAX_INTEGER_TYPE_PRECISION) { // integer
             Schema schema;
             if (precision > 9) {
               schema = (optional) ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA;
@@ -1074,8 +1077,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           }
         } else if (mapNumerics == NumericMapping.BEST_FIT) {
           glog.debug("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
-          if (precision < 19) { // fits in primitive data types.
-            if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
+          if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
+            if (precision <= MAX_INTEGER_TYPE_PRECISION) { // fits in primitive data types.
               Schema schema;
               if (precision > 9) {
                 schema = (optional) ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA;
@@ -1088,11 +1091,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
               }
               builder.field(fieldName, schema);
               break;
-            } else if (scale > 0) { // floating point - use double in all cases
-              Schema schema = (optional) ? Schema.OPTIONAL_FLOAT64_SCHEMA : Schema.FLOAT64_SCHEMA;
-              builder.field(fieldName, schema);
-              break;
             }
+          } else if (scale > 0) { // floating point - use double in all cases
+            Schema schema = (optional) ? Schema.OPTIONAL_FLOAT64_SCHEMA : Schema.FLOAT64_SCHEMA;
+            builder.field(fieldName, schema);
+            break;
           }
         }
         // fallthrough
@@ -1271,7 +1274,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           int precision = defn.precision();
           int scale = defn.scale();
           glog.trace("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
-          if (scale == 0 && precision < 19) { // integer
+          if (scale == 0 && precision <= MAX_INTEGER_TYPE_PRECISION) { // integer
             if (precision > 9) {
               return rs -> rs.getLong(col);
             } else if (precision > 4) {
@@ -1286,8 +1289,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           int precision = defn.precision();
           int scale = defn.scale();
           glog.trace("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
-          if (precision < 19) { // fits in primitive data types.
-            if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
+          if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
+            if (precision <= MAX_INTEGER_TYPE_PRECISION) { // fits in primitive data types.
               if (precision > 9) {
                 return rs -> rs.getLong(col);
               } else if (precision > 4) {
@@ -1297,9 +1300,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
               } else {
                 return rs -> rs.getByte(col);
               }
-            } else if (scale > 0) { // floating point - use double in all cases
-              return rs -> rs.getDouble(col);
             }
+          } else if (scale > 0) { // floating point - use double in all cases
+            return rs -> rs.getDouble(col);
           }
         }
         // fallthrough

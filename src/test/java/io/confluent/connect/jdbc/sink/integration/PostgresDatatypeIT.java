@@ -251,10 +251,64 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     }
   }
 
+  @Test
+  public void testWriteToTableWithIntArrayColumnMissingFields() throws SQLException, InterruptedException {
+    createTableWithIntArrayColumnsMissing();
+    props.put(JdbcSinkConfig.AUTO_CREATE, "true");
+    props.put(JdbcSinkConfig.AUTO_EVOLVE, "true");
+    connect.configureConnector("jdbc-sink-connector", props);
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+
+    final Schema schema = SchemaBuilder.struct().name("com.example.Person")
+        .field("firstname", Schema.STRING_SCHEMA)
+        .field("lastname", Schema.STRING_SCHEMA)
+        .field("friends", SchemaBuilder.array(Schema.INT32_SCHEMA).optional().build())
+        .field("friendnames", SchemaBuilder.array(Schema.STRING_SCHEMA).optional().build())
+        .build();
+
+    final Struct struct = new Struct(schema)
+        .put("firstname", "Christina")
+        .put("lastname", "Brams")
+        .put("friends", Arrays.asList(10, 6221))
+        .put("friendnames", Arrays.asList("Lucas", "Tom"));
+    produceRecord(schema, struct);
+
+    waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 1, 1,
+        TimeUnit.MINUTES.toMillis(2));
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
+      try (Statement s = c.createStatement()) {
+        try (ResultSet rs = s.executeQuery("SELECT * FROM " + tableName)) {
+          assertTrue(rs.next());
+          assertEquals(struct.getString("firstname"), rs.getString("firstname"));
+          assertEquals(struct.getString("lastname"), rs.getString("lastname"));
+          assertJDBCArray(rs, "friends", struct);
+          assertJDBCArray(rs, "friendnames", struct);
+        }
+      }
+    }
+  }
+
   private void assertJDBCArray(ResultSet rs, String fieldName, Struct struct) throws SQLException {
     Array array = rs.getArray(fieldName);
     assertNotNull(array);
     assertEquals(struct.getArray(fieldName), Arrays.asList((Object[])array.getArray()));
+  }
+
+  private void createTableWithIntArrayColumnsMissing() throws SQLException {
+    LOG.info("Creating table {} with UUID column", tableName);
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
+      c.setAutoCommit(false);
+      try (Statement s = c.createStatement()) {
+        String sql = String.format(
+            "CREATE TABLE %s(firstName TEXT, lastName TEXT, jsonid json)",
+            tableName
+        );
+        LOG.info("Executing statement: {}", sql);
+        s.execute(sql);
+        c.commit();
+      }
+    }
+    LOG.info("Created table {} with UUID column", tableName);
   }
 
   private void createTableWithIntArrayColumns() throws SQLException {

@@ -237,7 +237,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     }
     switch (field.schemaType()) {
       case INT8:
-        return "SMALLINT";
       case INT16:
         return "SMALLINT";
       case INT32:
@@ -254,6 +253,13 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         return "TEXT";
       case BYTES:
         return "BYTEA";
+      case ARRAY:
+        SinkRecordField childField = new SinkRecordField(
+              field.schema().valueSchema(),
+              field.name(),
+              field.isPrimaryKey()
+            );
+        return getSqlType(childField) + "[]";
       default:
         return super.getSqlType(field);
     }

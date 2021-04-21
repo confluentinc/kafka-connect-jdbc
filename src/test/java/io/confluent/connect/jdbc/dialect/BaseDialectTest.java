@@ -529,7 +529,15 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
           when(colDef.type()).thenReturn(Types.TIMESTAMP);
           break;
         default:
-          when(colDef.type()).thenReturn(null);
+          when(colDef.type()).thenThrow(
+              new UnsupportedOperationException(
+                  String.format(
+                      "%s: '%s' is not a supported schema name",
+                      this.getClass().getSimpleName(),
+                      schema.name()
+                  )
+              )
+          );
       }
     } else {
       switch (schema.type()) {
@@ -554,8 +562,19 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
         case BYTES:
           when(colDef.type()).thenReturn(Types.BLOB);
           break;
+        case ARRAY:
+          when(colDef.type()).thenReturn(Types.ARRAY);
+          break;
         default:
-          when(colDef.type()).thenReturn(null);
+          when(colDef.type()).thenThrow(
+              new UnsupportedOperationException(
+                  String.format(
+                      "%s: '%s' is not a supported schema type",
+                      this.getClass().getSimpleName(),
+                      schema.type()
+                  )
+              )
+          );
       }
     }
 

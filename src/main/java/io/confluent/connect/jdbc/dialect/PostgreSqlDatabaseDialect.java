@@ -366,6 +366,74 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     }
   }
 
+  @SuppressWarnings("unchecked")
+  @Override
+  protected boolean maybeBindPrimitive(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
+      Object value
+  ) throws SQLException {
+
+    switch (schema.type()) {
+      case ARRAY: {
+        Class<?> valueClass = value.getClass();
+        Object newValue = null;
+        if (valueClass.isArray()) {
+          newValue = value;
+        } else {
+
+          // All typecasts below are based on pgjdbc's documentation on how to use primitive arrays
+          // - https://jdbc.postgresql.org/documentation/head/arrays.html
+          switch (schema.valueSchema().type()) {
+            case INT8: {
+              // Gotta do this the long way, as Postgres has no single-byte integer,
+              // so we want to cast to short as the next best thing, and we can't do that with
+              // toArray.
+              Collection<Byte> listVal = (Collection<Byte>) value;
+              newValue = listVal.stream()
+                  .map(Byte::shortValue)
+                  .toArray(Short[]::new);
+              break;
+            }
+            case INT32:
+              newValue = ((Collection<Object>) value).toArray(new Integer[0]);
+              break;
+            case INT16:
+              newValue = ((Collection<Object>) value).toArray(new Short[0]);
+              break;
+            case BOOLEAN:
+              newValue = ((Collection<Object>) value).toArray(new Boolean[0]);
+              break;
+            case STRING:
+              newValue = ((Collection<Object>) value).toArray(new String[0]);
+              break;
+            case FLOAT64:
+              newValue = ((Collection<Object>) value).toArray(new Double[0]);
+              break;
+            case FLOAT32:
+              newValue = ((Collection<Object>) value).toArray(new Float[0]);
+              break;
+            case INT64:
+              newValue = ((Collection<Object>) value).toArray(new Long[0]);
+              break;
+            default:
+              break;
+          }
+        }
+
+        if (newValue != null) {
+          statement.setObject(index, newValue, Types.ARRAY);
+          return true;
+        }
+        break;
+      }
+      default:
+        break;
+    }
+    return super.maybeBindPrimitive(statement, index, schema, value);
+  }
+
   /**
    * Return the transform that produces an assignment expression each with the name of one of the
    * columns and the prepared statement variable. PostgreSQL may require the variable to have a

@@ -254,7 +254,6 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
   @Test
   public void testWriteToTableWithIntArrayColumnMissingFields() throws SQLException, InterruptedException {
     createTableWithIntArrayColumnsMissing();
-    props.put(JdbcSinkConfig.AUTO_CREATE, "true");
     props.put(JdbcSinkConfig.AUTO_EVOLVE, "true");
     connect.configureConnector("jdbc-sink-connector", props);
     waitForConnectorToStart("jdbc-sink-connector", 1);

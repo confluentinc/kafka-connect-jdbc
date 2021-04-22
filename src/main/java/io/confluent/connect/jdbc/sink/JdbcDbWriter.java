@@ -87,6 +87,10 @@ public class JdbcDbWriter {
     cachedConnectionProvider.close();
   }
 
+  void rollbackTransaction() {
+    cachedConnectionProvider.rollbackTransaction();
+  }
+
   TableId destinationTable(String topic) {
     final String tableName = config.tableNameFormat.replace("${topic}", topic);
     if (tableName.isEmpty()) {

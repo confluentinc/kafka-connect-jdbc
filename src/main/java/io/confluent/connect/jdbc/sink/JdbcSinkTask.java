@@ -101,6 +101,7 @@ public class JdbcSinkTask extends SinkTask {
       }
       SQLException sqlAllMessagesException = getAllMessagesException(sqle);
       if (remainingRetries > 0) {
+        writer.rollbackTransaction();
         writer.closeQuietly();
         initWriter();
         remainingRetries--;
@@ -127,16 +128,19 @@ public class JdbcSinkTask extends SinkTask {
   }
 
   private void unrollAndRetry(Collection<SinkRecord> records) {
+    writer.rollbackTransaction();
     writer.closeQuietly();
     for (SinkRecord record : records) {
       try {
         writer.write(Collections.singletonList(record));
       } catch (TableAlterOrCreateException tace) {
         reporter.report(record, tace);
+        writer.rollbackTransaction();
         writer.closeQuietly();
       } catch (SQLException sqle) {
         SQLException sqlAllMessagesException = getAllMessagesException(sqle);
         reporter.report(record, sqlAllMessagesException);
+        writer.rollbackTransaction();
         writer.closeQuietly();
       }
     }

@@ -101,12 +101,21 @@ public class CachedConnectionProvider implements ConnectionProvider {
     }
   }
 
+  public synchronized void rollbackTransaction() {
+    if (connection != null) {
+      try {
+        connection.rollback();
+      } catch (SQLException e) {
+        // TBD
+      }
+    }
+  }
+
   @Override
   public synchronized void close() {
     if (connection != null) {
       try {
         log.info("Closing connection #{} to {}", count, provider);
-        connection.rollback();
         connection.close();
       } catch (SQLException sqle) {
         log.warn("Ignoring error closing connection", sqle);

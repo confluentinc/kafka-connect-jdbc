@@ -435,7 +435,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
             break;
         }
 
-
         if (newValue != null) {
           statement.setObject(index, newValue, Types.ARRAY);
           return true;

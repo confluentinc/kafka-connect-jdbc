@@ -130,6 +130,38 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final EnumRecommender NUMERIC_MAPPING_RECOMMENDER =
       EnumRecommender.in(NumericMapping.values());
 
+  public static final String DECIMAL_PRECISION_OVERRIDE_CONFIG = "decimal.precision.override";
+  private static final String DECIMAL_PRECISION_OVERRIDE_DOC =
+      "Used to set a override Precision for JDBC DECIMAL types.\n"
+      + "If ``decimal.precision.enabled`` is set to ``true``, DECIMAL values without an explicit Precision"
+      + " will be configured with a precision equal to ``decimal.precision.override``.";
+  public static final int DECIMAL_PRECISION_OVERRIDE_DEFAULT = 0;
+  private static final String DECIMAL_PRECISION_OVERRIDE_DISPLAY = "Precision for DECIMAL fields";
+
+  public static final String DECIMAL_PRECISION_ENABLED_CONFIG = "decimal.precision.enabled";
+  private static final String DECIMAL_PRECISION_ENABLED_DOC =
+      "Used to set a override Precision for JDBC DECIMAL types.\n"
+      + "If ``decimal.precision.enabled`` is set to ``true``, DECIMAL values without an explicit Precision"
+      + " will be configured with a precision equal to ``decimal.precision.override``.";
+  public static final boolean DECIMAL_PRECISION_ENABLED_DEFAULT = false;
+  private static final String DECIMAL_PRECISION_ENABLED_DISPLAY = "Enable Precision Override for DECIMAL FIELDS";
+
+  public static final String DECIMAL_SCALE_MAX_CONFIG = "decimal.scale.max";
+  private static final String DECIMAL_SCALE_MAX_DOC =
+      "Used to set a max Scale for JDBC DECIMAL types.\n"
+      + "If ``decimal.scale.enabled`` is set to ``true``, DECIMAL values with a higher scale \n"
+      + "than ``decimal.scale.max`` will be created with a scale of ``decimal.scale.max``.";
+  public static final int DECIMAL_SCALE_MAX_DEFAULT = 0;
+  private static final String DECIMAL_SCALE_MAX_DISPLAY = "Max Scale for DECIMAL fields";
+
+  public static final String DECIMAL_SCALE_ENABLED_CONFIG = "decimal.scale.enabled";
+  private static final String DECIMAL_SCALE_ENABLED_DOC =
+      "Used to set a max Scale for JDBC DECIMAL types.\n"
+      + "If ``decimal.scale.enabled`` is set to ``true``, DECIMAL values with a higher scale \n"
+      + "than ``decimal.scale.max`` will be created with a scale of ``decimal.scale.max``.";
+  public static final boolean DECIMAL_SCALE_ENABLED_DEFAULT = false;
+  private static final String DECIMAL_SCALE_ENABLED_DISPLAY = "Enable Max Scale for DECIMAL fields";
+
   public static final String DIALECT_NAME_CONFIG = "dialect.name";
   private static final String DIALECT_NAME_DISPLAY = "Database Dialect";
   public static final String DIALECT_NAME_DEFAULT = "";
@@ -434,6 +466,46 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Width.SHORT,
         NUMERIC_MAPPING_DISPLAY,
         NUMERIC_MAPPING_RECOMMENDER
+    ).define(
+        DECIMAL_PRECISION_OVERRIDE_CONFIG,
+        Type.INT,
+        DECIMAL_PRECISION_OVERRIDE_DEFAULT,
+        Importance.LOW,
+        DECIMAL_PRECISION_OVERRIDE_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        DECIMAL_PRECISION_OVERRIDE_DISPLAY
+    ).define(
+        DECIMAL_PRECISION_ENABLED_CONFIG,
+        Type.BOOLEAN,
+        DECIMAL_PRECISION_ENABLED_DEFAULT,
+        Importance.LOW,
+        DECIMAL_PRECISION_ENABLED_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        DECIMAL_PRECISION_ENABLED_DISPLAY
+    ).define(
+        DECIMAL_SCALE_MAX_CONFIG,
+        Type.INT,
+        DECIMAL_SCALE_MAX_DEFAULT,
+        Importance.LOW,
+        DECIMAL_SCALE_MAX_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        DECIMAL_SCALE_MAX_DISPLAY
+    ).define(
+        DECIMAL_SCALE_ENABLED_CONFIG,
+        Type.BOOLEAN,
+        DECIMAL_SCALE_ENABLED_DEFAULT,
+        Importance.LOW,
+        DECIMAL_SCALE_ENABLED_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        DECIMAL_SCALE_ENABLED_DISPLAY
     ).define(
         DIALECT_NAME_CONFIG,
         Type.STRING,

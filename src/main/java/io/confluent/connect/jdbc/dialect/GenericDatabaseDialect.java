@@ -149,6 +149,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   private final TimeZone timeZone;
 
   /**
+   * Override {@code DECIMAL} JDBC type precision and scale.
+   */
+  protected final int decimalPrecisionOverride;
+  protected final boolean decimalPrecisionEnabled;
+  protected final int decimalScaleMax;
+  protected final boolean decimalScaleEnabled;
+
+  /**
    * Create a new dialect instance with the given connector configuration.
    *
    * @param config the connector configuration; may not be null
@@ -191,9 +199,17 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     if (config instanceof JdbcSourceConnectorConfig) {
       mapNumerics = ((JdbcSourceConnectorConfig)config).numericMapping();
       batchMaxRows = config.getInt(JdbcSourceConnectorConfig.BATCH_MAX_ROWS_CONFIG);
+      decimalPrecisionOverride = config.getInt(JdbcSourceConnectorConfig.DECIMAL_PRECISION_OVERRIDE_CONFIG);
+      decimalPrecisionEnabled = config.getBoolean(JdbcSourceConnectorConfig.DECIMAL_PRECISION_ENABLED_CONFIG);
+      decimalScaleMax = config.getInt(JdbcSourceConnectorConfig.DECIMAL_SCALE_MAX_CONFIG);
+      decimalScaleEnabled = config.getBoolean(JdbcSourceConnectorConfig.DECIMAL_SCALE_ENABLED_CONFIG);
     } else {
       mapNumerics = NumericMapping.NONE;
       batchMaxRows = 0;
+      decimalPrecisionOverride = 0;
+      decimalPrecisionEnabled = false;
+      decimalScaleMax = 0;
+      decimalScaleEnabled = false;
     }
 
     if (config instanceof JdbcSourceConnectorConfig) {
@@ -1101,6 +1117,10 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         glog.debug("DECIMAL with precision: '{}' and scale: '{}'", precision, scale);
         scale = decimalScale(columnDefn);
         SchemaBuilder fieldBuilder = Decimal.builder(scale);
+        if (decimalPrecisionEnabled) {
+          int modifiedPrecision = precision == 0 ? decimalPrecisionOverride : precision;
+          fieldBuilder.parameter("connect.decimal.precision", Integer.toString(modifiedPrecision));
+        }
         if (optional) {
           fieldBuilder.optional();
         }
@@ -1438,7 +1458,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   protected int decimalScale(ColumnDefinition defn) {
-    return defn.scale() == NUMERIC_TYPE_SCALE_UNSET ? NUMERIC_TYPE_SCALE_HIGH : defn.scale();
+    int returnScale = defn.scale() == NUMERIC_TYPE_SCALE_UNSET ? NUMERIC_TYPE_SCALE_HIGH : defn.scale();
+    if (decimalScaleEnabled && returnScale > decimalScaleMax) return decimalScaleMax;
+    return returnScale;
   }
 
   /**

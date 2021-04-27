@@ -101,13 +101,9 @@ public class CachedConnectionProvider implements ConnectionProvider {
     }
   }
 
-  public synchronized void rollbackTransaction() {
+  public synchronized void rollbackTransaction() throws SQLException {
     if (connection != null) {
-      try {
-        connection.rollback();
-      } catch (SQLException e) {
-        // TBD
-      }
+      connection.rollback();
     }
   }
 

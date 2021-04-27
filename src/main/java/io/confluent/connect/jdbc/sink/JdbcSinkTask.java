@@ -83,6 +83,11 @@ public class JdbcSinkTask extends SinkTask {
     try {
       writer.write(records);
     } catch (TableAlterOrCreateException tace) {
+      try {
+        writer.rollbackTransaction();
+      } catch (SQLException e) {
+        tace.addSuppressed(e);
+      }
       if (reporter != null) {
         unrollAndRetry(records);
       } else {
@@ -101,13 +106,22 @@ public class JdbcSinkTask extends SinkTask {
       }
       SQLException sqlAllMessagesException = getAllMessagesException(sqle);
       if (remainingRetries > 0) {
-        writer.rollbackTransaction();
+        try {
+          writer.rollbackTransaction();
+        } catch (SQLException e) {
+          sqlAllMessagesException.addSuppressed(e);
+        }
         writer.closeQuietly();
         initWriter();
         remainingRetries--;
         context.timeout(config.retryBackoffMs);
         throw new RetriableException(sqlAllMessagesException);
       } else {
+        try {
+          writer.rollbackTransaction();
+        } catch (SQLException e) {
+          sqlAllMessagesException.addSuppressed(e);
+        }
         if (reporter != null) {
           unrollAndRetry(records);
         } else {
@@ -128,19 +142,26 @@ public class JdbcSinkTask extends SinkTask {
   }
 
   private void unrollAndRetry(Collection<SinkRecord> records) {
-    writer.rollbackTransaction();
     writer.closeQuietly();
     for (SinkRecord record : records) {
       try {
         writer.write(Collections.singletonList(record));
       } catch (TableAlterOrCreateException tace) {
+        try {
+          writer.rollbackTransaction();
+        } catch (SQLException e) {
+          tace.addSuppressed(e);
+        }
         reporter.report(record, tace);
-        writer.rollbackTransaction();
         writer.closeQuietly();
       } catch (SQLException sqle) {
         SQLException sqlAllMessagesException = getAllMessagesException(sqle);
+        try {
+          writer.rollbackTransaction();
+        } catch (SQLException e) {
+          sqlAllMessagesException.addSuppressed(e);
+        }
         reporter.report(record, sqlAllMessagesException);
-        writer.rollbackTransaction();
         writer.closeQuietly();
       }
     }

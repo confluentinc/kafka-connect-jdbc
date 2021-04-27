@@ -239,6 +239,8 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     ctx.timeout(retryBackoffMs);
     expectLastCall().times(maxRetries);
 
+    mockWriter.rollbackTransaction();
+    expectLastCall().times(maxRetries + 1);
     mockWriter.closeQuietly();
     expectLastCall().times(maxRetries);
 
@@ -309,6 +311,8 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     mockWriter.write(records);
     SQLException exception = new SQLException("cause 1");
     expectLastCall().andThrow(exception);
+    mockWriter.rollbackTransaction();
+    expectLastCall();
     mockWriter.closeQuietly();
     expectLastCall();
     mockWriter.write(anyObject());
@@ -324,6 +328,8 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
     expect(ctx.errantRecordReporter()).andReturn(reporter);
     expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null));
+    mockWriter.rollbackTransaction();
+    expectLastCall();
     mockWriter.closeQuietly();
     expectLastCall();
     replayAll();
@@ -341,6 +347,8 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     mockWriter.write(records);
     TableAlterOrCreateException exception = new TableAlterOrCreateException("cause 1");
     expectLastCall().andThrow(exception);
+    mockWriter.rollbackTransaction();
+    expectLastCall();
     mockWriter.closeQuietly();
     expectLastCall();
     mockWriter.write(anyObject());
@@ -356,6 +364,8 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
     expect(ctx.errantRecordReporter()).andReturn(reporter);
     expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null));
+    mockWriter.rollbackTransaction();
+    expectLastCall();
     mockWriter.closeQuietly();
     expectLastCall();
     replayAll();
@@ -375,6 +385,8 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     mockWriter.write(records);
     SQLException exception = new SQLException("cause 1");
     expectLastCall().andThrow(exception);
+    mockWriter.rollbackTransaction();
+    expectLastCall();
     mockWriter.closeQuietly();
     expectLastCall();
     mockWriter.write(anyObject());
@@ -391,6 +403,8 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     expect(ctx.errantRecordReporter()).andReturn(reporter);
     expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null)).times(batchSize);
     for (int i = 0; i < batchSize; i++) {
+      mockWriter.rollbackTransaction();
+      expectLastCall();
       mockWriter.closeQuietly();
       expectLastCall();
     }
@@ -411,6 +425,8 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     mockWriter.write(records);
     SQLException exception = new SQLException("cause 1");
     expectLastCall().andThrow(exception);
+    mockWriter.rollbackTransaction();
+    expectLastCall();
     mockWriter.closeQuietly();
     expectLastCall();
     mockWriter.write(anyObject());
@@ -427,6 +443,8 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
     expect(ctx.errantRecordReporter()).andReturn(reporter);
     expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null));
+    mockWriter.rollbackTransaction();
+    expectLastCall();
     mockWriter.closeQuietly();
     expectLastCall();
     replayAll();
@@ -446,6 +464,8 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     mockWriter.write(records);
     SQLException exception = new SQLException("cause 1");
     expectLastCall().andThrow(exception);
+    mockWriter.rollbackTransaction();
+    expectLastCall();
     mockWriter.closeQuietly();
     expectLastCall();
     mockWriter.write(anyObject());
@@ -465,6 +485,8 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
     expect(ctx.errantRecordReporter()).andReturn(reporter);
     expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null));
+    mockWriter.rollbackTransaction();
+    expectLastCall();
     mockWriter.closeQuietly();
     expectLastCall();
     replayAll();

@@ -87,7 +87,7 @@ public class JdbcDbWriter {
     cachedConnectionProvider.close();
   }
 
-  void rollbackTransaction() {
+  void rollbackTransaction() throws SQLException {
     cachedConnectionProvider.rollbackTransaction();
   }
 

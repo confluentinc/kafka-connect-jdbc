@@ -199,10 +199,13 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     if (config instanceof JdbcSourceConnectorConfig) {
       mapNumerics = ((JdbcSourceConnectorConfig)config).numericMapping();
       batchMaxRows = config.getInt(JdbcSourceConnectorConfig.BATCH_MAX_ROWS_CONFIG);
-      decimalPrecisionOverride = config.getInt(JdbcSourceConnectorConfig.DECIMAL_PRECISION_OVERRIDE_CONFIG);
-      decimalPrecisionEnabled = config.getBoolean(JdbcSourceConnectorConfig.DECIMAL_PRECISION_ENABLED_CONFIG);
+      decimalPrecisionOverride = config.getInt(
+              JdbcSourceConnectorConfig.DECIMAL_PRECISION_OVERRIDE_CONFIG);
+      decimalPrecisionEnabled = config.getBoolean(
+              JdbcSourceConnectorConfig.DECIMAL_PRECISION_ENABLED_CONFIG);
       decimalScaleMax = config.getInt(JdbcSourceConnectorConfig.DECIMAL_SCALE_MAX_CONFIG);
-      decimalScaleEnabled = config.getBoolean(JdbcSourceConnectorConfig.DECIMAL_SCALE_ENABLED_CONFIG);
+      decimalScaleEnabled = config.getBoolean(
+              JdbcSourceConnectorConfig.DECIMAL_SCALE_ENABLED_CONFIG);
     } else {
       mapNumerics = NumericMapping.NONE;
       batchMaxRows = 0;
@@ -1458,8 +1461,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   protected int decimalScale(ColumnDefinition defn) {
-    int returnScale = defn.scale() == NUMERIC_TYPE_SCALE_UNSET ? NUMERIC_TYPE_SCALE_HIGH : defn.scale();
-    if (decimalScaleEnabled && returnScale > decimalScaleMax) return decimalScaleMax;
+    int returnScale = defn.scale() == NUMERIC_TYPE_SCALE_UNSET
+        ? NUMERIC_TYPE_SCALE_HIGH : defn.scale();
+    if (decimalScaleEnabled && returnScale > decimalScaleMax) {
+      return decimalScaleMax;
+    }
     return returnScale;
   }
 

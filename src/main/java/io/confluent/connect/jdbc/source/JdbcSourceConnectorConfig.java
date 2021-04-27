@@ -133,18 +133,20 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String DECIMAL_PRECISION_OVERRIDE_CONFIG = "decimal.precision.override";
   private static final String DECIMAL_PRECISION_OVERRIDE_DOC =
       "Used to set a override Precision for JDBC DECIMAL types.\n"
-      + "If ``decimal.precision.enabled`` is set to ``true``, DECIMAL values without an explicit Precision"
-      + " will be configured with a precision equal to ``decimal.precision.override``.";
+      + "If ``decimal.precision.enabled`` is set to ``true``, DECIMAL values without an "
+      + "explicit Precision will be configured with a precision equal to "
+      + "``decimal.precision.override``.";
   public static final int DECIMAL_PRECISION_OVERRIDE_DEFAULT = 0;
   private static final String DECIMAL_PRECISION_OVERRIDE_DISPLAY = "Precision for DECIMAL fields";
 
   public static final String DECIMAL_PRECISION_ENABLED_CONFIG = "decimal.precision.enabled";
   private static final String DECIMAL_PRECISION_ENABLED_DOC =
       "Used to set a override Precision for JDBC DECIMAL types.\n"
-      + "If ``decimal.precision.enabled`` is set to ``true``, DECIMAL values without an explicit Precision"
-      + " will be configured with a precision equal to ``decimal.precision.override``.";
+      + "If ``decimal.precision.enabled`` is set to ``true``, DECIMAL values without an explicit "
+      + " Precision will be configured with a precision equal to ``decimal.precision.override``.";
   public static final boolean DECIMAL_PRECISION_ENABLED_DEFAULT = false;
-  private static final String DECIMAL_PRECISION_ENABLED_DISPLAY = "Enable Precision Override for DECIMAL FIELDS";
+  private static final String DECIMAL_PRECISION_ENABLED_DISPLAY =
+      "Enable Precision Override for DECIMAL FIELDS";
 
   public static final String DECIMAL_SCALE_MAX_CONFIG = "decimal.scale.max";
   private static final String DECIMAL_SCALE_MAX_DOC =

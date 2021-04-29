@@ -116,7 +116,14 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "  * Use ``none`` if all NUMERIC columns are to be represented by Connect's DECIMAL "
       + "logical type.\n"
       + "  * Use ``best_fit`` if NUMERIC columns should be cast to Connect's INT8, INT16, "
-      + "INT32, INT64, or FLOAT64 based upon the column's precision and scale.\n"
+      + "INT32, INT64, or FLOAT64 based upon the column's precision and scale. This option may "
+      + "still represent the NUMERIC value as Connect DECIMAL if it cannot be cast to a native "
+      + "type without losing precision. For example, a NUMERIC(20) type with precision 20 would not "
+      + "be able to fit in a native INT64 without overflowing and thus would be retained as "
+      + "DECIMAL.\n"
+      + "  * Use ``best_fit_eager_double`` if in addition to the properties of ``best_fit`` "
+      + "described above, it is desirable to always cast NUMERIC columns with scale to Connect "
+      + "FLOAT64 type, despite potential of loss in accuracy.\n"
       + "  * Use ``precision_only`` to map NUMERIC columns based only on the column's precision "
       + "assuming that column's scale is 0.\n"
       + "  * The ``none`` option is the default, but may lead to serialization issues with Avro "
@@ -787,7 +794,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public enum NumericMapping {
     NONE,
     PRECISION_ONLY,
-    BEST_FIT;
+    BEST_FIT,
+    BEST_FIT_EAGER_DOUBLE;
 
     private static final Map<String, NumericMapping> reverse = new HashMap<>(values().length);
     static {

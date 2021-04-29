@@ -1062,34 +1062,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         if (mapNumerics == NumericMapping.PRECISION_ONLY) {
           glog.debug("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
           if (scale == 0 && precision <= MAX_INTEGER_TYPE_PRECISION) { // integer
-            Schema schema;
-            if (precision > 9) {
-              schema = (optional) ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA;
-            } else if (precision > 4) {
-              schema = (optional) ? Schema.OPTIONAL_INT32_SCHEMA : Schema.INT32_SCHEMA;
-            } else if (precision > 2) {
-              schema = (optional) ? Schema.OPTIONAL_INT16_SCHEMA : Schema.INT16_SCHEMA;
-            } else {
-              schema = (optional) ? Schema.OPTIONAL_INT8_SCHEMA : Schema.INT8_SCHEMA;
-            }
-            builder.field(fieldName, schema);
+            builder.field(fieldName, integerSchema(optional, precision));
             break;
           }
         } else if (mapNumerics == NumericMapping.BEST_FIT) {
           glog.debug("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
           if (precision <= MAX_INTEGER_TYPE_PRECISION) { // fits in primitive data types.
             if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
-              Schema schema;
-              if (precision > 9) {
-                schema = (optional) ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA;
-              } else if (precision > 4) {
-                schema = (optional) ? Schema.OPTIONAL_INT32_SCHEMA : Schema.INT32_SCHEMA;
-              } else if (precision > 2) {
-                schema = (optional) ? Schema.OPTIONAL_INT16_SCHEMA : Schema.INT16_SCHEMA;
-              } else {
-                schema = (optional) ? Schema.OPTIONAL_INT8_SCHEMA : Schema.INT8_SCHEMA;
-              }
-              builder.field(fieldName, schema);
+              builder.field(fieldName, integerSchema(optional, precision));
               break;
             } else if (scale > 0) { // floating point - use double in all cases
               Schema schema = (optional) ? Schema.OPTIONAL_FLOAT64_SCHEMA : Schema.FLOAT64_SCHEMA;
@@ -1101,17 +1081,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           glog.debug("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
           if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
             if (precision <= MAX_INTEGER_TYPE_PRECISION) { // fits in primitive data types.
-              Schema schema;
-              if (precision > 9) {
-                schema = (optional) ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA;
-              } else if (precision > 4) {
-                schema = (optional) ? Schema.OPTIONAL_INT32_SCHEMA : Schema.INT32_SCHEMA;
-              } else if (precision > 2) {
-                schema = (optional) ? Schema.OPTIONAL_INT16_SCHEMA : Schema.INT16_SCHEMA;
-              } else {
-                schema = (optional) ? Schema.OPTIONAL_INT8_SCHEMA : Schema.INT8_SCHEMA;
-              }
-              builder.field(fieldName, schema);
+              builder.field(fieldName, integerSchema(optional, precision));
               break;
             }
           } else if (scale > 0) { // floating point - use double in all cases
@@ -1202,6 +1172,20 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       }
     }
     return fieldName;
+  }
+
+  private Schema integerSchema(boolean optional, int precision) {
+    Schema schema;
+    if (precision > 9) {
+      schema = (optional) ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA;
+    } else if (precision > 4) {
+      schema = (optional) ? Schema.OPTIONAL_INT32_SCHEMA : Schema.INT32_SCHEMA;
+    } else if (precision > 2) {
+      schema = (optional) ? Schema.OPTIONAL_INT16_SCHEMA : Schema.INT16_SCHEMA;
+    } else {
+      schema = (optional) ? Schema.OPTIONAL_INT8_SCHEMA : Schema.INT8_SCHEMA;
+    }
+    return schema;
   }
 
   @Override

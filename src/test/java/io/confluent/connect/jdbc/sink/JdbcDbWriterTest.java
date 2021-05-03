@@ -30,6 +30,8 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collections;
@@ -39,11 +41,18 @@ import java.util.concurrent.ThreadLocalRandom;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.SqliteDatabaseDialect;
+import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static junit.framework.TestCase.assertTrue;
 import static org.junit.Assert.*;
+import static org.mockito.Matchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 public class JdbcDbWriterTest {
 
@@ -69,6 +78,59 @@ public class JdbcDbWriterTest {
     dialect = new SqliteDatabaseDialect(config);
     final DbStructure dbStructure = new DbStructure(dialect);
     return new JdbcDbWriter(config, dialect, dbStructure);
+  }
+
+  private JdbcDbWriter newConnectionMockedWriter(Map<String, String> props, Connection mockConnection) {
+    final JdbcSinkConfig config = new JdbcSinkConfig(props);
+    dialect = mock(DatabaseDialect.class);
+    final DbStructure dbStructure = mock(DbStructure.class);
+    return new JdbcDbWriter(config, dialect, dbStructure) {
+      protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
+        CachedConnectionProvider mockConnectionProvider = mock(CachedConnectionProvider.class);
+        when(mockConnectionProvider.getConnection()).thenReturn(mockConnection);
+        return mockConnectionProvider;
+      }
+    };
+  }
+
+  @Test (expected = SQLException.class)
+  public void verifyConnectionRollback() throws SQLException {
+    Connection mockConnection = mock(Connection.class);
+
+    doThrow(new SQLException()).when(mockConnection).commit();
+
+    Map<String, String> props = new HashMap<>();
+    props.put("connection.url", sqliteHelper.sqliteUri());
+    props.put("auto.create", "true");
+    props.put("auto.evolve", "true");
+    props.put("insert.mode", "upsert");
+    props.put("pk.mode", "record_key");
+    props.put("pk.fields", "id"); // assigned name for the primitive key
+
+    JdbcDbWriter writer = newConnectionMockedWriter(props, mockConnection);
+
+    PreparedStatement mockStatement = mock(PreparedStatement.class);
+    when(dialect.parseTableIdentifier(any())).thenReturn(mock(TableId.class));
+    when(dialect.createPreparedStatement(any(), any())).thenReturn(mockStatement);
+    when(dialect.statementBinder(any(), any(), any(), any(), any(), any()))
+        .thenReturn(mock(PreparedStatementBinder.class));
+    when(mockStatement.executeBatch()).thenReturn(new int[3]);
+
+    Schema keySchema = Schema.INT64_SCHEMA;
+
+    Schema valueSchema1 = SchemaBuilder.struct()
+        .field("author", Schema.STRING_SCHEMA)
+        .field("title", Schema.STRING_SCHEMA)
+        .build();
+
+    Struct valueStruct1 = new Struct(valueSchema1)
+        .put("author", "Tom Robbins")
+        .put("title", "Villa Incognito");
+
+    writer.write(Collections.singleton(new SinkRecord("books", 0, keySchema, 1L, valueSchema1,
+        valueStruct1, 0)));
+
+    verify(mockConnection, times(1)).rollback();
   }
 
   @Test

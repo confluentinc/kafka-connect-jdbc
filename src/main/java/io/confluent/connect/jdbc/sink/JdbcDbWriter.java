@@ -62,33 +62,38 @@ public class JdbcDbWriter {
   void write(final Collection<SinkRecord> records)
       throws SQLException, TableAlterOrCreateException {
     final Connection connection = cachedConnectionProvider.getConnection();
-
-    final Map<TableId, BufferedRecords> bufferByTable = new HashMap<>();
-    for (SinkRecord record : records) {
-      final TableId tableId = destinationTable(record.topic());
-      BufferedRecords buffer = bufferByTable.get(tableId);
-      if (buffer == null) {
-        buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
-        bufferByTable.put(tableId, buffer);
+    try {
+      final Map<TableId, BufferedRecords> bufferByTable = new HashMap<>();
+      for (SinkRecord record : records) {
+        final TableId tableId = destinationTable(record.topic());
+        BufferedRecords buffer = bufferByTable.get(tableId);
+        if (buffer==null) {
+          buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
+          bufferByTable.put(tableId, buffer);
+        }
+        buffer.add(record);
       }
-      buffer.add(record);
+      for (Map.Entry<TableId, BufferedRecords> entry : bufferByTable.entrySet()) {
+        TableId tableId = entry.getKey();
+        BufferedRecords buffer = entry.getValue();
+        log.debug("Flushing records in JDBC Writer for table ID: {}", tableId);
+        buffer.flush();
+        buffer.close();
+      }
+      connection.commit();
+    } catch (SQLException | TableAlterOrCreateException e) {
+      try {
+        connection.rollback();
+      } catch (SQLException sqle) {
+        e.addSuppressed(sqle);
+      } finally {
+        throw e;
+      }
     }
-    for (Map.Entry<TableId, BufferedRecords> entry : bufferByTable.entrySet()) {
-      TableId tableId = entry.getKey();
-      BufferedRecords buffer = entry.getValue();
-      log.debug("Flushing records in JDBC Writer for table ID: {}", tableId);
-      buffer.flush();
-      buffer.close();
-    }
-    connection.commit();
   }
 
   void closeQuietly() {
     cachedConnectionProvider.close();
-  }
-
-  void rollbackTransaction() throws SQLException {
-    cachedConnectionProvider.rollbackTransaction();
   }
 
   TableId destinationTable(String topic) {

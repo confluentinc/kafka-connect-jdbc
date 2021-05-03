@@ -62,10 +62,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
   }
 
   @Override
-  public boolean isConnectionValid(
-      Connection connection,
-      int timeout
-  ) throws SQLException {
+  public boolean isConnectionValid(Connection connection, int timeout) {
     try {
       return provider.isConnectionValid(connection, timeout);
     } catch (SQLException sqle) {
@@ -98,12 +95,6 @@ public class CachedConnectionProvider implements ConnectionProvider {
           throw sqle;
         }
       }
-    }
-  }
-
-  public synchronized void rollbackTransaction() throws SQLException {
-    if (connection != null) {
-      connection.rollback();
     }
   }
 

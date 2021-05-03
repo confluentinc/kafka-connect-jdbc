@@ -67,7 +67,7 @@ public class JdbcDbWriter {
       for (SinkRecord record : records) {
         final TableId tableId = destinationTable(record.topic());
         BufferedRecords buffer = bufferByTable.get(tableId);
-        if (buffer==null) {
+        if (buffer == null) {
           buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
           bufferByTable.put(tableId, buffer);
         }

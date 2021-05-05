@@ -80,7 +80,7 @@ public class JdbcDbWriterTest {
     return new JdbcDbWriter(config, dialect, dbStructure);
   }
 
-  private JdbcDbWriter newConnectionMockedWriter(Map<String, String> props, Connection mockConnection) {
+  private JdbcDbWriter newWriterWithMockConnection(Map<String, String> props, Connection mockConnection) {
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
     dialect = mock(DatabaseDialect.class);
     final DbStructure dbStructure = mock(DbStructure.class);
@@ -93,11 +93,12 @@ public class JdbcDbWriterTest {
     };
   }
 
-  @Test (expected = SQLException.class)
+  @Test
   public void verifyConnectionRollback() throws SQLException {
     Connection mockConnection = mock(Connection.class);
 
     doThrow(new SQLException()).when(mockConnection).commit();
+    doThrow(new SQLException()).when(mockConnection).rollback();
 
     Map<String, String> props = new HashMap<>();
     props.put("connection.url", sqliteHelper.sqliteUri());
@@ -107,7 +108,7 @@ public class JdbcDbWriterTest {
     props.put("pk.mode", "record_key");
     props.put("pk.fields", "id"); // assigned name for the primitive key
 
-    JdbcDbWriter writer = newConnectionMockedWriter(props, mockConnection);
+    JdbcDbWriter writer = newWriterWithMockConnection(props, mockConnection);
 
     PreparedStatement mockStatement = mock(PreparedStatement.class);
     when(dialect.parseTableIdentifier(any())).thenReturn(mock(TableId.class));
@@ -127,8 +128,21 @@ public class JdbcDbWriterTest {
         .put("author", "Tom Robbins")
         .put("title", "Villa Incognito");
 
-    writer.write(Collections.singleton(new SinkRecord("books", 0, keySchema, 1L, valueSchema1,
-        valueStruct1, 0)));
+    try {
+      writer.write(Collections.singleton(new SinkRecord(
+          "books", 0,
+          keySchema,
+          1L,
+          valueSchema1,
+          valueStruct1,
+          0)
+      ));
+      fail();
+    } catch (SQLException e) {
+      Throwable[] suppressed = e.getSuppressed();
+      assertTrue(suppressed.length == 1);
+      assertTrue(suppressed[0] instanceof SQLException);
+    }
 
     verify(mockConnection, times(1)).rollback();
   }

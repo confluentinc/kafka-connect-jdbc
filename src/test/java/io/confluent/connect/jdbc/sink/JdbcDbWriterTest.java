@@ -93,12 +93,36 @@ public class JdbcDbWriterTest {
     };
   }
 
+  private class MockRollbackException extends SQLException {
+    public MockRollbackException() {
+      super();
+    }
+  }
+
   @Test
-  public void verifyConnectionRollback() throws SQLException {
+  public void verifyConnectionRollbackFailed() throws SQLException {
+    SQLException e = connectionRollback(false);
+
+    Throwable[] suppressed = e.getSuppressed();
+    assertEquals(suppressed.length, 1);
+    assertTrue(suppressed[0] instanceof MockRollbackException);
+  }
+
+  @Test
+  public void verifyConnectionRollbackSucceeded() throws SQLException {
+    SQLException e = connectionRollback(true);
+
+    Throwable[] suppressed = e.getSuppressed();
+    assertEquals(suppressed.length, 0);
+  }
+
+  public SQLException connectionRollback(boolean succeedOnRollBack) throws SQLException {
     Connection mockConnection = mock(Connection.class);
 
     doThrow(new SQLException()).when(mockConnection).commit();
-    doThrow(new SQLException()).when(mockConnection).rollback();
+    if (!succeedOnRollBack) {
+      doThrow(new MockRollbackException()).when(mockConnection).rollback();
+    }
 
     Map<String, String> props = new HashMap<>();
     props.put("connection.url", sqliteHelper.sqliteUri());
@@ -128,23 +152,20 @@ public class JdbcDbWriterTest {
         .put("author", "Tom Robbins")
         .put("title", "Villa Incognito");
 
-    try {
-      writer.write(Collections.singleton(new SinkRecord(
-          "books", 0,
-          keySchema,
-          1L,
-          valueSchema1,
-          valueStruct1,
-          0)
-      ));
-      fail();
-    } catch (SQLException e) {
-      Throwable[] suppressed = e.getSuppressed();
-      assertTrue(suppressed.length == 1);
-      assertTrue(suppressed[0] instanceof SQLException);
-    }
+    SQLException e = assertThrows(
+        SQLException.class,
+        () ->
+            writer.write(Collections.singleton(new SinkRecord(
+                "books", 0,
+                keySchema,
+                1L,
+                valueSchema1,
+                valueStruct1,
+                0)
+            )));
 
     verify(mockConnection, times(1)).rollback();
+    return e;
   }
 
   @Test

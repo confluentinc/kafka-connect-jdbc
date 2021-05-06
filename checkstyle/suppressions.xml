@@ -7,7 +7,7 @@
 <suppressions>
 
     <suppress checks="CyclomaticComplexity"
-              files="(BufferedRecords|DataConverter|DatabaseDialect|FieldsMetadata|HanaDialect|JdbcSourceTask|MySqlDatabaseDialect|OracleDatabaseDialect|PostgreSqlDatabaseDialect|PreparedStatementBinder|SqlServerDatabaseDialect|SqliteDatabaseDialect|TimestampIncrementingTableQuerier|GenericDatabaseDialect|SybaseDatabaseDialect|VerticaDatabaseDialect|SapHanaDatabaseDialect|TableId|ColumnDefinition|TableMonitorThread).java"/>
+              files="(BufferedRecords|DataConverter|DatabaseDialect|FieldsMetadata|HanaDialect|JdbcSourceTask|MySqlDatabaseDialect|OracleDatabaseDialect|PostgreSqlDatabaseDialect|PreparedStatementBinder|SqlServerDatabaseDialect|SqliteDatabaseDialect|TimestampIncrementingTableQuerier|GenericDatabaseDialect|SybaseDatabaseDialect|VerticaDatabaseDialect|SapHanaDatabaseDialect|TableId|ColumnDefinition|TableMonitorThread|JdbcSinkTask).java"/>
 
     <suppress checks="ClassDataAbstractionCoupling"
               files="(DbDialect|JdbcSourceTask|GenericDatabaseDialect).java"/>

@@ -101,7 +101,7 @@ public class JdbcDbWriterTest {
 
   @Test
   public void verifyConnectionRollbackFailed() throws SQLException {
-    SQLException e = connectionRollback(false);
+    SQLException e = verifyConnectionRollback(false);
 
     Throwable[] suppressed = e.getSuppressed();
     assertEquals(suppressed.length, 1);
@@ -110,13 +110,13 @@ public class JdbcDbWriterTest {
 
   @Test
   public void verifyConnectionRollbackSucceeded() throws SQLException {
-    SQLException e = connectionRollback(true);
+    SQLException e = verifyConnectionRollback(true);
 
     Throwable[] suppressed = e.getSuppressed();
     assertEquals(suppressed.length, 0);
   }
 
-  public SQLException connectionRollback(boolean succeedOnRollBack) throws SQLException {
+  private SQLException verifyConnectionRollback(boolean succeedOnRollBack) throws SQLException {
     Connection mockConnection = mock(Connection.class);
 
     doThrow(new SQLException()).when(mockConnection).commit();

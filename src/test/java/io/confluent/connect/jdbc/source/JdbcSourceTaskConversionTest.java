@@ -230,6 +230,7 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
 
   @Test
   public void testDecimal() throws Exception {
+    // Populate precision on schema
     SchemaBuilder schemaBuilder = Decimal.builder(2);
     schemaBuilder.parameter("connect.decimal.precision", Integer.toString(5));
 
@@ -240,6 +241,7 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
 
   @Test
   public void testNullableDecimal() throws Exception {
+    // Populate precision on schema
     SchemaBuilder schemaBuilder = Decimal.builder(2).optional();
     schemaBuilder.parameter("connect.decimal.precision", Integer.toString(5));
 

@@ -1096,6 +1096,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         glog.debug("DECIMAL with precision: '{}' and scale: '{}'", precision, scale);
         scale = decimalScale(columnDefn);
         SchemaBuilder fieldBuilder = Decimal.builder(scale);
+        fieldBuilder.parameter("connect.decimal.precision", Integer.toString(precision));
         if (optional) {
           fieldBuilder.optional();
         }

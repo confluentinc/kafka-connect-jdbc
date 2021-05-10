@@ -19,6 +19,7 @@ import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Time;
@@ -229,18 +230,25 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
 
   @Test
   public void testDecimal() throws Exception {
+    SchemaBuilder schemaBuilder = Decimal.builder(2);
+    schemaBuilder.parameter("connect.decimal.precision", Integer.toString(5));
+
     typeConversion("DECIMAL(5,2)", false,
                    new EmbeddedDerby.Literal("CAST (123.45 AS DECIMAL(5,2))"),
-                   Decimal.schema(2),new BigDecimal(new BigInteger("12345"), 2));
+                  schemaBuilder.build(),new BigDecimal(new BigInteger("12345"), 2));
   }
 
   @Test
   public void testNullableDecimal() throws Exception {
+    SchemaBuilder schemaBuilder = Decimal.builder(2).optional();
+    schemaBuilder.parameter("connect.decimal.precision", Integer.toString(5));
+
     typeConversion("DECIMAL(5,2)", true,
                    new EmbeddedDerby.Literal("CAST(123.45 AS DECIMAL(5,2))"),
-                   Decimal.builder(2).optional().build(),
+                   schemaBuilder.build(),
                    new BigDecimal(new BigInteger("12345"), 2));
-    typeConversion("DECIMAL(5,2)", true, null, Decimal.builder(2).optional().build(),
+    typeConversion("DECIMAL(5,2)", true, null,
+                   schemaBuilder.build(),
                    null);
   }
 

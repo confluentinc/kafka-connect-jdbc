@@ -230,9 +230,8 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
 
   @Test
   public void testDecimal() throws Exception {
-    SchemaBuilder schemaBuilder = Decimal.builder(2)
-        .parameter("connect.decimal.precision", Integer.toString(5))
-        .optional();
+    SchemaBuilder schemaBuilder = Decimal.builder(2);
+    schemaBuilder.parameter("connect.decimal.precision", Integer.toString(5));
 
     typeConversion("DECIMAL(5,2)", false,
                    new EmbeddedDerby.Literal("CAST (123.45 AS DECIMAL(5,2))"),
@@ -241,9 +240,8 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
 
   @Test
   public void testNullableDecimal() throws Exception {
-    SchemaBuilder schemaBuilder = Decimal.builder(2)
-        .parameter("connect.decimal.precision", Integer.toString(5))
-        .optional();
+    SchemaBuilder schemaBuilder = Decimal.builder(2).optional();
+    schemaBuilder.parameter("connect.decimal.precision", Integer.toString(5));
 
     typeConversion("DECIMAL(5,2)", true,
                    new EmbeddedDerby.Literal("CAST(123.45 AS DECIMAL(5,2))"),

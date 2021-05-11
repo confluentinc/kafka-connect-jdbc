@@ -15,11 +15,15 @@
 
 package io.confluent.connect.jdbc.integration;
 
+import java.util.Collections;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.runtime.AbstractStatus;
 import org.apache.kafka.connect.runtime.rest.entities.ConnectorStateInfo;
+import org.apache.kafka.connect.storage.ConverterConfig;
+import org.apache.kafka.connect.storage.ConverterType;
 import org.apache.kafka.connect.util.clusters.EmbeddedConnectCluster;
 import org.apache.kafka.test.IntegrationTest;
 import org.apache.kafka.test.TestUtils;
@@ -43,6 +47,16 @@ public abstract class BaseConnectorIT {
 
         // start the clusters
         connect.start();
+    }
+
+    protected JsonConverter jsonConverter() {
+        JsonConverter jsonConverter = new JsonConverter();
+        jsonConverter.configure(Collections.singletonMap(
+                ConverterConfig.TYPE_CONFIG,
+                ConverterType.VALUE.getName()
+        ));
+
+        return jsonConverter;
     }
 
     protected void stopConnect() {
@@ -88,6 +102,55 @@ public abstract class BaseConnectorIT {
         } catch (Exception e) {
             log.warn("Could not check connector state info.");
             return Optional.empty();
+        }
+    }
+
+    protected boolean assertConnectorIsRunningButTasksFailedWith(
+            String connectorName,
+            int numTasks,
+            String error
+    ) {
+        try {
+            ConnectorStateInfo info = connect.connectorStatus(connectorName);
+            if (info != null) {
+                return info.tasks().size() == numTasks
+                        && info.connector().state().equals(
+                        AbstractStatus.State.RUNNING.toString()
+                )
+                        && info.tasks().stream().allMatch(
+                        (s) -> s.state().equals(
+                                AbstractStatus.State.FAILED.toString()
+                        )
+                                && s.trace().contains(error)
+                );
+            } else {
+                return false;
+            }
+
+        } catch (Exception ex) {
+            log.error("Could not check connector state info.", ex);
+            return false;
+        }
+    }
+
+    protected void assertTasksFailedWithTrace(
+            String connectorName,
+            int numTasks,
+            String error
+    ) throws InterruptedException {
+        try {
+            TestUtils.waitForCondition(
+                    () -> assertConnectorIsRunningButTasksFailedWith(
+                            connectorName,
+                            numTasks,
+                            error
+                    ),
+                    CONNECTOR_STARTUP_DURATION_MS,
+                    "Either the connector is not running or not all the "
+                            + numTasks + " tasks have failed."
+            );
+        } catch (AssertionError ex) {
+            throw new AssertionError("failed to verify that tasks have failed", ex);
         }
     }
 }

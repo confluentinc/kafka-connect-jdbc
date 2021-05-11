@@ -240,7 +240,7 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
 
     typeConversion("DECIMAL(5,2)", false,
                    new EmbeddedDerby.Literal("CAST (123.45 AS DECIMAL(5,2))"),
-                  Decimal.schema(2),new BigDecimal(new BigInteger("12345"), 2));
+                   Decimal.schema(2),new BigDecimal(new BigInteger("12345"), 2));
   }
 
   @Test
@@ -251,7 +251,7 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
 
     typeConversion("DECIMAL(5,2)", true,
                    new EmbeddedDerby.Literal("CAST(123.45 AS DECIMAL(5,2))"),
-                    Decimal.builder(2).optional().build(),
+                   Decimal.builder(2).optional().build(),
                    new BigDecimal(new BigInteger("12345"), 2));
     typeConversion("DECIMAL(5,2)", true, null, Decimal.builder(2).optional().build(),
                    null);

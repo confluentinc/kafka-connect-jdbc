@@ -110,6 +110,13 @@ public class DbStructure {
     //   We also don't check if the data types for columns that do line-up are compatible.
 
     final TableDefinition tableDefn = tableDefns.get(connection, tableId);
+    if (tableDefn == null) {
+      throw new ConnectException(
+          "Unable to auto create table " + tableId
+              + " . DDL statement for auto creation was successful"
+                  + " but table does not exist in database."
+      );
+    }
 
     // FIXME: SQLite JDBC driver seems to not always return the PK column names?
     //    if (!tableMetadata.getPrimaryKeyColumnNames().equals(fieldsMetadata.keyFieldNames)) {
@@ -179,7 +186,13 @@ public class DbStructure {
       );
     }
 
-    tableDefns.refresh(connection, tableId);
+    if (tableDefns.refresh(connection, tableId) == null) {
+      // Refresh should not make the table null.
+      throw new ConnectException(
+              "Unable to auto create or update table. Ddl statements to create or update"
+                  + " the table was successful but table does not exist. Table id" + tableId
+      );
+    }
     return true;
   }
 

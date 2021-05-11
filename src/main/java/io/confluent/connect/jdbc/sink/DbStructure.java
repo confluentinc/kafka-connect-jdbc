@@ -111,10 +111,12 @@ public class DbStructure {
 
     final TableDefinition tableDefn = tableDefns.get(connection, tableId);
     if (tableDefn == null) {
-      throw new ConnectException(
-          "Unable to auto create table " + tableId
-              + " . DDL statement for auto creation was successful"
-                  + " but table does not exist in database."
+      throw new SQLException(
+          "Table with id " + tableId +  "does not exist in database."
+              + " Since we've either already auto-created the table or confirmed"
+              + " it existed before this point, it must mean this user does not"
+              + " have the permission to read the column data for this table"
+              + " (assuming the database is ACID compliant)."
       );
     }
 
@@ -188,11 +190,15 @@ public class DbStructure {
 
     if (tableDefns.refresh(connection, tableId) == null) {
       // Refresh should not make the table null.
-      throw new ConnectException(
-              "Unable to auto create or update table. Ddl statements to create or update"
-                  + " the table was successful but table does not exist. Table id" + tableId
+      throw new SQLException(
+        "Table with id " + tableId +  "does not exist in database."
+                + " Since we've either already auto-created the table or confirmed"
+                + " it existed before this point, it must mean this user does not"
+                + " have the permission to read the column data for this table"
+                + " (assuming the database is ACID compliant)."
       );
     }
+
     return true;
   }
 

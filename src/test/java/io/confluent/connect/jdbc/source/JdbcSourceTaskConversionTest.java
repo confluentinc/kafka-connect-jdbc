@@ -237,8 +237,7 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
         false,
         new EmbeddedDerby.Literal("CAST (123.45 AS DECIMAL(5,2))"),
         schemaBuilder.build(),
-        new BigDecimal(new BigInteger("12345"),
-  2));
+        new BigDecimal(new BigInteger("12345"), 2));
   }
 
   @Test

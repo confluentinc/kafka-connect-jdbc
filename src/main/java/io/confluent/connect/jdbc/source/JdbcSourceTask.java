@@ -61,7 +61,7 @@ public class JdbcSourceTask extends SourceTask {
   private static final Logger log = LoggerFactory.getLogger(JdbcSourceTask.class);
 
   private Time time;
-  private JdbcSourceTaskConfig config;
+  protected JdbcSourceTaskConfig config;
   private DatabaseDialect dialect;
   private CachedConnectionProvider cachedConnectionProvider;
   private PriorityQueue<TableQuerier> tableQueue = new PriorityQueue<TableQuerier>();

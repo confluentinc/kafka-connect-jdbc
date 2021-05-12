@@ -113,7 +113,6 @@ public abstract class BaseDialectTypeTest<T extends GenericDatabaseDialect> {
     Field field = fields.get(0);
     assertEquals(expectedType, field.schema().type());
 
-
     // Set up the ResultSet
     when(resultSet.getBigDecimal(1, scale)).thenReturn(BIG_DECIMAL);
     when(resultSet.getBigDecimal(1, -scale)).thenReturn(BIG_DECIMAL);

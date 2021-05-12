@@ -190,4 +190,53 @@ public abstract class BaseConnectorIT {
             .mapToLong(entry -> entry.getValue().offset())
             .sum();
     }
+
+    protected boolean assertConnectorIsRunningButTasksFailedWith(
+            String connectorName,
+            int numTasks,
+            String error
+    ) {
+        try {
+            ConnectorStateInfo info = connect.connectorStatus(connectorName);
+            if (info != null) {
+                return info.tasks().size() == numTasks
+                        && info.connector().state().equals(
+                        AbstractStatus.State.RUNNING.toString()
+                )
+                        && info.tasks().stream().allMatch(
+                        (s) -> s.state().equals(
+                                AbstractStatus.State.FAILED.toString()
+                        )
+                                && s.trace().contains(error)
+                );
+            } else {
+                return false;
+            }
+
+        } catch (Exception ex) {
+            log.error("Could not check connector state info.", ex);
+            return false;
+        }
+    }
+
+    protected void assertTasksFailedWithTrace(
+            String connectorName,
+            int numTasks,
+            String error
+    ) throws InterruptedException {
+        try {
+            waitForCondition(
+                    () -> assertConnectorIsRunningButTasksFailedWith(
+                            connectorName,
+                            numTasks,
+                            error
+                    ),
+                    CONNECTOR_STARTUP_DURATION_MS,
+                    "Either the connector is not running or not all the "
+                            + numTasks + " tasks have failed."
+            );
+        } catch (AssertionError ex) {
+            throw new AssertionError("failed to verify that tasks have failed", ex);
+        }
+    }
 }

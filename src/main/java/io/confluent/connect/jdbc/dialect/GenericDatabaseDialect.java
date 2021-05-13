@@ -108,6 +108,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   // The maximum precision that can be achieved in a signed 64-bit integer is 2^63 ~= 9.223372e+18
   private static final int MAX_INTEGER_TYPE_PRECISION = 18;
 
+  private static final String PRECISION_FIELD = "connect.decimal.precision";
+
   /**
    * The provider for {@link GenericDatabaseDialect}.
    */
@@ -1096,7 +1098,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         glog.debug("DECIMAL with precision: '{}' and scale: '{}'", precision, scale);
         scale = decimalScale(columnDefn);
         SchemaBuilder fieldBuilder = Decimal.builder(scale);
-        fieldBuilder.parameter("connect.decimal.precision", Integer.toString(precision));
+        fieldBuilder.parameter(PRECISION_FIELD, Integer.toString(precision));
         if (optional) {
           fieldBuilder.optional();
         }

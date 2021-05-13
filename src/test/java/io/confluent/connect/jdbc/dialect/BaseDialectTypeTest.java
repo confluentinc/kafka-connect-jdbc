@@ -127,6 +127,21 @@ public abstract class BaseDialectTypeTest<T extends GenericDatabaseDialect> {
       when(resultSet.getString(1)).thenReturn((String)expectedValue);
     }
 
+    // For BigDecimal, ensure we're adding precision and scale as schema parameters
+    // Special case: scale of -127 (NUMERIC_TYPE_SCALE_UNSET) indicates scale is unset, which is overridden to 127
+    if (expectedValue instanceof BigDecimal) {
+      assertEquals(precision,
+          Integer.parseInt(field.schema().parameters().get("connect.decimal.precision")));
+
+      if (scale != -127) {
+        assertEquals(scale,
+            Integer.parseInt(field.schema().parameters().get("scale")));
+      } else {
+        assertEquals(127,
+            Integer.parseInt(field.schema().parameters().get("scale")));
+      }
+    }
+
     // Check the converter operates correctly
     ColumnMapping mapping = new ColumnMapping(columnDefn, 1, field);
     converter = dialect.columnConverterFor(
@@ -136,6 +151,7 @@ public abstract class BaseDialectTypeTest<T extends GenericDatabaseDialect> {
         true
     );
     Object value = converter.convert(resultSet);
+
     if (value instanceof Number && expectedValue instanceof Number) {
       assertEquals(((Number) expectedValue).floatValue(), ((Number) value).floatValue(), 0.01d);
     } else {

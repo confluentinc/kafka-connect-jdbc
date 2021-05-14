@@ -659,36 +659,6 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     return getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG).trim();
   }
 
-  private static class TableRecommender implements Recommender {
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public List<Object> validValues(String name, Map<String, Object> config) {
-      String dbUrl = (String) config.get(CONNECTION_URL_CONFIG);
-      if (dbUrl == null) {
-        throw new ConfigException(CONNECTION_URL_CONFIG + " cannot be null.");
-      }
-      // Create the dialect to get the tables ...
-      AbstractConfig jdbcConfig = new AbstractConfig(CONFIG_DEF, config);
-      DatabaseDialect dialect = DatabaseDialects.findBestFor(dbUrl, jdbcConfig);
-      try (Connection db = dialect.getConnection()) {
-        List<Object> result = new LinkedList<>();
-        for (TableId id : dialect.tableIds(db)) {
-          // Just add the unqualified table name
-          result.add(id.tableName());
-        }
-        return result;
-      } catch (SQLException e) {
-        throw new ConnectException("Couldn't open connection to " + dbUrl, e);
-      }
-    }
-
-    @Override
-    public boolean visible(String name, Map<String, Object> config) {
-      return true;
-    }
-  }
-
   /**
    * A recommender that caches values returned by a delegate, where the cache remains valid for a
    * specified duration and as long as the configuration remains unchanged.

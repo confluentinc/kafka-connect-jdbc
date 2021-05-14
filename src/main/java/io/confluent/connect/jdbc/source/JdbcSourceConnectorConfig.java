@@ -15,11 +15,6 @@
 
 package io.confluent.connect.jdbc.source;
 
-import io.confluent.connect.jdbc.dialect.DatabaseDialect;
-import io.confluent.connect.jdbc.dialect.DatabaseDialects;
-import io.confluent.connect.jdbc.util.TableId;
-import java.sql.Connection;
-import java.sql.SQLException;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -45,7 +40,6 @@ import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.Time;
-import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -664,36 +658,6 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public String topicPrefix() {
     return getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG).trim();
-  }
-
-  private static class TableRecommender implements Recommender {
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public List<Object> validValues(String name, Map<String, Object> config) {
-      String dbUrl = (String) config.get(CONNECTION_URL_CONFIG);
-      if (dbUrl == null) {
-        throw new ConfigException(CONNECTION_URL_CONFIG + " cannot be null.");
-      }
-      // Create the dialect to get the tables ...
-      AbstractConfig jdbcConfig = new AbstractConfig(CONFIG_DEF, config);
-      DatabaseDialect dialect = DatabaseDialects.findBestFor(dbUrl, jdbcConfig);
-      try (Connection db = dialect.getConnection()) {
-        List<Object> result = new LinkedList<>();
-        for (TableId id : dialect.tableIds(db)) {
-          // Just add the unqualified table name
-          result.add(id.tableName());
-        }
-        return result;
-      } catch (SQLException e) {
-        throw new ConnectException("Couldn't open connection to " + dbUrl, e);
-      }
-    }
-
-    @Override
-    public boolean visible(String name, Map<String, Object> config) {
-      return true;
-    }
   }
 
   /**

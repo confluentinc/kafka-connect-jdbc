@@ -115,8 +115,7 @@ public class DbStructure {
           "Table with id " + tableId +  "does not exist in database."
               + " Since we've either already auto-created the table or confirmed"
               + " it existed before this point, it must mean this user does not"
-              + " have the permission to read the column data for this table"
-              + " (assuming the database is ACID compliant)."
+              + " have the permission to read the column data for this table."
       );
     }
 

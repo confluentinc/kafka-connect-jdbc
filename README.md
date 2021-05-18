@@ -1,6 +1,4 @@
 # Kafka Connect JDBC Connector
-[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bhttps%3A%2F%2Fgithub.com%2Fconfluentinc%2Fkafka-connect-jdbc.svg?type=shield)](https://app.fossa.io/projects/git%2Bhttps%3A%2F%2Fgithub.com%2Fconfluentinc%2Fkafka-connect-jdbc?ref=badge_shield)
-
 
 kafka-connect-jdbc is a [Kafka Connector](http://kafka.apache.org/documentation.html#connect)
 for loading data to and from any JDBC-compatible database.
@@ -34,5 +32,3 @@ For more information, check the documentation for the JDBC connector on the [con
 
 This project is licensed under the [Confluent Community License](LICENSE).
 
-
-[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bhttps%3A%2F%2Fgithub.com%2Fconfluentinc%2Fkafka-connect-jdbc.svg?type=large)](https://app.fossa.io/projects/git%2Bhttps%3A%2F%2Fgithub.com%2Fconfluentinc%2Fkafka-connect-jdbc?ref=badge_large)

@@ -23,7 +23,7 @@ mkdir -p ${DESTDIR}${BINPATH}
 mkdir -p ${DESTDIR}${LIBPATH}
 mkdir -p ${DESTDIR}${SYSCONFDIR}
 
-PREPACKAGED="target/kafka-connect-jdbc-${VERSION}-package"
+PREPACKAGED="target/kafka-connect-jdbc-${VERSION}${SECURITY_SUFFIX}-package"
 pushd ${PREPACKAGED}
 find share/ -type f | grep -v README[.]rpm | xargs -I XXX ${INSTALL} -o root -g root XXX ${DESTDIR}${PREFIX}/XXX
 pushd etc/kafka-connect-jdbc/

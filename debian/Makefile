@@ -11,9 +11,13 @@ ifndef VERSION
 VERSION=$(shell grep version pom.xml | head -n 1 | awk -F'>|<' '{ print $$3 }')
 endif
 
+ifndef SECURITY_SUFFIX
+SECURITY_SUFFIX=
+endif
+
 export PACKAGE_TITLE=kafka-connect-jdbc
 export FULL_PACKAGE_TITLE=confluent-kafka-connect-jdbc
-export PACKAGE_NAME=$(FULL_PACKAGE_TITLE)-$(VERSION)
+export PACKAGE_NAME=$(FULL_PACKAGE_TITLE)-$(VERSION)$(SECURITY_SUFFIX)
 
 # Defaults that are likely to vary by platform. These are cleanly separated so
 # it should be easy to maintain altered values on platform-specific branches

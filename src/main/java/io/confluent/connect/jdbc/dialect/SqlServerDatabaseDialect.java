@@ -325,7 +325,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     ExpressionBuilder builder = expressionBuilder();
     builder.append("merge into ");
     builder.append(table);
-    if (this.config.getBoolean(JdbcSinkConfig.MSSQL_USE_MERGE_HOLDLOCK)) {
+    if (((JdbcSinkConfig) this.config).useHoldlockInMerge) {
       builder.append(" with (HOLDLOCK)");
     }
     builder.append(" AS target using (select ");

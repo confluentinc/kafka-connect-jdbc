@@ -63,6 +63,7 @@ public class JdbcSourceTask extends SourceTask {
   private Time time;
   private JdbcSourceTaskConfig config;
   private DatabaseDialect dialect;
+  public  static String diaName = "";
   private CachedConnectionProvider cachedConnectionProvider;
   private PriorityQueue<TableQuerier> tableQueue = new PriorityQueue<TableQuerier>();
   private final AtomicBoolean running = new AtomicBoolean(false);
@@ -100,7 +101,7 @@ public class JdbcSourceTask extends SourceTask {
       dialect = DatabaseDialects.findBestFor(url, config);
     }
     log.info("Using JDBC dialect {}", dialect.name());
-
+    diaName = dialect.name();
     cachedConnectionProvider = connectionProvider(maxConnAttempts, retryBackoff);
 
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);

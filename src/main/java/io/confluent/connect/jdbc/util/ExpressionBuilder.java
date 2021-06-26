@@ -294,12 +294,18 @@ public class ExpressionBuilder {
     return this;
   }
 
+  public ExpressionBuilder appendIdentifierDelimiter(String delim) {
+    sb.append(delim.trim());
+    return this;
+  }
+
   /**
    * Always append to this builder's expression the leading quote character(s) defined by this
    * builder's {@link IdentifierRules}.
    *
    * @return this builder to enable methods to be chained; never null
    */
+
   public ExpressionBuilder appendLeadingQuote() {
     return appendLeadingQuote(QuoteMethod.ALWAYS);
   }
@@ -398,6 +404,13 @@ public class ExpressionBuilder {
     return this;
   }
 
+  public ExpressionBuilder appendIdentifierwithoutqutes(
+      String name
+  ) {
+    sb.append(name.trim());
+    return this;
+  }
+
   /**
    * Append to this builder's expression the specified Column identifier, possibly surrounded by
    * the leading and trailing quotes based upon {@link #setQuoteIdentifiers(QuoteMethod)}.
@@ -421,6 +434,11 @@ public class ExpressionBuilder {
     appendLeadingQuote(quote);
     sb.append(name);
     appendTrailingQuote(quote);
+    return this;
+  }
+
+  public ExpressionBuilder appendTableNamewithoutquotes(String name) {
+    sb.append(name.trim());
     return this;
   }
 
@@ -621,6 +639,7 @@ public class ExpressionBuilder {
   }
 
   public String toString() {
+
     return sb.toString();
   }
 }

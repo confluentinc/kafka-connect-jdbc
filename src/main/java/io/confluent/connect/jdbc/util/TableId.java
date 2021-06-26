@@ -18,13 +18,24 @@ package io.confluent.connect.jdbc.util;
 import java.util.Objects;
 
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Expressable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import io.confluent.connect.jdbc.source.JdbcSourceTask;
 
-public class TableId implements Comparable<TableId>, Expressable {
+
+
+public class TableId implements Comparable<TableId>, Expressable  {
+
+  private static final Logger log = LoggerFactory.getLogger(
+      TableId.class
+  );
 
   private final String catalogName;
   private final String schemaName;
   private final String tableName;
   private final int hash;
+
+  JdbcSourceTask tn;
 
   public TableId(
       String catalogName,
@@ -58,16 +69,33 @@ public class TableId implements Comparable<TableId>, Expressable {
   public void appendTo(
       ExpressionBuilder builder,
       QuoteMethod useQuotes
+
   ) {
     if (catalogName != null) {
-      builder.appendIdentifier(catalogName, useQuotes);
-      builder.appendIdentifierDelimiter();
+      if (tn.diaName.equals("Informix")) {
+        builder.appendIdentifierwithoutqutes(catalogName);
+        builder.appendIdentifierDelimiter(":");
+      } else {
+        builder.appendIdentifier(catalogName, useQuotes);
+        builder.appendIdentifierDelimiter();
+      }
     }
     if (schemaName != null) {
-      builder.appendIdentifier(schemaName, useQuotes);
-      builder.appendIdentifierDelimiter();
+      if (tn.diaName.equals("Informix")) {
+        builder.appendIdentifierwithoutqutes(schemaName);
+        builder.appendIdentifierDelimiter(".");
+      } else {
+        builder.appendIdentifier(schemaName, useQuotes);
+        builder.appendIdentifierDelimiter();
+
+      }
     }
-    builder.appendTableName(tableName, useQuotes);
+    if (tn.diaName.equals("Informix")) {
+      builder.appendTableNamewithoutquotes(tableName);
+    } else {
+      builder.appendTableName(tableName, useQuotes);
+    }
+
   }
 
   @Override
@@ -130,5 +158,6 @@ public class TableId implements Comparable<TableId>, Expressable {
   @Override
   public String toString() {
     return ExpressionBuilder.create().append(this).toString();
+
   }
 }

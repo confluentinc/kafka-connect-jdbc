@@ -189,10 +189,11 @@ public class TimestampIncrementingCriteria {
     Timestamp extractedTimestamp = null;
     if (hasTimestampColumns()) {
       extractedTimestamp = extractOffsetTimestamp(schema, record);
-      assert previousOffset == null || (previousOffset.getTimestampOffset() != null
-                                        && previousOffset.getTimestampOffset().compareTo(
-          extractedTimestamp) <= 0
-      );
+
+      if (extractedTimestamp != null && previousOffset != null
+                && previousOffset.getTimestampOffset().compareTo(extractedTimestamp) > 0) {
+        extractedTimestamp = previousOffset.getTimestampOffset();
+      }
     }
     Long extractedId = null;
     if (hasIncrementedColumn()) {
@@ -307,7 +308,7 @@ public class TimestampIncrementingCriteria {
     coalesceTimestampColumns(builder);
     builder.append(" < ? AND ((");
     coalesceTimestampColumns(builder);
-    builder.append(" = ? AND ");
+    builder.append(" <= ? AND ");
     builder.append(incrementingColumn);
     builder.append(" > ?");
     builder.append(") OR ");

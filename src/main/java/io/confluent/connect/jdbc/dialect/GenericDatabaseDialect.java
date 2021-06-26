@@ -1916,6 +1916,10 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     return url.replaceAll("(?i)([?&]([^=&]*)password([^=&]*)=)[^&]*", "$1****");
   }
 
+  protected Connection peekConnection() {
+    return connections.peek();
+  }
+
   @Override
   public String identifier() {
     return name() + " database " + sanitizedUrl(jdbcUrl);

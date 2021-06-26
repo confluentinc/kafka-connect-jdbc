@@ -28,6 +28,7 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 
+import java.sql.Array;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -382,67 +383,61 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       Object value
   ) throws SQLException {
 
-    switch (schema.type()) {
-      case ARRAY: {
-        Class<?> valueClass = value.getClass();
-        Object newValue = null;
-        Collection<?> valueCollection;
-        if (Collection.class.isAssignableFrom(valueClass)) {
-          valueCollection = (Collection<?>) value;
-        } else if (valueClass.isArray()) {
-          valueCollection = Arrays.asList((Object[]) value);
-        } else {
-          throw new DataException(
-              String.format("Type '%s' is not supported for Array.", valueClass.getName())
-          );
-        }
+    if (schema.type() == Type.ARRAY) {
+      final Class<?> valueClass = value.getClass();
+      final Collection<?> valueCollection;
 
-        // All typecasts below are based on pgjdbc's documentation on how to use primitive arrays
-        // - https://jdbc.postgresql.org/documentation/head/arrays.html
-        switch (schema.valueSchema().type()) {
-          case INT8: {
-            // Gotta do this the long way, as Postgres has no single-byte integer,
-            // so we want to cast to short as the next best thing, and we can't do that with
-            // toArray.
-
-            newValue = valueCollection.stream()
-                .map(o -> ((Byte) o).shortValue())
-                .toArray(Short[]::new);
-            break;
-          }
-          case INT32:
-            newValue = valueCollection.toArray(new Integer[0]);
-            break;
-          case INT16:
-            newValue = valueCollection.toArray(new Short[0]);
-            break;
-          case BOOLEAN:
-            newValue = valueCollection.toArray(new Boolean[0]);
-            break;
-          case STRING:
-            newValue = valueCollection.toArray(new String[0]);
-            break;
-          case FLOAT64:
-            newValue = valueCollection.toArray(new Double[0]);
-            break;
-          case FLOAT32:
-            newValue = valueCollection.toArray(new Float[0]);
-            break;
-          case INT64:
-            newValue = valueCollection.toArray(new Long[0]);
-            break;
-          default:
-            break;
-        }
-
-        if (newValue != null) {
-          statement.setObject(index, newValue, Types.ARRAY);
-          return true;
-        }
-        break;
+      if (Collection.class.isAssignableFrom(valueClass)) {
+        valueCollection = (Collection<?>) value;
+      } else if (valueClass.isArray()) {
+        valueCollection = Arrays.asList((Object[]) value);
+      } else {
+        throw new DataException(
+            String.format("Type '%s' is not supported for Array.", valueClass.getName())
+        );
       }
-      default:
-        break;
+
+      // To be used in order to create Postgres arrays.
+      final Connection connection = peekConnection();
+
+      final Array newValue;
+
+      // All typecasts below are based on pgjdbc's documentation on how to use primitive arrays
+      // - https://jdbc.postgresql.org/documentation/head/arrays.html
+      switch (schema.valueSchema().type()) {
+        case INT8:
+          newValue = connection.createArrayOf("INT2", valueCollection.toArray(new Short[0]));
+          break;
+        case INT16:
+          newValue = connection.createArrayOf("INT4", valueCollection.toArray(new Integer[0]));
+          break;
+        case INT32:
+          newValue = connection.createArrayOf("INT8", valueCollection.toArray(new Integer[0]));
+          break;
+        case INT64:
+          newValue = connection.createArrayOf("INT8", valueCollection.toArray(new Long[0]));
+          break;
+        case BOOLEAN:
+          newValue = connection.createArrayOf("BOOL", valueCollection.toArray(new Boolean[0]));
+          break;
+        case STRING:
+          newValue = connection.createArrayOf("VARCHAR", valueCollection.toArray(new String[0]));
+          break;
+        case FLOAT32:
+          newValue = connection.createArrayOf("FLOAT4", valueCollection.toArray(new Float[0]));
+          break;
+        case FLOAT64:
+          newValue = connection.createArrayOf("FLOAT8", valueCollection.toArray(new Double[0]));
+          break;
+        default:
+          newValue = null;
+          break;
+      }
+
+      if (newValue != null) {
+        statement.setArray(index, newValue);
+        return true;
+      }
     }
     return super.maybeBindPrimitive(statement, index, schema, value);
   }

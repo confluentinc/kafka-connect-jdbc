@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.TimeZone;
 
 import io.confluent.connect.jdbc.util.ColumnId;
+import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -42,8 +43,8 @@ import static org.junit.Assert.assertEquals;
 public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatabaseDialect> {
 
   public class MockSqlServerDatabaseDialect extends SqlServerDatabaseDialect {
-    public MockSqlServerDatabaseDialect() {
-      super(sourceConfigWithUrl("jdbc:jtds:sqlsserver://something"));
+    public MockSqlServerDatabaseDialect(AbstractConfig config) {
+      super(config);
     }
     @Override
     public boolean versionWithBreakingDatetimeChange() {
@@ -53,7 +54,11 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
 
   @Override
   protected SqlServerDatabaseDialect createDialect() {
-    return new MockSqlServerDatabaseDialect();
+    return new MockSqlServerDatabaseDialect(sourceConfigWithUrl("jdbc:jtds:sqlsserver://something"));
+  }
+
+  protected SqlServerDatabaseDialect createDialect(AbstractConfig config) {
+    return new MockSqlServerDatabaseDialect(config);
   }
 
   @Test
@@ -214,6 +219,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
 
   @Test
   public void shouldBuildUpsertStatement() {
+    dialect = createDialect(sinkConfigWithUrl("jdbc:jtds:sqlsserver://something"));
     assertEquals(
         "merge into [myTable] with (HOLDLOCK) AS target using (select ? AS [id1], ?" +
         " AS [id2], ? AS [columnA], ? AS [columnB], ? AS [columnC], ? AS [columnD])" +
@@ -228,7 +234,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
     );
 
     quoteIdentfiiers = QuoteMethod.NEVER;
-    dialect = createDialect();
+    dialect = createDialect(sinkConfigWithUrl("jdbc:jtds:sqlsserver://something"));
     assertEquals(
         "merge into myTable with (HOLDLOCK) AS target using (select ? AS id1, ?" +
         " AS id2, ? AS columnA, ? AS columnB, ? AS columnC, ? AS columnD)" +
@@ -240,6 +246,38 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
         "incoming.columnB,incoming.columnC,incoming.columnD,incoming.id1," +
         "incoming.id2);",
         dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
+    );
+  }
+
+  @Test
+  public void shouldBuildUpsertStatementRespectingHoldlockOption() {
+    dialect = createDialect(sinkConfigWithUrl("jdbc:jtds:sqlsserver://something"));
+    assertEquals(
+            "merge into [myTable] with (HOLDLOCK) AS target using (select ? AS [id1], ?" +
+                    " AS [id2], ? AS [columnA], ? AS [columnB], ? AS [columnC], ? AS [columnD])" +
+                    " AS incoming on (target.[id1]=incoming.[id1] and target.[id2]=incoming" +
+                    ".[id2]) when matched then update set [columnA]=incoming.[columnA]," +
+                    "[columnB]=incoming.[columnB],[columnC]=incoming.[columnC]," +
+                    "[columnD]=incoming.[columnD] when not matched then insert ([columnA], " +
+                    "[columnB], [columnC], [columnD], [id1], [id2]) values (incoming.[columnA]," +
+                    "incoming.[columnB],incoming.[columnC],incoming.[columnD],incoming.[id1]," +
+                    "incoming.[id2]);",
+            dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
+    );
+
+    useHoldlockInMerge = false;
+    dialect = createDialect(sinkConfigWithUrl("jdbc:jtds:sqlsserver://something"));
+    assertEquals(
+            "merge into [myTable] AS target using (select ? AS [id1], ?" +
+                    " AS [id2], ? AS [columnA], ? AS [columnB], ? AS [columnC], ? AS [columnD])" +
+                    " AS incoming on (target.[id1]=incoming.[id1] and target.[id2]=incoming" +
+                    ".[id2]) when matched then update set [columnA]=incoming.[columnA]," +
+                    "[columnB]=incoming.[columnB],[columnC]=incoming.[columnC]," +
+                    "[columnD]=incoming.[columnD] when not matched then insert ([columnA], " +
+                    "[columnB], [columnC], [columnD], [id1], [id2]) values (incoming.[columnA]," +
+                    "incoming.[columnB],incoming.[columnC],incoming.[columnD],incoming.[id1]," +
+                    "incoming.[id2]);",
+            dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
     );
   }
 
@@ -286,6 +324,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
 
   @Test
   public void upsert1() {
+    dialect = createDialect(sinkConfigWithUrl("jdbc:jtds:sqlsserver://something"));
     TableId customer = tableId("Customer");
     assertEquals(
         "merge into [Customer] with (HOLDLOCK) AS target using (select ? AS [id], ? AS [name], ? " +
@@ -302,7 +341,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
     );
 
     quoteIdentfiiers = QuoteMethod.NEVER;
-    dialect = createDialect();
+    dialect = createDialect(sinkConfigWithUrl("jdbc:jtds:sqlsserver://something"));
     assertEquals(
         "merge into Customer with (HOLDLOCK) AS target using (select ? AS id, ? AS name, ? " +
         "AS salary, ? AS address) AS incoming on (target.id=incoming.id) when matched then update set " +
@@ -320,6 +359,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
 
   @Test
   public void upsert2() {
+    dialect = createDialect(sinkConfigWithUrl("jdbc:jtds:sqlsserver://something"));
     TableId book = new TableId(null, null, "Book");
     assertEquals(
         "merge into [Book] with (HOLDLOCK) AS target using (select ? AS [author], ? AS [title], ?" +
@@ -337,7 +377,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
     );
 
     quoteIdentfiiers = QuoteMethod.NEVER;
-    dialect = createDialect();
+    dialect = createDialect(sinkConfigWithUrl("jdbc:jtds:sqlsserver://something"));
     assertEquals(
         "merge into Book with (HOLDLOCK) AS target using (select ? AS author, ? AS title, ?" +
         " AS ISBN, ? AS year, ? AS pages)" +

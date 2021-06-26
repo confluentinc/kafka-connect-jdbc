@@ -87,6 +87,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
   }
 
   protected QuoteMethod quoteIdentfiiers;
+  protected Boolean useHoldlockInMerge;
   protected TableId tableId;
   protected ColumnId columnPK1;
   protected ColumnId columnPK2;
@@ -188,6 +189,13 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     Map<String, String> connProps = new HashMap<>();
     connProps.putAll(propertiesFromPairs(propertyPairs));
     connProps.put(JdbcSinkConfig.CONNECTION_URL, url);
+    connProps.putAll(propertiesFromPairs(propertyPairs));
+    if (quoteIdentfiiers != null) {
+      connProps.put("quote.sql.identifiers", quoteIdentfiiers.toString());
+    }
+    if (useHoldlockInMerge != null) {
+      connProps.put(JdbcSinkConfig.MSSQL_USE_MERGE_HOLDLOCK, useHoldlockInMerge.toString());
+    }
     return new JdbcSinkConfig(connProps);
   }
 

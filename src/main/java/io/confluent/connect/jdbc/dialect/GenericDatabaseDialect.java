@@ -1493,6 +1493,15 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   @Override
+  public String buildInsertIgnoreStatement(
+          TableId table,
+          Collection<ColumnId> keyColumns,
+          Collection<ColumnId> nonKeyColumns
+  ) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
   @SuppressWarnings("deprecation")
   public String buildInsertStatement(
       TableId table,

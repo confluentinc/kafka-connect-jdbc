@@ -46,6 +46,7 @@ import org.apache.kafka.common.config.types.Password;
 public class JdbcSinkConfig extends AbstractConfig {
 
   public enum InsertMode {
+    IGNORE,
     INSERT,
     UPSERT,
     UPDATE;

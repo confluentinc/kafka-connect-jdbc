@@ -269,6 +269,30 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
   @Override
   public String buildInsertStatement(
+          TableId table,
+          Collection<ColumnId> keyColumns,
+          Collection<ColumnId> nonKeyColumns,
+          TableDefinition definition
+  ) {
+    ExpressionBuilder builder = expressionBuilder();
+    builder.append("INSERT INTO ");
+    builder.append(table);
+    builder.append(" (");
+    builder.appendList()
+            .delimitedBy(",")
+            .transformedBy(ExpressionBuilder.columnNames())
+            .of(keyColumns, nonKeyColumns);
+    builder.append(") VALUES (");
+    builder.appendList()
+            .delimitedBy(",")
+            .transformedBy(this.columnValueVariables(definition))
+            .of(keyColumns, nonKeyColumns);
+    builder.append(")");
+    return builder.toString();
+  }
+
+  @Override
+  public String buildInsertIgnoreStatement(
       TableId table,
       Collection<ColumnId> keyColumns,
       Collection<ColumnId> nonKeyColumns,
@@ -287,7 +311,12 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
            .delimitedBy(",")
            .transformedBy(this.columnValueVariables(definition))
            .of(keyColumns, nonKeyColumns);
-    builder.append(")");
+    builder.append(") ON CONFLICT (");
+    builder.appendList()
+            .delimitedBy(",")
+            .transformedBy(ExpressionBuilder.columnNames())
+            .of(keyColumns);
+    builder.append(") DO NOTHING");
     return builder.toString();
   }
 

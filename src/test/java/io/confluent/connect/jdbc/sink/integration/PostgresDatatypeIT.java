@@ -226,6 +226,7 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
         .field("firstname", Schema.STRING_SCHEMA)
         .field("lastname", Schema.STRING_SCHEMA)
         .field("friends", SchemaBuilder.array(Schema.INT32_SCHEMA).build())
+        .field("neighbours", SchemaBuilder.array(Schema.FLOAT64_SCHEMA).build())
         .field("friendnames", SchemaBuilder.array(Schema.STRING_SCHEMA).build())
         .build();
 
@@ -233,6 +234,7 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
         .put("firstname", "Christina")
         .put("lastname", "Brams")
         .put("friends", Arrays.asList(10, 6221))
+        .put("neighbours", Arrays.asList(1.0, 2.0))
         .put("friendnames", Arrays.asList("Lucas", "Tom"));
     produceRecord(schema, struct);
 
@@ -245,6 +247,7 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
           assertEquals(struct.getString("firstname"), rs.getString("firstname"));
           assertEquals(struct.getString("lastname"), rs.getString("lastname"));
           assertJDBCArray(rs, "friends", struct);
+          assertJDBCArray(rs, "neighbours", struct);
           assertJDBCArray(rs, "friendnames", struct);
         }
       }
@@ -316,7 +319,7 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
       c.setAutoCommit(false);
       try (Statement s = c.createStatement()) {
         String sql = String.format(
-            "CREATE TABLE %s(firstName TEXT, lastName TEXT, jsonid json, friends int[], friendnames text[])",
+            "CREATE TABLE %s(firstName TEXT, lastName TEXT, jsonid json, friends int[], neighbours numeric[], friendnames text[])",
             tableName
         );
         LOG.info("Executing statement: {}", sql);

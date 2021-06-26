@@ -20,6 +20,7 @@ import java.sql.SQLException;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.TimeZone;
 
@@ -35,6 +36,7 @@ import org.junit.Test;
 
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.util.UpdateDropCondition;
 import org.mockito.Mockito;
 
 import static org.junit.Assert.assertEquals;
@@ -209,6 +211,40 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
             + "c9 bit DEFAULT 1"
         },
         dialect.buildAlterTable(tableId, sinkRecordFields)
+    );
+  }
+
+  @Test
+  public void shouldBuildUpsertStatementWithConditions() {
+    assertEquals(
+            "merge into [myTable] with (HOLDLOCK) AS target using (select ? AS [id1], ?" +
+                    " AS [id2], ? AS [columnA], ? AS [columnB], ? AS [columnC], ? AS [columnD])" +
+                    " AS incoming on (target.[id1]=incoming.[id1] and target.[id2]=incoming" +
+                    ".[id2]) when matched and target.[columnA] < incoming.[columnA] then " +
+                    "update set [columnA]=incoming.[columnA]," +
+                    "[columnB]=incoming.[columnB],[columnC]=incoming.[columnC]," +
+                    "[columnD]=incoming.[columnD] when not matched then insert ([columnA], " +
+                    "[columnB], [columnC], [columnD], [id1], [id2]) values (incoming.[columnA]," +
+                    "incoming.[columnB],incoming.[columnC],incoming.[columnD],incoming.[id1]," +
+                    "incoming.[id2]);",
+            dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD,
+                    Arrays.asList(new UpdateDropCondition(columnA)))
+    );
+
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertEquals(
+            "merge into myTable with (HOLDLOCK) AS target using (select ? AS id1, ?" +
+                    " AS id2, ? AS columnA, ? AS columnB, ? AS columnC, ? AS columnD)" +
+                    " AS incoming on (target.id1=incoming.id1 and target.id2=incoming" +
+                    ".id2) when matched and target.columnA < incoming.columnA then " +
+                    "update set columnA=incoming.columnA,columnB=incoming.columnB," +
+                    "columnC=incoming.columnC,columnD=incoming.columnD when not matched " +
+                    "then insert (columnA, columnB, columnC, columnD, id1, id2) values " +
+                    "(incoming.columnA,incoming.columnB,incoming.columnC,incoming." +
+                    "columnD,incoming.id1,incoming.id2);",
+            dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD,
+                    Arrays.asList(new UpdateDropCondition(columnA)))
     );
   }
 

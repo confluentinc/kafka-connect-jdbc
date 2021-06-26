@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.util.UpdateDropCondition;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -23,6 +24,9 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 import io.confluent.connect.jdbc.util.QuoteMethod;
@@ -124,6 +128,20 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
                       "`columnB`=values(`columnB`),`columnC`=values(`columnC`),`columnD`=values" +
                       "(`columnD`)";
     String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD);
+    assertEquals(expected, sql);
+  }
+
+  @Test
+  public void shouldBuildUpsertStatementWithConditions() {
+    Collection<UpdateDropCondition> conditions =
+            Collections.singletonList(new UpdateDropCondition(columnA));
+    String expected = "insert into `myTable`(`id1`,`id2`,`columnA`,`columnB`,`columnC`" +
+            ",`columnD`) values(?,?,?,?,?,?) on duplicate key update " +
+            "`columnA` = IF(`columnA` < values(`columnA`), values(`columnA`), `columnA`)," +
+            "`columnB` = IF(`columnA` < values(`columnA`), values(`columnB`), `columnB`)," +
+            "`columnC` = IF(`columnA` < values(`columnA`), values(`columnC`), `columnC`)," +
+            "`columnD` = IF(`columnA` < values(`columnA`), values(`columnD`), `columnD`)";
+    String sql = dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD, conditions);
     assertEquals(expected, sql);
   }
 

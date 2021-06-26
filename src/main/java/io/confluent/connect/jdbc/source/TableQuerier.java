@@ -46,6 +46,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected final String query;
   protected final String topicPrefix;
   protected final TableId tableId;
+  protected final String whereClause;
   protected final String suffix;
 
   // Mutable state
@@ -62,6 +63,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
       QueryMode mode,
       String nameOrQuery,
       String topicPrefix,
+      String whereClause,
       String suffix
   ) {
     this.dialect = dialect;
@@ -70,6 +72,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     this.query = mode.equals(QueryMode.QUERY) ? nameOrQuery : null;
     this.topicPrefix = topicPrefix;
     this.lastUpdate = 0;
+    this.whereClause = whereClause;
     this.suffix = suffix;
   }
 

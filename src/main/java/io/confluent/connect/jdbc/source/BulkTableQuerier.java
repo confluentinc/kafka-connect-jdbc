@@ -44,9 +44,10 @@ public class BulkTableQuerier extends TableQuerier {
       QueryMode mode,
       String name,
       String topicPrefix,
+      String whereClause,
       String suffix
   ) {
-    super(dialect, mode, name, topicPrefix, suffix);
+    super(dialect, mode, name, topicPrefix, whereClause, suffix);
   }
 
   @Override
@@ -55,16 +56,19 @@ public class BulkTableQuerier extends TableQuerier {
     switch (mode) {
       case TABLE:
         builder.append("SELECT * FROM ").append(tableId);
-
+        
         break;
       case QUERY:
-        builder.append(query);  
+        builder.append(query);
         
         break;
       default:
         throw new ConnectException("Unknown mode: " + mode);
     }
 
+    if (!whereClause.isEmpty()) {
+      builder.append(" WHERE ").append(whereClause);
+    }
     addSuffixIfPresent(builder);
     
     String queryStr = builder.toString();

@@ -15,30 +15,14 @@
 
 package io.confluent.connect.jdbc.dialect;
 
-import io.confluent.connect.jdbc.source.ColumnMapping;
-import io.confluent.connect.jdbc.util.ColumnDefinition;
-import io.confluent.connect.jdbc.util.ColumnDefinition.Mutability;
-import io.confluent.connect.jdbc.util.ColumnDefinition.Nullability;
-import java.sql.Types;
-import java.time.ZoneOffset;
-import org.apache.kafka.connect.data.Date;
-import org.apache.kafka.connect.data.Decimal;
-import org.apache.kafka.connect.data.Field;
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.SchemaBuilder;
-import org.apache.kafka.connect.data.Struct;
-import org.apache.kafka.connect.data.Time;
-import org.apache.kafka.connect.data.Timestamp;
-import org.apache.kafka.connect.errors.ConnectException;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Types;
+import java.time.ZoneOffset;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -51,21 +35,39 @@ import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.ThreadLocalRandom;
 
+import static junit.framework.TestCase.assertNotNull;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.*;
+
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.ColumnDefinition.Mutability;
+import io.confluent.connect.jdbc.util.ColumnDefinition.Nullability;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
-
-import static junit.framework.TestCase.assertNotNull;
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import io.debezium.data.geometry.Geography;
+import io.debezium.data.geometry.Geometry;
+import io.debezium.data.geometry.Point;
+import io.debezium.time.ZonedTime;
+import io.debezium.time.ZonedTimestamp;
+import org.apache.kafka.connect.data.Date;
+import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.Field;
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.SchemaBuilder;
+import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.data.Time;
+import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.connect.errors.ConnectException;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
 
 public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
 
@@ -476,7 +478,12 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
         Decimal.schema(0),
         Date.SCHEMA,
         Time.SCHEMA,
-        Timestamp.SCHEMA
+        Timestamp.SCHEMA,
+        ZonedTime.schema(),
+        ZonedTimestamp.schema(),
+        Geometry.schema(),
+        Geography.schema(),
+        Point.schema()
     );
     int index = 0;
     for (Schema schema : nullableTypes) {
@@ -527,6 +534,15 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
           break;
         case Timestamp.LOGICAL_NAME:
           when(colDef.type()).thenReturn(Types.TIMESTAMP);
+          break;
+        case ZonedTime.SCHEMA_NAME:
+        case ZonedTimestamp.SCHEMA_NAME:
+          when(colDef.type()).thenReturn(Types.OTHER);
+          break;
+        case Geometry.LOGICAL_NAME:
+        case Geography.LOGICAL_NAME:
+        case Point.LOGICAL_NAME:
+          when(colDef.type()).thenReturn(Types.BLOB);
           break;
         default:
           when(colDef.type()).thenThrow(

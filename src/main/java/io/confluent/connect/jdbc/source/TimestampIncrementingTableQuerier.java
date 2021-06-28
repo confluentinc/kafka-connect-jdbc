@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
@@ -28,13 +29,8 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Timestamp;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.TimeZone;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
-import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.source.SchemaMapping.FieldSetter;
 import io.confluent.connect.jdbc.source.TimestampIncrementingCriteria.CriteriaValues;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
@@ -73,9 +69,11 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   private final Map<String, String> partition;
   private final String topic;
   private final TimeZone timeZone;
+  private final String topicBasedOnDatabaseValue;
 
   public TimestampIncrementingTableQuerier(DatabaseDialect dialect, QueryMode mode, String name,
                                            String topicPrefix,
+                                           String topicBasedOnDatabaseValue,
                                            List<String> timestampColumnNames,
                                            String incrementingColumnName,
                                            Map<String, Object> offsetMap, Long timestampDelay,
@@ -110,6 +108,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     }
 
     this.timeZone = timeZone;
+    this.topicBasedOnDatabaseValue = topicBasedOnDatabaseValue;
   }
 
   /**
@@ -144,7 +143,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     criteria.whereClause(builder);
 
     addSuffixIfPresent(builder);
-    
+
     String queryString = builder.toString();
     recordQuery(queryString);
     log.debug("{} prepared SQL query: {}", this, queryString);
@@ -214,8 +213,11 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
         throw new DataException(e);
       }
     }
+    String expectedTopicName = Optional.ofNullable(topicBasedOnDatabaseValue)
+                                       .map(databaseColumn -> record.getString("topic"))
+                                       .orElse(topic);
     offset = criteria.extractValues(schemaMapping.schema(), record, offset);
-    return new SourceRecord(partition, offset.toMap(), topic, record.schema(), record);
+    return new SourceRecord(partition, offset.toMap(), expectedTopicName, record.schema(), record);
   }
 
   @Override

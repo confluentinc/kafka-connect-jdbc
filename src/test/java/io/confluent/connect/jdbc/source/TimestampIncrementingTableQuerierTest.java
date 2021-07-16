@@ -181,9 +181,7 @@ public class TimestampIncrementingTableQuerierTest {
 
     querier.maybeStartQuery(db);
 
-    // We just commit timestamp offsets immediately in this mode since the incrementing column
-    // provides an additional layer of granularity; as long as there aren't two updates to the same
-    // row that take place with the same timestamp, no data loss should occur
+    // We commit offsets immediately in this mode
     assertNextRecord(querier, firstNewOffset);
     assertNextRecord(querier, firstNewOffset);
     assertNextRecord(querier, secondNewOffset);

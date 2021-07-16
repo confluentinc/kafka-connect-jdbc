@@ -48,9 +48,7 @@ import io.confluent.connect.jdbc.source.SchemaMapping.FieldSetter;
  * committed.
  */
 public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
-  private static final Logger log = LoggerFactory.getLogger(
-      TimestampIncrementingTableQuerier.class
-  );
+  private static final Logger log = LoggerFactory.getLogger(TimestampTableQuerier.class);
 
   private boolean exhaustedResultSet;
   private PendingRecord nextRecord;

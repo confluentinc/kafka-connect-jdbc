@@ -38,9 +38,9 @@ import io.confluent.connect.jdbc.source.SchemaMapping.FieldSetter;
 
 /**
  * A specialized subclass of the {@link TimestampIncrementingTableQuerier} that only advances the
- * to-be-committed timestamp offset for its records after all either all rows have been read from
- * the current table query, or all rows with the to-be-committed timestamp have been read
- * successfully (and the next row has a timestamp that is strictly greater than it).
+ * to-be-committed timestamp offset for its records after either all rows have been read from the
+ * current table query, or all rows with the to-be-committed timestamp have been read successfully
+ * (and the next row has a timestamp that is strictly greater than it).
  * This prevents data loss in cases where the table has multiple rows with identical timestamps and
  * the connector is shut down in the middle of reading these rows. However, if the connector is
  * configured with additional query logic (such as a suffix containing a LIMIT clause), data loss

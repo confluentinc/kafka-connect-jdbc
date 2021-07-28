@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.source;
 
+import java.sql.SQLNonTransientException;
 import java.util.TimeZone;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.SystemTime;
@@ -398,13 +399,21 @@ public class JdbcSourceTask extends SourceTask {
           consecutiveEmptyResults.put(querier, 0);
         }
 
-        log.debug("Returning {} records for {}", results.size(), querier.toString());
+        log.debug("Returning {} records for {}", results.size(), querier);
         return results;
+      } catch (SQLNonTransientException sqle) {
+        log.error("Non-transient SQL exception while running query for table: {}",
+            querier, sqle);
+        resetAndRequeueHead(querier);
+        // This task has failed, so close any resources (may be reopened if needed) before throwing
+        closeResources();
+        throw new ConnectException(sqle);
       } catch (SQLException sqle) {
-        log.error("Failed to run query for table {}: {}", querier.toString(), sqle);
+        log.error("SQL exception while running query for table: {}", querier, sqle);
         resetAndRequeueHead(querier);
         return null;
       } catch (Throwable t) {
+        log.error("Failed to run query for table: {}", querier, t);
         resetAndRequeueHead(querier);
         // This task has failed, so close any resources (may be reopened if needed) before throwing
         closeResources();

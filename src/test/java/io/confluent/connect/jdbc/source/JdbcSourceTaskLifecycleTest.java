@@ -27,14 +27,19 @@ import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
 import java.sql.Connection;
+import java.sql.SQLNonTransientException;
 import java.util.List;
 import java.util.Map;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.core.IsInstanceOf.instanceOf;
+import static org.hamcrest.core.StringContains.containsString;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 
 @RunWith(PowerMockRunner.class)
 @PowerMockIgnore("javax.management.*")
@@ -228,6 +233,21 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
     task.start(twoTableConfig());
 
     assertNull(task.poll());
+  }
+
+  @Test
+  public void testNonTransientSQLExceptionThrows() throws Exception {
+    db.createTable(SINGLE_TABLE_NAME, "id", "INT");
+
+    Map<String, String> config = singleTableConfig();
+    config.put(JdbcSourceTaskConfig.TABLES_CONFIG, "not_existing_table");
+    task.start(config);
+
+    ConnectException e = assertThrows(ConnectException.class, () -> {
+      task.poll();
+    });
+    assertThat(e.getCause(), instanceOf(SQLNonTransientException.class));
+    assertThat(e.getMessage(), containsString("not_existing_table"));
   }
 
   private static void validatePollResultTable(List<SourceRecord> records,

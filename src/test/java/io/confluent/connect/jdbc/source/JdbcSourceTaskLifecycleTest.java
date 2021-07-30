@@ -87,7 +87,7 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
   }
 
   @Test
-  public void testPollInterval() throws Exception {
+  public void testPollIntervalMs() throws Exception {
     // Here we just want to verify behavior of the poll method, not any loading of data, so we
     // specifically want an empty
     db.createTable(SINGLE_TABLE_NAME, "id", "INT");
@@ -112,6 +112,35 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
     task.stop();
   }
 
+  @Test
+  public void testPollIntervalCron() throws Exception {
+    // Here we just want to verify behavior of the poll method, not any loading of data, so we
+    // specifically want an empty
+    db.createTable(SINGLE_TABLE_NAME, "id", "INT");
+    // Need data or poll() never returns
+    db.insert(SINGLE_TABLE_NAME, "id", 1);
+
+    long startTime = time.milliseconds();
+    Map<String, String> configCronInterval = singleTableConfig();
+    configCronInterval.put(JdbcSourceConnectorConfig.POLL_INTERVAL_MODE_CONFIG, JdbcSourceConnectorConfig.POLL_INTERVAL_MODE_CRON);
+
+    // configure to poll once per second
+    configCronInterval.put(JdbcSourceConnectorConfig.POLL_INTERVAL_CRON_CONFIG, "* * * ? * *");
+    task.start(configCronInterval);
+
+    // First poll should happen in 1s
+    task.poll();
+    assertEquals(startTime + 1000, time.milliseconds());
+
+    // Subsequent polls have to wait for timeout (default 1 second)
+    task.poll();
+    assertEquals(startTime + 2 * 1000, time.milliseconds());
+    task.poll();
+
+    assertEquals(startTime + 3 * 1000, time.milliseconds());
+
+    task.stop();
+  }
 
   @Test
   public void testSingleUpdateMultiplePoll() throws Exception {

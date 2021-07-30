@@ -374,7 +374,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
 
     db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), tz), "id", 1);
     db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(currentTime+1000L), tz), "id", 2);
-    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(currentTime+1000L), tz), "id", 3);
+    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(currentTime+1001L), tz), "id", 3);
 
     startTask("modified", null, null, 4L, tz.getID(), -1L);
 

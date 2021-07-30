@@ -62,7 +62,8 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
       List<String> timestampColumnNames,
       Map<String, Object> offsetMap,
       Long timestampDelay,
-      TimeZone timeZone
+      TimeZone timeZone,
+      String suffix
   ) {
     super(
         dialect,
@@ -73,7 +74,8 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
         null,
         offsetMap,
         timestampDelay,
-        timeZone
+        timeZone,
+        suffix
     );
 
     this.latestCommittableTimestamp = this.offset.getTimestampOffset();

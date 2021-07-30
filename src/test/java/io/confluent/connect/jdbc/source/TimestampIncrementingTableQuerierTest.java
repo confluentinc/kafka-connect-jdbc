@@ -98,7 +98,8 @@ public class TimestampIncrementingTableQuerierTest {
         INCREMENTING_COLUMN,
         initialOffset.toMap(),
         10211197100L, // Timestamp delay
-        TimeZone.getTimeZone("UTC")
+        TimeZone.getTimeZone("UTC"),
+        ""
     );
   }
 

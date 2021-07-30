@@ -22,6 +22,7 @@ import org.slf4j.LoggerFactory;
 import java.sql.Timestamp;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 public class TimestampIncrementingOffset {
   private static final Logger log = LoggerFactory.getLogger(JdbcSourceTask.class);
@@ -51,6 +52,10 @@ public class TimestampIncrementingOffset {
 
   public Timestamp getTimestampOffset() {
     return timestampOffset != null ? timestampOffset : new Timestamp(0L);
+  }
+
+  public boolean hasTimestampOffset() {
+    return timestampOffset != null;
   }
 
   public Map<String, Object> toMap() {
@@ -96,15 +101,8 @@ public class TimestampIncrementingOffset {
 
     TimestampIncrementingOffset that = (TimestampIncrementingOffset) o;
 
-    if (incrementingOffset != null
-        ? !incrementingOffset.equals(that.incrementingOffset)
-        : that.incrementingOffset != null) {
-      return false;
-    }
-    return timestampOffset != null
-           ? timestampOffset.equals(that.timestampOffset)
-           : that.timestampOffset == null;
-
+    return Objects.equals(incrementingOffset, that.incrementingOffset)
+        && Objects.equals(timestampOffset, that.timestampOffset);
   }
 
   @Override

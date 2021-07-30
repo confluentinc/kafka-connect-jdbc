@@ -45,18 +45,18 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder;
 /**
  * <p>
  *   TimestampIncrementingTableQuerier performs incremental loading of data using two mechanisms: a
- *   timestamp column provides monotonically incrementing values that can be used to detect new or
- *   modified rows and a strictly incrementing (e.g. auto increment) column allows detecting new
+ *   timestamp column provides monotonically-incrementing values that can be used to detect new or
+ *   modified rows and a strictly-incrementing (e.g. auto increment) column allows detecting new
  *   rows or combined with the timestamp provide a unique identifier for each update to the row.
  * </p>
  * <p>
  *   At least one of the two columns must be specified (or left as "" for the incrementing column
  *   to indicate use of an auto-increment column). If both columns are provided, they are both
  *   used to ensure only new or updated rows are reported and to totally order updates so
- *   recovery can occur no matter when offsets were committed. If only the incrementing fields is
- *   provided, new rows will be detected but not updates. If only the timestamp field is
+ *   recovery can occur no matter when offsets were committed. If only an incrementing field is
+ *   provided, new rows will be detected but not updates. If only timestamp fields are
  *   provided, both new and updated rows will be detected, but stream offsets will not be unique
- *   so failures may cause duplicates or losses.
+ *   so failures may cause duplicates.
  * </p>
  */
 public class TimestampIncrementingTableQuerier extends TableQuerier implements CriteriaValues {
@@ -64,14 +64,14 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
       TimestampIncrementingTableQuerier.class
   );
 
-  private final List<String> timestampColumnNames;
+  protected final List<String> timestampColumnNames;
+  protected TimestampIncrementingOffset offset;
+  protected TimestampIncrementingCriteria criteria;
+  protected final Map<String, String> partition;
+  protected final String topic;
   private final List<ColumnId> timestampColumns;
   private String incrementingColumnName;
-  private long timestampDelay;
-  private TimestampIncrementingOffset offset;
-  private TimestampIncrementingCriteria criteria;
-  private final Map<String, String> partition;
-  private final String topic;
+  private final long timestampDelay;
   private final TimeZone timeZone;
 
   public TimestampIncrementingTableQuerier(DatabaseDialect dialect, QueryMode mode, String name,
@@ -83,7 +83,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     super(dialect, mode, name, topicPrefix, suffix);
     this.incrementingColumnName = incrementingColumnName;
     this.timestampColumnNames = timestampColumnNames != null
-                                ? timestampColumnNames : Collections.<String>emptyList();
+        ? timestampColumnNames : Collections.emptyList();
     this.timestampDelay = timestampDelay;
     this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
 
@@ -97,7 +97,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     switch (mode) {
       case TABLE:
         String tableName = tableId.tableName();
-        topic = topicPrefix + tableName;// backward compatible
+        topic = topicPrefix + tableName; // backward compatible
         partition = OffsetProtocols.sourcePartitionForProtocolV1(tableId);
         break;
       case QUERY:
@@ -219,12 +219,12 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   }
 
   @Override
-  public Timestamp beginTimetampValue() {
+  public Timestamp beginTimestampValue() {
     return offset.getTimestampOffset();
   }
 
   @Override
-  public Timestamp endTimetampValue()  throws SQLException {
+  public Timestamp endTimestampValue()  throws SQLException {
     final long currentDbTime = dialect.currentTimeOnDB(
         stmt.getConnection(),
         DateTimeUtils.getTimeZoneCalendar(timeZone)

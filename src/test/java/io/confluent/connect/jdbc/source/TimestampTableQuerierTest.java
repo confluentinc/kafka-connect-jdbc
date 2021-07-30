@@ -112,6 +112,8 @@ public class TimestampTableQuerierTest {
     expect(dialect.createPreparedStatement(eq(db), anyObject())).andReturn(stmt);
     expect(dialect.expressionBuilder()).andReturn(expressionBuilder);
     expect(dialect.criteriaFor(anyObject(), anyObject())).andReturn(criteria);
+    dialect.validateSpecificColumnTypes(anyObject(), anyObject());
+    expectLastCall();
     criteria.whereClause(expressionBuilder);
     expectLastCall();
     criteria.setQueryParameters(eq(stmt), anyObject());

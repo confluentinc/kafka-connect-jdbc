@@ -216,13 +216,12 @@ public class JdbcSourceTask extends SourceTask {
         );
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
         tableQueue.add(
-            new TimestampIncrementingTableQuerier(
+            new TimestampTableQuerier(
                 dialect,
                 queryMode,
                 tableOrQuery,
                 topicPrefix,
                 timestampColumns,
-                null,
                 offset,
                 timestampDelayInterval,
                 timeZone

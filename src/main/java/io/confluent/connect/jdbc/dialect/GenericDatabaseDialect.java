@@ -1189,6 +1189,17 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         statement.executeUpdate(ddlStatement);
       }
     }
+    try {
+      connection.commit();
+    } catch (Exception e) {
+      try {
+        connection.rollback();
+      } catch (SQLException sqle) {
+        e.addSuppressed(sqle);
+      } finally {
+        throw e;
+      }
+    }
   }
 
   @Override

@@ -23,13 +23,16 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.easymock.EasyMock;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.testcontainers.shaded.com.google.common.collect.ImmutableList;
 
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Types;
 import java.util.Arrays;
 import java.util.Collection;
@@ -56,11 +59,15 @@ import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.TableType;
 
+import static org.easymock.EasyMock.expect;
+import static org.easymock.EasyMock.replay;
+import static org.easymock.EasyMock.verify;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseDialect> {
@@ -293,6 +300,60 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
       assertTrue(ids.contains(expectedTableId));
     }
     assertEquals(expectedTableIds.length, ids.size());
+  }
+
+  @Test
+  public void testApplyDdlStatementsCommits() throws Exception {
+    Connection conn = EasyMock.createMock(Connection.class);
+    Statement statement = EasyMock.createNiceMock(Statement.class);
+    expect(conn.createStatement()).andReturn(statement);
+    conn.commit();
+    expect(statement.executeUpdate("SQL things here")).andReturn(0);
+
+    replay(conn, statement);
+    dialect.applyDdlStatements(conn, ImmutableList.of("SQL things here"));
+    verify(conn, statement);
+  }
+
+  @Test
+  public void testApplyDdlStatementsRollbackOnCommitFail() throws Exception {
+    Connection conn = EasyMock.createMock(Connection.class);
+    Statement statement = EasyMock.createNiceMock(Statement.class);
+    expect(conn.createStatement()).andReturn(statement);
+    conn.commit();
+    EasyMock.expectLastCall().andThrow(new SQLException("Ooops!"));
+    conn.rollback();
+
+    expect(statement.executeUpdate("SQL things here")).andReturn(0);
+
+    replay(conn, statement);
+    Throwable thrown = assertThrows(SQLException.class, () -> {
+      dialect.applyDdlStatements(conn, ImmutableList.of("SQL things here"));
+    });
+    verify(conn, statement);
+    assertEquals("Ooops!", thrown.getMessage());
+  }
+
+  @Test
+  public void testApplyDdlStatementsCommitAndRollbackBothFail() throws Exception {
+    Connection conn = EasyMock.createMock(Connection.class);
+    Statement statement = EasyMock.createNiceMock(Statement.class);
+    expect(conn.createStatement()).andReturn(statement);
+    conn.commit();
+    EasyMock.expectLastCall().andThrow(new SQLException("Ooops!"));
+    conn.rollback();
+    EasyMock.expectLastCall().andThrow(new SQLException("Double Ooops!"));
+
+    expect(statement.executeUpdate("SQL things here")).andReturn(0);
+
+    replay(conn, statement);
+    Throwable thrown = assertThrows(SQLException.class, () -> {
+      dialect.applyDdlStatements(conn, ImmutableList.of("SQL things here"));
+    });
+    verify(conn, statement);
+    assertEquals("Ooops!", thrown.getMessage());
+    assertEquals(1, thrown.getSuppressed().length);
+    assertEquals("Double Ooops!", thrown.getSuppressed()[0].getMessage());
   }
 
   @Test

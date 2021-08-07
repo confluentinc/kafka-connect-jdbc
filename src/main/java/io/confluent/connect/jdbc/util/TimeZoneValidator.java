@@ -28,7 +28,7 @@ public class TimeZoneValidator implements ConfigDef.Validator {
   @Override
   public void ensureValid(String name, Object value) {
     if (value != null) {
-      if (!Arrays.asList(TimeZone.getAvailableIDs()).contains(value.toString())) {
+      if (!Arrays.asList(TimeZone.getAvailableIDs()).contains(value.getID())) {
         throw new ConfigException(name, value, "Invalid time zone identifier");
       }
     }

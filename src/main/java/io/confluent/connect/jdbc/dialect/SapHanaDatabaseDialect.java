@@ -15,6 +15,12 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.ExpressionBuilder;
+import io.confluent.connect.jdbc.util.IdentifierRules;
+import io.confluent.connect.jdbc.util.TableId;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -25,17 +31,13 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
-import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
-import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
-import io.confluent.connect.jdbc.util.ColumnId;
-import io.confluent.connect.jdbc.util.ExpressionBuilder;
-import io.confluent.connect.jdbc.util.IdentifierRules;
-import io.confluent.connect.jdbc.util.TableId;
-
 /**
  * A {@link DatabaseDialect} for SAP.
  */
 public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
+
+
+  private static final Logger glog = LoggerFactory.getLogger(GenericDatabaseDialect.class);
   /**
    * The provider for {@link SapHanaDatabaseDialect}.
    *
@@ -157,4 +159,47 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
     builder.append(" WITH PRIMARY KEY");
     return builder.toString();
   }
+
+  /**
+   * masieb: Added Case for TableType "VIEW" so that the right metadata
+   * table is read for calculation views
+   */
+  @Override
+  public List<TableId> tableIds(Connection conn) throws SQLException {
+    DatabaseMetaData metadata = conn.getMetaData();
+    String[] tableTypes = tableTypes(metadata, this.tableTypes);
+    String tableTypeDisplay = displayableTableTypes(tableTypes, ", ");
+    glog.debug("Using {} dialect to get {}", this, tableTypeDisplay);
+
+    List<TableId> extTableIds = new ArrayList<>();
+    if (this.tableTypes.contains("VIEW")) {
+      ResultSet rsView = conn.createStatement()
+              .executeQuery("select SCHEMA_NAME, VIEW_NAME from SYS.VIEWS "
+                      + "WHERE SCHEMA_NAME = '" + schemaPattern() + "'");
+      while (rsView.next()) {
+        String schemaName = rsView.getString(1);
+        String tableName = rsView.getString(2);
+        TableId tableId = new TableId(null, schemaName, tableName);
+        if (includeTable(tableId)) {
+          extTableIds.add(tableId);
+        }
+      }
+    }
+
+    try (ResultSet rs = metadata.getTables(catalogPattern(), schemaPattern(), "%", tableTypes)) {
+      List<TableId> tableIds = new ArrayList<>();
+      while (rs.next()) {
+        String catalogName = rs.getString(1);
+        String schemaName = rs.getString(2);
+        String tableName = rs.getString(3);
+        TableId tableId = new TableId(catalogName, schemaName, tableName);
+        if (includeTable(tableId)) {
+          tableIds.add(tableId);
+        }
+      }
+      glog.debug("Used {} dialect to find {} {}", this, tableIds.size(), tableTypeDisplay);
+      return tableIds;
+    }
+  }
+
 }

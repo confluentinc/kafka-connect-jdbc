@@ -192,11 +192,6 @@
         </dependency>
         <dependency>
             <groupId>org.apache.kafka</groupId>
-            <artifactId>connect-api</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.kafka</groupId>
             <artifactId>connect-runtime</artifactId>
             <version>${kafka.version}</version>
             <scope>test</scope>

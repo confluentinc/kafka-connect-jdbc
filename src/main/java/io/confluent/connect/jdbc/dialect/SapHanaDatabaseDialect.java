@@ -26,10 +26,18 @@ import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+
 
 /**
  * A {@link DatabaseDialect} for SAP.
@@ -37,169 +45,160 @@ import java.util.List;
 public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
 
 
-  private static final Logger glog = LoggerFactory.getLogger(GenericDatabaseDialect.class);
-  /**
-   * The provider for {@link SapHanaDatabaseDialect}.
-   *
-   * <p>HANA url's are in the format: {@code jdbc:sap://$host:3(instance)(port)/}
-   */
-  public static class Provider extends SubprotocolBasedProvider {
-    public Provider() {
-      super(SapHanaDatabaseDialect.class.getSimpleName(), "sap");
+    private static final Logger glog = LoggerFactory.getLogger(GenericDatabaseDialect.class);
+
+    /**
+     * Create a new dialect instance with the given connector configuration.
+     *
+     * @param config the connector configuration; may not be null
+     */
+    public SapHanaDatabaseDialect(AbstractConfig config) {
+        super(config, new IdentifierRules(".", "\"", "\""));
     }
 
     @Override
-    public DatabaseDialect create(AbstractConfig config) {
-      return new SapHanaDatabaseDialect(config);
+    protected String currentTimestampDatabaseQuery() {
+        return "SELECT CURRENT_TIMESTAMP FROM DUMMY";
     }
-  }
 
-  /**
-   * Create a new dialect instance with the given connector configuration.
-   *
-   * @param config the connector configuration; may not be null
-   */
-  public SapHanaDatabaseDialect(AbstractConfig config) {
-    super(config, new IdentifierRules(".", "\"", "\""));
-  }
-  
-  @Override
-  protected String currentTimestampDatabaseQuery() {
-    return "SELECT CURRENT_TIMESTAMP FROM DUMMY";
-  }
-
-  @Override
-  protected String checkConnectionQuery() {
-    return "SELECT DATABASE_NAME FROM SYS.M_DATABASES";
-  }
-
-  @Override
-  protected String getSqlType(SinkRecordField field) {
-    if (field.schemaName() != null) {
-      switch (field.schemaName()) {
-        case Decimal.LOGICAL_NAME:
-          return "DECIMAL";
-        case Date.LOGICAL_NAME:
-          return "DATE";
-        case Time.LOGICAL_NAME:
-          return "DATE";
-        case Timestamp.LOGICAL_NAME:
-          return "TIMESTAMP";
-        default:
-          // fall through to normal types
-          break;
-      }
+    @Override
+    protected String checkConnectionQuery() {
+        return "SELECT DATABASE_NAME FROM SYS.M_DATABASES";
     }
-    switch (field.schemaType()) {
-      case INT8:
-        return "TINYINT";
-      case INT16:
-        return "SMALLINT";
-      case INT32:
-        return "INTEGER";
-      case INT64:
-        return "BIGINT";
-      case FLOAT32:
-        return "REAL";
-      case FLOAT64:
-        return "DOUBLE";
-      case BOOLEAN:
-        return "BOOLEAN";
-      case STRING:
-        return "VARCHAR(1000)";
-      case BYTES:
-        return "BLOB";
-      default:
-        return super.getSqlType(field);
-    }
-  }
 
-  @Override
-  public String buildCreateTableStatement(
-      TableId table,
-      Collection<SinkRecordField> fields
-  ) {
-    // Defaulting to Column Store
-    return super.buildCreateTableStatement(table, fields)
+    @Override
+    protected String getSqlType(SinkRecordField field) {
+        if (field.schemaName() != null) {
+            switch (field.schemaName()) {
+                case Decimal.LOGICAL_NAME:
+                    return "DECIMAL";
+                case Date.LOGICAL_NAME:
+                    return "DATE";
+                case Time.LOGICAL_NAME:
+                    return "DATE";
+                case Timestamp.LOGICAL_NAME:
+                    return "TIMESTAMP";
+                default:
+                    // fall through to normal types
+                    break;
+            }
+        }
+        switch (field.schemaType()) {
+            case INT8:
+                return "TINYINT";
+            case INT16:
+                return "SMALLINT";
+            case INT32:
+                return "INTEGER";
+            case INT64:
+                return "BIGINT";
+            case FLOAT32:
+                return "REAL";
+            case FLOAT64:
+                return "DOUBLE";
+            case BOOLEAN:
+                return "BOOLEAN";
+            case STRING:
+                return "VARCHAR(1000)";
+            case BYTES:
+                return "BLOB";
+            default:
+                return super.getSqlType(field);
+        }
+    }
+
+    @Override
+    public String buildCreateTableStatement(
+            TableId table,
+            Collection<SinkRecordField> fields
+    ) {
+        // Defaulting to Column Store
+        return super.buildCreateTableStatement(table, fields)
                 .replace("CREATE TABLE", "CREATE COLUMN TABLE");
-  }
-
-  @Override
-  public List<String> buildAlterTable(
-      TableId table,
-      Collection<SinkRecordField> fields
-  ) {
-    ExpressionBuilder builder = expressionBuilder();
-    builder.append("ALTER TABLE ");
-    builder.append(table);
-    builder.append(" ADD(");
-    writeColumnsSpec(builder, fields);
-    builder.append(")");
-    return Collections.singletonList(builder.toString());
-  }
-
-  @Override
-  public String buildUpsertQueryStatement(
-      TableId table,
-      Collection<ColumnId> keyColumns,
-      Collection<ColumnId> nonKeyColumns
-  ) {
-    // https://help.sap.com/hana_one/html/sql_replace_upsert.html
-    ExpressionBuilder builder = expressionBuilder();
-    builder.append("UPSERT ");
-    builder.append(table);
-    builder.append("(");
-    builder.appendList()
-           .delimitedBy(",")
-           .transformedBy(ExpressionBuilder.columnNames())
-           .of(keyColumns, nonKeyColumns);
-    builder.append(") VALUES(");
-    builder.appendMultiple(",", "?", keyColumns.size() + nonKeyColumns.size());
-    builder.append(")");
-    builder.append(" WITH PRIMARY KEY");
-    return builder.toString();
-  }
-
-  /**
-   * masieb: Added Case for TableType "VIEW" so that the right metadata
-   * table is read for calculation views
-   */
-  @Override
-  public List<TableId> tableIds(Connection conn) throws SQLException {
-    DatabaseMetaData metadata = conn.getMetaData();
-    String[] tableTypes = tableTypes(metadata, this.tableTypes);
-    String tableTypeDisplay = displayableTableTypes(tableTypes, ", ");
-    glog.debug("Using {} dialect to get {}", this, tableTypeDisplay);
-
-    List<TableId> extTableIds = new ArrayList<>();
-    if (this.tableTypes.contains("VIEW")) {
-      ResultSet rsView = conn.createStatement()
-              .executeQuery("select SCHEMA_NAME, VIEW_NAME from SYS.VIEWS "
-                      + "WHERE SCHEMA_NAME = '" + schemaPattern() + "'");
-      while (rsView.next()) {
-        String schemaName = rsView.getString(1);
-        String tableName = rsView.getString(2);
-        TableId tableId = new TableId(null, schemaName, tableName);
-        if (includeTable(tableId)) {
-          extTableIds.add(tableId);
-        }
-      }
     }
 
-    try (ResultSet rs = metadata.getTables(catalogPattern(), schemaPattern(), "%", tableTypes)) {
-      List<TableId> tableIds = new ArrayList<>();
-      while (rs.next()) {
-        String catalogName = rs.getString(1);
-        String schemaName = rs.getString(2);
-        String tableName = rs.getString(3);
-        TableId tableId = new TableId(catalogName, schemaName, tableName);
-        if (includeTable(tableId)) {
-          tableIds.add(tableId);
-        }
-      }
-      glog.debug("Used {} dialect to find {} {}", this, tableIds.size(), tableTypeDisplay);
-      return tableIds;
+    @Override
+    public List<String> buildAlterTable(
+            TableId table,
+            Collection<SinkRecordField> fields
+    ) {
+        ExpressionBuilder builder = expressionBuilder();
+        builder.append("ALTER TABLE ");
+        builder.append(table);
+        builder.append(" ADD(");
+        writeColumnsSpec(builder, fields);
+        builder.append(")");
+        return Collections.singletonList(builder.toString());
     }
-  }
+
+    @Override
+    public String buildUpsertQueryStatement(
+            TableId table,
+            Collection<ColumnId> keyColumns,
+            Collection<ColumnId> nonKeyColumns
+    ) {
+        // https://help.sap.com/hana_one/html/sql_replace_upsert.html
+        ExpressionBuilder builder = expressionBuilder();
+        builder.append("UPSERT ");
+        builder.append(table);
+        builder.append("(");
+        builder.appendList()
+                .delimitedBy(",")
+                .transformedBy(ExpressionBuilder.columnNames())
+                .of(keyColumns, nonKeyColumns);
+        builder.append(") VALUES(");
+        builder.appendMultiple(",", "?", keyColumns.size() + nonKeyColumns.size());
+        builder.append(")");
+        builder.append(" WITH PRIMARY KEY");
+        return builder.toString();
+    }
+
+    /**
+     * Case for TableType "VIEW" so that the right metadata
+     * table is read for calculation views
+     */
+    @Override
+    public List<TableId> tableIds(Connection conn) throws SQLException {
+        DatabaseMetaData metadata = conn.getMetaData();
+        String[] tableTypes = tableTypes(metadata, this.tableTypes);
+        String tableTypeDisplay = displayableTableTypes(tableTypes, ", ");
+        glog.debug("Using {} dialect to get {}", this, tableTypeDisplay);
+        final List<TableId> upperTableIds = super.tableIds(conn);
+        List<TableId> extTableIds = new ArrayList<>();
+        if (this.tableTypes.contains("VIEW")) {
+            String query = "select SCHEMA_NAME, VIEW_NAME from SYS.VIEWS "
+                    + "WHERE SCHEMA_NAME = '" + schemaPattern() + "'";
+            try (ResultSet rsView = conn.createStatement()
+                    .executeQuery(query)) {
+                while (rsView.next()) {
+                    String schemaName = rsView.getString(1);
+                    String tableName = rsView.getString(2);
+                    TableId tableId = new TableId(null, schemaName, tableName);
+                    if (includeTable(tableId)) {
+                        extTableIds.add(tableId);
+                    }
+                }
+
+            }
+            extTableIds.addAll(upperTableIds);
+        }
+        return extTableIds;
+    }
+
+    /**
+     * The provider for {@link SapHanaDatabaseDialect}.
+     *
+     * <p>HANA url's are in the format: {@code jdbc:sap://$host:3(instance)(port)/}
+     */
+    public static class Provider extends SubprotocolBasedProvider {
+        public Provider() {
+            super(SapHanaDatabaseDialect.class.getSimpleName(), "sap");
+        }
+
+        @Override
+        public DatabaseDialect create(AbstractConfig config) {
+            return new SapHanaDatabaseDialect(config);
+        }
+    }
 
 }

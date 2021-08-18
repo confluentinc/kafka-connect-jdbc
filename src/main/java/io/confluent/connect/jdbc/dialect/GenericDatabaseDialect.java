@@ -91,6 +91,9 @@ import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.TableType;
 
+import io.confluent.connect.jdbc.data.NanoTimestamp;
+import io.confluent.connect.jdbc.data.NanoTimestampString;
+
 /**
  * A {@link DatabaseDialect} implementation that provides functionality based upon JDBC and SQL.
  *
@@ -1154,12 +1157,30 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
       // Timestamp is a date + time
       case Types.TIMESTAMP: {
-        SchemaBuilder tsSchemaBuilder = org.apache.kafka.connect.data.Timestamp.builder();
-        if (optional) {
-          tsSchemaBuilder.optional();
+        if (0 == 1) {
+          // Placeholder: flag for INT64
+          SchemaBuilder ntSchemaBuilder = NanoTimestamp.builder();
+          if (optional) {
+            ntSchemaBuilder.optional();
+          }
+          builder.field(fieldName, ntSchemaBuilder.build());
+          break;
+        } else if (0 == 0) {
+          // Placeholder: flag for STRING
+          SchemaBuilder ntsSchemaBuilder = NanoTimestampString.builder();
+          if (optional) {
+            ntsSchemaBuilder.optional();
+          }
+          builder.field(fieldName, ntsSchemaBuilder.build());
+          break;
+        } else {
+          SchemaBuilder tsSchemaBuilder = org.apache.kafka.connect.data.Timestamp.builder();
+          if (optional) {
+            tsSchemaBuilder.optional();
+          }
+          builder.field(fieldName, tsSchemaBuilder.build());
+          break;
         }
-        builder.field(fieldName, tsSchemaBuilder.build());
-        break;
       }
 
       case Types.ARRAY:
@@ -1385,7 +1406,19 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
       // Timestamp is a date + time
       case Types.TIMESTAMP: {
-        return rs -> rs.getTimestamp(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
+        if (0 == 1) {
+          return rs -> {
+            Timestamp ts = rs.getTimestamp(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
+            return NanoTimestamp.toEpochNanos(ts);
+          };
+        } else if (2 == 2) {
+          return rs -> {
+            Timestamp ts = rs.getTimestamp(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
+            return NanoTimestampString.toNanoString(ts);
+          };
+        } else {
+          return rs -> rs.getTimestamp(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
+        }
       }
 
       // Datalink is basically a URL -> string

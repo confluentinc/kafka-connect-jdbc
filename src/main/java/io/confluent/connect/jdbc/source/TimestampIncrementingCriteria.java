@@ -218,11 +218,12 @@ public class TimestampIncrementingCriteria {
       Struct record
   ) {
     for (ColumnId timestampColumn : timestampColumns) {
-      Timestamp ts = (Timestamp) record.get(timestampColumn.name());
-      if (ts != null) {
-        return ts;
+      if (record.get(timestampColumn.name()) instanceof Timestamp) {
+        return (Timestamp) record.get(timestampColumn.name());
       }
     }
+    log.warn("None of the fields [{}] entered are of timestamp type.",
+            timestampColumns.stream().map(ColumnId::name).collect(Collectors.joining(",")));
     return null;
   }
 

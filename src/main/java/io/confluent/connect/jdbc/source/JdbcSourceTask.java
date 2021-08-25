@@ -38,7 +38,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -65,7 +64,6 @@ public class JdbcSourceTask extends SourceTask {
   private DatabaseDialect dialect;
   private CachedConnectionProvider cachedConnectionProvider;
   private PriorityQueue<TableQuerier> tableQueue = new PriorityQueue<TableQuerier>();
-  private final AtomicBoolean running = new AtomicBoolean(false);
 
   public JdbcSourceTask() {
     this.time = new SystemTime();
@@ -256,7 +254,6 @@ public class JdbcSourceTask extends SourceTask {
       }
     }
 
-    running.set(true);
     log.info("Started JDBC source task");
   }
 
@@ -314,9 +311,12 @@ public class JdbcSourceTask extends SourceTask {
   @Override
   public void stop() throws ConnectException {
     log.info("Stopping JDBC source task");
-    running.set(false);
-    // All resources are closed at the end of 'poll()' when no longer running or
-    // if there is an error
+
+    final TableQuerier querier = tableQueue.peek();
+    if (querier != null) {
+      resetAndRequeueHead(querier);
+    }
+    closeResources();
   }
 
   protected void closeResources() {
@@ -347,7 +347,7 @@ public class JdbcSourceTask extends SourceTask {
 
     Map<TableQuerier, Integer> consecutiveEmptyResults = tableQueue.stream().collect(
         Collectors.toMap(Function.identity(), (q) -> 0));
-    while (running.get()) {
+    while (true) {
       final TableQuerier querier = tableQueue.peek();
 
       if (!querier.querying()) {
@@ -410,14 +410,6 @@ public class JdbcSourceTask extends SourceTask {
         throw t;
       }
     }
-
-    // Only in case of shutdown
-    final TableQuerier querier = tableQueue.peek();
-    if (querier != null) {
-      resetAndRequeueHead(querier);
-    }
-    closeResources();
-    return null;
   }
 
   private void resetAndRequeueHead(TableQuerier expectedHead) {

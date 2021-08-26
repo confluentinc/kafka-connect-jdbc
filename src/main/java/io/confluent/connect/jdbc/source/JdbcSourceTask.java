@@ -38,6 +38,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -64,6 +66,8 @@ public class JdbcSourceTask extends SourceTask {
   private DatabaseDialect dialect;
   private CachedConnectionProvider cachedConnectionProvider;
   private PriorityQueue<TableQuerier> tableQueue = new PriorityQueue<TableQuerier>();
+  private final AtomicBoolean running = new AtomicBoolean(false);
+  private final AtomicLong taskThreadId = new AtomicLong(0);
 
   public JdbcSourceTask() {
     this.time = new SystemTime();
@@ -254,6 +258,8 @@ public class JdbcSourceTask extends SourceTask {
       }
     }
 
+    running.set(true);
+    taskThreadId.set(Thread.currentThread().getId());
     log.info("Started JDBC source task");
   }
 
@@ -312,11 +318,13 @@ public class JdbcSourceTask extends SourceTask {
   public void stop() throws ConnectException {
     log.info("Stopping JDBC source task");
 
-    final TableQuerier querier = tableQueue.peek();
-    if (querier != null) {
-      resetAndRequeueHead(querier);
+    if (taskThreadId.longValue() == Thread.currentThread().getId()) {
+      shutdown();
+    } else {
+      running.set(false);
+      // All resources are closed at the end of 'poll()' when no longer running or
+      // if there is an error
     }
-    closeResources();
   }
 
   protected void closeResources() {
@@ -347,7 +355,7 @@ public class JdbcSourceTask extends SourceTask {
 
     Map<TableQuerier, Integer> consecutiveEmptyResults = tableQueue.stream().collect(
         Collectors.toMap(Function.identity(), (q) -> 0));
-    while (true) {
+    while (running.get()) {
       final TableQuerier querier = tableQueue.peek();
 
       if (!querier.querying()) {
@@ -410,6 +418,17 @@ public class JdbcSourceTask extends SourceTask {
         throw t;
       }
     }
+
+    shutdown();
+    return null;
+  }
+
+  private void shutdown() {
+    final TableQuerier querier = tableQueue.peek();
+    if (querier != null) {
+      resetAndRequeueHead(querier);
+    }
+    closeResources();
   }
 
   private void resetAndRequeueHead(TableQuerier expectedHead) {

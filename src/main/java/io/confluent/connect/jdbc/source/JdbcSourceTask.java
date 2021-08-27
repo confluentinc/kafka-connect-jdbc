@@ -318,12 +318,12 @@ public class JdbcSourceTask extends SourceTask {
   public void stop() throws ConnectException {
     log.info("Stopping JDBC source task");
 
+    // In earlier versions of Kafka, stop() was not called from the task thread. In this case, all
+    // resources are closed at the end of 'poll()' when no longer running or if there is an error.
+    running.set(false);
+
     if (taskThreadId.longValue() == Thread.currentThread().getId()) {
       shutdown();
-    } else {
-      running.set(false);
-      // All resources are closed at the end of 'poll()' when no longer running or
-      // if there is an error
     }
   }
 

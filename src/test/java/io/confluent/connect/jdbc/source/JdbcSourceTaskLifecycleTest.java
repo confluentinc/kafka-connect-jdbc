@@ -106,6 +106,9 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
 
     try {
       task.stop();
+      synchronized (lock) {
+          lock.wait();
+      }
       running.set(false);
     } finally {
       executor.shutdown();

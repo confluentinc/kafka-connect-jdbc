@@ -248,6 +248,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "to, or in the case of a custom query, the full name of the topic to publish to.";
   private static final String TOPIC_PREFIX_DISPLAY = "Topic Prefix";
 
+  public static final String TOPIC_SUFFIX_CONFIG = "topic.suffix";
+  private static final String TOPIC_SUFFIX_DOC =
+      "Suffix to append to table names to generate the name of the Kafka topic to publish data "
+      + "to.";
+  private static final String TOPIC_SUFFIX_DISPLAY = "Topic Suffix";
+
   public static final String VALIDATE_NON_NULL_CONFIG = "validate.non.null";
   private static final String VALIDATE_NON_NULL_DOC =
       "By default, the JDBC connector will validate that all incrementing and timestamp tables "
@@ -624,6 +630,37 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Width.MEDIUM,
         TOPIC_PREFIX_DISPLAY
     ).define(
+            TOPIC_SUFFIX_CONFIG,
+            Type.STRING,
+            "",
+            new Validator() {
+              @Override
+              public void ensureValid(final String name, final Object value) {
+                if (value == null) {
+                  throw new ConfigException(name, value, "Topic suffix must not be null.");
+                }
+
+                String trimmed = ((String) value).trim();
+
+                if (trimmed.length() > 249) {
+                  throw new ConfigException(name, value,
+                          "Topic suffix length must not exceed max topic name length, 249 chars");
+                }
+
+                if (INVALID_CHARS.matcher(trimmed).find()) {
+                  throw new ConfigException(name, value,
+                          "Topic suffix must not contain any character other than "
+                                  + "ASCII alphanumerics, '.', '_' and '-'.");
+                }
+              }
+            },
+            Importance.HIGH,
+            TOPIC_SUFFIX_DOC,
+            CONNECTOR_GROUP,
+            ++orderInGroup,
+            Width.MEDIUM,
+            TOPIC_SUFFIX_DISPLAY
+    ).define(
         TIMESTAMP_DELAY_INTERVAL_MS_CONFIG,
         Type.LONG,
         TIMESTAMP_DELAY_INTERVAL_MS_DEFAULT,
@@ -658,6 +695,10 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public String topicPrefix() {
     return getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG).trim();
+  }
+
+  public String topicSuffix() {
+    return getString(JdbcSourceTaskConfig.TOPIC_SUFFIX_CONFIG).trim();
   }
 
   /**

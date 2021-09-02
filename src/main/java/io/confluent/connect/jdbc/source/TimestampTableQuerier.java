@@ -54,21 +54,23 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
   private Timestamp latestCommittableTimestamp;
 
   public TimestampTableQuerier(
-      DatabaseDialect dialect,
-      QueryMode mode,
-      String name,
-      String topicPrefix,
-      List<String> timestampColumnNames,
-      Map<String, Object> offsetMap,
-      Long timestampDelay,
-      TimeZone timeZone,
-      String suffix
+          DatabaseDialect dialect,
+          QueryMode mode,
+          String name,
+          String topicPrefix,
+          String topicSuffix,
+          List<String> timestampColumnNames,
+          Map<String, Object> offsetMap,
+          Long timestampDelay,
+          TimeZone timeZone,
+          String suffix
   ) {
     super(
         dialect,
         mode,
         name,
         topicPrefix,
+        topicSuffix,
         timestampColumnNames,
         null,
         offsetMap,
@@ -160,6 +162,7 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
         + "table=" + tableId
         + ", query='" + query + '\''
         + ", topicPrefix='" + topicPrefix + '\''
+        + ", topicSuffix='" + topicSuffix + '\''
         + ", timestampColumns=" + timestampColumnNames
         + '}';
   }

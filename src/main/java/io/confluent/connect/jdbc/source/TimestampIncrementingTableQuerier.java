@@ -76,11 +76,12 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
 
   public TimestampIncrementingTableQuerier(DatabaseDialect dialect, QueryMode mode, String name,
                                            String topicPrefix,
+                                           String topicSuffix,
                                            List<String> timestampColumnNames,
                                            String incrementingColumnName,
                                            Map<String, Object> offsetMap, Long timestampDelay,
                                            TimeZone timeZone, String suffix) {
-    super(dialect, mode, name, topicPrefix, suffix);
+    super(dialect, mode, name, topicPrefix, topicSuffix, suffix);
     this.incrementingColumnName = incrementingColumnName;
     this.timestampColumnNames = timestampColumnNames != null
         ? timestampColumnNames : Collections.emptyList();
@@ -97,7 +98,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     switch (mode) {
       case TABLE:
         String tableName = tableId.tableName();
-        topic = topicPrefix + tableName; // backward compatible
+        topic = topicPrefix + tableName + topicSuffix; // backward compatible
         partition = OffsetProtocols.sourcePartitionForProtocolV1(tableId);
         break;
       case QUERY:

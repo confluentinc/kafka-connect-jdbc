@@ -94,6 +94,7 @@ public class TimestampIncrementingTableQuerierTest {
         TableQuerier.QueryMode.TABLE,
         tableName,
         "",
+        "",
         timestampMode ? TIMESTAMP_COLUMNS : null,
         INCREMENTING_COLUMN,
         initialOffset.toMap(),

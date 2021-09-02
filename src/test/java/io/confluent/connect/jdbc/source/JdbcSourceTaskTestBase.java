@@ -64,6 +64,7 @@ public class JdbcSourceTaskTestBase {
       = new EmbeddedDerby.TableName(JOIN_TABLE_NAME);
 
   protected static final String TOPIC_PREFIX = "test-";
+  protected static final String TOPIC_SUFFIX = "-test";
 
   protected Time time;
   @Mock
@@ -118,6 +119,7 @@ public class JdbcSourceTaskTestBase {
     props.put(JdbcSourceTaskConfig.TABLES_CONFIG, SINGLE_TABLE_NAME + "," + SECOND_TABLE_NAME);
     props.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
     props.put(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG, TOPIC_PREFIX);
+    props.put(JdbcSourceTaskConfig.TOPIC_SUFFIX_CONFIG, TOPIC_SUFFIX);
     return props;
   }
 

@@ -201,6 +201,7 @@ public class JdbcSourceTask extends SourceTask {
       offset = computeInitialOffset(tableOrQuery, offset, timeZone);
 
       String topicPrefix = config.topicPrefix();
+      String topicSuffix = config.topicSuffix();
 
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(
@@ -208,7 +209,8 @@ public class JdbcSourceTask extends SourceTask {
                 dialect, 
                 queryMode, 
                 tableOrQuery, 
-                topicPrefix, 
+                topicPrefix,
+                topicSuffix,
                 suffix
             )
         );
@@ -219,6 +221,7 @@ public class JdbcSourceTask extends SourceTask {
                 queryMode,
                 tableOrQuery,
                 topicPrefix,
+                topicSuffix,
                 null,
                 incrementingColumn,
                 offset,
@@ -234,6 +237,7 @@ public class JdbcSourceTask extends SourceTask {
                 queryMode,
                 tableOrQuery,
                 topicPrefix,
+                topicSuffix,
                 timestampColumns,
                 offset,
                 timestampDelayInterval,
@@ -248,6 +252,7 @@ public class JdbcSourceTask extends SourceTask {
                 queryMode,
                 tableOrQuery,
                 topicPrefix,
+                topicSuffix,
                 timestampColumns,
                 incrementingColumn,
                 offset,

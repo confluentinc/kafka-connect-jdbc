@@ -64,7 +64,8 @@ public class TableQuerierTest {
                                                     databaseDialectMock, 
                                                     QueryMode.TABLE, 
                                                     TABLE_NAME, 
-                                                    null, 
+                                                    null,
+                                                    null,
                                                     null,
                                                     INCREMENTING_COLUMN_NAME, 
                                                     null,
@@ -84,8 +85,9 @@ public class TableQuerierTest {
                                                     databaseDialectMock, 
                                                     QueryMode.QUERY, 
                                                     QUERY, 
-                                                    null, 
-                                                    null, 
+                                                    null,
+                                                    null,
+                                                    null,
                                                     INCREMENTING_COLUMN_NAME, 
                                                     null, 
                                                     TIMESTAMP_DELAY, 
@@ -104,7 +106,8 @@ public class TableQuerierTest {
                                    databaseDialectMock,
                                    QueryMode.TABLE, 
                                    TABLE_NAME, 
-                                   null, 
+                                   null,
+                                   null,
                                    SUFFIX
                                );
       
@@ -119,7 +122,8 @@ public class TableQuerierTest {
                                    databaseDialectMock, 
                                    QueryMode.QUERY,
                                    QUERY, 
-                                   null, 
+                                   null,
+                                   null,
                                    SUFFIX
                                );
       
@@ -134,7 +138,8 @@ public class TableQuerierTest {
                                    databaseDialectMock, 
                                    QueryMode.QUERY, 
                                    QUERY, 
-                                   null, 
+                                   null,
+                                   null,
                                    "" /* default value */
                                );
       

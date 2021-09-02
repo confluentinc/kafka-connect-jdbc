@@ -92,6 +92,7 @@ public class TimestampTableQuerierTest {
         TableQuerier.QueryMode.TABLE,
         tableName,
         "",
+        "",
         TIMESTAMP_COLUMNS,
         new TimestampIncrementingOffset(initialTimestampOffset, null).toMap(),
         10211197100L, // Timestamp delay

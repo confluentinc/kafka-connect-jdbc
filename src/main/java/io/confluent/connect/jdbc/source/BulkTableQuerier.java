@@ -40,13 +40,14 @@ public class BulkTableQuerier extends TableQuerier {
   private static final Logger log = LoggerFactory.getLogger(BulkTableQuerier.class);
 
   public BulkTableQuerier(
-      DatabaseDialect dialect,
-      QueryMode mode,
-      String name,
-      String topicPrefix,
-      String suffix
+          DatabaseDialect dialect,
+          QueryMode mode,
+          String name,
+          String topicPrefix,
+          String topicSuffix,
+          String suffix
   ) {
-    super(dialect, mode, name, topicPrefix, suffix);
+    super(dialect, mode, name, topicPrefix, topicSuffix, suffix);
   }
 
   @Override
@@ -100,7 +101,7 @@ public class BulkTableQuerier extends TableQuerier {
       case TABLE:
         String name = tableId.tableName(); // backwards compatible
         partition = Collections.singletonMap(JdbcSourceConnectorConstants.TABLE_NAME_KEY, name);
-        topic = topicPrefix + name;
+        topic = topicPrefix + name + topicSuffix;
         break;
       case QUERY:
         partition = Collections.singletonMap(JdbcSourceConnectorConstants.QUERY_NAME_KEY,
@@ -116,8 +117,11 @@ public class BulkTableQuerier extends TableQuerier {
 
   @Override
   public String toString() {
-    return "BulkTableQuerier{" + "table='" + tableId + '\'' + ", query='" + query + '\''
-           + ", topicPrefix='" + topicPrefix + '\'' + '}';
+    return "BulkTableQuerier{"
+           + "table='" + tableId + '\''
+           + ", topicPrefix='" + topicPrefix + '\''
+           + ", topicSuffix='" + topicSuffix + '\''
+           + ", query=" + query
+           + '}';
   }
-
 }

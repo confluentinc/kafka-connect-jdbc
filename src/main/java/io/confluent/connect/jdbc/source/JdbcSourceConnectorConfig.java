@@ -131,6 +131,16 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final EnumRecommender NUMERIC_MAPPING_RECOMMENDER =
       EnumRecommender.in(NumericMapping.values());
 
+  public static final String TIMESTAMP_MAPPING_CONFIG = "timestamp.mapping";
+  public static final String TIMESTAMP_MAPPING_UNSPECIFIED = "";
+  public static final String TIMESTAMP_MAPPING_NANOS = "nanos";
+  public static final String TIMESTAMP_MAPPING_NANOS_STRING = "nanos_string";
+  private static final String TIMESTAMP_MAPPING_DOC =
+      "Mode used to map SQL TIMESTAMP values to Kafka Connect types.  By default this is "
+      + "empty, and the connector automatically";
+  private static final String TIMESTAMP_MAPPING_DISPLAY = "Timestamp Mapping Format";
+
+
   public static final String DIALECT_NAME_CONFIG = "dialect.name";
   private static final String DIALECT_NAME_DISPLAY = "Database Dialect";
   public static final String DIALECT_NAME_DEFAULT = "";
@@ -435,6 +445,21 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Width.SHORT,
         NUMERIC_MAPPING_DISPLAY,
         NUMERIC_MAPPING_RECOMMENDER
+    ).define(
+        TIMESTAMP_MAPPING_CONFIG,
+        Type.STRING,
+        TIMESTAMP_MAPPING_UNSPECIFIED,
+        ConfigDef.ValidString.in(
+          TIMESTAMP_MAPPING_UNSPECIFIED,
+          TIMESTAMP_MAPPING_NANOS,
+          TIMESTAMP_MAPPING_NANOS_STRING
+        ),
+        Importance.LOW,
+        TIMESTAMP_MAPPING_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        TIMESTAMP_MAPPING_DISPLAY
     ).define(
         DIALECT_NAME_CONFIG,
         Type.STRING,

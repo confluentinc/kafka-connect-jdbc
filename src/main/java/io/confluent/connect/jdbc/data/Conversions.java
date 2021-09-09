@@ -43,6 +43,7 @@ final class Conversions {
 
   @SuppressWarnings("deprecation")
   // Todo: determine if we need all of this, or just the Timestamp > LocalDateTime conversion
+  // Also todo: see if we can reduce the number of conversions here
   protected static LocalDateTime toLocalDateTime(Object obj) {
     if (obj == null) {
       return null;

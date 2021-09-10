@@ -248,35 +248,35 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
     ExpressionBuilder builder = expressionBuilder();
     builder.append("merge into ");
     builder.append(table);
-    builder.append(" with (HOLDLOCK) AS target using (select ");
+    builder.append(" AS target using (select ");
     builder.appendList()
-           .delimitedBy(", ")
-           .transformedBy(ExpressionBuilder.columnNamesWithPrefix("? AS "))
-           .of(keyColumns, nonKeyColumns);
+        .delimitedBy(", ")
+        .transformedBy(ExpressionBuilder.columnNamesWithPrefix("? AS "))
+        .of(keyColumns, nonKeyColumns);
     builder.append(") AS incoming on (");
     builder.appendList()
-           .delimitedBy(" and ")
-           .transformedBy(this::transformAs)
-           .of(keyColumns);
+        .delimitedBy(" and ")
+        .transformedBy(this::transformAs)
+        .of(keyColumns);
     builder.append(")");
     if (nonKeyColumns != null && !nonKeyColumns.isEmpty()) {
       builder.append(" when matched then update set ");
       builder.appendList()
-             .delimitedBy(",")
-             .transformedBy(this::transformUpdate)
-             .of(nonKeyColumns);
+          .delimitedBy(",")
+          .transformedBy(this::transformUpdate)
+          .of(nonKeyColumns);
     }
     builder.append(" when not matched then insert (");
     builder.appendList()
-           .delimitedBy(", ")
-           .transformedBy(ExpressionBuilder.columnNames())
-           .of(nonKeyColumns, keyColumns);
+        .delimitedBy(", ")
+        .transformedBy(ExpressionBuilder.columnNames())
+        .of(nonKeyColumns, keyColumns);
     builder.append(") values (");
     builder.appendList()
-           .delimitedBy(",")
-           .transformedBy(ExpressionBuilder.columnNamesWithPrefix("incoming."))
-           .of(nonKeyColumns, keyColumns);
-    builder.append(");");
+        .delimitedBy(",")
+        .transformedBy(ExpressionBuilder.columnNamesWithPrefix("incoming."))
+        .of(nonKeyColumns, keyColumns);
+    builder.append(")");
     return builder.toString();
   }
 

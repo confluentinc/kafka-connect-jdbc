@@ -31,7 +31,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import io.confluent.connect.jdbc.data.NanoEpochTimestamp;
 import io.confluent.connect.jdbc.data.NanoStringTimestamp;
 
 import javax.sql.rowset.serial.SerialBlob;

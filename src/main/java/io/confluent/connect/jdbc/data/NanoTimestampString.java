@@ -16,7 +16,6 @@
 package io.confluent.connect.jdbc.data;
 
 import java.sql.Timestamp;
-import java.time.format.DateTimeFormatter;
 
 
 import org.apache.kafka.connect.data.Schema;
@@ -28,8 +27,6 @@ import org.apache.kafka.connect.data.SchemaBuilder;
  */
 public class NanoTimestampString {
   public static final String SCHEMA_NAME = "io.confluent.connect.jdbc.data.NanoTimestampString";
-  private static DateTimeFormatter formatter = 
-      DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm:ss.SSSSSSSSS");
 
   static final String NULL_TIMESTAMP = "NULL";
 

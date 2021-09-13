@@ -53,7 +53,7 @@ public class TableQuerierTest {
     when(databaseDialectMock.expressionBuilder())
       .thenReturn(ExpressionBuilder.create());
     when(databaseDialectMock.criteriaFor(Matchers.any(ColumnId.class), Matchers.anyListOf(ColumnId.class)))
-      .thenReturn(new TimestampIncrementingCriteria(new ColumnId(new TableId(null,null,TABLE_NAME),INCREMENTING_COLUMN_NAME), null,null));
+      .thenReturn(new TimestampIncrementingCriteria(new ColumnId(new TableId(null,null,TABLE_NAME),INCREMENTING_COLUMN_NAME), null, null,null));
 	    
     connectionMock = mock(Connection.class);	  
   }

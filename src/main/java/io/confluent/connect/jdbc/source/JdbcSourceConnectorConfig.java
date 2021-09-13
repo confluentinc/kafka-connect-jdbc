@@ -132,9 +132,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       EnumRecommender.in(NumericMapping.values());
 
   public static final String TIMESTAMP_MAPPING_CONFIG = "timestamp.mapping";
-  public static final String TIMESTAMP_MAPPING_UNSPECIFIED = "";
-  public static final String TIMESTAMP_MAPPING_NANOS = "nanos";
-  public static final String TIMESTAMP_MAPPING_NANOS_STRING = "nanos_string";
+  public static final String TIMESTAMP_MAPPING_DEFAULT = null;
+  private static final EnumRecommender TIMESTAMP_MAPPING_RECOMMENDER =
+      EnumRecommender.in(TimestampMapping.values());
+
+  // public static final String TIMESTAMP_MAPPING_NANOS = "nanos_epoch";
+  // public static final String TIMESTAMP_MAPPING_NANOS_STRING = "nanos_string";
   private static final String TIMESTAMP_MAPPING_DOC =
       "Mode used to map SQL TIMESTAMP values to Kafka Connect types.  By default this is "
       + "empty, and the connector automatically";
@@ -448,18 +451,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     ).define(
         TIMESTAMP_MAPPING_CONFIG,
         Type.STRING,
-        TIMESTAMP_MAPPING_UNSPECIFIED,
-        ConfigDef.ValidString.in(
-          TIMESTAMP_MAPPING_UNSPECIFIED,
-          TIMESTAMP_MAPPING_NANOS,
-          TIMESTAMP_MAPPING_NANOS_STRING
-        ),
+        // TIMESTAMP_MAPPING_DEFAULT,
+        // "NANOS_EPOCH", // for testing
+        "NANOS_STRING", // for testing
+        TIMESTAMP_MAPPING_RECOMMENDER,
         Importance.LOW,
         TIMESTAMP_MAPPING_DOC,
         DATABASE_GROUP,
         ++orderInGroup,
         Width.LONG,
-        TIMESTAMP_MAPPING_DISPLAY
+        TIMESTAMP_MAPPING_DISPLAY,
+        TIMESTAMP_MAPPING_RECOMMENDER
     ).define(
         DIALECT_NAME_CONFIG,
         Type.STRING,
@@ -811,12 +813,43 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     }
   }
 
+  public enum TimestampMapping {
+    NONE,
+    NANOS_EPOCH,
+    NANOS_STRING;
+
+    private static final Map<String, TimestampMapping> reverse = new HashMap<>(values().length);
+    static {
+      for (TimestampMapping val : values()) {
+        reverse.put(val.name().toLowerCase(Locale.ROOT), val);
+      }
+    }
+
+    public static TimestampMapping get(String prop) {
+      // not adding a check for null value because the recommender/validator should catch those.
+      return reverse.get(prop.toLowerCase(Locale.ROOT));
+    }
+
+    public static TimestampMapping get(JdbcSourceConnectorConfig config) {
+      String tsMappingConfig = config.getString(JdbcSourceConnectorConfig.TIMESTAMP_MAPPING_CONFIG);
+      // We use 'null' as default to be able to check the old config if the new one is unset.
+      if (tsMappingConfig != null) {
+        return get(config.getString(JdbcSourceConnectorConfig.TIMESTAMP_MAPPING_CONFIG));
+      }
+      return TimestampMapping.NONE;
+    }
+  }
+
   protected JdbcSourceConnectorConfig(ConfigDef subclassConfigDef, Map<String, String> props) {
     super(subclassConfigDef, props);
   }
 
   public NumericMapping numericMapping() {
     return NumericMapping.get(this);
+  }
+
+  public TimestampMapping timestampMapping() {
+    return TimestampMapping.get(this);
   }
 
   public TimeZone timeZone() {

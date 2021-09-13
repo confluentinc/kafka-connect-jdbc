@@ -75,6 +75,7 @@ import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.NumericMapping;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TimestampMapping;
 import io.confluent.connect.jdbc.source.JdbcSourceTaskConfig;
 import io.confluent.connect.jdbc.source.TimestampIncrementingCriteria;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
@@ -143,6 +144,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
    * Whether to map {@code NUMERIC} JDBC types by precision.
    */
   protected final NumericMapping mapNumerics;
+  protected final TimestampMapping mapTimestamps;
   protected String catalogPattern;
   protected final String schemaPattern;
   protected final Set<String> tableTypes;
@@ -198,9 +200,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     }
     if (config instanceof JdbcSourceConnectorConfig) {
       mapNumerics = ((JdbcSourceConnectorConfig)config).numericMapping();
+      mapTimestamps = ((JdbcSourceConnectorConfig)config).timestampMapping();
       batchMaxRows = config.getInt(JdbcSourceConnectorConfig.BATCH_MAX_ROWS_CONFIG);
     } else {
       mapNumerics = NumericMapping.NONE;
+      mapTimestamps = TimestampMapping.NONE;
       batchMaxRows = 0;
     }
 
@@ -952,7 +956,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       ColumnId incrementingColumn,
       List<ColumnId> timestampColumns
   ) {
-    return new TimestampIncrementingCriteria(incrementingColumn, timestampColumns, timeZone);
+    return new TimestampIncrementingCriteria(
+      incrementingColumn,
+      timestampColumns,
+      mapTimestamps,
+      timeZone);
   }
 
   /**
@@ -1156,17 +1164,16 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       }
 
       // Timestamp is a date + time
+      // TODO justin
       case Types.TIMESTAMP: {
-        if (0 == 1) {
-          // Placeholder: flag for INT64
+        if (mapTimestamps == TimestampMapping.NANOS_EPOCH) {
           SchemaBuilder ntSchemaBuilder = NanoTimestamp.builder();
           if (optional) {
             ntSchemaBuilder.optional();
           }
           builder.field(fieldName, ntSchemaBuilder.build());
           break;
-        } else if (0 == 0) {
-          // Placeholder: flag for STRING
+        } else if (mapTimestamps == TimestampMapping.NANOS_STRING) {
           SchemaBuilder ntsSchemaBuilder = NanoTimestampString.builder();
           if (optional) {
             ntsSchemaBuilder.optional();
@@ -1405,13 +1412,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       }
 
       // Timestamp is a date + time
+      // TODO justin
       case Types.TIMESTAMP: {
-        if (0 == 1) {
+        if (mapTimestamps == TimestampMapping.NANOS_EPOCH) {
           return rs -> {
             Timestamp ts = rs.getTimestamp(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
-            return NanoTimestamp.toEpochNanos(ts);
+            return NanoTimestamp.toNanoEpoch(ts);
           };
-        } else if (2 == 2) {
+        } else if (mapTimestamps == TimestampMapping.NANOS_STRING) {
           return rs -> {
             Timestamp ts = rs.getTimestamp(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
             return NanoTimestampString.toNanoString(ts);

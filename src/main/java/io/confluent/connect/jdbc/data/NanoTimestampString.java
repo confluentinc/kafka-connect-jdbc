@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Confluent Inc.
+ * Copyright 2021 Confluent Inc.
  *
  * Licensed under the Confluent Community License (the "License"); you may not use
  * this file except in compliance with the License.  You may obtain a copy of the
@@ -15,7 +15,7 @@
 
 package io.confluent.connect.jdbc.data;
 
-import java.time.LocalDateTime;
+import java.sql.Timestamp;
 import java.time.format.DateTimeFormatter;
 
 
@@ -31,6 +31,8 @@ public class NanoTimestampString {
   private static DateTimeFormatter formatter = 
       DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm:ss.SSSSSSSSS");
 
+  static final String NULL_TIMESTAMP = "NULL";
+
   public static SchemaBuilder builder() {
     return SchemaBuilder.string()
                         .name(SCHEMA_NAME)
@@ -41,15 +43,21 @@ public class NanoTimestampString {
     return builder().build();
   }
 
-  // public static long toEpochNanos(Object value) {
-  //   LocalDateTime dateTime = Conversions.toLocalDateTime(value);
-  //   return Conversions.toEpochNanos(dateTime);
-  // }
+  public static String toNanoString(Timestamp timestamp) {
+    if (timestamp != null) {
+      return timestamp.toString();
+    } else {
+      return NULL_TIMESTAMP;
+    }
+  }
 
-  public static String toNanoString(Object value) {
-    LocalDateTime dateTime = Conversions.toLocalDateTime(value);
-    return dateTime.format(formatter);
-  } 
+  public static Timestamp fromNanoString(String nanoString) {
+    if (nanoString != null && ! nanoString.equalsIgnoreCase(NULL_TIMESTAMP)) {
+      return Timestamp.valueOf(nanoString);
+    } else {
+      return null;
+    }
+  }
 
   private NanoTimestampString() {
   }

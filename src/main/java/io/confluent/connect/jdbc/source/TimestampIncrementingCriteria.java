@@ -36,8 +36,8 @@ import java.util.stream.Collectors;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
-import io.confluent.connect.jdbc.data.NanoTimestamp;
-import io.confluent.connect.jdbc.data.NanoTimestampString;
+import io.confluent.connect.jdbc.data.NanoEpochTimestamp;
+import io.confluent.connect.jdbc.data.NanoStringTimestamp;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TimestampMapping;
 
 public class TimestampIncrementingCriteria {
@@ -224,10 +224,10 @@ public class TimestampIncrementingCriteria {
   ) {
     for (ColumnId timestampColumn : timestampColumns) {
       Timestamp ts;
-      if (mapTimestamps == TimestampMapping.NANOS_STRING) {
-        ts = NanoTimestampString.fromNanoString((String) record.get(timestampColumn.name()));
-      } else if (mapTimestamps == TimestampMapping.NANOS_EPOCH) {
-        ts = NanoTimestamp.fromNanoEpoch((long) record.get(timestampColumn.name()));
+      if (mapTimestamps == TimestampMapping.NANO_STRING) {
+        ts = NanoStringTimestamp.fromNanoString((String) record.get(timestampColumn.name()));
+      } else if (mapTimestamps == TimestampMapping.NANO_EPOCH) {
+        ts = NanoEpochTimestamp.fromNanoEpoch((long) record.get(timestampColumn.name()));
       } else {
         ts = (Timestamp) record.get(timestampColumn.name());
       }

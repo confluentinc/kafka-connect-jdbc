@@ -26,7 +26,7 @@ import org.apache.kafka.connect.data.SchemaBuilder;
  * Utility class for managing nano timestamp representations
  * 
  */
-public class NanoTimestamp {
+public class NanoEpochTimestamp {
   public static final String SCHEMA_NAME = "io.confluent.connect.jdbc.data.NanoTimestamp";
   static final long NANOSECONDS_PER_SECOND = TimeUnit.SECONDS.toNanos(1);
   static final long NANOSECONDS_PER_MILLISECOND = TimeUnit.MILLISECONDS.toNanos(1);
@@ -38,7 +38,10 @@ public class NanoTimestamp {
                         .version(1);
   }
 
-  public static Schema schema() {
+  // public static final Schema NANO_TIMESTAMP_SCHEMA = builder().schema();
+  // public static final Schema OPTIONAL_NANO_TIMESTAMP_SCHEMA = builder().optional().schema();
+
+  public static final Schema schema() {
     return builder().build();
   }
 
@@ -61,6 +64,6 @@ public class NanoTimestamp {
     }
   }
 
-  private NanoTimestamp() {
+  private NanoEpochTimestamp() {
   }
 }

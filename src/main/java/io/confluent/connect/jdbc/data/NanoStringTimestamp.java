@@ -25,7 +25,7 @@ import org.apache.kafka.connect.data.SchemaBuilder;
  * Utility class for managing nano timestamp representations
  * 
  */
-public class NanoTimestampString {
+public class NanoStringTimestamp {
   public static final String SCHEMA_NAME = "io.confluent.connect.jdbc.data.NanoTimestampString";
 
   static final String NULL_TIMESTAMP = "NULL";
@@ -56,6 +56,6 @@ public class NanoTimestampString {
     }
   }
 
-  private NanoTimestampString() {
+  private NanoStringTimestamp() {
   }
 }

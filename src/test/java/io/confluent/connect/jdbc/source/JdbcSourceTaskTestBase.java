@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.TimeZone;
 
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.NumericMapping;
+import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TimestampMapping;
 
 public class JdbcSourceTaskTestBase {
 
@@ -110,6 +111,24 @@ public class JdbcSourceTaskTestBase {
     Map<String, String> props = singleTableConfig(completeMapping);
     props.put(JdbcSourceTaskConfig.DB_TIMEZONE_CONFIG, tz.getID());
     return props;
+  }
+
+  protected Map<String, String> singleTableWithTimezoneAndNanoEpochTimestampConfig(
+    boolean completeMapping,
+    TimeZone tz) {
+      Map<String, String> props = singleTableConfig(completeMapping);
+      props.put(JdbcSourceTaskConfig.DB_TIMEZONE_CONFIG, tz.getID());
+      props.put(JdbcSourceTaskConfig.TIMESTAMP_MAPPING_CONFIG, TimestampMapping.NANO_EPOCH.toString());
+      return props;
+  }
+
+  protected Map<String, String> singleTableWithTimezoneAndNanoStringTimestampConfig(
+    boolean completeMapping,
+    TimeZone tz) {
+      Map<String, String> props = singleTableConfig(completeMapping);
+      props.put(JdbcSourceTaskConfig.DB_TIMEZONE_CONFIG, tz.getID());
+      props.put(JdbcSourceTaskConfig.TIMESTAMP_MAPPING_CONFIG, TimestampMapping.NANO_STRING.toString());
+      return props;
   }
 
   protected Map<String, String> twoTableConfig() {

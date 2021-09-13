@@ -92,8 +92,8 @@ import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.TableType;
 
-import io.confluent.connect.jdbc.data.NanoTimestamp;
-import io.confluent.connect.jdbc.data.NanoTimestampString;
+import io.confluent.connect.jdbc.data.NanoEpochTimestamp;
+import io.confluent.connect.jdbc.data.NanoStringTimestamp;
 
 /**
  * A {@link DatabaseDialect} implementation that provides functionality based upon JDBC and SQL.
@@ -1166,15 +1166,15 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       // Timestamp is a date + time
       // TODO justin
       case Types.TIMESTAMP: {
-        if (mapTimestamps == TimestampMapping.NANOS_EPOCH) {
-          SchemaBuilder ntSchemaBuilder = NanoTimestamp.builder();
+        if (mapTimestamps == TimestampMapping.NANO_EPOCH) {
+          SchemaBuilder ntSchemaBuilder = NanoEpochTimestamp.builder();
           if (optional) {
             ntSchemaBuilder.optional();
           }
           builder.field(fieldName, ntSchemaBuilder.build());
           break;
-        } else if (mapTimestamps == TimestampMapping.NANOS_STRING) {
-          SchemaBuilder ntsSchemaBuilder = NanoTimestampString.builder();
+        } else if (mapTimestamps == TimestampMapping.NANO_STRING) {
+          SchemaBuilder ntsSchemaBuilder = NanoStringTimestamp.builder();
           if (optional) {
             ntsSchemaBuilder.optional();
           }
@@ -1414,15 +1414,15 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       // Timestamp is a date + time
       // TODO justin
       case Types.TIMESTAMP: {
-        if (mapTimestamps == TimestampMapping.NANOS_EPOCH) {
+        if (mapTimestamps == TimestampMapping.NANO_EPOCH) {
           return rs -> {
             Timestamp ts = rs.getTimestamp(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
-            return NanoTimestamp.toNanoEpoch(ts);
+            return NanoEpochTimestamp.toNanoEpoch(ts);
           };
-        } else if (mapTimestamps == TimestampMapping.NANOS_STRING) {
+        } else if (mapTimestamps == TimestampMapping.NANO_STRING) {
           return rs -> {
             Timestamp ts = rs.getTimestamp(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
-            return NanoTimestampString.toNanoString(ts);
+            return NanoStringTimestamp.toNanoString(ts);
           };
         } else {
           return rs -> rs.getTimestamp(col, DateTimeUtils.getTimeZoneCalendar(timeZone));

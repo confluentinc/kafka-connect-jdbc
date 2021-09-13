@@ -136,8 +136,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final EnumRecommender TIMESTAMP_MAPPING_RECOMMENDER =
       EnumRecommender.in(TimestampMapping.values());
 
-  // public static final String TIMESTAMP_MAPPING_NANOS = "nanos_epoch";
-  // public static final String TIMESTAMP_MAPPING_NANOS_STRING = "nanos_string";
+  // public static final String TIMESTAMP_MAPPING_NANO = "nano_epoch";
+  // public static final String TIMESTAMP_MAPPING_NANO_STRING = "nano_string";
   private static final String TIMESTAMP_MAPPING_DOC =
       "Mode used to map SQL TIMESTAMP values to Kafka Connect types.  By default this is "
       + "empty, and the connector automatically";
@@ -451,9 +451,9 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     ).define(
         TIMESTAMP_MAPPING_CONFIG,
         Type.STRING,
-        // TIMESTAMP_MAPPING_DEFAULT,
-        // "NANOS_EPOCH", // for testing
-        "NANOS_STRING", // for testing
+        TIMESTAMP_MAPPING_DEFAULT,
+        // "NANO_EPOCH", // for testing
+        // "NANO_STRING", // for testing
         TIMESTAMP_MAPPING_RECOMMENDER,
         Importance.LOW,
         TIMESTAMP_MAPPING_DOC,
@@ -815,8 +815,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public enum TimestampMapping {
     NONE,
-    NANOS_EPOCH,
-    NANOS_STRING;
+    NANO_EPOCH,
+    NANO_STRING;
 
     private static final Map<String, TimestampMapping> reverse = new HashMap<>(values().length);
     static {

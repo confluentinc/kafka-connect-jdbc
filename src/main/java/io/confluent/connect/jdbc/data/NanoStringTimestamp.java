@@ -51,7 +51,7 @@ public class NanoStringTimestamp {
 
   public static Timestamp fromNanoString(String nanoString) {
     if (nanoString != null) {
-    // if (nanoString != null && ! nanoString.equalsIgnoreCase(NULL_TIMESTAMP)) {
+      // if (nanoString != null && ! nanoString.equalsIgnoreCase(NULL_TIMESTAMP)) {
       return Timestamp.valueOf(nanoString);
     } else {
       return null;

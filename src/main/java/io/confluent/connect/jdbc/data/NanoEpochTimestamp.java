@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.data;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.kafka.connect.data.Schema;
@@ -47,8 +48,20 @@ public class NanoEpochTimestamp {
 
   public static long toNanoEpoch(Timestamp timestamp) {
     if (timestamp != null) {
-      Instant instant = timestamp.toInstant();
-      return instant.getEpochSecond() * NANOSECONDS_PER_SECOND + instant.getNano();
+      LocalDateTime ldt = LocalDateTime.of(timestamp.getYear() + 1900,
+        timestamp.getMonth() + 1,
+        timestamp.getDate(),
+        timestamp.getHours(),
+        timestamp.getMinutes(),
+        timestamp.getSeconds(),
+        timestamp.getNanos());
+      
+      long nanoInDay = ldt.getNano();
+      long ldt.toInstant();
+
+
+      // Instant instant = timestamp.toInstant();
+      // return instant.getEpochSecond() * NANOSECONDS_PER_SECOND + instant.getNano();
     } else {
       return NULL_TIMESTAMP;
     }

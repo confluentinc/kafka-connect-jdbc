@@ -302,6 +302,7 @@ public class JdbcSourceTaskConversionNanoEpochTest extends JdbcSourceTaskTestBas
   public void testTimestamp() throws Exception {
     // GregorianCalendar expected = new GregorianCalendar(1977, Calendar.FEBRUARY, 13, 23, 3, 20);
     // expected.setTimeZone(timezone);
+    java.sql.Timestamp timestamp = new java.sql.Timestamp(224723000000L);
     Long expected = new Long(224723000000000000L);
     typeConversion("TIMESTAMP", false, "1977-02-13 23:03:20",
                    NanoEpochTimestamp.builder().build(),
@@ -312,6 +313,7 @@ public class JdbcSourceTaskConversionNanoEpochTest extends JdbcSourceTaskTestBas
   public void testNullableTimestamp() throws Exception {
     // GregorianCalendar expected = new GregorianCalendar(1977, Calendar.FEBRUARY, 13, 23, 3, 20);
     // expected.setTimeZone(timezone);
+    java.sql.Timestamp ts = new java.sql.Timestamp(224723000000L);
     Long expected = new Long(224723000000000000L);
     typeConversion("TIMESTAMP", true, "1977-02-13 23:03:20",
                   NanoEpochTimestamp.builder().build(),

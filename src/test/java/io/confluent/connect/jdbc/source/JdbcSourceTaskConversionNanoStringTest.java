@@ -23,7 +23,7 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Time;
-import org.apache.kafka.connect.data.Timestamp;
+// import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.junit.After;
 import org.junit.Before;
@@ -33,6 +33,7 @@ import org.junit.runners.Parameterized;
 
 import io.confluent.connect.jdbc.data.NanoStringTimestamp;
 
+import 
 import javax.sql.rowset.serial.SerialBlob;
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -302,6 +303,7 @@ public class JdbcSourceTaskConversionNanoStringTest extends JdbcSourceTaskTestBa
   public void testTimestamp() throws Exception {
     // GregorianCalendar expected = new GregorianCalendar(1977, Calendar.FEBRUARY, 13, 23, 3, 20);
     // expected.setTimeZone(timezone);
+    // Timestamp 
     Long expected = new Long(224723000000000000L);
     typeConversion("TIMESTAMP", false, "1977-02-13 23:03:20",
                    NanoStringTimestamp.builder().build(),

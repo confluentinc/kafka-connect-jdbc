@@ -17,7 +17,7 @@ package io.confluent.connect.jdbc.data;
 
 import java.sql.Timestamp;
 import java.time.Instant;
-import java.time.LocalDateTime;
+// import java.time.LocalDateTime;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.kafka.connect.data.Schema;
@@ -31,7 +31,7 @@ public class NanoEpochTimestamp {
   public static final String SCHEMA_NAME = "io.confluent.connect.jdbc.data.NanoTimestamp";
   static final long NANOSECONDS_PER_SECOND = TimeUnit.SECONDS.toNanos(1);
   static final long NANOSECONDS_PER_MILLISECOND = TimeUnit.MILLISECONDS.toNanos(1);
-  static final long NULL_TIMESTAMP = -1;
+  static final long NULL_TIMESTAMP = 0;
 
   public static SchemaBuilder builder() {
     return SchemaBuilder.int64()
@@ -46,22 +46,21 @@ public class NanoEpochTimestamp {
     return builder().build();
   }
 
+  // java.sql.Timestamp is like a java.util.Date with fractional seconds added
+  // It does not have a time zone; the output long is nanoseconds from epoch
   public static long toNanoEpoch(Timestamp timestamp) {
     if (timestamp != null) {
-      LocalDateTime ldt = LocalDateTime.of(timestamp.getYear() + 1900,
-        timestamp.getMonth() + 1,
-        timestamp.getDate(),
-        timestamp.getHours(),
-        timestamp.getMinutes(),
-        timestamp.getSeconds(),
-        timestamp.getNanos());
+      // LocalDateTime ldt = LocalDateTime.of(timestamp.getYear() + 1900,
+      //   timestamp.getMonth() + 1,
+      //   timestamp.getDate(),
+      //   timestamp.getHours(),
+      //   timestamp.getMinutes(),
+      //   timestamp.getSeconds(),
+      //   timestamp.getNanos());
       
-      long nanoInDay = ldt.getNano();
-      long ldt.toInstant();
-
-
-      // Instant instant = timestamp.toInstant();
-      // return instant.getEpochSecond() * NANOSECONDS_PER_SECOND + instant.getNano();
+      // long nanoInDay = ldt.getNano();
+      Instant instant = timestamp.toInstant();
+      return instant.getEpochSecond() * NANOSECONDS_PER_SECOND + instant.getNano();
     } else {
       return NULL_TIMESTAMP;
     }

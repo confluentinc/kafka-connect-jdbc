@@ -192,7 +192,7 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
   @Test
   public void shouldBuildUpsertStatement() {
     assertEquals(
-        "merge into \"myTable\" with (HOLDLOCK) AS target using (select ? AS \"id1\", ?" +
+        "merge into \"myTable\" AS target using (select ? AS \"id1\", ?" +
         " AS \"id2\", ? AS \"columnA\", ? AS \"columnB\", ? AS \"columnC\", ? AS \"columnD\")" +
         " AS incoming on (target.\"id1\"=incoming.\"id1\" and target.\"id2\"=incoming" +
         ".\"id2\") when matched then update set \"columnA\"=incoming.\"columnA\"," +
@@ -200,14 +200,14 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
         "\"columnD\"=incoming.\"columnD\" when not matched then insert (\"columnA\", " +
         "\"columnB\", \"columnC\", \"columnD\", \"id1\", \"id2\") values (incoming.\"columnA\"," +
         "incoming.\"columnB\",incoming.\"columnC\",incoming.\"columnD\",incoming.\"id1\"," +
-        "incoming.\"id2\");",
+        "incoming.\"id2\")",
         dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
     );
 
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
     assertEquals(
-        "merge into myTable with (HOLDLOCK) AS target using (select ? AS id1, ?" +
+        "merge into myTable AS target using (select ? AS id1, ?" +
         " AS id2, ? AS columnA, ? AS columnB, ? AS columnC, ? AS columnD)" +
         " AS incoming on (target.id1=incoming.id1 and target.id2=incoming" +
         ".id2) when matched then update set columnA=incoming.columnA," +
@@ -215,7 +215,7 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
         "columnD=incoming.columnD when not matched then insert (columnA, " +
         "columnB, columnC, columnD, id1, id2) values (incoming.columnA," +
         "incoming.columnB,incoming.columnC,incoming.columnD,incoming.id1," +
-        "incoming.id2);",
+        "incoming.id2)",
         dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
     );
   }

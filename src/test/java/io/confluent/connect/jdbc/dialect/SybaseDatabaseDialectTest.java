@@ -265,12 +265,12 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
   public void upsert1() {
     TableId customer = tableId("Customer");
     assertEquals(
-        "merge into \"Customer\" with (HOLDLOCK) AS target using (select ? AS \"id\", ? AS \"name\", ? " +
+        "merge into \"Customer\" AS target using (select ? AS \"id\", ? AS \"name\", ? " +
         "AS \"salary\", ? AS \"address\") AS incoming on (target.\"id\"=incoming.\"id\") when matched then update set " +
         "\"name\"=incoming.\"name\",\"salary\"=incoming.\"salary\",\"address\"=incoming" +
         ".\"address\" when not matched then insert " +
         "(\"name\", \"salary\", \"address\", \"id\") values (incoming.\"name\",incoming" +
-        ".\"salary\",incoming.\"address\",incoming.\"id\");",
+        ".\"salary\",incoming.\"address\",incoming.\"id\")",
         dialect.buildUpsertQueryStatement(
             customer,
             columns(customer, "id"),
@@ -281,12 +281,12 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
     assertEquals(
-        "merge into Customer with (HOLDLOCK) AS target using (select ? AS id, ? AS name, ? " +
+        "merge into Customer AS target using (select ? AS id, ? AS name, ? " +
         "AS salary, ? AS address) AS incoming on (target.id=incoming.id) when matched then update set " +
         "name=incoming.name,salary=incoming.salary,address=incoming" +
         ".address when not matched then insert " +
         "(name, salary, address, id) values (incoming.name,incoming" +
-        ".salary,incoming.address,incoming.id);",
+        ".salary,incoming.address,incoming.id)",
         dialect.buildUpsertQueryStatement(
             customer,
             columns(customer, "id"),
@@ -299,13 +299,13 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
   public void upsert2() {
     TableId book = new TableId(null, null, "Book");
     assertEquals(
-        "merge into \"Book\" with (HOLDLOCK) AS target using (select ? AS \"author\", ? AS \"title\", ?" +
+        "merge into \"Book\" AS target using (select ? AS \"author\", ? AS \"title\", ?" +
         " AS \"ISBN\", ? AS \"year\", ? AS \"pages\")" +
         " AS incoming on (target.\"author\"=incoming.\"author\" and target.\"title\"=incoming.\"title\")" +
         " when matched then update set \"ISBN\"=incoming.\"ISBN\",\"year\"=incoming.\"year\"," +
         "\"pages\"=incoming.\"pages\" when not " +
         "matched then insert (\"ISBN\", \"year\", \"pages\", \"author\", \"title\") values (incoming" +
-        ".\"ISBN\",incoming.\"year\"," + "incoming.\"pages\",incoming.\"author\",incoming.\"title\");",
+        ".\"ISBN\",incoming.\"year\"," + "incoming.\"pages\",incoming.\"author\",incoming.\"title\")",
         dialect.buildUpsertQueryStatement(
             book,
             columns(book, "author", "title"),
@@ -316,13 +316,13 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
     assertEquals(
-        "merge into Book with (HOLDLOCK) AS target using (select ? AS author, ? AS title, ?" +
+        "merge into Book AS target using (select ? AS author, ? AS title, ?" +
         " AS ISBN, ? AS year, ? AS pages)" +
         " AS incoming on (target.author=incoming.author and target.title=incoming.title)" +
         " when matched then update set ISBN=incoming.ISBN,year=incoming.year," +
         "pages=incoming.pages when not " +
         "matched then insert (ISBN, year, pages, author, title) values (incoming" +
-        ".ISBN,incoming.year," + "incoming.pages,incoming.author,incoming.title);",
+        ".ISBN,incoming.year," + "incoming.pages,incoming.author,incoming.title)",
         dialect.buildUpsertQueryStatement(
             book,
             columns(book, "author", "title"),

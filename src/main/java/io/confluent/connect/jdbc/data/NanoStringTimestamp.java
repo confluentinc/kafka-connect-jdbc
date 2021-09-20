@@ -44,12 +44,14 @@ public class NanoStringTimestamp {
     if (timestamp != null) {
       return timestamp.toString();
     } else {
-      return NULL_TIMESTAMP;
+      return null;
+      // return NULL_TIMESTAMP;
     }
   }
 
   public static Timestamp fromNanoString(String nanoString) {
-    if (nanoString != null && ! nanoString.equalsIgnoreCase(NULL_TIMESTAMP)) {
+    if (nanoString != null) {
+    // if (nanoString != null && ! nanoString.equalsIgnoreCase(NULL_TIMESTAMP)) {
       return Timestamp.valueOf(nanoString);
     } else {
       return null;

@@ -33,7 +33,6 @@ import org.junit.runners.Parameterized;
 
 import io.confluent.connect.jdbc.data.NanoStringTimestamp;
 
-import 
 import javax.sql.rowset.serial.SerialBlob;
 import java.math.BigDecimal;
 import java.math.BigInteger;

@@ -60,7 +60,7 @@ public class DbStructure {
       final Connection connection,
       final TableId tableId,
       final FieldsMetadata fieldsMetadata
-  ) throws SQLException {
+  ) throws SQLException, TableAlterOrCreateException {
     if (tableDefns.get(connection, tableId) == null) {
       // Table does not yet exist, so attempt to create it ...
       try {
@@ -75,6 +75,9 @@ public class DbStructure {
         } catch (SQLException e) {
           throw sqle;
         }
+      } catch (TableAlterOrCreateException te) {
+        log.warn(te.getMessage());
+        throw te;
       }
     }
     return amendIfNecessary(config, connection, tableId, fieldsMetadata, config.maxRetries);
@@ -109,7 +112,7 @@ public class DbStructure {
       final Connection connection,
       final TableId tableId,
       final FieldsMetadata fieldsMetadata
-  ) throws SQLException {
+  ) throws SQLException, TableAlterOrCreateException {
     if (!config.autoCreate) {
       throw new TableAlterOrCreateException(
           String.format("Table %s is missing and auto-creation is disabled", tableId)

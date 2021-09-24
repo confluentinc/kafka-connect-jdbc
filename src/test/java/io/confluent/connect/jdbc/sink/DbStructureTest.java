@@ -67,6 +67,24 @@ public class DbStructureTest {
   }
 
   @Test (expected = TableAlterOrCreateException.class)
+  public void testCreateOrAlterNoAutoEvolve() throws Exception {
+    when(dbDialect.tableExists(any(), any())).thenReturn(false);
+
+    SinkRecordField sinkRecordField = new SinkRecordField(
+        Schema.OPTIONAL_INT32_SCHEMA,
+        "test",
+        false
+    );
+
+    fieldsMetadata = new FieldsMetadata(
+        Collections.emptySet(),
+        Collections.singleton(sinkRecordField.name()),
+        Collections.singletonMap(sinkRecordField.name(), sinkRecordField));
+
+    structure.createOrAmendIfNecessary(config, connection, tableId, fieldsMetadata);
+  }
+
+  @Test (expected = TableAlterOrCreateException.class)
   public void testAlterNoAutoEvolve() throws Exception {
     TableDefinition tableDefinition = mock(TableDefinition.class);
     when(dbDialect.tableExists(any(), any())).thenReturn(true);

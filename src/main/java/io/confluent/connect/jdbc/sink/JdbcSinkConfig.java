@@ -382,6 +382,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             TABLE_NAME_FORMAT,
             ConfigDef.Type.STRING,
             TABLE_NAME_FORMAT_DEFAULT,
+            new ConfigDef.NonEmptyString(),
             ConfigDef.Importance.MEDIUM,
             TABLE_NAME_FORMAT_DOC,
             DATAMAPPING_GROUP,

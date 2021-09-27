@@ -105,6 +105,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   protected static final int NUMERIC_TYPE_SCALE_HIGH = 127;
   protected static final int NUMERIC_TYPE_SCALE_UNSET = -127;
 
+  // The maximum precision that can be achieved in a signed 64-bit integer is 2^63 ~= 9.223372e+18
+  private static final int MAX_INTEGER_TYPE_PRECISION = 18;
+
+  private static final String PRECISION_FIELD = "connect.decimal.precision";
+
   /**
    * The provider for {@link GenericDatabaseDialect}.
    */
@@ -1058,41 +1063,33 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       case Types.NUMERIC:
         if (mapNumerics == NumericMapping.PRECISION_ONLY) {
           glog.debug("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
-          if (scale == 0 && precision < 19) { // integer
-            Schema schema;
-            if (precision > 9) {
-              schema = (optional) ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA;
-            } else if (precision > 4) {
-              schema = (optional) ? Schema.OPTIONAL_INT32_SCHEMA : Schema.INT32_SCHEMA;
-            } else if (precision > 2) {
-              schema = (optional) ? Schema.OPTIONAL_INT16_SCHEMA : Schema.INT16_SCHEMA;
-            } else {
-              schema = (optional) ? Schema.OPTIONAL_INT8_SCHEMA : Schema.INT8_SCHEMA;
-            }
-            builder.field(fieldName, schema);
+          if (scale == 0 && precision <= MAX_INTEGER_TYPE_PRECISION) { // integer
+            builder.field(fieldName, integerSchema(optional, precision));
             break;
           }
         } else if (mapNumerics == NumericMapping.BEST_FIT) {
           glog.debug("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
-          if (precision < 19) { // fits in primitive data types.
+          if (precision <= MAX_INTEGER_TYPE_PRECISION) { // fits in primitive data types.
             if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
-              Schema schema;
-              if (precision > 9) {
-                schema = (optional) ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA;
-              } else if (precision > 4) {
-                schema = (optional) ? Schema.OPTIONAL_INT32_SCHEMA : Schema.INT32_SCHEMA;
-              } else if (precision > 2) {
-                schema = (optional) ? Schema.OPTIONAL_INT16_SCHEMA : Schema.INT16_SCHEMA;
-              } else {
-                schema = (optional) ? Schema.OPTIONAL_INT8_SCHEMA : Schema.INT8_SCHEMA;
-              }
-              builder.field(fieldName, schema);
+              builder.field(fieldName, integerSchema(optional, precision));
               break;
             } else if (scale > 0) { // floating point - use double in all cases
               Schema schema = (optional) ? Schema.OPTIONAL_FLOAT64_SCHEMA : Schema.FLOAT64_SCHEMA;
               builder.field(fieldName, schema);
               break;
             }
+          }
+        } else if (mapNumerics == NumericMapping.BEST_FIT_EAGER_DOUBLE) {
+          glog.debug("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
+          if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
+            if (precision <= MAX_INTEGER_TYPE_PRECISION) { // fits in primitive data types.
+              builder.field(fieldName, integerSchema(optional, precision));
+              break;
+            }
+          } else if (scale > 0) { // floating point - use double in all cases
+            Schema schema = (optional) ? Schema.OPTIONAL_FLOAT64_SCHEMA : Schema.FLOAT64_SCHEMA;
+            builder.field(fieldName, schema);
+            break;
           }
         }
         // fallthrough
@@ -1101,6 +1098,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         glog.debug("DECIMAL with precision: '{}' and scale: '{}'", precision, scale);
         scale = decimalScale(columnDefn);
         SchemaBuilder fieldBuilder = Decimal.builder(scale);
+        fieldBuilder.parameter(PRECISION_FIELD, Integer.toString(precision));
         if (optional) {
           fieldBuilder.optional();
         }
@@ -1179,6 +1177,20 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     return fieldName;
   }
 
+  private Schema integerSchema(boolean optional, int precision) {
+    Schema schema;
+    if (precision > 9) {
+      schema = (optional) ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA;
+    } else if (precision > 4) {
+      schema = (optional) ? Schema.OPTIONAL_INT32_SCHEMA : Schema.INT32_SCHEMA;
+    } else if (precision > 2) {
+      schema = (optional) ? Schema.OPTIONAL_INT16_SCHEMA : Schema.INT16_SCHEMA;
+    } else {
+      schema = (optional) ? Schema.OPTIONAL_INT8_SCHEMA : Schema.INT8_SCHEMA;
+    }
+    return schema;
+  }
+
   @Override
   public void applyDdlStatements(
       Connection connection,
@@ -1187,6 +1199,17 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     try (Statement statement = connection.createStatement()) {
       for (String ddlStatement : statements) {
         statement.executeUpdate(ddlStatement);
+      }
+    }
+    try {
+      connection.commit();
+    } catch (Exception e) {
+      try {
+        connection.rollback();
+      } catch (SQLException sqle) {
+        e.addSuppressed(sqle);
+      } finally {
+        throw e;
       }
     }
   }
@@ -1271,7 +1294,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           int precision = defn.precision();
           int scale = defn.scale();
           glog.trace("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
-          if (scale == 0 && precision < 19) { // integer
+          if (scale == 0 && precision <= MAX_INTEGER_TYPE_PRECISION) { // integer
             if (precision > 9) {
               return rs -> rs.getLong(col);
             } else if (precision > 4) {
@@ -1286,7 +1309,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           int precision = defn.precision();
           int scale = defn.scale();
           glog.trace("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
-          if (precision < 19) { // fits in primitive data types.
+          if (precision <= MAX_INTEGER_TYPE_PRECISION) { // fits in primitive data types.
             if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
               if (precision > 9) {
                 return rs -> rs.getLong(col);
@@ -1300,6 +1323,25 @@ public class GenericDatabaseDialect implements DatabaseDialect {
             } else if (scale > 0) { // floating point - use double in all cases
               return rs -> rs.getDouble(col);
             }
+          }
+        } else if (mapNumerics == NumericMapping.BEST_FIT_EAGER_DOUBLE) {
+          int precision = defn.precision();
+          int scale = defn.scale();
+          glog.trace("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
+          if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
+            if (precision <= MAX_INTEGER_TYPE_PRECISION) { // fits in primitive data types.
+              if (precision > 9) {
+                return rs -> rs.getLong(col);
+              } else if (precision > 4) {
+                return rs -> rs.getInt(col);
+              } else if (precision > 2) {
+                return rs -> rs.getShort(col);
+              } else {
+                return rs -> rs.getByte(col);
+              }
+            }
+          } else if (scale > 0) { // floating point - use double in all cases
+            return rs -> rs.getDouble(col);
           }
         }
         // fallthrough

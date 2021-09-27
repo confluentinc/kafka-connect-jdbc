@@ -108,6 +108,15 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     jtdsDriver = jdbcUrlInfo == null ? false : jdbcUrlInfo.subprotocol().matches("jtds");
   }
 
+  @Override
+  public TableId parseTableIdentifier(String fqn) {
+    TableId tableId = super.parseTableIdentifier(fqn);
+    if (tableId.schemaName() == null) {
+      return new TableId(tableId.catalogName(), "dbo", tableId.tableName());
+    }
+    return tableId;
+  }
+
   /**
    * Check if the mssql server instance, the connector is configured, to is an mssql version with
    * the breaking Datetime change (MSSQL Server version 2016 or newer). If unable to get version

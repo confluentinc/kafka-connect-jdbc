@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.source;
 
+import java.sql.SQLNonTransientException;
 import java.util.TimeZone;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.SystemTime;
@@ -39,6 +40,7 @@ import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -66,6 +68,7 @@ public class JdbcSourceTask extends SourceTask {
   private CachedConnectionProvider cachedConnectionProvider;
   private PriorityQueue<TableQuerier> tableQueue = new PriorityQueue<TableQuerier>();
   private final AtomicBoolean running = new AtomicBoolean(false);
+  private final AtomicLong taskThreadId = new AtomicLong(0);
 
   public JdbcSourceTask() {
     this.time = new SystemTime();
@@ -226,13 +229,12 @@ public class JdbcSourceTask extends SourceTask {
         );
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
         tableQueue.add(
-            new TimestampIncrementingTableQuerier(
+            new TimestampTableQuerier(
                 dialect,
                 queryMode,
                 tableOrQuery,
                 topicPrefix,
                 timestampColumns,
-                null,
                 offset,
                 timestampDelayInterval,
                 timeZone,
@@ -258,6 +260,7 @@ public class JdbcSourceTask extends SourceTask {
     }
 
     running.set(true);
+    taskThreadId.set(Thread.currentThread().getId());
     log.info("Started JDBC source task");
   }
 
@@ -315,9 +318,14 @@ public class JdbcSourceTask extends SourceTask {
   @Override
   public void stop() throws ConnectException {
     log.info("Stopping JDBC source task");
+
+    // In earlier versions of Kafka, stop() was not called from the task thread. In this case, all
+    // resources are closed at the end of 'poll()' when no longer running or if there is an error.
     running.set(false);
-    // All resources are closed at the end of 'poll()' when no longer running or
-    // if there is an error
+
+    if (taskThreadId.longValue() == Thread.currentThread().getId()) {
+      shutdown();
+    }
   }
 
   protected void closeResources() {
@@ -398,13 +406,21 @@ public class JdbcSourceTask extends SourceTask {
           consecutiveEmptyResults.put(querier, 0);
         }
 
-        log.debug("Returning {} records for {}", results.size(), querier.toString());
+        log.debug("Returning {} records for {}", results.size(), querier);
         return results;
+      } catch (SQLNonTransientException sqle) {
+        log.error("Non-transient SQL exception while running query for table: {}",
+            querier, sqle);
+        resetAndRequeueHead(querier);
+        // This task has failed, so close any resources (may be reopened if needed) before throwing
+        closeResources();
+        throw new ConnectException(sqle);
       } catch (SQLException sqle) {
-        log.error("Failed to run query for table {}: {}", querier.toString(), sqle);
+        log.error("SQL exception while running query for table: {}", querier, sqle);
         resetAndRequeueHead(querier);
         return null;
       } catch (Throwable t) {
+        log.error("Failed to run query for table: {}", querier, t);
         resetAndRequeueHead(querier);
         // This task has failed, so close any resources (may be reopened if needed) before throwing
         closeResources();
@@ -412,13 +428,16 @@ public class JdbcSourceTask extends SourceTask {
       }
     }
 
-    // Only in case of shutdown
+    shutdown();
+    return null;
+  }
+
+  private void shutdown() {
     final TableQuerier querier = tableQueue.peek();
     if (querier != null) {
       resetAndRequeueHead(querier);
     }
     closeResources();
-    return null;
   }
 
   private void resetAndRequeueHead(TableQuerier expectedHead) {

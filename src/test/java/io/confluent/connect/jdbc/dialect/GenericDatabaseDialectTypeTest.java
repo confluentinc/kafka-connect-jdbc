@@ -27,7 +27,7 @@ import org.junit.runners.Parameterized;
 @RunWith(Parameterized.class)
 public class GenericDatabaseDialectTypeTest extends BaseDialectTypeTest<GenericDatabaseDialect> {
 
-  @Parameterized.Parameters
+  @Parameterized.Parameters(name="{0},{1},{2},NUMERIC({5},{6})")
   public static Iterable<Object[]> mapping() {
     return Arrays.asList(
         new Object[][] {
@@ -74,6 +74,12 @@ public class GenericDatabaseDialectTypeTest extends BaseDialectTypeTest<GenericD
             {Schema.Type.INT8, BYTE, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NOT_NULLABLE, Types.NUMERIC, 1, 0 },
             {Schema.Type.BYTES, BIG_DECIMAL, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NOT_NULLABLE, Types.NUMERIC, 19, -1 },
 
+            {Schema.Type.INT64, LONG, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT_EAGER_DOUBLE, NOT_NULLABLE, Types.NUMERIC, 18, -1 },
+            {Schema.Type.INT32, INT, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT_EAGER_DOUBLE, NOT_NULLABLE, Types.NUMERIC, 8, -1 },
+            {Schema.Type.INT16, SHORT, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT_EAGER_DOUBLE, NOT_NULLABLE, Types.NUMERIC, 3, 0 },
+            {Schema.Type.INT8, BYTE, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT_EAGER_DOUBLE, NOT_NULLABLE, Types.NUMERIC, 1, 0 },
+            {Schema.Type.BYTES, BIG_DECIMAL, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT_EAGER_DOUBLE, NOT_NULLABLE, Types.NUMERIC, 19, -1 },
+
             // integers - optional
             // Parameter range 26-30
             {Schema.Type.INT64, LONG, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NULLABLE, Types.NUMERIC, 18, -1 },
@@ -82,17 +88,32 @@ public class GenericDatabaseDialectTypeTest extends BaseDialectTypeTest<GenericD
             {Schema.Type.INT8, BYTE, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NULLABLE, Types.NUMERIC, 1, 0 },
             {Schema.Type.BYTES, BIG_DECIMAL, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NULLABLE, Types.NUMERIC, 19, -1 },
 
+            {Schema.Type.INT64, LONG, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT_EAGER_DOUBLE, NULLABLE, Types.NUMERIC, 18, -1 },
+            {Schema.Type.INT32, INT, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT_EAGER_DOUBLE, NULLABLE, Types.NUMERIC, 8, -1 },
+            {Schema.Type.INT16, SHORT, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT_EAGER_DOUBLE, NULLABLE, Types.NUMERIC, 3, 0 },
+            {Schema.Type.INT8, BYTE, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT_EAGER_DOUBLE, NULLABLE, Types.NUMERIC, 1, 0 },
+            {Schema.Type.BYTES, BIG_DECIMAL, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT_EAGER_DOUBLE, NULLABLE, Types.NUMERIC, 19, -1 },
+
             // floating point - fitting - non optional
             {Schema.Type.FLOAT64, DOUBLE, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NOT_NULLABLE, Types.NUMERIC, 18, 127 },
             {Schema.Type.FLOAT64, DOUBLE, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NOT_NULLABLE, Types.NUMERIC, 8, 1 },
             {Schema.Type.BYTES, BIG_DECIMAL, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NOT_NULLABLE, Types.NUMERIC, 19, 1 },
+
+            {Schema.Type.FLOAT64, DOUBLE, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT_EAGER_DOUBLE, NOT_NULLABLE, Types.NUMERIC, 18, 127 },
+            {Schema.Type.FLOAT64, DOUBLE, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT_EAGER_DOUBLE, NOT_NULLABLE, Types.NUMERIC, 8, 1 },
+            {Schema.Type.FLOAT64, DOUBLE, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT_EAGER_DOUBLE, NOT_NULLABLE, Types.NUMERIC, 19, 1 },
+            {Schema.Type.FLOAT64, DOUBLE, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT_EAGER_DOUBLE, NOT_NULLABLE, Types.NUMERIC, 32, 12 },
 
             // floating point - fitting - optional
             {Schema.Type.FLOAT64, DOUBLE, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NULLABLE, Types.NUMERIC, 18, 127 },
             {Schema.Type.FLOAT64, DOUBLE, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NULLABLE, Types.NUMERIC, 8, 1 },
             {Schema.Type.BYTES, BIG_DECIMAL, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NULLABLE, Types.NUMERIC, 19, 1 },
 
-            }
+            {Schema.Type.FLOAT64, DOUBLE, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT_EAGER_DOUBLE, NULLABLE, Types.NUMERIC, 18, 127 },
+            {Schema.Type.FLOAT64, DOUBLE, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT_EAGER_DOUBLE, NULLABLE, Types.NUMERIC, 8, 1 },
+            {Schema.Type.FLOAT64, DOUBLE, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT_EAGER_DOUBLE, NULLABLE, Types.NUMERIC, 19, 1 },
+            {Schema.Type.FLOAT64, DOUBLE, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT_EAGER_DOUBLE, NULLABLE, Types.NUMERIC, 32, 12 },
+        }
     );
   }
 

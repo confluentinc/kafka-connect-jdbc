@@ -212,7 +212,7 @@ public class TimestampIncrementingTableQuerierTest {
 
     assertFalse(querier.next());
 
-    querier.reset(0);
+    querier.reset(0, true);
     querier.maybeStartQuery(db);
 
     assertNextRecord(querier, initialOffset);

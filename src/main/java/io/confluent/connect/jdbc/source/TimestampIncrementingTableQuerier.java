@@ -65,6 +65,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   );
 
   protected final List<String> timestampColumnNames;
+  protected TimestampIncrementingOffset committedOffset;
   protected TimestampIncrementingOffset offset;
   protected TimestampIncrementingCriteria criteria;
   protected final Map<String, String> partition;
@@ -85,7 +86,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     this.timestampColumnNames = timestampColumnNames != null
         ? timestampColumnNames : Collections.emptyList();
     this.timestampDelay = timestampDelay;
-    this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
+    this.committedOffset = this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
 
     this.timestampColumns = new ArrayList<>();
     for (String timestampColumn : this.timestampColumnNames) {
@@ -162,6 +163,15 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
       dialect.validateSpecificColumnTypes(metadata, timestampColumns);
       schemaMapping = SchemaMapping.create(schemaName, metadata, dialect);
     }
+
+    updateCommittedOffset();
+  }
+
+  private void updateCommittedOffset() {
+    // This is called everytime during poll() before extracting records,
+    // to ensure that the previous run succeeded, allowing us to move the committedOffset forward.
+    // This action is a no-op for the first poll()
+    this.committedOffset = this.offset;
   }
 
   private void findDefaultAutoIncrementingColumn(Connection db) throws SQLException {
@@ -216,6 +226,17 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     }
     offset = criteria.extractValues(schemaMapping.schema(), record, offset);
     return new SourceRecord(partition, offset.toMap(), topic, record.schema(), record);
+  }
+
+
+  @Override
+  public void reset(long now, boolean resetOffset) {
+    // the task is being reset, any uncommitted offset needs to be reset as well
+    // use the previous committedOffset to set the running offset
+    if (resetOffset) {
+      this.offset = this.committedOffset;
+    }
+    super.reset(now, resetOffset);
   }
 
   @Override

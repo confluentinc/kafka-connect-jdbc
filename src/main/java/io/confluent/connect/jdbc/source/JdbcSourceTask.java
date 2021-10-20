@@ -387,7 +387,7 @@ public class JdbcSourceTask extends SourceTask {
         if (!hadNext) {
           // If we finished processing the results from the current query, we can reset and send
           // the querier to the tail of the queue
-          resetAndRequeueHead(querier);
+          resetAndRequeueHead(querier, false);
         }
 
         if (results.isEmpty()) {
@@ -411,17 +411,17 @@ public class JdbcSourceTask extends SourceTask {
       } catch (SQLNonTransientException sqle) {
         log.error("Non-transient SQL exception while running query for table: {}",
             querier, sqle);
-        resetAndRequeueHead(querier);
+        resetAndRequeueHead(querier, true);
         // This task has failed, so close any resources (may be reopened if needed) before throwing
         closeResources();
         throw new ConnectException(sqle);
       } catch (SQLException sqle) {
         log.error("SQL exception while running query for table: {}", querier, sqle);
-        resetAndRequeueHead(querier);
+        resetAndRequeueHead(querier, true);
         return null;
       } catch (Throwable t) {
         log.error("Failed to run query for table: {}", querier, t);
-        resetAndRequeueHead(querier);
+        resetAndRequeueHead(querier, true);
         // This task has failed, so close any resources (may be reopened if needed) before throwing
         closeResources();
         throw t;
@@ -435,16 +435,16 @@ public class JdbcSourceTask extends SourceTask {
   private void shutdown() {
     final TableQuerier querier = tableQueue.peek();
     if (querier != null) {
-      resetAndRequeueHead(querier);
+      resetAndRequeueHead(querier, true);
     }
     closeResources();
   }
 
-  private void resetAndRequeueHead(TableQuerier expectedHead) {
+  private void resetAndRequeueHead(TableQuerier expectedHead, boolean resetOffset) {
     log.debug("Resetting querier {}", expectedHead.toString());
     TableQuerier removedQuerier = tableQueue.poll();
     assert removedQuerier == expectedHead;
-    expectedHead.reset(time.milliseconds());
+    expectedHead.reset(time.milliseconds(), resetOffset);
     tableQueue.add(expectedHead);
   }
 

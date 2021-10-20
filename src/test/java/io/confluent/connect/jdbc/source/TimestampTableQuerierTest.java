@@ -262,13 +262,67 @@ public class TimestampTableQuerierTest {
 
     assertFalse(querier.next());
 
-    querier.reset(0);
+    querier.reset(0, true);
     querier.maybeStartQuery(db);
 
     // We have to commit for the last record in the batch
     assertNextRecord(querier, INITIAL_TS);
 
     assertFalse(querier.next());
+  }
+
+  @Test
+  public void testMultipleDoubleRecordResultSetsOffsetReset() throws Exception {
+    Timestamp firstNewTimestamp = new Timestamp(INITIAL_TS.getTime() + 1);
+    expectNewQuery();
+    expectNewQuery();
+    TimestampIncrementingTableQuerier querier = querier(INITIAL_TS);
+    expectRecord(INITIAL_TS);
+    expectRecord(firstNewTimestamp);
+    expect(resultSet.next()).andReturn(false);
+    expectReset();
+
+    replayAll();
+
+    querier.maybeStartQuery(db);
+
+    // We have to commit for the last record in the batch
+    assertNextRecord(querier, INITIAL_TS);
+    assertNextRecord(querier, firstNewTimestamp);
+
+    assertFalse(querier.next());
+
+    querier.reset(0, true);
+    querier.maybeStartQuery(db);
+
+    assertEquals(querier.offset.getTimestampOffset(), INITIAL_TS);
+  }
+
+  @Test
+  public void testMultipleDoubleRecordResultSetsNoOffsetReset() throws Exception {
+    Timestamp firstNewTimestamp = new Timestamp(INITIAL_TS.getTime() + 1);
+    expectNewQuery();
+    expectNewQuery();
+    TimestampIncrementingTableQuerier querier = querier(INITIAL_TS);
+    expectRecord(INITIAL_TS);
+    expectRecord(firstNewTimestamp);
+    expect(resultSet.next()).andReturn(false);
+    expectReset();
+
+    replayAll();
+
+    querier.maybeStartQuery(db);
+
+    // We have to commit for the last record in the batch
+    assertNextRecord(querier, INITIAL_TS);
+    assertNextRecord(querier, firstNewTimestamp);
+
+    assertFalse(querier.next());
+
+    querier.reset(0, false);
+    querier.maybeStartQuery(db);
+
+    assertEquals(querier.offset.getTimestampOffset(), firstNewTimestamp);
   }
 
   private void assertNextRecord(

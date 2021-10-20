@@ -81,6 +81,15 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       = "JDBC connection backoff in milliseconds";
   public static final long CONNECTION_BACKOFF_DEFAULT = 10000L;
 
+  public static final String CONNECTION_TTL_MS_CONFIG = CONNECTION_PREFIX + "ttl.ms";
+  public static final long CONNECTION_TTL_MS_DEFAULT = -1;
+  public static final String CONNECTION_TTL_MS_DOC = "Time to live in milliseconds"
+          + " for individual database connections. When the ttl expires,"
+          + " the existing db connection is closed,"
+          + " and a new one is opened, which can help manage database resources."
+          + " Defaults to -1, which is an infinite ttl";
+  public static final String CONNECTION_TTL_MS_DISPLAY = "Database Connection Time To Live (ms)";
+
   public static final String POLL_INTERVAL_MS_CONFIG = "poll.interval.ms";
   private static final String POLL_INTERVAL_MS_DOC = "Frequency in ms to poll for new data in "
                                                      + "each table.";
@@ -446,7 +455,24 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.LONG,
         DIALECT_NAME_DISPLAY,
-        DatabaseDialectRecommender.INSTANCE);
+        DatabaseDialectRecommender.INSTANCE
+    ).define(
+        CONNECTION_TTL_MS_CONFIG,
+        Type.LONG,
+        CONNECTION_TTL_MS_DEFAULT,
+            (String k, Object v) -> {
+          if (v == null) {
+            throw new ConfigException(k, v, "connection ttl must not be null.");
+          }
+        },
+        Importance.MEDIUM,
+        CONNECTION_TTL_MS_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        CONNECTION_TTL_MS_DISPLAY,
+        (Recommender) null
+    );
   }
 
   private static final void addModeOptions(ConfigDef config) {

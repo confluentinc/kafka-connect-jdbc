@@ -86,7 +86,17 @@ public class JdbcSourceConnector extends SourceConnector {
         dbUrl,
         config
     );
-    cachedConnectionProvider = connectionProvider(maxConnectionAttempts, connectionRetryBackoff);
+
+    final long connectionTTL = config.getLong(JdbcSourceConnectorConfig.CONNECTION_TTL_MS_CONFIG);
+    log.info(
+            "JdbcSourceConnector: Connection TTL: {}",
+            connectionTTL == -1 ? "infinite" : connectionTTL
+    );
+    cachedConnectionProvider = connectionProvider(
+            maxConnectionAttempts,
+            connectionRetryBackoff,
+            connectionTTL
+    );
 
     // Initial connection attempt
     cachedConnectionProvider.getConnection();
@@ -126,8 +136,12 @@ public class JdbcSourceConnector extends SourceConnector {
     }
   }
 
-  protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
-    return new CachedConnectionProvider(dialect, maxConnAttempts, retryBackoff);
+  protected CachedConnectionProvider connectionProvider(
+          int maxConnAttempts,
+          long retryBackoff,
+          long cacheTTL
+  ) {
+    return new CachedConnectionProvider(dialect, maxConnAttempts, retryBackoff, cacheTTL);
   }
 
   @Override

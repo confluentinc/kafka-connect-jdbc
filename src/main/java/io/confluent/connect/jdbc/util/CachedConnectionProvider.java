@@ -21,6 +21,7 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.time.Clock;
 
 public class CachedConnectionProvider implements ConnectionProvider {
 
@@ -28,6 +29,9 @@ public class CachedConnectionProvider implements ConnectionProvider {
 
   private static final int VALIDITY_CHECK_TIMEOUT_S = 5;
 
+  private final long cacheTTL;
+  private long connectionStartTs;
+  private final Clock clock;
   private final ConnectionProvider provider;
   private final int maxConnectionAttempts;
   private final long connectionRetryBackoff;
@@ -36,19 +40,53 @@ public class CachedConnectionProvider implements ConnectionProvider {
   private Connection connection;
 
   public CachedConnectionProvider(
-      ConnectionProvider provider,
-      int maxConnectionAttempts,
-      long connectionRetryBackoff
+          ConnectionProvider provider,
+          int maxConnectionAttempts,
+          long connectionRetryBackoff,
+          long cacheTTL
   ) {
     this.provider = provider;
     this.maxConnectionAttempts = maxConnectionAttempts;
     this.connectionRetryBackoff = connectionRetryBackoff;
+    this.cacheTTL = cacheTTL;
+    this.clock = Clock.systemUTC();
+  }
+
+  public CachedConnectionProvider(
+          ConnectionProvider provider,
+          int maxConnectionAttempts,
+          long connectionRetryBackoff,
+          long cacheTTL,
+          Clock clock,
+          Connection connection,
+          Long connectionStartTs
+  ) {
+    this.provider = provider;
+    this.maxConnectionAttempts = maxConnectionAttempts;
+    this.connectionRetryBackoff = connectionRetryBackoff;
+    this.cacheTTL = cacheTTL;
+    this.clock = clock;
+    this.connection = connection;
+    this.connectionStartTs = connectionStartTs;
+  }
+
+  public boolean connectionIsExpired() {
+    if (cacheTTL == -1) {
+      return false;
+    }
+    long now = clock.millis();
+    long connectionLifetime = now - connectionStartTs;
+    return cacheTTL < connectionLifetime;
   }
 
   @Override
   public synchronized Connection getConnection() {
     try {
       if (connection == null) {
+        newConnection();
+      } else if (connectionIsExpired()) {
+        log.info("The database connection is expired. Reconnecting...");
+        close();
         newConnection();
       } else if (!isConnectionValid(connection, VALIDITY_CHECK_TIMEOUT_S)) {
         log.info("The database connection is invalid. Reconnecting...");
@@ -78,6 +116,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
         ++count;
         log.info("Attempting to open connection #{} to {}", count, provider);
         connection = provider.getConnection();
+        connectionStartTs = clock.millis();
         onConnect(connection);
         return;
       } catch (SQLException sqle) {

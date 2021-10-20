@@ -15,20 +15,25 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.util.ConnectionProvider;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.easymock.EasyMock;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mockito;
 import org.powermock.api.easymock.PowerMock;
 import org.powermock.api.easymock.annotation.Mock;
 import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.modules.junit4.PowerMockRunner;
 
 import java.sql.Connection;
+import java.sql.SQLException;
 import java.sql.SQLNonTransientException;
+import java.time.Clock;
 import java.util.List;
 import java.util.Map;
+import java.util.PriorityQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -45,6 +50,8 @@ import static org.junit.Assert.assertThrows;
 @RunWith(PowerMockRunner.class)
 @PowerMockIgnore("javax.management.*")
 public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
+
+  private CachedConnectionProvider newMockCachedConnectionProvider;
 
   @Mock
   private CachedConnectionProvider mockCachedConnectionProvider;
@@ -74,8 +81,9 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
     task = new JdbcSourceTask(time) {
       @Override
       protected CachedConnectionProvider connectionProvider(
-          int maxConnAttempts,
-          long retryBackoff
+              int maxConnAttempts,
+              long retryBackoff,
+              long connectionTTL
       ) {
         return mockCachedConnectionProvider;
       }
@@ -128,8 +136,9 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
     task = new JdbcSourceTask(time) {
       @Override
       protected CachedConnectionProvider connectionProvider(
-          int maxConnAttempts,
-          long retryBackoff
+              int maxConnAttempts,
+              long retryBackoff,
+              long cacheTTL
       ) {
         return mockCachedConnectionProvider;
       }
@@ -315,4 +324,67 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
       assertEquals(table, record.sourcePartition().get(JdbcSourceConnectorConstants.TABLE_NAME_KEY));
     }
   }
+
+  @Test
+  public void testGetConnectionGetsCalledOnPoll() throws Exception {
+    PriorityQueue<TableQuerier> queue = mockTableQuerierQueue();
+    JdbcSourceTask mockTask = new JdbcSourceTask(time, queue) {
+      @Override
+      protected CachedConnectionProvider connectionProvider(
+              int maxConnAttempts,
+              long retryBackoff,
+              long connectionTTL
+      ) {
+        newMockCachedConnectionProvider = getNewMockCachedConnectionProvider(maxConnAttempts, retryBackoff);
+        return newMockCachedConnectionProvider;
+      }};
+
+    mockTask.start(singleTableConfig(false, false, 101));
+    mockTask.poll();
+
+    // Expect getConnection to be called 2 times. Once during the the sleep interval and once during the querying
+    Mockito.verify(newMockCachedConnectionProvider, Mockito.times(2)).getConnection();
+  }
+
+
+  private PriorityQueue<TableQuerier> mockTableQuerierQueue() throws SQLException {
+    SourceRecord srcRecord = Mockito.mock(SourceRecord.class);
+
+    TableQuerier tableQuerier = Mockito.mock(TableQuerier.class);
+    Mockito.stub(tableQuerier.next()).toReturn(true);
+    Mockito.stub(tableQuerier.extractRecord()).toReturn(srcRecord);
+    Mockito.stub(tableQuerier.getLastUpdate()).toReturn(time.milliseconds() - 100);
+
+    PriorityQueue<TableQuerier> queue = Mockito.spy(new PriorityQueue<>());
+    Mockito.stub(queue.peek()).toReturn(tableQuerier);
+
+    return queue;
+  }
+
+  private CachedConnectionProvider getNewMockCachedConnectionProvider(int maxConnAttempts, long retryBackoff) {
+    Connection mockConnection = Mockito.mock(Connection.class);
+    ConnectionProvider provider = Mockito.mock(ConnectionProvider.class);
+
+    try {
+      Mockito.stub(provider.isConnectionValid(mockConnection, 5)).toReturn(true);
+    } catch (SQLException throwables) {
+      throwables.printStackTrace();
+    }
+    CachedConnectionProvider ccp = new CachedConnectionProvider(
+            provider,
+            maxConnAttempts,
+            retryBackoff,
+            10L,
+            Clock.systemUTC(),
+            mockConnection,
+            -1L);
+    try {
+      Mockito.stub(provider.getConnection()).toReturn(mockConnection);
+    } catch (SQLException throwables) {
+      throwables.printStackTrace();
+    }
+
+    return Mockito.spy(ccp);
+  }
+
 }

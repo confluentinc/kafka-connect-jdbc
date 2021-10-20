@@ -14,6 +14,7 @@
  */
 package io.confluent.connect.jdbc.source;
 
+import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Recommender;
 import org.apache.kafka.common.config.ConfigValue;
@@ -28,11 +29,7 @@ import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CachedRecommenderValues;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CachingRecommender;
@@ -251,6 +248,42 @@ public class JdbcSourceConnectorConfigTest {
         validatedConfig.get(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG);
     assertNotNull(connectionAttemptsConfig);
     assertFalse(connectionAttemptsConfig.errorMessages().isEmpty());
+  }
+
+  @Test
+  public void testDbConnectionTTLMsConfigIsNotNull() {
+    String duration = "15000";
+    props.put(JdbcSourceConnectorConfig.CONNECTION_TTL_MS_CONFIG, duration);
+    Map<String, ConfigValue> validatedConfig = JdbcSourceConnectorConfig.baseConfigDef().validateAll(props);
+    ConfigValue actual =  validatedConfig.get(JdbcSourceConnectorConfig.CONNECTION_TTL_MS_CONFIG);
+    assertNotNull(actual);
+  }
+
+  @Test
+  public void testDbConnectionTTLMsIsCastToLong() {
+    String duration = "15000";
+    props.put(JdbcSourceConnectorConfig.CONNECTION_TTL_MS_CONFIG, duration);
+    Map<String, ConfigValue> validatedConfig = JdbcSourceConnectorConfig.baseConfigDef().validateAll(props);
+    ConfigValue actual =  validatedConfig.get(JdbcSourceConnectorConfig.CONNECTION_TTL_MS_CONFIG);
+    assertEquals(15000L, actual.value());
+  }
+
+  @Test
+  public void testDbConnectionTTLThrowsErrorIfInvalidValue() {
+    String notReallyADuration = "invalid";
+    props.put(JdbcSourceConnectorConfig.CONNECTION_TTL_MS_CONFIG, notReallyADuration);
+    Map<String, ConfigValue> validatedConfig = JdbcSourceConnectorConfig.baseConfigDef().validateAll(props);
+    ConfigValue actual = validatedConfig.get(JdbcSourceConnectorConfig.CONNECTION_TTL_MS_CONFIG);
+    assertEquals(2, actual.errorMessages().size());
+  }
+
+  @Test
+  public void testDbConnectionTTLReturnsErrorIfNull() {
+    String nullDuration = null;
+    props.put(JdbcSourceConnectorConfig.CONNECTION_TTL_MS_CONFIG, nullDuration);
+    Map<String, ConfigValue> validatedConfig = JdbcSourceConnectorConfig.baseConfigDef().validateAll(props);
+    ConfigValue actual = validatedConfig.get(JdbcSourceConnectorConfig.CONNECTION_TTL_MS_CONFIG);
+    assertEquals(1, actual.errorMessages().size());
   }
 
   @SuppressWarnings("unchecked")

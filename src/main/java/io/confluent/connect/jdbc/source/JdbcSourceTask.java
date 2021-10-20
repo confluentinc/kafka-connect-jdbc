@@ -66,16 +66,23 @@ public class JdbcSourceTask extends SourceTask {
   private JdbcSourceTaskConfig config;
   private DatabaseDialect dialect;
   private CachedConnectionProvider cachedConnectionProvider;
-  private PriorityQueue<TableQuerier> tableQueue = new PriorityQueue<TableQuerier>();
+  private final PriorityQueue<TableQuerier> tableQueue;
   private final AtomicBoolean running = new AtomicBoolean(false);
   private final AtomicLong taskThreadId = new AtomicLong(0);
 
   public JdbcSourceTask() {
     this.time = new SystemTime();
+    this.tableQueue = new PriorityQueue<TableQuerier>();
   }
 
   public JdbcSourceTask(Time time) {
     this.time = time;
+    this.tableQueue = new PriorityQueue<TableQuerier>();
+  }
+
+  public JdbcSourceTask(Time time, PriorityQueue<TableQuerier> tableQueue) {
+    this.time = time;
+    this.tableQueue = tableQueue;
   }
 
   @Override
@@ -104,7 +111,13 @@ public class JdbcSourceTask extends SourceTask {
     }
     log.info("Using JDBC dialect {}", dialect.name());
 
-    cachedConnectionProvider = connectionProvider(maxConnAttempts, retryBackoff);
+    final long connectionTTL = config.getLong(JdbcSourceConnectorConfig.CONNECTION_TTL_MS_CONFIG);
+    log.info(
+            "JdbcSourceTask: Connection TTL is {}",
+            connectionTTL == -1 ? "infinite" : connectionTTL
+    );
+
+    cachedConnectionProvider = connectionProvider(maxConnAttempts, retryBackoff, connectionTTL);
 
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
     String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
@@ -264,8 +277,12 @@ public class JdbcSourceTask extends SourceTask {
     log.info("Started JDBC source task");
   }
 
-  protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
-    return new CachedConnectionProvider(dialect, maxConnAttempts, retryBackoff) {
+  protected CachedConnectionProvider connectionProvider(
+          int maxConnAttempts,
+          long retryBackoff,
+          long connectionTTL
+  ) {
+    return new CachedConnectionProvider(dialect, maxConnAttempts, retryBackoff, connectionTTL) {
       @Override
       protected void onConnect(final Connection connection) throws SQLException {
         super.onConnect(connection);
@@ -367,6 +384,8 @@ public class JdbcSourceTask extends SourceTask {
         final long sleepMs = Math.min(nextUpdate - now, 100);
 
         if (sleepMs > 0) {
+          // call getConnection to recycle the connection if ttl is expired
+          cachedConnectionProvider.getConnection();
           log.trace("Waiting {} ms to poll {} next", nextUpdate - now, querier.toString());
           time.sleep(sleepMs);
           continue; // Re-check stop flag before continuing

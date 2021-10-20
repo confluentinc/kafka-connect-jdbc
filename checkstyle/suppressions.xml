@@ -7,13 +7,13 @@
 <suppressions>
 
     <suppress checks="CyclomaticComplexity"
-              files="(BufferedRecords|DataConverter|DatabaseDialect|FieldsMetadata|HanaDialect|JdbcSourceTask|MySqlDatabaseDialect|OracleDatabaseDialect|PostgreSqlDatabaseDialect|PreparedStatementBinder|SqlServerDatabaseDialect|SqliteDatabaseDialect|TimestampIncrementingTableQuerier|GenericDatabaseDialect|SybaseDatabaseDialect|VerticaDatabaseDialect|SapHanaDatabaseDialect|TableId|ColumnDefinition|TableMonitorThread|JdbcSinkTask).java"/>
+              files="(BufferedRecords|DataConverter|DatabaseDialect|FieldsMetadata|HanaDialect|JdbcSourceTask|MySqlDatabaseDialect|OracleDatabaseDialect|PostgreSqlDatabaseDialect|PreparedStatementBinder|SqlServerDatabaseDialect|SqliteDatabaseDialect|TimestampIncrementingTableQuerier|GenericDatabaseDialect|SybaseDatabaseDialect|VerticaDatabaseDialect|SapHanaDatabaseDialect|TableId|ColumnDefinition|TableMonitorThread|JdbcSinkTask|JdbcSourceConnector).java"/>
 
     <suppress checks="ClassDataAbstractionCoupling"
               files="(DbDialect|JdbcSourceTask|GenericDatabaseDialect).java"/>
 
     <suppress checks="NPathComplexity"
-              files="(BufferedRecords|DataConverter|FieldsMetadata|JdbcSourceTask|GenericDatabaseDialect).java"/>
+              files="(BufferedRecords|DataConverter|FieldsMetadata|JdbcSourceTask|GenericDatabaseDialect|JdbcSourceConnector).java"/>
 
     <suppress checks="JavaNCSS"
               files="(DataConverter|FieldsMetadata|JdbcSourceTask|GenericDatabaseDialect).java"/>

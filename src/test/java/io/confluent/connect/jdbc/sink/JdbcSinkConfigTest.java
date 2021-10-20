@@ -27,6 +27,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 
 public class JdbcSinkConfigTest {
 
@@ -113,6 +114,13 @@ public class JdbcSinkConfigTest {
     assertTableTypes(TableType.TABLE);
   }
 
+  @Test
+  public void shouldCreateConfigWithConnectionTTL() {
+    props.put(JdbcSinkConfig.CONNECTION_TTL_MS_CONFIG, "0");
+    createConfig();
+    assertEquals(0L, config.connectionTTL);
+  }
+
   protected void createConfig() {
     config = new JdbcSinkConfig(props);
   }
@@ -122,5 +130,6 @@ public class JdbcSinkConfigTest {
     EnumSet<TableType> tableTypes = config.tableTypes;
     assertEquals(expected, tableTypes);
   }
+
 
 }

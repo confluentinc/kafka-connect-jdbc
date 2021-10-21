@@ -384,8 +384,14 @@ public class JdbcSourceTask extends SourceTask {
         final long sleepMs = Math.min(nextUpdate - now, 100);
 
         if (sleepMs > 0) {
-          // call getConnection to recycle the connection if ttl is expired
-          cachedConnectionProvider.getConnection();
+          // Ensure that idle connections get closed at/around the connectionTTL
+          if (cachedConnectionProvider.connectionIsExpired()) {
+            log.trace(
+                    "Database connection is expired. "
+                    + "Closing until the polling interval has elapsed..."
+            );
+            cachedConnectionProvider.close();
+          }
           log.trace("Waiting {} ms to poll {} next", nextUpdate - now, querier.toString());
           time.sleep(sleepMs);
           continue; // Re-check stop flag before continuing

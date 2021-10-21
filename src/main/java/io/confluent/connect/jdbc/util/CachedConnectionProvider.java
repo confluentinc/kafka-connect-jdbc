@@ -29,7 +29,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
 
   private static final int VALIDITY_CHECK_TIMEOUT_S = 5;
 
-  private final long cacheTTL;
+  private final long connectionTTL;
   private long connectionStartTs;
   private final Clock clock;
   private final ConnectionProvider provider;
@@ -42,13 +42,12 @@ public class CachedConnectionProvider implements ConnectionProvider {
   public CachedConnectionProvider(
           ConnectionProvider provider,
           int maxConnectionAttempts,
-          long connectionRetryBackoff,
-          long cacheTTL
+          long connectionRetryBackoff
   ) {
     this.provider = provider;
     this.maxConnectionAttempts = maxConnectionAttempts;
     this.connectionRetryBackoff = connectionRetryBackoff;
-    this.cacheTTL = cacheTTL;
+    this.connectionTTL = -1L;
     this.clock = Clock.systemUTC();
   }
 
@@ -56,7 +55,20 @@ public class CachedConnectionProvider implements ConnectionProvider {
           ConnectionProvider provider,
           int maxConnectionAttempts,
           long connectionRetryBackoff,
-          long cacheTTL,
+          long connectionTTL
+  ) {
+    this.provider = provider;
+    this.maxConnectionAttempts = maxConnectionAttempts;
+    this.connectionRetryBackoff = connectionRetryBackoff;
+    this.connectionTTL = connectionTTL;
+    this.clock = Clock.systemUTC();
+  }
+
+  public CachedConnectionProvider(
+          ConnectionProvider provider,
+          int maxConnectionAttempts,
+          long connectionRetryBackoff,
+          long connectionTTL,
           Clock clock,
           Connection connection,
           Long connectionStartTs
@@ -64,19 +76,19 @@ public class CachedConnectionProvider implements ConnectionProvider {
     this.provider = provider;
     this.maxConnectionAttempts = maxConnectionAttempts;
     this.connectionRetryBackoff = connectionRetryBackoff;
-    this.cacheTTL = cacheTTL;
+    this.connectionTTL = connectionTTL;
     this.clock = clock;
     this.connection = connection;
     this.connectionStartTs = connectionStartTs;
   }
 
   public boolean connectionIsExpired() {
-    if (cacheTTL == -1) {
+    if (connectionTTL == -1) {
       return false;
     }
     long now = clock.millis();
     long connectionLifetime = now - connectionStartTs;
-    return cacheTTL < connectionLifetime;
+    return connectionTTL < connectionLifetime;
   }
 
   @Override
@@ -85,7 +97,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
       if (connection == null) {
         newConnection();
       } else if (connectionIsExpired()) {
-        log.info("The database connection is expired. Reconnecting...");
+        log.trace("The database connection is expired. Reconnecting...");
         close();
         newConnection();
       } else if (!isConnectionValid(connection, VALIDITY_CHECK_TIMEOUT_S)) {

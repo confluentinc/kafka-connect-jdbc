@@ -22,6 +22,7 @@ import org.easymock.EasyMock;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
+import org.powermock.api.easymock.EasyMockConfiguration;
 import org.powermock.api.easymock.PowerMock;
 import org.powermock.api.easymock.annotation.Mock;
 import org.powermock.core.classloader.annotations.PowerMockIgnore;
@@ -90,6 +91,7 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
     };
 
     // Should request a connection, then should close it on stop()
+    EasyMock.expect(mockCachedConnectionProvider.connectionIsExpired()).andReturn(false).anyTimes();
     EasyMock.expect(mockCachedConnectionProvider.getConnection()).andReturn(db.getConnection()).anyTimes();
     mockCachedConnectionProvider.close();
 
@@ -343,7 +345,7 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
     mockTask.poll();
 
     // Expect getConnection to be called 2 times. Once during the the sleep interval and once during the querying
-    Mockito.verify(newMockCachedConnectionProvider, Mockito.times(2)).getConnection();
+    Mockito.verify(newMockCachedConnectionProvider, Mockito.times(1)).close();
   }
 
 

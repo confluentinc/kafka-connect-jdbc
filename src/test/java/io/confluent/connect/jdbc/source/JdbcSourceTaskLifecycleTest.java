@@ -344,7 +344,7 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
     mockTask.start(singleTableConfig(false, false, 101));
     mockTask.poll();
 
-    // Expect getConnection to be called 2 times. Once during the the sleep interval and once during the querying
+    // Expect cachedConnectionProvider.close() to be called once due to connection expiry.
     Mockito.verify(newMockCachedConnectionProvider, Mockito.times(1)).close();
   }
 

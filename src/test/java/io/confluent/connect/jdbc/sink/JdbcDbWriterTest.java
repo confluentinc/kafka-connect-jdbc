@@ -531,5 +531,4 @@ public class JdbcDbWriterTest {
         )
     );
   }
-
 }

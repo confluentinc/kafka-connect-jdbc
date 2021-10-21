@@ -117,4 +117,11 @@ public class JdbcDbWriter {
     }
     return dbDialect.parseTableIdentifier(tableName);
   }
+
+  public void handleIdling() {
+    if (cachedConnectionProvider.connectionIsExpired()) {
+      log.debug("No results found. Closing database connection until there's work to do...");
+      closeQuietly();
+    }
+  }
 }

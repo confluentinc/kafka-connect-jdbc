@@ -84,7 +84,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String CONNECTION_TTL_MS_CONFIG = CONNECTION_PREFIX + "ttl.ms";
   public static final long CONNECTION_TTL_MS_DEFAULT = -1;
   public static final String CONNECTION_TTL_MS_DOC = "Time to live in milliseconds"
-          + " for individual database connections. When the ttl expires,"
+          + " for individual database connections. Within 100 ms of the ttl expiry,"
           + " the existing db connection is closed,"
           + " and a new one is opened, which can help manage database resources."
           + " Defaults to -1, which is an infinite ttl";

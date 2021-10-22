@@ -121,7 +121,7 @@ public class JdbcDbWriter {
   public void handleIdling() {
     if (cachedConnectionProvider.connectionIsExpired()) {
       log.debug("No results found. Closing database connection until there's work to do...");
-      closeQuietly();
+      cachedConnectionProvider.close();
     }
   }
 }

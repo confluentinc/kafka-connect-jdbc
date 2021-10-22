@@ -71,7 +71,8 @@ public class JdbcSinkTask extends SinkTask {
   @Override
   public void put(Collection<SinkRecord> records) {
     if (records.isEmpty()) {
-      // closes the database connection if there's no work to do and the connection.ttl.ms is expired
+      // closes the database connection
+      // if there's no work to do and the connection.ttl.ms is expired
       writer.handleIdling();
       return;
     }

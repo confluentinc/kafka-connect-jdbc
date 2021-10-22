@@ -99,6 +99,8 @@ public class CachedConnectionProvider implements ConnectionProvider {
       } else if (connectionIsExpired()) {
         log.trace("The database connection is expired. Reconnecting...");
         close();
+        log.trace("Resetting connection count to 0, since this reconnection is expected behavior");
+        count = 0;
         newConnection();
       } else if (!isConnectionValid(connection, VALIDITY_CHECK_TIMEOUT_S)) {
         log.info("The database connection is invalid. Reconnecting...");

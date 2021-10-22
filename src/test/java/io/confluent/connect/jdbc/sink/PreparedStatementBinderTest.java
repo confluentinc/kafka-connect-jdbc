@@ -187,8 +187,8 @@ public class PreparedStatementBinderTest {
     // key field first
     verify(statement, times(1)).setLong(index++, valueStruct.getInt64("long"));
     // rest in order of schema def
-    verify(statement, times(1)).setString(index++, valueStruct.getString("firstName"));
-    verify(statement, times(1)).setString(index++, valueStruct.getString("lastName"));
+    verify(statement, times(1)).setObject(index++, valueStruct.getString("firstName"));
+    verify(statement, times(1)).setObject(index++, valueStruct.getString("lastName"));
     verify(statement, times(1)).setInt(index++, valueStruct.getInt32("age"));
     verify(statement, times(1)).setBoolean(index++, valueStruct.getBoolean("bool"));
     verify(statement, times(1)).setShort(index++, valueStruct.getInt16("short"));
@@ -261,7 +261,7 @@ public class PreparedStatementBinderTest {
       // key field first
       verify(statement, times(1)).setLong(index++, valueStruct.getInt64("long"));
       // rest in order of schema def
-      verify(statement, times(1)).setString(index++, valueStruct.getString("firstName"));
+      verify(statement, times(1)).setObject(index++, valueStruct.getString("firstName"));
     }
 
     @Test
@@ -311,7 +311,7 @@ public class PreparedStatementBinderTest {
       int index = 1;
 
       // non key first
-      verify(statement, times(1)).setString(index++, valueStruct.getString("firstName"));
+      verify(statement, times(1)).setObject(index++, valueStruct.getString("firstName"));
       // last the keys
       verify(statement, times(1)).setLong(index++, valueStruct.getInt64("long"));
     }

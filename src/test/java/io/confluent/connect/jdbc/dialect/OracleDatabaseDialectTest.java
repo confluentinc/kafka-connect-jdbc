@@ -335,7 +335,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
     when(colDefClob.type()).thenReturn(Types.CLOB);
 
     dialect.bindField(stmtVarchar, index, schema, value, colDefVarchar);
-    verify(stmtVarchar, times(1)).setString(index, value);
+    verify(stmtVarchar, times(1)).setObject(index, value);
 
     dialect.bindField(stmtNchar, index, schema, value, colDefNchar);
     verify(stmtNchar, times(1)).setNString(index, value);

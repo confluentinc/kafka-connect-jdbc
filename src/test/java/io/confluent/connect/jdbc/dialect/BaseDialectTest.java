@@ -451,7 +451,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
   @Test
   public void bindFieldStringValue() throws SQLException {
     int index = ThreadLocalRandom.current().nextInt();
-    verifyBindField(++index, Schema.STRING_SCHEMA, "yep").setString(index, "yep");
+    verifyBindField(++index, Schema.STRING_SCHEMA, "yep").setObject(index, "yep");
   }
 
   @Test

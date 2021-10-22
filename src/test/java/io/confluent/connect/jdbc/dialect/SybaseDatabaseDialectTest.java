@@ -345,7 +345,7 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
     verifyBindField(++index, Schema.FLOAT64_SCHEMA, 42d).setDouble(index, 42d);
     verifyBindField(++index, Schema.BYTES_SCHEMA, new byte[]{42}).setBytes(index, new byte[]{42});
     verifyBindField(++index, Schema.BYTES_SCHEMA, ByteBuffer.wrap(new byte[]{42})).setBytes(index, new byte[]{42});
-    verifyBindField(++index, Schema.STRING_SCHEMA, "yep").setString(index, "yep");
+    verifyBindField(++index, Schema.STRING_SCHEMA, "yep").setObject(index, "yep");
     verifyBindField(++index, Decimal.schema(0), new BigDecimal("1.5").setScale(0, BigDecimal.ROUND_HALF_EVEN)).setBigDecimal(index, new BigDecimal(2));
     Calendar utcCalendar = DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone(ZoneOffset.UTC));
     verifyBindField(

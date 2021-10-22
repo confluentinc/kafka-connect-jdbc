@@ -1663,7 +1663,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         statement.setBoolean(index, (Boolean) value);
         break;
       case STRING:
-        statement.setString(index, (String) value);
+        statement.setObject(index, value);
         break;
       case BYTES:
         final byte[] bytes;

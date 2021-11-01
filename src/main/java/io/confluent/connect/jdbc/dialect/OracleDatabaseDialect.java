@@ -140,14 +140,15 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     }
 
     if (schema.type() == Type.STRING) {
+      String strValue = (String) value;
       if (colDef.type() == Types.CLOB) {
-        statement.setCharacterStream(index, new StringReader((String) value));
+        statement.setCharacterStream(index, new StringReader(strValue), strValue.length());
         return true;
       } else if (colDef.type() == Types.NCLOB) {
-        statement.setNCharacterStream(index, new StringReader((String) value));
+        statement.setNCharacterStream(index, new StringReader(strValue), strValue.length());
         return true;
       } else if (colDef.type() == Types.NVARCHAR || colDef.type() == Types.NCHAR) {
-        statement.setNString(index, (String) value);
+        statement.setNString(index, strValue);
         return true;
       } else {
         return super.maybeBindPrimitive(statement, index, schema, value);

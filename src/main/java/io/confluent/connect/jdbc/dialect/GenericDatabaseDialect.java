@@ -15,6 +15,8 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import java.time.ZoneOffset;
 import java.util.TimeZone;
 import org.apache.kafka.common.config.AbstractConfig;
@@ -152,6 +154,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   private volatile JdbcDriverInfo jdbcDriverInfo;
   private final int batchMaxRows;
   private final TimeZone timeZone;
+  private HikariDataSource dataSource;
 
   /**
    * Create a new dialect instance with the given connector configuration.
@@ -232,11 +235,31 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       properties.setProperty("password", dbPassword.value());
     }
     properties = addConnectionProperties(properties);
-    // Timeout is 40 seconds to be as long as possible for customer to have a long connection
-    // handshake, while still giving enough time to validate once in the follower worker,
-    // and again in the leader worker and still be under 90s REST serving timeout
-    DriverManager.setLoginTimeout(40);
-    Connection connection = DriverManager.getConnection(jdbcUrl, properties);
+    final Connection connection;
+    try {
+      if (dataSource == null || dataSource.isClosed()) {
+        glog.info("Creating new pool");
+        final HikariConfig hikariConfig = new HikariConfig();
+        hikariConfig.setJdbcUrl(jdbcUrl);
+        hikariConfig.setMinimumIdle(0);
+        hikariConfig.setMaximumPoolSize(5);
+        hikariConfig.setDataSourceProperties(properties);
+        this.dataSource = new HikariDataSource(hikariConfig);
+        // Timeout is 40 seconds to be as long as possible for customer to have a long connection
+        // handshake, while still giving enough time to validate once in the follower worker,
+        // and again in the leader worker and still be under 90s REST serving timeout
+        dataSource.setLoginTimeout(40);
+      }
+      connection = dataSource.getConnection();
+    } catch (RuntimeException e) {
+      if (e.getClass().getPackage().getName().startsWith("com.zaxxer.hikari")) {
+        throw new SQLException(e);
+      }
+      if (e.getMessage().contains("Failed to get driver instance")) {
+        throw new SQLException("Hikari didn't find the driver", e);
+      }
+      throw e;
+    }
     if (jdbcDriverInfo == null) {
       jdbcDriverInfo = createJdbcDriverInfo(connection);
     }
@@ -246,6 +269,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
   @Override
   public void close() {
+    this.dataSource.close();
     Connection conn;
     while ((conn = connections.poll()) != null) {
       try {

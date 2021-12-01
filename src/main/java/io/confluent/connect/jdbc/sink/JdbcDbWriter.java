@@ -89,6 +89,8 @@ public class JdbcDbWriter {
       } finally {
         throw e;
       }
+    } finally {
+      connection.close();
     }
   }
 

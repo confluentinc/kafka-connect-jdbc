@@ -19,11 +19,11 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 @SuppressWarnings("serial")
-public class LRUCache<K, V> extends LinkedHashMap<K, V> {
+public class LruCache<K, V> extends LinkedHashMap<K, V> {
 
   private final int maxEntries;
 
-  public LRUCache(int maxEntries) {
+  public LruCache(int maxEntries) {
     super(16, 0.75f, true);
     this.maxEntries = maxEntries;
   }

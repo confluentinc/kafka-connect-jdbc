@@ -75,6 +75,7 @@ import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.NumericMapping;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TimestampMapping;
 import io.confluent.connect.jdbc.source.JdbcSourceTaskConfig;
 import io.confluent.connect.jdbc.source.TimestampIncrementingCriteria;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
@@ -90,6 +91,9 @@ import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.TableType;
+
+import io.confluent.connect.jdbc.data.NanoEpochTimestamp;
+import io.confluent.connect.jdbc.data.NanoStringTimestamp;
 
 /**
  * A {@link DatabaseDialect} implementation that provides functionality based upon JDBC and SQL.
@@ -140,6 +144,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
    * Whether to map {@code NUMERIC} JDBC types by precision.
    */
   protected final NumericMapping mapNumerics;
+  protected final TimestampMapping mapTimestamps;
   protected String catalogPattern;
   protected final String schemaPattern;
   protected final Set<String> tableTypes;
@@ -195,9 +200,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     }
     if (config instanceof JdbcSourceConnectorConfig) {
       mapNumerics = ((JdbcSourceConnectorConfig)config).numericMapping();
+      mapTimestamps = ((JdbcSourceConnectorConfig)config).timestampMapping();
       batchMaxRows = config.getInt(JdbcSourceConnectorConfig.BATCH_MAX_ROWS_CONFIG);
     } else {
       mapNumerics = NumericMapping.NONE;
+      mapTimestamps = TimestampMapping.NONE;
       batchMaxRows = 0;
     }
 
@@ -949,7 +956,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       ColumnId incrementingColumn,
       List<ColumnId> timestampColumns
   ) {
-    return new TimestampIncrementingCriteria(incrementingColumn, timestampColumns, timeZone);
+    return new TimestampIncrementingCriteria(
+      incrementingColumn,
+      timestampColumns,
+      mapTimestamps,
+      timeZone);
   }
 
   /**
@@ -1153,13 +1164,30 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       }
 
       // Timestamp is a date + time
+      // TODO justin
       case Types.TIMESTAMP: {
-        SchemaBuilder tsSchemaBuilder = org.apache.kafka.connect.data.Timestamp.builder();
-        if (optional) {
-          tsSchemaBuilder.optional();
+        if (mapTimestamps == TimestampMapping.NANO_EPOCH) {
+          SchemaBuilder ntSchemaBuilder = NanoEpochTimestamp.builder();
+          if (optional) {
+            ntSchemaBuilder.optional();
+          }
+          builder.field(fieldName, ntSchemaBuilder.build());
+          break;
+        } else if (mapTimestamps == TimestampMapping.NANO_STRING) {
+          SchemaBuilder ntsSchemaBuilder = NanoStringTimestamp.builder();
+          if (optional) {
+            ntsSchemaBuilder.optional();
+          }
+          builder.field(fieldName, ntsSchemaBuilder.build());
+          break;
+        } else {
+          SchemaBuilder tsSchemaBuilder = org.apache.kafka.connect.data.Timestamp.builder();
+          if (optional) {
+            tsSchemaBuilder.optional();
+          }
+          builder.field(fieldName, tsSchemaBuilder.build());
+          break;
         }
-        builder.field(fieldName, tsSchemaBuilder.build());
-        break;
       }
 
       case Types.ARRAY:
@@ -1384,8 +1412,21 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       }
 
       // Timestamp is a date + time
+      // TODO justin
       case Types.TIMESTAMP: {
-        return rs -> rs.getTimestamp(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
+        if (mapTimestamps == TimestampMapping.NANO_EPOCH) {
+          return rs -> {
+            Timestamp ts = rs.getTimestamp(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
+            return NanoEpochTimestamp.toNanoEpoch(ts);
+          };
+        } else if (mapTimestamps == TimestampMapping.NANO_STRING) {
+          return rs -> {
+            Timestamp ts = rs.getTimestamp(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
+            return NanoStringTimestamp.toNanoString(ts);
+          };
+        } else {
+          return rs -> rs.getTimestamp(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
+        }
       }
 
       // Datalink is basically a URL -> string

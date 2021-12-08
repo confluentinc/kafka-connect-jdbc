@@ -36,6 +36,9 @@ import java.util.stream.Collectors;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
+import io.confluent.connect.jdbc.data.NanoEpochTimestamp;
+import io.confluent.connect.jdbc.data.NanoStringTimestamp;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TimestampMapping;
 
 public class TimestampIncrementingCriteria {
 
@@ -72,19 +75,21 @@ public class TimestampIncrementingCriteria {
   protected static final BigDecimal LONG_MAX_VALUE_AS_BIGDEC = new BigDecimal(Long.MAX_VALUE);
 
   protected final Logger log = LoggerFactory.getLogger(getClass());
+  protected final TimestampMapping mapTimestamps;
   protected final List<ColumnId> timestampColumns;
   protected final ColumnId incrementingColumn;
   protected final TimeZone timeZone;
 
-
   public TimestampIncrementingCriteria(
       ColumnId incrementingColumn,
       List<ColumnId> timestampColumns,
+      TimestampMapping mapTimestamps,
       TimeZone timeZone
   ) {
     this.timestampColumns =
         timestampColumns != null ? timestampColumns : Collections.<ColumnId>emptyList();
     this.incrementingColumn = incrementingColumn;
+    this.mapTimestamps = mapTimestamps;
     this.timeZone = timeZone;
   }
 
@@ -218,7 +223,14 @@ public class TimestampIncrementingCriteria {
       Struct record
   ) {
     for (ColumnId timestampColumn : timestampColumns) {
-      Timestamp ts = (Timestamp) record.get(timestampColumn.name());
+      Timestamp ts;
+      if (mapTimestamps == TimestampMapping.NANO_STRING) {
+        ts = NanoStringTimestamp.fromNanoString((String) record.get(timestampColumn.name()));
+      } else if (mapTimestamps == TimestampMapping.NANO_EPOCH) {
+        ts = NanoEpochTimestamp.fromNanoEpoch((long) record.get(timestampColumn.name()));
+      } else {
+        ts = (Timestamp) record.get(timestampColumn.name());
+      }
       if (ts != null) {
         return ts;
       }

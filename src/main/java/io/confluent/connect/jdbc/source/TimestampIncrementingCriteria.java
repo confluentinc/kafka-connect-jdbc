@@ -15,7 +15,12 @@
 
 package io.confluent.connect.jdbc.source;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.TimeZone;
+
+import io.confluent.connect.jdbc.util.LRUCache;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
@@ -31,6 +36,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.util.ColumnId;
@@ -75,6 +81,7 @@ public class TimestampIncrementingCriteria {
   protected final List<ColumnId> timestampColumns;
   protected final ColumnId incrementingColumn;
   protected final TimeZone timeZone;
+  private final LRUCache<Schema, List<String>> caseAdjustedTimestampColumns;
 
 
   public TimestampIncrementingCriteria(
@@ -86,6 +93,8 @@ public class TimestampIncrementingCriteria {
         timestampColumns != null ? timestampColumns : Collections.<ColumnId>emptyList();
     this.incrementingColumn = incrementingColumn;
     this.timeZone = timeZone;
+    this.caseAdjustedTimestampColumns =
+        timestampColumns != null ? new LRUCache<>(16) : null;
   }
 
   protected boolean hasTimestampColumns() {
@@ -216,8 +225,9 @@ public class TimestampIncrementingCriteria {
       Schema schema,
       Struct record
   ) {
-    for (ColumnId timestampColumn : timestampColumns) {
-      Timestamp ts = (Timestamp) record.get(timestampColumn.name());
+    caseAdjustedTimestampColumns.computeIfAbsent(schema, this::findCaseSensitiveTimestampColumns);
+    for (String timestampColumn : caseAdjustedTimestampColumns.get(schema)) {
+      Timestamp ts = (Timestamp) record.get(timestampColumn);
       if (ts != null) {
         return ts;
       }
@@ -240,7 +250,7 @@ public class TimestampIncrementingCriteria {
     final Field field = schema.field(incrementingColumn.name());
     if (field == null) {
       throw new DataException("Incrementing column " + incrementingColumn.name() + " not found in "
-              + schema.fields().stream().map(f -> f.name()).collect(Collectors.joining(",")));
+              + schema.fields().stream().map(Field::name).collect(Collectors.joining(",")));
     }
 
     final Schema incrementingColumnSchema = field.schema();
@@ -336,6 +346,49 @@ public class TimestampIncrementingCriteria {
     builder.append(" < ? ORDER BY ");
     coalesceTimestampColumns(builder);
     builder.append(" ASC");
+  }
+
+  private List<String> findCaseSensitiveTimestampColumns(Schema schema) {
+    Map<String, List<String>> caseInsensitiveColumns = schema.fields().stream()
+        .map(Field::name)
+        .collect(Collectors.groupingBy(String::toLowerCase));
+
+    List<String> result = new ArrayList<>();
+    for (ColumnId timestampColumn : timestampColumns) {
+      String columnName = timestampColumn.name();
+      if (schema.field(columnName) != null) {
+        log.trace("Timestamp column name {} case-sensitively matches column read from database", columnName);
+        result.add(columnName);
+      } else {
+        log.debug(
+            "Timestamp column name {} not found in columns read from database; falling back to a case-insensitive search",
+            columnName
+        );
+        List<String> caseInsensitiveMatches = caseInsensitiveColumns.get(columnName.toLowerCase());
+        if (caseInsensitiveMatches == null || caseInsensitiveMatches.isEmpty()) {
+          throw new DataException("Timestamp column " + columnName + " not found in "
+              + schema.fields().stream().map(Field::name).collect(Collectors.joining(",")));
+        } else if (caseInsensitiveMatches.size() > 1) {
+          throw new DataException("Timestamp column " + columnName + " not found in columns read from database: "
+              + schema.fields().stream().map(Field::name).collect(Collectors.joining(","))
+              + ". Could not fall back to case-insensitively selecting a column because there were multiple columns whose names "
+              + "case-insensitively matched the specified name: " + String.join(",", caseInsensitiveMatches)
+              + ". To force the connector to choose between these columns, specify a value for the timestamp column "
+              + "configuration property that matches the desired column case-sensitively."
+          );
+        } else {
+          String caseAdjustedColumnName = caseInsensitiveMatches.get(0);
+          log.debug(
+              "Falling back on column {} for user-specified timestamp column {} (this is the only column that case-insensitively matches)",
+              caseAdjustedColumnName,
+              columnName
+          );
+          result.add(caseAdjustedColumnName);
+        }
+      }
+    }
+
+    return result;
   }
 
 }

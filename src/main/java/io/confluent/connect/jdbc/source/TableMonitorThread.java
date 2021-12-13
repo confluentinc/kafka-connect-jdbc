@@ -198,7 +198,7 @@ public class TableMonitorThread extends Thread {
    * @return a {@link RuntimeException} that can be thrown from the calling method, for convenience
    */
   private RuntimeException fail(Throwable t) {
-    String message = "Encountered an unrecoverable rrorwhile reading tables from the database ";
+    String message = "Encountered an unrecoverable error while reading tables from the database";
     log.error(message, t);
 
     RuntimeException exception = new ConnectException(message, t);

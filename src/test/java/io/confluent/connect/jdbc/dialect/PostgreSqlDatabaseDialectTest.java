@@ -15,32 +15,30 @@
 
 package io.confluent.connect.jdbc.dialect;
 
-import java.sql.JDBCType;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.Types;
+import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.QuoteMethod;
+import io.confluent.connect.jdbc.util.TableDefinition;
+import io.confluent.connect.jdbc.util.TableDefinitionBuilder;
+import io.confluent.connect.jdbc.util.TableId;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Schema.Type;
+import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
+import java.sql.JDBCType;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
-
-import io.confluent.connect.jdbc.util.ColumnDefinition;
-import io.confluent.connect.jdbc.util.ColumnId;
-import io.confluent.connect.jdbc.util.QuoteMethod;
-import io.confluent.connect.jdbc.util.TableDefinition;
-import io.confluent.connect.jdbc.util.TableDefinitionBuilder;
-import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
@@ -418,6 +416,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
+<<<<<<< HEAD
   @Override
   public void bindFieldArrayUnsupported() throws SQLException {
       // Overridden simply to dummy out the test.
@@ -439,3 +438,118 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     super.verifyBindField(++index, SchemaBuilder.array(Schema.BOOLEAN_SCHEMA), Arrays.asList(true, false, true )).setObject(index, new Object[] { true, false, true }, Types.ARRAY);
   }
 }
+=======
+  public void shouldComputeMaxTableNameLength() throws Exception {
+    int expectedMaxLength = 24;
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.next()).thenReturn(true);
+    when(resultSet.getInt(1)).thenReturn(expectedMaxLength);
+
+    Statement statement = mock(Statement.class);
+    when(statement.executeQuery("SELECT length(repeat('1234567890', 1000)::NAME);"))
+        .thenReturn(resultSet);
+
+    Connection connection = mock(Connection.class);
+    when(connection.createStatement()).thenReturn(statement);
+
+    int actualMaxLength = PostgreSqlDatabaseDialect.computeMaxIdentifierLength(connection);
+
+    assertEquals(expectedMaxLength, actualMaxLength);
+  }
+
+  @Test
+  public void shouldGracefullyHandleErrorWhenComputingMaxTableNameLength() throws Exception {
+    Statement statement = mock(Statement.class);
+    when(statement.executeQuery("SELECT length(repeat('1234567890', 1000)::NAME);"))
+        .thenThrow(new SQLException("I plead the fifth"));
+
+    Connection connection = mock(Connection.class);
+    when(connection.createStatement()).thenReturn(statement);
+
+    int actualMaxLength = PostgreSqlDatabaseDialect.computeMaxIdentifierLength(connection);
+
+    assertEquals(Integer.MAX_VALUE, actualMaxLength);
+  }
+
+  @Test
+  public void shouldGracefullyHandleEmptyResultSetWhenComputingMaxTableNameLength() throws Exception {
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.next()).thenReturn(false);
+
+    Statement statement = mock(Statement.class);
+    when(statement.executeQuery("SELECT length(repeat('1234567890', 1000)::NAME);"))
+        .thenReturn(resultSet);
+
+    Connection connection = mock(Connection.class);
+    when(connection.createStatement()).thenReturn(statement);
+
+    int actualMaxLength = PostgreSqlDatabaseDialect.computeMaxIdentifierLength(connection);
+
+    assertEquals(Integer.MAX_VALUE, actualMaxLength);
+  }
+
+  @Test
+  public void shouldGracefullyHandleInvalidValueWhenComputingMaxTableNameLength() throws Exception {
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.next()).thenReturn(true);
+    when(resultSet.getInt(1)).thenReturn(0);
+
+    Statement statement = mock(Statement.class);
+    when(statement.executeQuery("SELECT length(repeat('1234567890', 1000)::NAME);"))
+        .thenReturn(resultSet);
+
+    Connection connection = mock(Connection.class);
+    when(connection.createStatement()).thenReturn(statement);
+
+    int actualMaxLength = PostgreSqlDatabaseDialect.computeMaxIdentifierLength(connection);
+
+    assertEquals(Integer.MAX_VALUE, actualMaxLength);
+  }
+
+  @Test
+  public void shouldTruncateTableNames() {
+
+    final String tableFqn = "some.table";
+
+    // Table name is one byte longer than it's allowed to be; should be truncated
+    dialect.maxIdentifierLength = 4;
+    TableId expectedTableId = new TableId(
+        null,
+        "some",
+        "tabl"
+    );
+    TableId actualTableId = dialect.parseTableIdentifier(tableFqn);
+    assertEquals(expectedTableId, actualTableId);
+
+    // Table name is exactly as long as it's allowed to be; should not be truncated
+    dialect.maxIdentifierLength = 5;
+    expectedTableId = new TableId(
+        null,
+        "some",
+        "table"
+    );
+    actualTableId = dialect.parseTableIdentifier(tableFqn);
+    assertEquals(expectedTableId, actualTableId);
+
+    // Something went wrong when computing the max length
+    dialect.maxIdentifierLength = Integer.MAX_VALUE;
+    expectedTableId = new TableId(
+        null,
+        "some",
+        "table"
+    );
+    actualTableId = dialect.parseTableIdentifier(tableFqn);
+    assertEquals(expectedTableId, actualTableId);
+
+    // We haven't computed the max length at all yet
+    dialect.maxIdentifierLength = 0;
+    expectedTableId = new TableId(
+        null,
+        "some",
+        "table"
+    );
+    actualTableId = dialect.parseTableIdentifier(tableFqn);
+    assertEquals(expectedTableId, actualTableId);
+  }
+}
+>>>>>>> 10.1.x

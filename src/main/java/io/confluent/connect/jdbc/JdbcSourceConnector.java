@@ -147,7 +147,13 @@ public class JdbcSourceConnector extends SourceConnector {
       return taskConfigs;
     } else {
       List<TableId> currentTables = tableMonitorThread.tables();
-      if (currentTables.isEmpty()) {
+      if (currentTables == null) {
+        taskConfigs = Collections.emptyList();
+        log.info(
+            "No tasks will be run because the connector has not been able to read "
+                + "the list of tables from the database yet"
+        );
+      } else if (currentTables.isEmpty()) {
         taskConfigs = Collections.emptyList();
         log.warn("No tasks will be run because no tables were found");
       } else {

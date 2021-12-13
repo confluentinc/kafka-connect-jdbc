@@ -16,6 +16,7 @@
 package io.confluent.connect.jdbc.source;
 
 import java.time.ZoneOffset;
+import java.util.Collections;
 import java.util.TimeZone;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -47,6 +48,8 @@ public class TimestampIncrementingCriteriaTest {
   private static final ColumnId TS1_COLUMN = new ColumnId(TABLE_ID, "ts1");
   private static final ColumnId TS2_COLUMN = new ColumnId(TABLE_ID, "ts2");
   private static final List<ColumnId> TS_COLUMNS = Arrays.asList(TS1_COLUMN, TS2_COLUMN);
+  private static final java.sql.Timestamp TS1 = new java.sql.Timestamp(4761);
+  private static final java.sql.Timestamp TS2 = new java.sql.Timestamp(176400L);
 
   private IdentifierRules rules;
   private QuoteMethod identifierQuoting;
@@ -145,6 +148,112 @@ public class TimestampIncrementingCriteriaTest {
             .build();
     record = new Struct(schema).put("real-id", 42);
     criteriaIncTs.extractValues(schema, record, null);
+  }
+
+  @Test
+  public void extractWithTsColumn() throws Exception {
+    schema = SchemaBuilder.struct()
+        .field(TS1_COLUMN.name(), Timestamp.SCHEMA)
+        .field(TS2_COLUMN.name(), Timestamp.SCHEMA)
+        .build();
+    record = new Struct(schema)
+        .put(TS1_COLUMN.name(), TS1)
+        .put(TS2_COLUMN.name(), TS2);
+    TimestampIncrementingOffset offset = criteriaTs.extractValues(schema, record, null);
+    assertEquals(TS1, offset.getTimestampOffset());
+  }
+
+  @Test
+  public void extractWithFallbackTsColumn() throws Exception {
+    schema = SchemaBuilder.struct()
+        .field(TS1_COLUMN.name(), Timestamp.builder().optional().build())
+        .field(TS2_COLUMN.name(), Timestamp.SCHEMA)
+        .build();
+    record = new Struct(schema)
+        .put(TS1_COLUMN.name(), null)
+        .put(TS2_COLUMN.name(), TS2);
+    TimestampIncrementingOffset offset = criteriaTs.extractValues(schema, record, null);
+    assertEquals(TS2, offset.getTimestampOffset());
+  }
+
+  @Test
+  public void extractWithCaseInsensitiveTsColumn() throws Exception {
+    schema = SchemaBuilder.struct()
+        .field(TS1_COLUMN.name().toUpperCase(), Timestamp.SCHEMA)
+        .field(TS2_COLUMN.name(), Timestamp.SCHEMA)
+        .build();
+    record = new Struct(schema)
+        .put(TS1_COLUMN.name().toUpperCase(), TS1)
+        .put(TS2_COLUMN.name(), TS2);
+    TimestampIncrementingOffset offset = criteriaTs.extractValues(schema, record, null);
+    assertEquals(TS1, offset.getTimestampOffset());
+  }
+
+  @Test
+  public void extractWithCaseInsensitiveFallbackTsColumn() throws Exception {
+    schema = SchemaBuilder.struct()
+        .field(TS1_COLUMN.name(), Timestamp.builder().optional().build())
+        .field(TS2_COLUMN.name().toUpperCase(), Timestamp.SCHEMA)
+        .build();
+    record = new Struct(schema)
+        .put(TS1_COLUMN.name(), null)
+        .put(TS2_COLUMN.name().toUpperCase(), TS2);
+    TimestampIncrementingOffset offset = criteriaTs.extractValues(schema, record, null);
+    assertEquals(TS2, offset.getTimestampOffset());
+  }
+
+  @Test(expected = DataException.class)
+  public void extractWithTsColumnNotExisting() throws Exception {
+    schema = SchemaBuilder.struct()
+        .field(TS1_COLUMN.name(), Timestamp.SCHEMA)
+        .build();
+    record = new Struct(schema)
+        .put(TS1_COLUMN.name(), TS1);
+    criteriaTs.extractValues(schema, record, null);
+  }
+
+  @Test(expected = DataException.class)
+  public void extractWithConflictingCaseInsensitiveTsColumns() throws Exception {
+    String lowerCaseColumnName = "ts1";
+    String upperCaseColumnName = "TS1";
+    String invalidColumnName = "tS1";
+
+    criteriaTs = new TimestampIncrementingCriteria(
+        null,
+        Collections.singletonList(new ColumnId(TABLE_ID, invalidColumnName)),
+        utcTimeZone
+    );
+
+    schema = SchemaBuilder.struct()
+        .field(lowerCaseColumnName, Timestamp.SCHEMA)
+        .field(upperCaseColumnName, Timestamp.SCHEMA)
+        .build();
+    record = new Struct(schema)
+        .put(lowerCaseColumnName, TS1)
+        .put(upperCaseColumnName, TS2);
+    criteriaTs.extractValues(schema, record, null);
+  }
+
+  @Test
+  public void extractWithCaseSensitiveTsColumnGivenPrecedence() throws Exception {
+    String lowerCaseColumnName = "ts1";
+    String upperCaseColumnName = "TS1";
+
+    criteriaTs = new TimestampIncrementingCriteria(
+        null,
+        Collections.singletonList(new ColumnId(TABLE_ID, lowerCaseColumnName)),
+        utcTimeZone
+    );
+
+    schema = SchemaBuilder.struct()
+        .field(lowerCaseColumnName, Timestamp.SCHEMA)
+        .field(upperCaseColumnName, Timestamp.SCHEMA)
+        .build();
+    record = new Struct(schema)
+        .put(lowerCaseColumnName, TS1)
+        .put(upperCaseColumnName, TS2);
+    TimestampIncrementingOffset offset = criteriaTs.extractValues(schema, record, null);
+    assertEquals(TS1, offset.getTimestampOffset());
   }
 
   @Test

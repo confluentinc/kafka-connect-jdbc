@@ -28,9 +28,11 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
@@ -45,10 +47,9 @@ public class TableMonitorThread extends Thread {
   private final ConnectorContext context;
   private final CountDownLatch shutdownLatch;
   private final long pollMs;
-  private Set<String> whitelist;
-  private Set<String> blacklist;
-  private List<TableId> tables;
-  private Map<String, List<TableId>> duplicates;
+  private final Set<String> whitelist;
+  private final Set<String> blacklist;
+  private final AtomicReference<List<TableId>> tables;
 
   public TableMonitorThread(DatabaseDialect dialect,
       ConnectionProvider connectionProvider,
@@ -64,8 +65,7 @@ public class TableMonitorThread extends Thread {
     this.pollMs = pollMs;
     this.whitelist = whitelist;
     this.blacklist = blacklist;
-    this.tables = null;
-
+    this.tables = new AtomicReference<>();
   }
 
   @Override
@@ -77,8 +77,7 @@ public class TableMonitorThread extends Thread {
           context.requestTaskReconfiguration();
         }
       } catch (Exception e) {
-        context.raiseError(e);
-        throw e;
+        throw fail(e);
       }
 
       try {
@@ -93,22 +92,37 @@ public class TableMonitorThread extends Thread {
     }
   }
 
-  public synchronized List<TableId> tables() {
-    //TODO: Timeout should probably be user-configurable or class-level constant
-    final long timeout = 10000L;
-    long started = System.currentTimeMillis();
-    long now = started;
-    while (tables == null && now - started < timeout) {
-      try {
-        wait(timeout - (now - started));
-      } catch (InterruptedException e) {
-        // Ignore
-      }
-      now = System.currentTimeMillis();
+  /**
+   * @return the latest set of tables from the database that should be read by the connector, or
+   *         {@link null} if the connector has not been able to read any tables from the database
+   *         successfully yet
+   */
+  public List<TableId> tables() {
+    List<TableId> tablesSnapshot = tables.get();
+    if (tablesSnapshot == null) {
+      return null;
     }
-    if (tables == null) {
-      throw new ConnectException("Tables could not be updated quickly enough.");
+
+    Map<String, List<TableId>> duplicates = tablesSnapshot.stream()
+        .collect(Collectors.groupingBy(TableId::tableName))
+        .entrySet().stream()
+        .filter(entry -> entry.getValue().size() > 1)
+        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+    if (tablesSnapshot.isEmpty()) {
+      log.debug(
+          "Based on the supplied filtering rules, there are no matching tables to read from"
+      );
+    } else {
+      log.debug(
+          "Based on the supplied filtering rules, the tables available to read from include: {}",
+          dialect.expressionBuilder()
+              .appendList()
+              .delimitedBy(",")
+              .of(tablesSnapshot)
+      );
     }
+
     if (!duplicates.isEmpty()) {
       String configText;
       if (whitelist != null) {
@@ -125,9 +139,10 @@ public class TableMonitorThread extends Thread {
           + "JDBC Source connector fails to start when it detects duplicate table name "
           + "configurations. Update the connector's " + configText + " config to include exactly "
           + "one table in each of the tables listed below.\n\t";
-      throw new ConnectException(msg + duplicates.values());
+      RuntimeException exception = new ConnectException(msg + duplicates.values());
+      throw fail(exception);
     }
-    return tables;
+    return tablesSnapshot;
   }
 
   public void shutdown() {
@@ -135,11 +150,11 @@ public class TableMonitorThread extends Thread {
     shutdownLatch.countDown();
   }
 
-  private synchronized boolean updateTables() {
-    final List<TableId> tables;
+  private boolean updateTables() {
+    final List<TableId> allTables;
     try {
-      tables = dialect.tableIds(connectionProvider.getConnection());
-      log.debug("Got the following tables: {}", tables);
+      allTables = dialect.tableIds(connectionProvider.getConnection());
+      log.debug("Got the following tables: {}", allTables);
     } catch (SQLException e) {
       log.error(
           "Error while trying to get updated table list, ignoring and waiting for next table poll"
@@ -150,9 +165,9 @@ public class TableMonitorThread extends Thread {
       return false;
     }
 
-    final List<TableId> filteredTables = new ArrayList<>(tables.size());
+    final List<TableId> filteredTables = new ArrayList<>(allTables.size());
     if (whitelist != null) {
-      for (TableId table : tables) {
+      for (TableId table : allTables) {
         String fqn1 = dialect.expressionBuilder().append(table, QuoteMethod.NEVER).toString();
         String fqn2 = dialect.expressionBuilder().append(table, QuoteMethod.ALWAYS).toString();
         if (whitelist.contains(fqn1) || whitelist.contains(fqn2)
@@ -161,7 +176,7 @@ public class TableMonitorThread extends Thread {
         }
       }
     } else if (blacklist != null) {
-      for (TableId table : tables) {
+      for (TableId table : allTables) {
         String fqn1 = dialect.expressionBuilder().append(table, QuoteMethod.NEVER).toString();
         String fqn2 = dialect.expressionBuilder().append(table, QuoteMethod.ALWAYS).toString();
         if (!(blacklist.contains(fqn1) || blacklist.contains(fqn2)
@@ -170,39 +185,28 @@ public class TableMonitorThread extends Thread {
         }
       }
     } else {
-      filteredTables.addAll(tables);
+      filteredTables.addAll(allTables);
     }
 
-    if (!filteredTables.equals(this.tables)) {
-      Map<String, List<TableId>> duplicates = filteredTables.stream()
-          .collect(Collectors.groupingBy(TableId::tableName))
-          .entrySet().stream()
-          .filter(entry -> entry.getValue().size() > 1)
-          .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-      this.duplicates = duplicates;
-      final List<TableId> previousTables = this.tables;
-      this.tables = filteredTables;
+    List<TableId> priorTablesSnapshot = tables.getAndSet(filteredTables);
+    return !Objects.equals(priorTablesSnapshot, filteredTables);
+  }
 
-      if (filteredTables.isEmpty()) {
-        log.debug(
-            "Based on the supplied filtering rules, there are no matching tables to read from"
-        );
-      } else {
-        log.debug(
-            "Based on the supplied filtering rules, the tables available to read from include: {}",
-            dialect.expressionBuilder()
-                .appendList()
-                .delimitedBy(",")
-                .of(filteredTables)
-        );
-      }
+  /**
+   * Fail the connector with an unrecoverable error and stop the table monitoring thread
+   * @param t the cause of the failure
+   * @return a {@link RuntimeException} that can be thrown from the calling method, for convenience
+   */
+  private RuntimeException fail(Throwable t) {
+    String message = "Encountered an unrecoverable error while reading tables from the database";
+    log.error(message, t);
 
-      notifyAll();
-      // Only return true if the table list wasn't previously null, i.e. if this was not the
-      // first table lookup
-      return previousTables != null;
-    }
+    RuntimeException exception = new ConnectException(message, t);
+    context.raiseError(exception);
 
-    return false;
+    // Preemptively shut down the monitoring thread
+    // so that we don't keep trying to read from the database
+    shutdownLatch.countDown();
+    return exception;
   }
 }

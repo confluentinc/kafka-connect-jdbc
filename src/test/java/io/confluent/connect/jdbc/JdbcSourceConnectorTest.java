@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc;
 
+import org.apache.kafka.connect.connector.ConnectorContext;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.easymock.EasyMock;
 import org.easymock.Mock;
@@ -34,6 +35,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.source.EmbeddedDerby;
@@ -74,6 +77,8 @@ public class JdbcSourceConnectorTest {
 
   @Mock
   private DatabaseDialect dialect;
+  @Mock
+  private ConnectorContext connectorContext;
 
   @Before
   public void setup() {
@@ -155,7 +160,22 @@ public class JdbcSourceConnectorTest {
     // Tests simplest case where we have exactly 1 table and also ensures we return fewer tasks
     // if there aren't enough tables for the max # of tasks
     db.createTable("test", "id", "INT NOT NULL");
+
+    CountDownLatch taskReconfigurationLatch = new CountDownLatch(1);
+    connectorContext.requestTaskReconfiguration();
+    EasyMock.expectLastCall().andAnswer(() -> {
+      taskReconfigurationLatch.countDown();
+      return null;
+    });
+    EasyMock.replay(connectorContext);
+    connector.initialize(connectorContext);
+
     connector.start(connProps);
+    assertTrue(
+        "Connector should have request task reconfiguration after reading tables from the database",
+        taskReconfigurationLatch.await(10, TimeUnit.SECONDS)
+    );
+
     List<Map<String, String>> configs = connector.taskConfigs(10);
     assertEquals(1, configs.size());
     assertTaskConfigsHaveParentConfigs(configs);
@@ -171,7 +191,22 @@ public class JdbcSourceConnectorTest {
     db.createTable("test2", "id", "INT NOT NULL");
     db.createTable("test3", "id", "INT NOT NULL");
     db.createTable("test4", "id", "INT NOT NULL");
+
+    CountDownLatch taskReconfigurationLatch = new CountDownLatch(1);
+    connectorContext.requestTaskReconfiguration();
+    EasyMock.expectLastCall().andAnswer(() -> {
+      taskReconfigurationLatch.countDown();
+      return null;
+    });
+    EasyMock.replay(connectorContext);
+    connector.initialize(connectorContext);
+
     connector.start(connProps);
+    assertTrue(
+        "Connector should have request task reconfiguration after reading tables from the database",
+        taskReconfigurationLatch.await(10, TimeUnit.SECONDS)
+    );
+
     List<Map<String, String>> configs = connector.taskConfigs(3);
     assertEquals(3, configs.size());
     assertTaskConfigsHaveParentConfigs(configs);

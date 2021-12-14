@@ -94,7 +94,7 @@ public class TableMonitorThread extends Thread {
 
   /**
    * @return the latest set of tables from the database that should be read by the connector, or
-   *         {@link null} if the connector has not been able to read any tables from the database
+   *         {@code null} if the connector has not been able to read any tables from the database
    *         successfully yet
    */
   public List<TableId> tables() {

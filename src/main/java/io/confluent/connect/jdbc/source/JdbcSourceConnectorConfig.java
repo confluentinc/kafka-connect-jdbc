@@ -187,6 +187,21 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "Use -1 to use the current time. If not specified, all data will be retrieved.";
   public static final String TIMESTAMP_INITIAL_DISPLAY = "Unix time value of initial timestamp";
 
+  public static final String TIMESTAMP_GRANULARITY_CONNECT_LOGICAL = "connect-logical";
+  public static final String TIMESTAMP_GRANULARITY_LONG_NANOS = "nanos-long";
+  public static final String TIMESTAMP_GRANULARITY_STRING_NANOS = "nanos-string";
+  public static final String TIMESTAMP_GRANULARITY_STRING_ISO_DATETIME = "iso-datetime-string";
+  public static final String TIMESTAMP_GRANULARITY_CONFIG = "timestamp.granularity";
+  public static final String TIMESTAMP_GRANULARITY_DOC =
+      "Define the granularity of the Timestamp column. Options include: \n"
+          + "  * connect-logical (default): represents timestamp values using Kafka Connect's "
+          + "built-in representations "
+          + "  * nanos-long: represents timestamp values as nanos since epoch"
+          + "  * nanos-string: represents timestamp values as nanos since epoch in string"
+          + "  * iso-datetime-string: uses the iso format 'yyyy-MM-dd'T'HH:mm:ss.n'";
+  public static final String TIMESTAMP_GRANULARITY_DISPLAY = "Timestamp granularity for "
+      + "timestamp columns";
+
   public static final String TABLE_POLL_INTERVAL_MS_CONFIG = "table.poll.interval.ms";
   private static final String TABLE_POLL_INTERVAL_MS_DOC =
       "Frequency in ms to poll for new or removed tables, which may result in updated task "
@@ -643,7 +658,23 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         CONNECTOR_GROUP,
         ++orderInGroup,
         Width.MEDIUM,
-        DB_TIMEZONE_CONFIG_DISPLAY);
+        DB_TIMEZONE_CONFIG_DISPLAY
+    ).define(
+        TIMESTAMP_GRANULARITY_CONFIG,
+        Type.STRING,
+        TIMESTAMP_GRANULARITY_CONNECT_LOGICAL,
+        ConfigDef.ValidString.in(
+            TIMESTAMP_GRANULARITY_CONNECT_LOGICAL,
+            TIMESTAMP_GRANULARITY_LONG_NANOS,
+            TIMESTAMP_GRANULARITY_STRING_NANOS,
+            TIMESTAMP_GRANULARITY_STRING_ISO_DATETIME
+        ),
+        Importance.MEDIUM,
+        TIMESTAMP_GRANULARITY_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        TIMESTAMP_GRANULARITY_DISPLAY);
   }
 
   public static final ConfigDef CONFIG_DEF = baseConfigDef();

@@ -70,6 +70,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   protected TimestampIncrementingCriteria criteria;
   protected final Map<String, String> partition;
   protected final String topic;
+  protected final String timestampGranularity;
   private final List<ColumnId> timestampColumns;
   private String incrementingColumnName;
   private final long timestampDelay;
@@ -80,7 +81,8 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
                                            List<String> timestampColumnNames,
                                            String incrementingColumnName,
                                            Map<String, Object> offsetMap, Long timestampDelay,
-                                           TimeZone timeZone, String suffix) {
+                                           TimeZone timeZone, String suffix,
+                                           String timestampGranularity) {
     super(dialect, mode, name, topicPrefix, suffix);
     this.incrementingColumnName = incrementingColumnName;
     this.timestampColumnNames = timestampColumnNames != null
@@ -111,6 +113,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     }
 
     this.timeZone = timeZone;
+    this.timestampGranularity = timestampGranularity;
   }
 
   /**
@@ -220,7 +223,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
         throw new DataException(e);
       }
     }
-    offset = criteria.extractValues(schemaMapping.schema(), record, offset);
+    offset = criteria.extractValues(schemaMapping.schema(), record, offset, timestampGranularity);
     return new SourceRecord(partition, offset.toMap(), topic, record.schema(), record);
   }
 

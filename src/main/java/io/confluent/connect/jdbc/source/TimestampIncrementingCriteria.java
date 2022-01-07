@@ -41,6 +41,10 @@ import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 
+import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TIMESTAMP_GRANULARITY_LONG_NANOS;
+import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TIMESTAMP_GRANULARITY_STRING_ISO_DATETIME;
+import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TIMESTAMP_GRANULARITY_STRING_NANOS;
+
 public class TimestampIncrementingCriteria {
 
   /**
@@ -186,16 +190,18 @@ public class TimestampIncrementingCriteria {
    * @param schema the record's schema; never null
    * @param record the record's struct; never null
    * @param previousOffset a previous timestamp offset if the table has timestamp columns
+   * @param timestampGranularity defines the configured grrityanualrity of the timestamp field
    * @return the timestamp for this row; may not be null
    */
   public TimestampIncrementingOffset extractValues(
       Schema schema,
       Struct record,
-      TimestampIncrementingOffset previousOffset
+      TimestampIncrementingOffset previousOffset,
+      String timestampGranularity
   ) {
     Timestamp extractedTimestamp = null;
     if (hasTimestampColumns()) {
-      extractedTimestamp = extractOffsetTimestamp(schema, record);
+      extractedTimestamp = extractOffsetTimestamp(schema, record, timestampGranularity);
       assert previousOffset == null || (previousOffset.getTimestampOffset() != null
                                         && previousOffset.getTimestampOffset().compareTo(
           extractedTimestamp) <= 0
@@ -218,15 +224,40 @@ public class TimestampIncrementingCriteria {
    *
    * @param schema the record's schema; never null
    * @param record the record's struct; never null
+   * @param timestampGranularity defines the configured granularity of the timestamp field
    * @return the timestamp for this row; may not be null
    */
   protected Timestamp extractOffsetTimestamp(
       Schema schema,
-      Struct record
+      Struct record,
+      String timestampGranularity
   ) {
     caseAdjustedTimestampColumns.computeIfAbsent(schema, this::findCaseSensitiveTimestampColumns);
     for (String timestampColumn : caseAdjustedTimestampColumns.get(schema)) {
-      Timestamp ts = (Timestamp) record.get(timestampColumn);
+      Timestamp ts;
+      switch (timestampGranularity) {
+        case TIMESTAMP_GRANULARITY_LONG_NANOS:
+          ts = DateTimeUtils.toTimestamp((long) record.get(timestampColumn));
+          break;
+        case TIMESTAMP_GRANULARITY_STRING_NANOS:
+          try {
+            ts = DateTimeUtils.toTimestamp((String) record.get(timestampColumn));
+          } catch (NumberFormatException  e) {
+            throw new ConnectException(
+                "Invalid value for timestamp column with nanos-string granularity: "
+                    + record.get(timestampColumn)
+                    + e.getMessage());
+          }
+          break;
+        case TIMESTAMP_GRANULARITY_STRING_ISO_DATETIME:
+          ts = DateTimeUtils.toTimestampFromIsoDateTime(
+              (String) record.get(timestampColumn)
+          );
+          break;
+        default:
+          ts = (Timestamp) record.get(timestampColumn);
+          break;
+      }
       if (ts != null) {
         return ts;
       }

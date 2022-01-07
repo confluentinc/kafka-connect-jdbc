@@ -62,7 +62,8 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
       Map<String, Object> offsetMap,
       Long timestampDelay,
       TimeZone timeZone,
-      String suffix
+      String suffix,
+      String timestampGranularity
   ) {
     super(
         dialect,
@@ -74,7 +75,8 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
         offsetMap,
         timestampDelay,
         timeZone,
-        suffix
+        suffix,
+        timestampGranularity
     );
 
     this.latestCommittableTimestamp = this.offset.getTimestampOffset();
@@ -145,7 +147,8 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
         throw new DataException(e);
       }
     }
-    this.offset = criteria.extractValues(schemaMapping.schema(), record, offset);
+    this.offset = criteria.extractValues(schemaMapping.schema(), record, offset,
+        timestampGranularity);
     Timestamp timestamp = offset.hasTimestampOffset() ? offset.getTimestampOffset() : null;
     return new PendingRecord(partition, timestamp, topic, record.schema(), record);
   }

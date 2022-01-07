@@ -190,7 +190,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String TIMESTAMP_GRANULARITY_CONNECT_LOGICAL = "connect-logical";
   public static final String TIMESTAMP_GRANULARITY_LONG_NANOS = "nanos-long";
   public static final String TIMESTAMP_GRANULARITY_STRING_NANOS = "nanos-string";
-  public static final String TIMESTAMP_GRANULARITY_STRING_ISO_DATETIME = "nanos-iso-datetime-string";
+  public static final String TIMESTAMP_GRANULARITY_STRING_ISO_DATETIME =
+      "nanos-iso-datetime-string";
   public static final String TIMESTAMP_GRANULARITY_CONFIG = "timestamp.granularity";
   public static final String TIMESTAMP_GRANULARITY_DOC =
       "Define the granularity of the Timestamp column. Options include: \n"

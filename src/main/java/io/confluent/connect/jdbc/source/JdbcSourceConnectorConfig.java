@@ -199,7 +199,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
           + "built-in representations "
           + "  * nanos-long: represents timestamp values as nanos since epoch"
           + "  * nanos-string: represents timestamp values as nanos since epoch in string"
-          + "  * iso-datetime-string: uses the iso format 'yyyy-MM-dd'T'HH:mm:ss.n'";
+          + "  * nanos-iso-datetime-string: uses the iso format 'yyyy-MM-dd'T'HH:mm:ss.n'";
   public static final String TIMESTAMP_GRANULARITY_DISPLAY = "Timestamp granularity for "
       + "timestamp columns";
 

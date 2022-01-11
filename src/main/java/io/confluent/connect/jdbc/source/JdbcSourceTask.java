@@ -158,6 +158,8 @@ public class JdbcSourceTask extends SourceTask {
         = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
     TimeZone timeZone = config.timeZone();
     String suffix = config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG).trim();
+    String whereClause
+        = config.getString(JdbcSourceTaskConfig.QUERY_WHERE_CONFIG).trim();
 
     for (String tableOrQuery : tablesOrQuery) {
       final List<Map<String, String>> tablePartitionsToCheck;
@@ -202,13 +204,18 @@ public class JdbcSourceTask extends SourceTask {
 
       String topicPrefix = config.topicPrefix();
 
+      Map<String, String> options = new HashMap<String, String>();
+      options.put("suffix", suffix);
+      options.put("whereClause", whereClause);
+      
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(
             new BulkTableQuerier(
-                dialect, 
-                queryMode, 
-                tableOrQuery, 
-                topicPrefix, 
+                dialect,
+                queryMode,
+                tableOrQuery,
+                topicPrefix,
+                whereClause,
                 suffix
             )
         );
@@ -224,7 +231,7 @@ public class JdbcSourceTask extends SourceTask {
                 offset,
                 timestampDelayInterval,
                 timeZone,
-                suffix
+                options
             )
         );
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
@@ -238,7 +245,7 @@ public class JdbcSourceTask extends SourceTask {
                 offset,
                 timestampDelayInterval,
                 timeZone,
-                suffix
+                options
             )
         );
       } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
@@ -253,7 +260,7 @@ public class JdbcSourceTask extends SourceTask {
                 offset,
                 timestampDelayInterval,
                 timeZone,
-                suffix
+                options
             )
         );
       }

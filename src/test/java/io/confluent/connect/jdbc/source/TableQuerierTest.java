@@ -23,6 +23,8 @@ import io.confluent.connect.jdbc.util.TableId;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -39,6 +41,8 @@ public class TableQuerierTest {
   private static final String SUFFIX = "/* SUFFIX */";   
   private static final Long TIMESTAMP_DELAY = 0l;
   private static final String QUERY = "SELECT * FROM name";
+  private static final String WHERE = "name.id > 1";
+  private static final Map<String, String> options = new HashMap<String, String>();
 
   DatabaseDialect databaseDialectMock;
   
@@ -55,7 +59,9 @@ public class TableQuerierTest {
     when(databaseDialectMock.criteriaFor(Matchers.any(ColumnId.class), Matchers.anyListOf(ColumnId.class)))
       .thenReturn(new TimestampIncrementingCriteria(new ColumnId(new TableId(null,null,TABLE_NAME),INCREMENTING_COLUMN_NAME), null,null));
 	    
-    connectionMock = mock(Connection.class);	  
+    connectionMock = mock(Connection.class);
+    options.put("suffix", SUFFIX);
+    options.put("whereClause", WHERE);
   }
   
   @Test
@@ -70,12 +76,12 @@ public class TableQuerierTest {
                                                     null,
                                                     TIMESTAMP_DELAY,
                                                     null,
-                                                    SUFFIX
+                                                    options
                                                 );
       
     querier.createPreparedStatement(connectionMock);
 
-    verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM \"name\" WHERE \"name\".\"column\" > ? ORDER BY \"name\".\"column\" ASC /* SUFFIX */"));
+    verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM \"name\" WHERE name.id > 1 AND \"name\".\"column\" > ? ORDER BY \"name\".\"column\" ASC /* SUFFIX */"));
   }
 
   @Test
@@ -90,12 +96,12 @@ public class TableQuerierTest {
                                                     null, 
                                                     TIMESTAMP_DELAY, 
                                                     null, 
-                                                    SUFFIX
+                                                    options
                                                 );
       
     querier.createPreparedStatement(connectionMock);
 
-    verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM name WHERE \"name\".\"column\" > ? ORDER BY \"name\".\"column\" ASC /* SUFFIX */"));
+    verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM name WHERE name.id > 1 AND \"name\".\"column\" > ? ORDER BY \"name\".\"column\" ASC /* SUFFIX */"));
   }
   
   @Test
@@ -105,12 +111,13 @@ public class TableQuerierTest {
                                    QueryMode.TABLE, 
                                    TABLE_NAME, 
                                    null, 
+                                   WHERE,
                                    SUFFIX
                                );
       
     querier.createPreparedStatement(connectionMock);
 
-    verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM \"name\" /* SUFFIX */"));
+    verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM \"name\" WHERE name.id > 1 /* SUFFIX */"));
   }
 
   @Test
@@ -120,12 +127,13 @@ public class TableQuerierTest {
                                    QueryMode.QUERY,
                                    QUERY, 
                                    null, 
+                                   WHERE,
                                    SUFFIX
                                );
       
     querier.createPreparedStatement(connectionMock);
 
-    verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM name /* SUFFIX */"));
+    verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM name WHERE name.id > 1 /* SUFFIX */"));
   }
 
   @Test
@@ -135,11 +143,30 @@ public class TableQuerierTest {
                                    QueryMode.QUERY, 
                                    QUERY, 
                                    null, 
+                                   WHERE, 
                                    "" /* default value */
                                );
       
     querier.createPreparedStatement(connectionMock);
 
-    verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM name"));
+    verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM name WHERE name.id > 1"));
   }  
+
+
+  @Test
+  public void testBulkTableQuerierInQueryModeWithDefaultWhere() throws SQLException {
+    BulkTableQuerier querier = new BulkTableQuerier(
+                                   databaseDialectMock, 
+                                   QueryMode.QUERY, 
+                                   QUERY, 
+                                   null, 
+                                   "", 
+                                   SUFFIX
+                               );
+      
+    querier.createPreparedStatement(connectionMock);
+
+    verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM name /* SUFFIX */"));
+  }  
+
 }

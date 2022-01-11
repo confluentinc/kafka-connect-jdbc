@@ -80,8 +80,10 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
                                            List<String> timestampColumnNames,
                                            String incrementingColumnName,
                                            Map<String, Object> offsetMap, Long timestampDelay,
-                                           TimeZone timeZone, String suffix) {
-    super(dialect, mode, name, topicPrefix, suffix);
+                                           TimeZone timeZone, Map<String, String> options) {
+    super(dialect, mode, name, topicPrefix, 
+            options.getOrDefault("whereClause", JdbcSourceConnectorConfig.QUERY_WHERE_DEFAULT), 
+            options.getOrDefault("suffix", JdbcSourceConnectorConfig.QUERY_SUFFIX_DEFAULT));
     this.incrementingColumnName = incrementingColumnName;
     this.timestampColumnNames = timestampColumnNames != null
         ? timestampColumnNames : Collections.emptyList();
@@ -140,6 +142,12 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
         throw new ConnectException("Unknown mode encountered when preparing query: " + mode);
     }
 
+    // Append WHERE clause provided in config, if any
+    builder.append(" WHERE ");
+    if (!whereClause.isEmpty()) {
+      builder.append(whereClause).append(" AND ");
+    }
+    
     // Append the criteria using the columns ...
     criteria = dialect.criteriaFor(incrementingColumn, timestampColumns);
     criteria.whereClause(builder);

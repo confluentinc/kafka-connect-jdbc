@@ -311,7 +311,6 @@ public class TimestampIncrementingCriteria {
     //  timestamp 1235, id 22
     //  timestamp 1236, id 23
     // We should capture both id = 22 (an update) and id = 23 (a new row)
-    builder.append(" WHERE ");
     coalesceTimestampColumns(builder);
     builder.append(" < ? AND ((");
     coalesceTimestampColumns(builder);
@@ -329,7 +328,6 @@ public class TimestampIncrementingCriteria {
   }
 
   protected void incrementingWhereClause(ExpressionBuilder builder) {
-    builder.append(" WHERE ");
     builder.append(incrementingColumn);
     builder.append(" > ?");
     builder.append(" ORDER BY ");
@@ -338,7 +336,6 @@ public class TimestampIncrementingCriteria {
   }
 
   protected void timestampWhereClause(ExpressionBuilder builder) {
-    builder.append(" WHERE ");
     coalesceTimestampColumns(builder);
     builder.append(" > ? AND ");
     coalesceTimestampColumns(builder);

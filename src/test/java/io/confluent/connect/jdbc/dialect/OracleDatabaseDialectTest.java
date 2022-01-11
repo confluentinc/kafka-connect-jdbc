@@ -57,10 +57,8 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
   @Override
   @Test
   public void bindFieldStringValue() throws SQLException {
-    String value = "yep";
     int index = ThreadLocalRandom.current().nextInt();
-    verifyBindField(++index, Schema.STRING_SCHEMA, value)
-        .setCharacterStream(eq(index), any(StringReader.class), eq(value.length()));
+    verifyBindField(++index, Schema.STRING_SCHEMA, "yep").setCharacterStream(eq(index), any(StringReader.class));
   }
 
   @Override
@@ -346,8 +344,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
     verify(stmtNvarchar, times(1)).setNString(index, value);
 
     dialect.bindField(stmtClob, index, schema, value, colDefClob);
-    verify(stmtClob, times(1))
-        .setCharacterStream(eq(index), any(StringReader.class), eq(value.length()));
+    verify(stmtClob, times(1)).setCharacterStream(eq(index), any(StringReader.class));
   }
 
   @Test

@@ -65,6 +65,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.package.home>target/${project.artifactId}-${project.version}-package</project.package.home>
         <maven.release.plugin.version>2.5.3</maven.release.plugin.version>
+        <testcontainers.version>1.16.2</testcontainers.version>
     </properties>
 
     <repositories>
@@ -229,7 +230,13 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers</artifactId>
-            <version>1.15.0-rc2</version>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>oracle-xe</artifactId>
+            <version>${testcontainers.version}</version>
             <scope>test</scope>
         </dependency>
 

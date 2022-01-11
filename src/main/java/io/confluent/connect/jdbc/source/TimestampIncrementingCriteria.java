@@ -186,7 +186,7 @@ public class TimestampIncrementingCriteria {
    * @param schema the record's schema; never null
    * @param record the record's struct; never null
    * @param previousOffset a previous timestamp offset if the table has timestamp columns
-   * @param timestampGranularity defines the configured grrityanualrity of the timestamp field
+   * @param timestampGranularity defines the configured granularity of the timestamp field
    * @return the timestamp for this row; may not be null
    */
   public TimestampIncrementingOffset extractValues(
@@ -230,16 +230,9 @@ public class TimestampIncrementingCriteria {
   ) {
     caseAdjustedTimestampColumns.computeIfAbsent(schema, this::findCaseSensitiveTimestampColumns);
     for (String timestampColumn : caseAdjustedTimestampColumns.get(schema)) {
-      try {
-        Timestamp ts = timestampGranularity.toTimestamp.apply(record.get(timestampColumn));
-        if (ts != null) {
-          return ts;
-        }
-      } catch (NumberFormatException  e) {
-        throw new ConnectException(
-            "Invalid value for timestamp column with nanos-string granularity: "
-                + record.get(timestampColumn)
-                + e.getMessage());
+      Timestamp ts = timestampGranularity.toTimestamp.apply(record.get(timestampColumn));
+      if (ts != null) {
+        return ts;
       }
     }
     return null;

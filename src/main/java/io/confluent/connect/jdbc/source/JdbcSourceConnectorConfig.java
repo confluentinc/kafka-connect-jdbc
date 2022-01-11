@@ -44,6 +44,7 @@ import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -666,7 +667,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Type.STRING,
         TimestampGranularity.DEFAULT,
         TIMESTAMP_GRANULARITY_RECOMMENDER,
-        Importance.MEDIUM,
+        Importance.LOW,
         TIMESTAMP_GRANULARITY_DOC,
         CONNECTOR_GROUP,
         ++orderInGroup,
@@ -828,7 +829,16 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
     NANOS_STRING(optional -> optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA,
         timestamp -> String.valueOf(DateTimeUtils.toEpochNanos(timestamp)),
-        timestamp -> DateTimeUtils.toTimestamp((String) timestamp)),
+        timestamp -> {
+          try {
+            return DateTimeUtils.toTimestamp((String) timestamp);
+          } catch (NumberFormatException  e) {
+            throw new ConnectException(
+                "Invalid value for timestamp column with nanos-string granularity: "
+                    + timestamp
+                    + e.getMessage());
+          }
+        }),
 
     NANOS_ISO_DATETIME_STRING(optional -> optional
         ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA,
@@ -836,7 +846,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         timestamp -> DateTimeUtils.toTimestampFromIsoDateTime((String) timestamp));
 
     public final Function<Boolean, Schema> schemaFunction;
-    public final Function<Timestamp, Object> convert;
+    public final Function<Timestamp, Object> fromTimestamp;
     public final Function<Object, Timestamp> toTimestamp;
 
     public static final String DEFAULT = CONNECT_LOGICAL.name().toLowerCase(Locale.ROOT);
@@ -854,10 +864,10 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     }
 
     TimestampGranularity(Function<Boolean, Schema> schemaFunction,
-        Function<Timestamp, Object> convert,
+        Function<Timestamp, Object> fromTimestamp,
         Function<Object, Timestamp> toTimestamp) {
       this.schemaFunction = schemaFunction;
-      this.convert = convert;
+      this.fromTimestamp = fromTimestamp;
       this.toTimestamp = toTimestamp;
     }
   }

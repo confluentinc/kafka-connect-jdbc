@@ -52,7 +52,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
         newConnection();
       } else if (!isConnectionValid(connection, VALIDITY_CHECK_TIMEOUT_S)) {
         log.info("The database connection is invalid. Reconnecting...");
-        close();
+        closeConnection();
         newConnection();
       }
     } catch (SQLException sqle) {
@@ -98,8 +98,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
     }
   }
 
-  @Override
-  public synchronized void close() {
+  private synchronized void closeConnection() {
     if (connection != null) {
       try {
         log.info("Closing connection #{} to {}", count, provider);
@@ -108,8 +107,16 @@ public class CachedConnectionProvider implements ConnectionProvider {
         log.warn("Ignoring error closing connection", sqle);
       } finally {
         connection = null;
-        provider.close();
       }
+    }
+  }
+
+  @Override
+  public synchronized void close() {
+    try {
+      closeConnection();
+    } finally {
+      provider.close();
     }
   }
 

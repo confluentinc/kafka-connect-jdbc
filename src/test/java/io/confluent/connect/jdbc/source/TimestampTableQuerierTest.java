@@ -97,7 +97,7 @@ public class TimestampTableQuerierTest {
         10211197100L, // Timestamp delay
         TimeZone.getTimeZone("UTC"),
         "",
-        JdbcSourceConnectorConfig.TIMESTAMP_GRANULARITY_CONNECT_LOGICAL
+        JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL
     );
   }
 

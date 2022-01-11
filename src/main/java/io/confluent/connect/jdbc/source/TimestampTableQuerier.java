@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TimestampGranularity;
 import io.confluent.connect.jdbc.source.SchemaMapping.FieldSetter;
 
 /**
@@ -63,7 +64,7 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
       Long timestampDelay,
       TimeZone timeZone,
       String suffix,
-      String timestampGranularity
+      TimestampGranularity timestampGranularity
   ) {
     super(
         dialect,

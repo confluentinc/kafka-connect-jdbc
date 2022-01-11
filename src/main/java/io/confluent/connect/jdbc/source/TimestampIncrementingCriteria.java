@@ -41,10 +41,6 @@ import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 
-import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TIMESTAMP_GRANULARITY_LONG_NANOS;
-import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TIMESTAMP_GRANULARITY_STRING_ISO_DATETIME;
-import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TIMESTAMP_GRANULARITY_STRING_NANOS;
-
 public class TimestampIncrementingCriteria {
 
   /**
@@ -197,7 +193,7 @@ public class TimestampIncrementingCriteria {
       Schema schema,
       Struct record,
       TimestampIncrementingOffset previousOffset,
-      String timestampGranularity
+      JdbcSourceConnectorConfig.TimestampGranularity timestampGranularity
   ) {
     Timestamp extractedTimestamp = null;
     if (hasTimestampColumns()) {
@@ -230,36 +226,20 @@ public class TimestampIncrementingCriteria {
   protected Timestamp extractOffsetTimestamp(
       Schema schema,
       Struct record,
-      String timestampGranularity
+      JdbcSourceConnectorConfig.TimestampGranularity timestampGranularity
   ) {
     caseAdjustedTimestampColumns.computeIfAbsent(schema, this::findCaseSensitiveTimestampColumns);
     for (String timestampColumn : caseAdjustedTimestampColumns.get(schema)) {
-      Timestamp ts;
-      switch (timestampGranularity) {
-        case TIMESTAMP_GRANULARITY_LONG_NANOS:
-          ts = DateTimeUtils.toTimestamp((long) record.get(timestampColumn));
-          break;
-        case TIMESTAMP_GRANULARITY_STRING_NANOS:
-          try {
-            ts = DateTimeUtils.toTimestamp((String) record.get(timestampColumn));
-          } catch (NumberFormatException  e) {
-            throw new ConnectException(
-                "Invalid value for timestamp column with nanos-string granularity: "
-                    + record.get(timestampColumn)
-                    + e.getMessage());
-          }
-          break;
-        case TIMESTAMP_GRANULARITY_STRING_ISO_DATETIME:
-          ts = DateTimeUtils.toTimestampFromIsoDateTime(
-              (String) record.get(timestampColumn)
-          );
-          break;
-        default:
-          ts = (Timestamp) record.get(timestampColumn);
-          break;
-      }
-      if (ts != null) {
-        return ts;
+      try {
+        Timestamp ts = timestampGranularity.toTimestamp.apply(record.get(timestampColumn));
+        if (ts != null) {
+          return ts;
+        }
+      } catch (NumberFormatException  e) {
+        throw new ConnectException(
+            "Invalid value for timestamp column with nanos-string granularity: "
+                + record.get(timestampColumn)
+                + e.getMessage());
       }
     }
     return null;

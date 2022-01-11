@@ -201,8 +201,8 @@ public class JdbcSourceTask extends SourceTask {
       offset = computeInitialOffset(tableOrQuery, offset, timeZone);
 
       String topicPrefix = config.topicPrefix();
-      String timestampGranularity
-          = config.getString(JdbcSourceConnectorConfig.TIMESTAMP_GRANULARITY_CONFIG);
+      JdbcSourceConnectorConfig.TimestampGranularity timestampGranularity
+          = JdbcSourceConnectorConfig.TimestampGranularity.get(config);
 
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(

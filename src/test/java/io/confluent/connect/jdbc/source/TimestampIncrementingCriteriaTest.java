@@ -35,6 +35,7 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TimestampGranularity;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.IdentifierRules;
@@ -80,7 +81,7 @@ public class TimestampIncrementingCriteriaTest {
       java.sql.Timestamp expectedT,
       Schema schema,
       Struct record,
-      String timestampGranularity) {
+      TimestampGranularity timestampGranularity) {
     TimestampIncrementingCriteria criteria;
     if (schema.field(INCREMENTING_COLUMN.name()) != null) {
       if (schema.field(TS1_COLUMN.name()) != null) {
@@ -103,14 +104,14 @@ public class TimestampIncrementingCriteriaTest {
   public void extractIntOffset() throws SQLException {
     schema = SchemaBuilder.struct().field("id", SchemaBuilder.INT32_SCHEMA).build();
     record = new Struct(schema).put("id", 42);
-    assertExtractedOffset(42L, TS0, schema, record, "");
+    assertExtractedOffset(42L, TS0, schema, record, TimestampGranularity.CONNECT_LOGICAL);
   }
 
   @Test
   public void extractLongOffset() throws SQLException {
     schema = SchemaBuilder.struct().field("id", SchemaBuilder.INT64_SCHEMA).build();
     record = new Struct(schema).put("id", 42L);
-    assertExtractedOffset(42L, TS0, schema, record, "");
+    assertExtractedOffset(42L, TS0, schema, record, TimestampGranularity.CONNECT_LOGICAL);
   }
 
   @Test
@@ -118,7 +119,7 @@ public class TimestampIncrementingCriteriaTest {
     final Schema decimalSchema = Decimal.schema(0);
     schema = SchemaBuilder.struct().field("id", decimalSchema).build();
     record = new Struct(schema).put("id", new BigDecimal(42));
-    assertExtractedOffset(42L, TS0, schema, record, "");
+    assertExtractedOffset(42L, TS0, schema, record, TimestampGranularity.CONNECT_LOGICAL);
   }
 
   @Test(expected = ConnectException.class)
@@ -126,7 +127,7 @@ public class TimestampIncrementingCriteriaTest {
     final Schema decimalSchema = Decimal.schema(0);
     schema = SchemaBuilder.struct().field("id", decimalSchema).build();
     record = new Struct(schema).put("id", new BigDecimal(Long.MAX_VALUE).add(new BigDecimal(1)));
-    assertExtractedOffset(42L, TS0, schema, record, "");
+    assertExtractedOffset(42L, TS0, schema, record, TimestampGranularity.CONNECT_LOGICAL);
   }
 
   @Test(expected = ConnectException.class)
@@ -134,7 +135,7 @@ public class TimestampIncrementingCriteriaTest {
     final Schema decimalSchema = Decimal.schema(2);
     schema = SchemaBuilder.struct().field("id", decimalSchema).build();
     record = new Struct(schema).put("id", new BigDecimal("42.42"));
-    assertExtractedOffset(42L, TS0, schema, record, "");
+    assertExtractedOffset(42L, TS0, schema, record, TimestampGranularity.CONNECT_LOGICAL);
   }
 
   @Test
@@ -148,7 +149,7 @@ public class TimestampIncrementingCriteriaTest {
         .put("id", 42)
         .put(TS1_COLUMN.name(), TS1);
     assertExtractedOffset(42L, TS1, schema, record,
-        JdbcSourceConnectorConfig.TIMESTAMP_GRANULARITY_CONNECT_LOGICAL);
+        TimestampGranularity.CONNECT_LOGICAL);
   }
 
   @Test(expected = DataException.class)
@@ -159,7 +160,7 @@ public class TimestampIncrementingCriteriaTest {
             .field(TS2_COLUMN.name(), Timestamp.SCHEMA)
             .build();
     record = new Struct(schema).put("real-id", 42);
-    criteriaIncTs.extractValues(schema, record, null, "");
+    criteriaIncTs.extractValues(schema, record, null, TimestampGranularity.CONNECT_LOGICAL);
   }
 
   @Test
@@ -171,7 +172,7 @@ public class TimestampIncrementingCriteriaTest {
     record = new Struct(schema)
         .put(TS1_COLUMN.name(), TS1)
         .put(TS2_COLUMN.name(), TS2);
-    assertExtractedOffset(-1, TS1, schema, record, "");
+    assertExtractedOffset(-1, TS1, schema, record, TimestampGranularity.CONNECT_LOGICAL);
   }
 
   @Test
@@ -184,7 +185,7 @@ public class TimestampIncrementingCriteriaTest {
         .put(TS1_COLUMN.name(), TS1)
         .put(TS2_COLUMN.name(), TS2);
     assertExtractedOffset(-1, TS1, schema, record,
-        JdbcSourceConnectorConfig.TIMESTAMP_GRANULARITY_CONNECT_LOGICAL);
+        TimestampGranularity.CONNECT_LOGICAL);
   }
 
   @Test
@@ -197,7 +198,7 @@ public class TimestampIncrementingCriteriaTest {
         .put(TS1_COLUMN.name(), DateTimeUtils.toEpochNanos(TS1))
         .put(TS2_COLUMN.name(), DateTimeUtils.toEpochNanos(TS2));
     assertExtractedOffset(-1, TS1, schema, record,
-        JdbcSourceConnectorConfig.TIMESTAMP_GRANULARITY_LONG_NANOS);
+        TimestampGranularity.NANOS_LONG);
   }
 
   @Test
@@ -210,7 +211,7 @@ public class TimestampIncrementingCriteriaTest {
         .put(TS1_COLUMN.name(), String.valueOf(DateTimeUtils.toEpochNanos(TS1)))
         .put(TS2_COLUMN.name(), String.valueOf(DateTimeUtils.toEpochNanos(TS2)));
     assertExtractedOffset(-1, TS1, schema, record,
-        JdbcSourceConnectorConfig.TIMESTAMP_GRANULARITY_STRING_NANOS);
+        TimestampGranularity.NANOS_STRING);
   }
 
   @Test
@@ -223,7 +224,7 @@ public class TimestampIncrementingCriteriaTest {
         .put(TS1_COLUMN.name(), DateTimeUtils.toIsoDateTimeString(TS1))
         .put(TS2_COLUMN.name(), DateTimeUtils.toIsoDateTimeString(TS2));
     assertExtractedOffset(-1, TS1, schema, record,
-        JdbcSourceConnectorConfig.TIMESTAMP_GRANULARITY_STRING_ISO_DATETIME);
+        TimestampGranularity.NANOS_ISO_DATETIME_STRING);
   }
 
   @Test(expected = ConnectException.class)
@@ -236,7 +237,7 @@ public class TimestampIncrementingCriteriaTest {
         .put(TS1_COLUMN.name(), DateTimeUtils.toIsoDateTimeString(TS1))
         .put(TS2_COLUMN.name(), DateTimeUtils.toIsoDateTimeString(TS2));
     assertExtractedOffset(-1, TS1, schema, record,
-        JdbcSourceConnectorConfig.TIMESTAMP_GRANULARITY_STRING_NANOS);
+        TimestampGranularity.NANOS_STRING);
   }
 
   @Test
@@ -248,7 +249,7 @@ public class TimestampIncrementingCriteriaTest {
     record = new Struct(schema)
         .put(TS1_COLUMN.name(), null)
         .put(TS2_COLUMN.name(), TS2);
-    assertExtractedOffset(-1, TS2, schema, record, "");
+    assertExtractedOffset(-1, TS2, schema, record, TimestampGranularity.CONNECT_LOGICAL);
   }
 
   @Test
@@ -260,7 +261,7 @@ public class TimestampIncrementingCriteriaTest {
     record = new Struct(schema)
         .put(TS1_COLUMN.name().toUpperCase(), TS1)
         .put(TS2_COLUMN.name(), TS2);
-    TimestampIncrementingOffset offset = criteriaTs.extractValues(schema, record, null, "");
+    TimestampIncrementingOffset offset = criteriaTs.extractValues(schema, record, null, TimestampGranularity.CONNECT_LOGICAL);
     assertEquals(TS1, offset.getTimestampOffset());
   }
 
@@ -273,7 +274,7 @@ public class TimestampIncrementingCriteriaTest {
     record = new Struct(schema)
         .put(TS1_COLUMN.name(), null)
         .put(TS2_COLUMN.name().toUpperCase(), TS2);
-    assertExtractedOffset(-1, TS2, schema, record, "");
+    assertExtractedOffset(-1, TS2, schema, record, TimestampGranularity.CONNECT_LOGICAL);
   }
 
   @Test(expected = DataException.class)
@@ -283,7 +284,7 @@ public class TimestampIncrementingCriteriaTest {
         .build();
     record = new Struct(schema)
         .put(TS1_COLUMN.name(), TS1);
-    assertExtractedOffset(-1, TS2, schema, record, "");
+    assertExtractedOffset(-1, TS2, schema, record, TimestampGranularity.CONNECT_LOGICAL);
   }
 
   @Test(expected = DataException.class)
@@ -305,7 +306,7 @@ public class TimestampIncrementingCriteriaTest {
     record = new Struct(schema)
         .put(lowerCaseColumnName, TS1)
         .put(upperCaseColumnName, TS2);
-    criteriaTs.extractValues(schema, record, null, "");
+    criteriaTs.extractValues(schema, record, null, TimestampGranularity.CONNECT_LOGICAL);
   }
 
   @Test
@@ -326,7 +327,7 @@ public class TimestampIncrementingCriteriaTest {
     record = new Struct(schema)
         .put(lowerCaseColumnName, TS1)
         .put(upperCaseColumnName, TS2);
-    TimestampIncrementingOffset offset = criteriaTs.extractValues(schema, record, null, "");
+    TimestampIncrementingOffset offset = criteriaTs.extractValues(schema, record, null, TimestampGranularity.CONNECT_LOGICAL);
     assertEquals(TS1, offset.getTimestampOffset());
   }
 

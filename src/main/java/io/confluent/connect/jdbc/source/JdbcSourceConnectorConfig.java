@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.source;
 
+import java.sql.Timestamp;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -26,10 +27,12 @@ import java.util.TimeZone;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
+import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.EnumRecommender;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TimeZoneValidator;
 
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
@@ -40,6 +43,7 @@ import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.Time;
+import org.apache.kafka.connect.data.Schema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -187,21 +191,18 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "Use -1 to use the current time. If not specified, all data will be retrieved.";
   public static final String TIMESTAMP_INITIAL_DISPLAY = "Unix time value of initial timestamp";
 
-  public static final String TIMESTAMP_GRANULARITY_CONNECT_LOGICAL = "connect-logical";
-  public static final String TIMESTAMP_GRANULARITY_LONG_NANOS = "nanos-long";
-  public static final String TIMESTAMP_GRANULARITY_STRING_NANOS = "nanos-string";
-  public static final String TIMESTAMP_GRANULARITY_STRING_ISO_DATETIME =
-      "nanos-iso-datetime-string";
   public static final String TIMESTAMP_GRANULARITY_CONFIG = "timestamp.granularity";
   public static final String TIMESTAMP_GRANULARITY_DOC =
       "Define the granularity of the Timestamp column. Options include: \n"
-          + "  * connect-logical (default): represents timestamp values using Kafka Connect's "
-          + "built-in representations "
-          + "  * nanos-long: represents timestamp values as nanos since epoch"
-          + "  * nanos-string: represents timestamp values as nanos since epoch in string"
-          + "  * nanos-iso-datetime-string: uses the iso format 'yyyy-MM-dd'T'HH:mm:ss.n'";
+          + "  * connect_logical (default): represents timestamp values using Kafka Connect's "
+          + "built-in representations \n"
+          + "  * nanos_long: represents timestamp values as nanos since epoch\n"
+          + "  * nanos_string: represents timestamp values as nanos since epoch in string\n"
+          + "  * nanos_iso_datetime_string: uses the iso format 'yyyy-MM-dd'T'HH:mm:ss.n'\n";
   public static final String TIMESTAMP_GRANULARITY_DISPLAY = "Timestamp granularity for "
       + "timestamp columns";
+  private static final EnumRecommender TIMESTAMP_GRANULARITY_RECOMMENDER =
+      EnumRecommender.in(TimestampGranularity.values());
 
   public static final String TABLE_POLL_INTERVAL_MS_CONFIG = "table.poll.interval.ms";
   private static final String TABLE_POLL_INTERVAL_MS_DOC =
@@ -663,19 +664,15 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     ).define(
         TIMESTAMP_GRANULARITY_CONFIG,
         Type.STRING,
-        TIMESTAMP_GRANULARITY_CONNECT_LOGICAL,
-        ConfigDef.ValidString.in(
-            TIMESTAMP_GRANULARITY_CONNECT_LOGICAL,
-            TIMESTAMP_GRANULARITY_LONG_NANOS,
-            TIMESTAMP_GRANULARITY_STRING_NANOS,
-            TIMESTAMP_GRANULARITY_STRING_ISO_DATETIME
-        ),
+        TimestampGranularity.DEFAULT,
+        TIMESTAMP_GRANULARITY_RECOMMENDER,
         Importance.MEDIUM,
         TIMESTAMP_GRANULARITY_DOC,
         CONNECTOR_GROUP,
         ++orderInGroup,
         Width.MEDIUM,
-        TIMESTAMP_GRANULARITY_DISPLAY);
+        TIMESTAMP_GRANULARITY_DISPLAY,
+        TIMESTAMP_GRANULARITY_RECOMMENDER);
   }
 
   public static final ConfigDef CONFIG_DEF = baseConfigDef();
@@ -815,6 +812,53 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         return NumericMapping.PRECISION_ONLY;
       }
       return NumericMapping.NONE;
+    }
+  }
+
+  public enum TimestampGranularity {
+    CONNECT_LOGICAL(optional -> optional
+        ? org.apache.kafka.connect.data.Timestamp.builder().optional().build()
+        : org.apache.kafka.connect.data.Timestamp.builder().build(),
+        timestamp -> timestamp,
+        timestamp -> (Timestamp) timestamp),
+
+    NANOS_LONG(optional -> optional ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA,
+        DateTimeUtils::toEpochNanos,
+        timestamp -> DateTimeUtils.toTimestamp((long) timestamp)),
+
+    NANOS_STRING(optional -> optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA,
+        timestamp -> String.valueOf(DateTimeUtils.toEpochNanos(timestamp)),
+        timestamp -> DateTimeUtils.toTimestamp((String) timestamp)),
+
+    NANOS_ISO_DATETIME_STRING(optional -> optional
+        ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA,
+        DateTimeUtils::toIsoDateTimeString,
+        timestamp -> DateTimeUtils.toTimestampFromIsoDateTime((String) timestamp));
+
+    public final Function<Boolean, Schema> schemaFunction;
+    public final Function<Timestamp, Object> convert;
+    public final Function<Object, Timestamp> toTimestamp;
+
+    public static final String DEFAULT = CONNECT_LOGICAL.name().toLowerCase(Locale.ROOT);
+
+    private static final Map<String, TimestampGranularity> reverse = new HashMap<>(values().length);
+    static {
+      for (TimestampGranularity val : values()) {
+        reverse.put(val.name().toLowerCase(Locale.ROOT), val);
+      }
+    }
+
+    public static TimestampGranularity get(JdbcSourceConnectorConfig config) {
+      String tsGranularity = config.getString(TIMESTAMP_GRANULARITY_CONFIG);
+      return reverse.get(tsGranularity.toLowerCase(Locale.ROOT));
+    }
+
+    TimestampGranularity(Function<Boolean, Schema> schemaFunction,
+        Function<Timestamp, Object> convert,
+        Function<Object, Timestamp> toTimestamp) {
+      this.schemaFunction = schemaFunction;
+      this.convert = convert;
+      this.toTimestamp = toTimestamp;
     }
   }
 

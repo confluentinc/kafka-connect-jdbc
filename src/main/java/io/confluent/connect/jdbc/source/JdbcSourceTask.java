@@ -201,6 +201,8 @@ public class JdbcSourceTask extends SourceTask {
       offset = computeInitialOffset(tableOrQuery, offset, timeZone);
 
       String topicPrefix = config.topicPrefix();
+      JdbcSourceConnectorConfig.TimestampGranularity timestampGranularity
+          = JdbcSourceConnectorConfig.TimestampGranularity.get(config);
 
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(
@@ -224,7 +226,8 @@ public class JdbcSourceTask extends SourceTask {
                 offset,
                 timestampDelayInterval,
                 timeZone,
-                suffix
+                suffix,
+                timestampGranularity
             )
         );
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
@@ -238,7 +241,8 @@ public class JdbcSourceTask extends SourceTask {
                 offset,
                 timestampDelayInterval,
                 timeZone,
-                suffix
+                suffix,
+                timestampGranularity
             )
         );
       } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
@@ -253,7 +257,8 @@ public class JdbcSourceTask extends SourceTask {
                 offset,
                 timestampDelayInterval,
                 timeZone,
-                suffix
+                suffix,
+                timestampGranularity
             )
         );
       }

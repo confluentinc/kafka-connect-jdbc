@@ -75,6 +75,7 @@ import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.NumericMapping;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TimestampGranularity;
 import io.confluent.connect.jdbc.source.JdbcSourceTaskConfig;
 import io.confluent.connect.jdbc.source.TimestampIncrementingCriteria;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
@@ -152,6 +153,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   private volatile JdbcDriverInfo jdbcDriverInfo;
   private final int batchMaxRows;
   private final TimeZone timeZone;
+  private final JdbcSourceConnectorConfig.TimestampGranularity tsGranularity;
 
   /**
    * Create a new dialect instance with the given connector configuration.
@@ -207,6 +209,12 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       timeZone = ((JdbcSinkConfig) config).timeZone;
     } else {
       timeZone = TimeZone.getTimeZone(ZoneOffset.UTC);
+    }
+
+    if (config instanceof JdbcSourceConnectorConfig) {
+      tsGranularity = TimestampGranularity.get((JdbcSourceConnectorConfig) config);
+    } else {
+      tsGranularity = TimestampGranularity.CONNECT_LOGICAL;
     }
   }
 
@@ -1154,11 +1162,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
       // Timestamp is a date + time
       case Types.TIMESTAMP: {
-        SchemaBuilder tsSchemaBuilder = org.apache.kafka.connect.data.Timestamp.builder();
-        if (optional) {
-          tsSchemaBuilder.optional();
-        }
-        builder.field(fieldName, tsSchemaBuilder.build());
+        builder.field(fieldName, tsGranularity.schemaFunction.apply(optional));
         break;
       }
 
@@ -1385,7 +1389,10 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
       // Timestamp is a date + time
       case Types.TIMESTAMP: {
-        return rs -> rs.getTimestamp(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
+        return rs -> {
+          Timestamp timestamp = rs.getTimestamp(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
+          return tsGranularity.fromTimestamp.apply(timestamp);
+        };
       }
 
       // Datalink is basically a URL -> string

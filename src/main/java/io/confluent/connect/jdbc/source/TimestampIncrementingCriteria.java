@@ -186,16 +186,18 @@ public class TimestampIncrementingCriteria {
    * @param schema the record's schema; never null
    * @param record the record's struct; never null
    * @param previousOffset a previous timestamp offset if the table has timestamp columns
+   * @param timestampGranularity defines the configured granularity of the timestamp field
    * @return the timestamp for this row; may not be null
    */
   public TimestampIncrementingOffset extractValues(
       Schema schema,
       Struct record,
-      TimestampIncrementingOffset previousOffset
+      TimestampIncrementingOffset previousOffset,
+      JdbcSourceConnectorConfig.TimestampGranularity timestampGranularity
   ) {
     Timestamp extractedTimestamp = null;
     if (hasTimestampColumns()) {
-      extractedTimestamp = extractOffsetTimestamp(schema, record);
+      extractedTimestamp = extractOffsetTimestamp(schema, record, timestampGranularity);
       assert previousOffset == null || (previousOffset.getTimestampOffset() != null
                                         && previousOffset.getTimestampOffset().compareTo(
           extractedTimestamp) <= 0
@@ -218,15 +220,17 @@ public class TimestampIncrementingCriteria {
    *
    * @param schema the record's schema; never null
    * @param record the record's struct; never null
+   * @param timestampGranularity defines the configured granularity of the timestamp field
    * @return the timestamp for this row; may not be null
    */
   protected Timestamp extractOffsetTimestamp(
       Schema schema,
-      Struct record
+      Struct record,
+      JdbcSourceConnectorConfig.TimestampGranularity timestampGranularity
   ) {
     caseAdjustedTimestampColumns.computeIfAbsent(schema, this::findCaseSensitiveTimestampColumns);
     for (String timestampColumn : caseAdjustedTimestampColumns.get(schema)) {
-      Timestamp ts = (Timestamp) record.get(timestampColumn);
+      Timestamp ts = timestampGranularity.toTimestamp.apply(record.get(timestampColumn));
       if (ts != null) {
         return ts;
       }

@@ -99,7 +99,8 @@ public class TimestampIncrementingTableQuerierTest {
         initialOffset.toMap(),
         10211197100L, // Timestamp delay
         TimeZone.getTimeZone("UTC"),
-        ""
+        "",
+        JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL
     );
   }
 
@@ -232,7 +233,7 @@ public class TimestampIncrementingTableQuerierTest {
     expect(schemaMapping.schema()).andReturn(schema()).times(2);
     expect(resultSet.next()).andReturn(true);
     expect(schemaMapping.fieldSetters()).andReturn(Collections.emptyList());
-    expect(criteria.extractValues(anyObject(), anyObject(), anyObject())).andReturn(offset);
+    expect(criteria.extractValues(anyObject(), anyObject(), anyObject(), anyObject())).andReturn(offset);
   }
 
   private void expectReset() throws Exception {

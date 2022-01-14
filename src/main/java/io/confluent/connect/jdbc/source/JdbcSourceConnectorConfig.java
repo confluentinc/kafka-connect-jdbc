@@ -273,9 +273,19 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       "Option indicates that topic name should be the same as a value retrieved from the database"
       + " based on passed property for example you have table in a database with 3 columns "
       + "(id, topic, payload) when you provide in this option value `topic` "
-      + "the connector will create a topic with name equals value from the column you provided";
+      + "the connector will create a topic with name equals value from the column you provided."
+      + "This feature should be used along with `MESSAGE_COLUMN_NAME_CONFIG`.";
   private static final String TOPIC_NAME_BASED_ON_DATABASE_COLUMN_VALUE_DISPLAY
           = "Value from database column to create a topic";
+
+  public static final String MESSAGE_COLUMN_NAME_CONFIG = "message.column.name";
+  public static final String MESSAGE_COLUMN_NAME_DEFAULT = null;
+  private static final String MESSAGE_COLUMN_NAME_DOC =
+      "Option indicates that kafka message should be retrieved from given column name from database. "
+      + "This feature should be used along with `TOPIC_NAME_BASED_ON_DATABASE_COLUMN_VALUE_CONFIG`.";
+  private static final String MESSAGE_COLUMN_NAME_DISPLAY
+          = "Column name contains message to be sent to topic";
+
 
   public static final String DB_TIMEZONE_CONFIG = "db.timezone";
   public static final String DB_TIMEZONE_DEFAULT = "UTC";
@@ -654,6 +664,16 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.MEDIUM,
         TOPIC_NAME_BASED_ON_DATABASE_COLUMN_VALUE_DISPLAY
+    ).define(
+        MESSAGE_COLUMN_NAME_CONFIG,
+        Type.STRING,
+        MESSAGE_COLUMN_NAME_DEFAULT,
+        Importance.HIGH,
+        MESSAGE_COLUMN_NAME_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        MESSAGE_COLUMN_NAME_DISPLAY
     ).define(
         DB_TIMEZONE_CONFIG,
         Type.STRING,

@@ -70,10 +70,12 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   private final String topic;
   private final TimeZone timeZone;
   private final String topicBasedOnDatabaseValue;
+  private final String messageColumnName;
 
   public TimestampIncrementingTableQuerier(DatabaseDialect dialect, QueryMode mode, String name,
                                            String topicPrefix,
                                            String topicBasedOnDatabaseValue,
+                                           String messageColumnName,
                                            List<String> timestampColumnNames,
                                            String incrementingColumnName,
                                            Map<String, Object> offsetMap, Long timestampDelay,
@@ -109,6 +111,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
 
     this.timeZone = timeZone;
     this.topicBasedOnDatabaseValue = topicBasedOnDatabaseValue;
+    this.messageColumnName = messageColumnName;
   }
 
   /**
@@ -213,11 +216,13 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
         throw new DataException(e);
       }
     }
-    String expectedTopicName = Optional.ofNullable(topicBasedOnDatabaseValue)
-                                       .map(databaseColumn -> record.getString("topic"))
-                                       .orElse(topic);
     offset = criteria.extractValues(schemaMapping.schema(), record, offset);
-    return new SourceRecord(partition, offset.toMap(), expectedTopicName, record.schema(), record);
+
+    if(isColumnValueDrivenTopicFeature()) {
+      return sourceRecordForColumnDrivenTopic(record);
+    }
+    offset = criteria.extractValues(schemaMapping.schema(), record, offset);
+    return new SourceRecord(partition, offset.toMap(), topic, record.schema(), record);
   }
 
   @Override
@@ -250,5 +255,17 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
                                         : "") + '\''
            + ", timestampColumns=" + timestampColumnNames
            + '}';
+  }
+
+  private boolean isColumnValueDrivenTopicFeature() {
+    return topicBasedOnDatabaseValue != null && messageColumnName != null;
+  }
+
+  private SourceRecord sourceRecordForColumnDrivenTopic(Struct record) {
+    String expectedTopicName = Optional.ofNullable(topicBasedOnDatabaseValue)
+                                       .map(databaseColumn -> record.getString("topic"))
+                                       .orElse(topic);
+    String message = record.getString(messageColumnName);
+    return new SourceRecord(partition, offset.toMap(), expectedTopicName, null, message);
   }
 }

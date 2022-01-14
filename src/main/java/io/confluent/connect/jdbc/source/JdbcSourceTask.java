@@ -153,6 +153,7 @@ public class JdbcSourceTask extends SourceTask {
         = config.getLong(JdbcSourceTaskConfig.TIMESTAMP_DELAY_INTERVAL_MS_CONFIG);
     String topicNameBasedOnDatabaseValue
         = config.getString(JdbcSourceTaskConfig.TOPIC_NAME_BASED_ON_DATABASE_COLUMN_VALUE_CONFIG);
+    String messageColumnName = config.getString(JdbcSourceTaskConfig.MESSAGE_COLUMN_NAME_CONFIG);
     boolean validateNonNulls
         = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
     TimeZone timeZone = config.timeZone();
@@ -219,6 +220,7 @@ public class JdbcSourceTask extends SourceTask {
                 tableOrQuery,
                 topicPrefix,
                 topicNameBasedOnDatabaseValue,
+                messageColumnName,
                 null,
                 incrementingColumn,
                 offset,
@@ -235,6 +237,7 @@ public class JdbcSourceTask extends SourceTask {
                 tableOrQuery,
                 topicPrefix,
                 topicNameBasedOnDatabaseValue,
+                messageColumnName,
                 timestampColumns,
                 null,
                 offset,
@@ -251,6 +254,7 @@ public class JdbcSourceTask extends SourceTask {
                 tableOrQuery,
                 topicPrefix,
                 topicNameBasedOnDatabaseValue,
+                messageColumnName,
                 timestampColumns,
                 incrementingColumn,
                 offset,

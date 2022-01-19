@@ -249,8 +249,9 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String TABLE_TYPES_DOC =
       "The comma-separated types of database tables to which the sink connector can write. "
       + "By default this is ``" + TableType.TABLE + "``, but any combination of ``"
-      + TableType.TABLE + "`` and ``" + TableType.VIEW + "`` is allowed. Not all databases "
-      + "support writing to views, and when they do the the sink connector will fail if the "
+      + TableType.TABLE + "``, ``" + TableType.PARTITIONED_TABLE + "`` and ``"
+      + TableType.VIEW + "`` is allowed. Not all databases support writing to views, "
+      + "and when they do the sink connector will fail if the "
       + "view definition does not match the records' schemas (regardless of ``"
       + AUTO_EVOLVE + "``).";
 

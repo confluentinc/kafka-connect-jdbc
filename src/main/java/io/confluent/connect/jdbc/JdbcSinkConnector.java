@@ -78,8 +78,7 @@ public class JdbcSinkConnector extends SinkConnector {
         .filter(cfg -> PK_MODE.equals(cfg.name())
             && !cfg.recommendedValues().contains(cfg.value()))
         .findFirst()
-        .ifPresent(cfg -> cfg.addErrorMessage("'" + cfg.value() + "' is not in valid values "
-            + cfg.recommendedValues()));
+        .ifPresent(cfg -> cfg.addErrorMessage("'" + cfg.value() + "' is not valid"));
 
     return config;
   }

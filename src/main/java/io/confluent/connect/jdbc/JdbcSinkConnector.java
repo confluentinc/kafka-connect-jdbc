@@ -72,13 +72,18 @@ public class JdbcSinkConnector extends SinkConnector {
 
     config.configValues()
         .stream()
-        /** use recommended values for configuration validation
+        .filter(cfg -> PK_MODE.equals(cfg.name()))
+        .findFirst()
+        /**
+         * use recommended values for configuration validation
          * {@link PrimaryKeyModeRecommender#validValues}
          */
-        .filter(cfg -> PK_MODE.equals(cfg.name())
-            && !cfg.recommendedValues().contains(cfg.value()))
-        .findFirst()
-        .ifPresent(cfg -> cfg.addErrorMessage("'" + cfg.value() + "' is not valid"));
+        .ifPresent(pkMode -> {
+          if (!pkMode.recommendedValues().contains(pkMode.value())) {
+            pkMode.addErrorMessage("'" + pkMode.name() + "' can only have value in list "
+                + pkMode.recommendedValues());
+          }
+        });
 
     return config;
   }

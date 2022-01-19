@@ -15,6 +15,8 @@
 
 package io.confluent.connect.jdbc;
 
+import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.PK_MODE;
+
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.connect.connector.Task;
@@ -65,8 +67,21 @@ public class JdbcSinkConnector extends SinkConnector {
 
   @Override
   public Config validate(Map<String, String> connectorConfigs) {
-    // TODO cross-fields validation here: pkFields against the pkMode
-    return super.validate(connectorConfigs);
+    /** get configuration parsed and validated individually */
+    Config config = super.validate(connectorConfigs);
+
+    config.configValues()
+        .stream()
+        /** use recommended values for configuration validation
+         * {@link PrimaryKeyModeRecommender#validValues}
+         */
+        .filter(cfg -> PK_MODE.equals(cfg.name())
+            && !cfg.recommendedValues().contains(cfg.value()))
+        .findFirst()
+        .ifPresent(cfg -> cfg.addErrorMessage("'" + cfg.value() + "' is not in valid values "
+            + cfg.recommendedValues()));
+
+    return config;
   }
 
   @Override

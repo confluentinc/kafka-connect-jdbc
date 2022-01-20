@@ -17,10 +17,15 @@ package io.confluent.connect.jdbc;
 
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.apache.kafka.common.config.Config;
 
 import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.PK_MODE;
+import static java.util.Collections.EMPTY_LIST;
+import static java.util.Collections.singletonList;
 import static org.junit.Assert.*;
 
 import org.junit.Test;
@@ -37,12 +42,13 @@ public class JdbcSinkConnectorTest {
     connConfig.put("delete.enabled", "true");
 
     connConfig.put("pk.mode", "record_key");
-    assertFalse("'record_key' is the only valid mode when 'delete.enabled' == true",
-        hasConfigError(connector.validate(connConfig), PK_MODE));
+    assertEquals("'record_key' is the only valid mode when 'delete.enabled' == true",
+        EMPTY_LIST, configErrors(connector.validate(connConfig), PK_MODE));
 
     connConfig.put("pk.mode", "none");
-    assertTrue("'record_key' is the only valid mode when 'delete.enabled' == true",
-        hasConfigError(connector.validate(connConfig), PK_MODE));
+    assertEquals("'record_key' is the only valid mode when 'delete.enabled' == true",
+        singletonList("'none' is invalid: Deletes are only supported for pk.mode 'record_key'"),
+        configErrors(connector.validate(connConfig), PK_MODE));
   }
 
   @Test
@@ -55,16 +61,32 @@ public class JdbcSinkConnectorTest {
     connConfig.put("delete.enabled", "false");
 
     connConfig.put("pk.mode", "none");
-    assertFalse("any defined mode is valid when 'delete.enabled' == false",
-        hasConfigError(connector.validate(connConfig), PK_MODE));
+    assertEquals("any defined mode is valid when 'delete.enabled' == false",
+        EMPTY_LIST, configErrors(connector.validate(connConfig), PK_MODE));
   }
 
-  private boolean hasConfigError(Config config, String propertyName) {
+  @Test
+  public void testValidationWhenPKModeInvalid() {
+
+    JdbcSinkConnector connector = new JdbcSinkConnector();
+
+    Map<String, String> connConfig = new HashMap<>();
+    connConfig.put("connector.class", "io.confluent.connect.jdbc.JdbcSinkConnector");
+    connConfig.put("delete.enabled", "false");
+    connConfig.put("pk.mode", "gibberish");
+
+    List<String> errors = configErrors(connector.validate(connConfig), PK_MODE);
+
+    assertEquals("no double reporting for unknown pk.mode",
+        1, configErrors(connector.validate(connConfig), PK_MODE).size());
+  }
+
+
+  private List<String> configErrors(Config config, String propertyName) {
     return config.configValues()
         .stream()
-        .filter(cfg -> propertyName.equals(cfg.name())
-            && !cfg.errorMessages().isEmpty())
-        .findFirst()
-        .isPresent();
+        .filter(cfg -> propertyName.equals(cfg.name()))
+        .flatMap(cfg -> propertyName.equals(cfg.name()) ? cfg.errorMessages().stream() : Stream.empty())
+        .collect(Collectors.toList());
   }
 }

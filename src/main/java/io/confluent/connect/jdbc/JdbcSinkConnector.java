@@ -15,10 +15,13 @@
 
 package io.confluent.connect.jdbc;
 
+import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.DELETE_ENABLED;
 import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.PK_MODE;
 
+import java.util.Optional;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigDef;
+import org.apache.kafka.common.config.ConfigValue;
 import org.apache.kafka.connect.connector.Task;
 import org.apache.kafka.connect.sink.SinkConnector;
 import org.slf4j.Logger;
@@ -70,22 +73,35 @@ public class JdbcSinkConnector extends SinkConnector {
     /** get configuration parsed and validated individually */
     Config config = super.validate(connectorConfigs);
 
-    config.configValues()
-        .stream()
-        .filter(cfg -> PK_MODE.equals(cfg.name()))
-        .findFirst()
+    configValue(config, PK_MODE)
+        .filter(cfg -> cfg.errorMessages().isEmpty()) // only if individual validation passed.
         /**
          * use recommended values for configuration validation
          * {@link PrimaryKeyModeRecommender#validValues}
          */
         .ifPresent(pkMode -> {
           if (!pkMode.recommendedValues().contains(pkMode.value())) {
-            pkMode.addErrorMessage("'" + pkMode.value() + "' is invalid:"
-                + " Deletes are only supported for pk.mode 'record_key'");
+
+            String error = "'" + pkMode.value() + "' is invalid";
+
+            if (configValue(config, DELETE_ENABLED)
+                .map(deleteEnabled -> (Boolean) deleteEnabled.value())
+                .orElse(Boolean.FALSE)) {
+              error += ": Deletes are only supported for pk.mode 'record_key'";
+            }
+
+            pkMode.addErrorMessage(error);
           }
         });
 
     return config;
+  }
+
+  private Optional<ConfigValue> configValue(Config config, String name) {
+    return config.configValues()
+        .stream()
+        .filter(cfg -> name.equals(cfg.name()))
+        .findFirst();
   }
 
   @Override

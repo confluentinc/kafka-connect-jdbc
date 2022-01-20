@@ -80,8 +80,8 @@ public class JdbcSinkConnector extends SinkConnector {
          */
         .ifPresent(pkMode -> {
           if (!pkMode.recommendedValues().contains(pkMode.value())) {
-            pkMode.addErrorMessage("'" + pkMode.name() + "' can only have value in list "
-                + pkMode.recommendedValues());
+            pkMode.addErrorMessage("'" + pkMode.value() + "' is invalid:"
+                + " Deletes are only supported for pk.mode 'record_key'");
           }
         });
 

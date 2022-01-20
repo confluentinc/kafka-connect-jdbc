@@ -85,8 +85,8 @@ public class JdbcSinkConnectorTest {
   private List<String> configErrors(Config config, String propertyName) {
     return config.configValues()
         .stream()
-        .filter(cfg -> propertyName.equals(cfg.name()))
-        .flatMap(cfg -> propertyName.equals(cfg.name()) ? cfg.errorMessages().stream() : Stream.empty())
+        .flatMap(cfg -> propertyName.equals(cfg.name()) ?
+            cfg.errorMessages().stream() : Stream.empty())
         .collect(Collectors.toList());
   }
 }

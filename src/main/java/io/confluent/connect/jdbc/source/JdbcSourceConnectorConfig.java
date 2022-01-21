@@ -825,17 +825,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
     NANOS_LONG(optional -> optional ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA,
         DateTimeUtils::toEpochNanos,
-        timestamp -> DateTimeUtils.toTimestamp((long) timestamp)),
+        epochNanos -> DateTimeUtils.toTimestamp((Long) epochNanos)),
 
     NANOS_STRING(optional -> optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA,
-        timestamp -> String.valueOf(DateTimeUtils.toEpochNanos(timestamp)),
-        timestamp -> {
+        DateTimeUtils::toEpochNanosString,
+        epochNanosString -> {
           try {
-            return DateTimeUtils.toTimestamp((String) timestamp);
+            return DateTimeUtils.toTimestamp((String) epochNanosString);
           } catch (NumberFormatException  e) {
             throw new ConnectException(
                 "Invalid value for timestamp column with nanos-string granularity: "
-                    + timestamp
+                    + epochNanosString
                     + e.getMessage());
           }
         }),
@@ -843,7 +843,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     NANOS_ISO_DATETIME_STRING(optional -> optional
         ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA,
         DateTimeUtils::toIsoDateTimeString,
-        timestamp -> DateTimeUtils.toTimestampFromIsoDateTime((String) timestamp));
+        isoDateTimeString -> DateTimeUtils.toTimestampFromIsoDateTime((String) isoDateTimeString));
 
     public final Function<Boolean, Schema> schemaFunction;
     public final Function<Timestamp, Object> fromTimestamp;

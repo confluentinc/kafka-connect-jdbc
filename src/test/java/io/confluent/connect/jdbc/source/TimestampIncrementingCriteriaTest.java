@@ -227,6 +227,45 @@ public class TimestampIncrementingCriteriaTest {
         TimestampGranularity.NANOS_ISO_DATETIME_STRING);
   }
 
+  @Test
+  public void extractWithTsColumnNanosLongNull() throws Exception {
+    schema = SchemaBuilder.struct()
+        .field(TS1_COLUMN.name(), SchemaBuilder.OPTIONAL_INT64_SCHEMA)
+        .field(TS2_COLUMN.name(), SchemaBuilder.OPTIONAL_INT64_SCHEMA)
+        .build();
+    record = new Struct(schema)
+        .put(TS1_COLUMN.name(), null)
+        .put(TS2_COLUMN.name(), null);
+    assertExtractedOffset(-1, TS0, schema, record,
+        TimestampGranularity.NANOS_LONG);
+  }
+
+  @Test
+  public void extractWithTsColumnNanosStringNull() throws Exception {
+    schema = SchemaBuilder.struct()
+        .field(TS1_COLUMN.name(), SchemaBuilder.OPTIONAL_STRING_SCHEMA)
+        .field(TS2_COLUMN.name(), SchemaBuilder.OPTIONAL_STRING_SCHEMA)
+        .build();
+    record = new Struct(schema)
+        .put(TS1_COLUMN.name(), null)
+        .put(TS2_COLUMN.name(), null);
+    assertExtractedOffset(-1, TS0, schema, record,
+        TimestampGranularity.NANOS_STRING);
+  }
+
+  @Test
+  public void extractWithTsColumnIsoDateTimeStringNull() throws Exception {
+    schema = SchemaBuilder.struct()
+        .field(TS1_COLUMN.name(), SchemaBuilder.OPTIONAL_STRING_SCHEMA)
+        .field(TS2_COLUMN.name(), SchemaBuilder.OPTIONAL_STRING_SCHEMA)
+        .build();
+    record = new Struct(schema)
+        .put(TS1_COLUMN.name(), null)
+        .put(TS2_COLUMN.name(), null);
+    assertExtractedOffset(-1, TS0, schema, record,
+        TimestampGranularity.NANOS_ISO_DATETIME_STRING);
+  }
+
   @Test(expected = ConnectException.class)
   public void extractWithTsColumnIsoDateTimeStringNanosConfig() throws Exception {
     schema = SchemaBuilder.struct()

@@ -24,6 +24,7 @@ import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
@@ -75,15 +76,35 @@ public class DateTimeUtils {
     }).format(date);
   }
 
+  private static Long convertToEpochNanos(Timestamp t) {
+    Long epochMillis = TimeUnit.SECONDS.toNanos(t.getTime() / MILLISECONDS_PER_SECOND);
+    Long nanosInSecond = TimeUnit.NANOSECONDS.toNanos(t.getNanos());
+    return epochMillis + nanosInSecond;
+  }
+
   /**
    * Get the number of nanoseconds past epoch of the given {@link Timestamp}.
    *
    * @param timestamp the Java timestamp value
    * @return the epoch nanoseconds
    */
-  public static long toEpochNanos(Timestamp timestamp) {
-    return TimeUnit.SECONDS.toNanos(timestamp.getTime() / MILLISECONDS_PER_SECOND)
-        + TimeUnit.NANOSECONDS.toNanos(timestamp.getNanos());
+  public static Long toEpochNanos(Timestamp timestamp) {
+    return Optional.ofNullable(timestamp)
+        .map(DateTimeUtils::convertToEpochNanos)
+        .orElse(null);
+  }
+
+  /**
+   * Get the number of nanoseconds past epoch of the given {@link Timestamp}.
+   *
+   * @param timestamp the Java timestamp value
+   * @return the epoch nanoseconds string
+   */
+  public static String toEpochNanosString(Timestamp timestamp) {
+    return Optional.ofNullable(timestamp)
+        .map(DateTimeUtils::convertToEpochNanos)
+        .map(String::valueOf)
+        .orElse(null);
   }
 
   /**
@@ -93,7 +114,9 @@ public class DateTimeUtils {
    * @return the string iso date time
    */
   public static String toIsoDateTimeString(Timestamp timestamp) {
-    return timestamp.toLocalDateTime().format(ISO_DATE_TIME_NANOS_FORMAT);
+    return Optional.ofNullable(timestamp)
+        .map(t -> t.toLocalDateTime().format(ISO_DATE_TIME_NANOS_FORMAT))
+        .orElse(null);
   }
 
   /**
@@ -102,10 +125,14 @@ public class DateTimeUtils {
    * @param nanos epoch nanos in long
    * @return the equivalent java sql Timestamp
    */
-  public static Timestamp toTimestamp(long nanos) {
-    Timestamp ts = new Timestamp(nanos / NANOSECONDS_PER_MILLISECOND);
-    ts.setNanos((int)(nanos % NANOSECONDS_PER_SECOND));
-    return ts;
+  public static Timestamp toTimestamp(Long nanos) {
+    return Optional.ofNullable(nanos)
+        .map(n -> {
+          Timestamp ts = new Timestamp(nanos / NANOSECONDS_PER_MILLISECOND);
+          ts.setNanos((int)(nanos % NANOSECONDS_PER_SECOND));
+          return ts;
+        })
+        .orElse(null);
   }
 
   /**
@@ -115,7 +142,10 @@ public class DateTimeUtils {
    * @return the equivalent java sql Timestamp
    */
   public static Timestamp toTimestamp(String nanos) throws NumberFormatException {
-    return toTimestamp(Long.parseLong(nanos));
+    return Optional.ofNullable(nanos)
+        .map(Long::parseLong)
+        .map(DateTimeUtils::toTimestamp)
+        .orElse(null);
   }
 
   /**
@@ -125,7 +155,10 @@ public class DateTimeUtils {
    * @return the equivalent java sql Timestamp
    */
   public static Timestamp toTimestampFromIsoDateTime(String isoDateTime) {
-    return Timestamp.valueOf(LocalDateTime.parse(isoDateTime, ISO_DATE_TIME_NANOS_FORMAT));
+    return Optional.ofNullable(isoDateTime)
+        .map(i -> LocalDateTime.parse(isoDateTime, ISO_DATE_TIME_NANOS_FORMAT))
+        .map(Timestamp::valueOf)
+        .orElse(null);
   }
 
   private DateTimeUtils() {

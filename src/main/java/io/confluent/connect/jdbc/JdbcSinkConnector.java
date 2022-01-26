@@ -17,7 +17,9 @@ package io.confluent.connect.jdbc;
 
 import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.DELETE_ENABLED;
 import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.PK_MODE;
+import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.PrimaryKeyMode.RECORD_KEY;
 
+import java.util.Locale;
 import java.util.Optional;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigDef;
@@ -73,34 +75,29 @@ public class JdbcSinkConnector extends SinkConnector {
     /** get configuration parsed and validated individually */
     Config config = super.validate(connectorConfigs);
 
-    configValue(config, PK_MODE)
-        .filter(cfg -> cfg.errorMessages().isEmpty()) // only if individual validation passed.
-        /**
-         * use recommended values for configuration validation
-         * {@link PrimaryKeyModeRecommender#validValues}
-         */
-        .ifPresent(pkMode -> {
-          if (!pkMode.recommendedValues().contains(pkMode.value())) {
+    return validateDeleteEnabledPkMode(config);
+  }
 
-            String error = "'" + pkMode.value() + "' is invalid";
-
-            if (configValue(config, DELETE_ENABLED)
-                .map(deleteEnabled -> (Boolean) deleteEnabled.value())
-                .orElse(Boolean.FALSE)) {
-              error += ": Deletes are only supported for pk.mode 'record_key'";
-            }
-
-            pkMode.addErrorMessage(error);
-          }
-        });
-
+  private Config validateDeleteEnabledPkMode(Config config) {
+    configValue(config, DELETE_ENABLED)
+        .filter(deleteEnabled -> Boolean.TRUE.equals(deleteEnabled.value()))
+        .ifPresent(deleteEnabled -> configValue(config, PK_MODE)
+            .ifPresent(pkMode -> {
+              if (!RECORD_KEY.name().toLowerCase(Locale.ROOT).equals(pkMode.value())) {
+                String conflictMsg = "Deletes are only supported for pk.mode record_key";
+                pkMode.addErrorMessage(conflictMsg);
+                deleteEnabled.addErrorMessage(conflictMsg);
+              }
+            }));
     return config;
   }
 
+  /** only if individual validation passed. */
   private Optional<ConfigValue> configValue(Config config, String name) {
     return config.configValues()
         .stream()
-        .filter(cfg -> name.equals(cfg.name()))
+        .filter(cfg -> name.equals(cfg.name())
+            && cfg.errorMessages().isEmpty())
         .findFirst();
   }
 

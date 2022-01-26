@@ -46,8 +46,11 @@ public class JdbcSinkConnectorTest {
         EMPTY_LIST, configErrors(connector.validate(connConfig), PK_MODE));
 
     connConfig.put("pk.mode", "none");
+
+    final String conflictMsg = "Deletes are only supported for pk.mode record_key";
+
     assertEquals("'record_key' is the only valid mode when 'delete.enabled' == true",
-        singletonList("'none' is invalid: Deletes are only supported for pk.mode 'record_key'"),
+        singletonList(conflictMsg),
         configErrors(connector.validate(connConfig), PK_MODE));
   }
 
@@ -74,8 +77,6 @@ public class JdbcSinkConnectorTest {
     connConfig.put("connector.class", "io.confluent.connect.jdbc.JdbcSinkConnector");
     connConfig.put("delete.enabled", "false");
     connConfig.put("pk.mode", "gibberish");
-
-    List<String> errors = configErrors(connector.validate(connConfig), PK_MODE);
 
     assertEquals("no double reporting for unknown pk.mode",
         1, configErrors(connector.validate(connConfig), PK_MODE).size());

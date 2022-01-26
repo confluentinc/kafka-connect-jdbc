@@ -20,6 +20,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
+
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.ColumnId;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -400,4 +403,41 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     actualTableId = dialect.parseTableIdentifier(tableFqn);
     assertEquals(expectedTableId, actualTableId);
   }
+
+  @Test
+  public void shouldFallBackOnUnknownDecimalScale() {
+    ColumnId columnId = new ColumnId(new TableId("catalog", "schema", "table"), "column");
+    ColumnDefinition definition = mock(ColumnDefinition.class);
+    when(definition.id()).thenReturn(columnId);
+
+    when(definition.precision()).thenReturn(4);
+    when(definition.scale()).thenReturn(GenericDatabaseDialect.NUMERIC_TYPE_SCALE_UNSET);
+
+    assertEquals(GenericDatabaseDialect.NUMERIC_TYPE_SCALE_HIGH, dialect.decimalScale(definition));
+  }
+
+  @Test
+  public void shouldFallBackOnUnfixedDecimalScale() {
+    ColumnId columnId = new ColumnId(new TableId("catalog", "schema", "table"), "column");
+    ColumnDefinition definition = mock(ColumnDefinition.class);
+    when(definition.id()).thenReturn(columnId);
+
+    when(definition.precision()).thenReturn(0);
+    when(definition.scale()).thenReturn(0);
+
+    assertEquals(GenericDatabaseDialect.NUMERIC_TYPE_SCALE_HIGH, dialect.decimalScale(definition));
+  }
+
+  @Test
+  public void shouldNotFallBackOnKnownDecimalScale() {
+    ColumnId columnId = new ColumnId(new TableId("catalog", "schema", "table"), "column");
+    ColumnDefinition definition = mock(ColumnDefinition.class);
+    when(definition.id()).thenReturn(columnId);
+
+    when(definition.precision()).thenReturn(0);
+    when(definition.scale()).thenReturn(5);
+
+    assertEquals(5, dialect.decimalScale(definition));
+  }
+
 }

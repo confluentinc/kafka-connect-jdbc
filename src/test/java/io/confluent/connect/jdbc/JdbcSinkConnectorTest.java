@@ -42,7 +42,11 @@ public class JdbcSinkConnectorTest {
     connConfig.put("delete.enabled", "true");
 
     connConfig.put("pk.mode", "record_key");
-    assertEquals("'record_key' is the only valid mode when 'delete.enabled' == true",
+    assertEquals("'pk.mode must be 'RECORD_KEY/record_key' when 'delete.enabled' == true",
+        EMPTY_LIST, configErrors(connector.validate(connConfig), PK_MODE));
+
+    connConfig.put("pk.mode", "RECORD_KEY");
+    assertEquals("pk.mode must be 'RECORD_KEY/record_key' when 'delete.enabled' == true",
         EMPTY_LIST, configErrors(connector.validate(connConfig), PK_MODE));
 
     connConfig.put("pk.mode", "none");

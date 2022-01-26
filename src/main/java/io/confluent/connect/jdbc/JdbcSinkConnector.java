@@ -83,7 +83,8 @@ public class JdbcSinkConnector extends SinkConnector {
         .filter(deleteEnabled -> Boolean.TRUE.equals(deleteEnabled.value()))
         .ifPresent(deleteEnabled -> configValue(config, PK_MODE)
             .ifPresent(pkMode -> {
-              if (!RECORD_KEY.name().toLowerCase(Locale.ROOT).equals(pkMode.value())) {
+              if (!RECORD_KEY.name().toLowerCase(Locale.ROOT).equals(pkMode.value())
+              && !RECORD_KEY.name().toUpperCase(Locale.ROOT).equals(pkMode.value())) {
                 String conflictMsg = "Deletes are only supported for pk.mode record_key";
                 pkMode.addErrorMessage(conflictMsg);
                 deleteEnabled.addErrorMessage(conflictMsg);

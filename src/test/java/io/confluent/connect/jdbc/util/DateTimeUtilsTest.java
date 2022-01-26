@@ -63,6 +63,34 @@ public class DateTimeUtilsTest {
     Timestamp timestamp = Timestamp.from(Instant.now());
     timestamp.setNanos(141362049);
     String isoDateTime = DateTimeUtils.toIsoDateTimeString(timestamp);
+    assertEquals("141362049", isoDateTime.substring(isoDateTime.lastIndexOf('.') + 1));
+    assertEquals(timestamp, DateTimeUtils.toTimestampFromIsoDateTime(isoDateTime));
+  }
+
+  @Test
+  public void testTimestampToIsoDateTimeNanosLeading0s() {
+    Timestamp timestamp = Timestamp.from(Instant.now());
+    timestamp.setNanos(1);
+    String isoDateTime = DateTimeUtils.toIsoDateTimeString(timestamp);
+    assertEquals("000000001", isoDateTime.substring(isoDateTime.lastIndexOf('.') + 1));
+    assertEquals(timestamp, DateTimeUtils.toTimestampFromIsoDateTime(isoDateTime));
+  }
+
+  @Test
+  public void testTimestampToIsoDateTimeNanosTrailing0s() {
+    Timestamp timestamp = Timestamp.from(Instant.now());
+    timestamp.setNanos(100);
+    String isoDateTime = DateTimeUtils.toIsoDateTimeString(timestamp);
+    assertEquals("000000100", isoDateTime.substring(isoDateTime.lastIndexOf('.') + 1));
+    assertEquals(timestamp, DateTimeUtils.toTimestampFromIsoDateTime(isoDateTime));
+  }
+
+  @Test
+  public void testTimestampToIsoDateTimeNanos0s() {
+    Timestamp timestamp = Timestamp.from(Instant.now());
+    timestamp.setNanos(0);
+    String isoDateTime = DateTimeUtils.toIsoDateTimeString(timestamp);
+    assertEquals("000000000", isoDateTime.substring(isoDateTime.lastIndexOf('.') + 1));
     assertEquals(timestamp, DateTimeUtils.toTimestampFromIsoDateTime(isoDateTime));
   }
 

@@ -34,7 +34,7 @@ public class DateTimeUtils {
   static final long NANOSECONDS_PER_MILLISECOND = TimeUnit.MILLISECONDS.toNanos(1);
   static final long NANOSECONDS_PER_SECOND = TimeUnit.SECONDS.toNanos(1);
   static final DateTimeFormatter ISO_DATE_TIME_NANOS_FORMAT =
-      DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.n");
+      DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS");
 
   private static final ThreadLocal<Map<TimeZone, Calendar>> TIMEZONE_CALENDARS =
       ThreadLocal.withInitial(HashMap::new);

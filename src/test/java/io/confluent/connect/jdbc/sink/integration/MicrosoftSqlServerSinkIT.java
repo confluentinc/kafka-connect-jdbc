@@ -47,6 +47,7 @@ public class MicrosoftSqlServerSinkIT extends BaseConnectorIT {
     private static final String PASS = "reallyStrongPwd123"; // test creds
 
     @ClassRule
+    @SuppressWarnings("deprecation")
     public static final FixedHostPortGenericContainer mssqlServer =
             new FixedHostPortGenericContainer<>("microsoft/mssql-server-linux:latest")
                     .withEnv("ACCEPT_EULA","Y")

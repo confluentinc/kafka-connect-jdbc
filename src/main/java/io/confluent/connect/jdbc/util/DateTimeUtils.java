@@ -18,6 +18,7 @@ package io.confluent.connect.jdbc.util;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
+import java.time.chrono.ChronoZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Calendar;
 import java.util.Date;
@@ -111,11 +112,14 @@ public class DateTimeUtils {
    * Get the iso date-time string with nano precision for the given {@link Timestamp}.
    *
    * @param timestamp the Java timestamp value
+   * @param tz the timezone of the source database
    * @return the string iso date time
    */
-  public static String toIsoDateTimeString(Timestamp timestamp) {
+  public static String toIsoDateTimeString(Timestamp timestamp, TimeZone tz) {
     return Optional.ofNullable(timestamp)
-        .map(t -> t.toLocalDateTime().format(ISO_DATE_TIME_NANOS_FORMAT))
+        .map(Timestamp::toInstant)
+        .map(t -> t.atZone(tz.toZoneId()))
+        .map(t -> t.format(ISO_DATE_TIME_NANOS_FORMAT))
         .orElse(null);
   }
 
@@ -151,13 +155,16 @@ public class DateTimeUtils {
   /**
    * Get {@link Timestamp} from epoch with nano precision
    *
-   * @param isoDateTime iso dateTime format "yyyy-MM-dd'T'HH:mm:ss.n"
+   * @param isoDT iso dateTime format "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS"
+   * @param tz the timezone of the source database
    * @return the equivalent java sql Timestamp
    */
-  public static Timestamp toTimestampFromIsoDateTime(String isoDateTime) {
-    return Optional.ofNullable(isoDateTime)
-        .map(i -> LocalDateTime.parse(isoDateTime, ISO_DATE_TIME_NANOS_FORMAT))
-        .map(Timestamp::valueOf)
+  public static Timestamp toTimestampFromIsoDateTime(String isoDT, TimeZone tz) {
+    return Optional.ofNullable(isoDT)
+        .map(i -> LocalDateTime.parse(isoDT, ISO_DATE_TIME_NANOS_FORMAT))
+        .map(t -> t.atZone(tz.toZoneId()))
+        .map(ChronoZonedDateTime::toInstant)
+        .map(Timestamp::from)
         .orElse(null);
   }
 

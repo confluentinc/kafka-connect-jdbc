@@ -20,11 +20,15 @@ import org.junit.Test;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.TimeZone;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
 public class DateTimeUtilsTest {
+
+  private TimeZone utcTimeZone = TimeZone.getTimeZone(ZoneOffset.UTC);
 
   @Test
   public void testTimestampToNanosLong() {
@@ -62,43 +66,43 @@ public class DateTimeUtilsTest {
   public void testTimestampToIsoDateTime() {
     Timestamp timestamp = Timestamp.from(Instant.now());
     timestamp.setNanos(141362049);
-    String isoDateTime = DateTimeUtils.toIsoDateTimeString(timestamp);
+    String isoDateTime = DateTimeUtils.toIsoDateTimeString(timestamp, utcTimeZone);
     assertEquals("141362049", isoDateTime.substring(isoDateTime.lastIndexOf('.') + 1));
-    assertEquals(timestamp, DateTimeUtils.toTimestampFromIsoDateTime(isoDateTime));
+    assertEquals(timestamp, DateTimeUtils.toTimestampFromIsoDateTime(isoDateTime, utcTimeZone));
   }
 
   @Test
   public void testTimestampToIsoDateTimeNanosLeading0s() {
     Timestamp timestamp = Timestamp.from(Instant.now());
     timestamp.setNanos(1);
-    String isoDateTime = DateTimeUtils.toIsoDateTimeString(timestamp);
+    String isoDateTime = DateTimeUtils.toIsoDateTimeString(timestamp, utcTimeZone);
     assertEquals("000000001", isoDateTime.substring(isoDateTime.lastIndexOf('.') + 1));
-    assertEquals(timestamp, DateTimeUtils.toTimestampFromIsoDateTime(isoDateTime));
+    assertEquals(timestamp, DateTimeUtils.toTimestampFromIsoDateTime(isoDateTime, utcTimeZone));
   }
 
   @Test
   public void testTimestampToIsoDateTimeNanosTrailing0s() {
     Timestamp timestamp = Timestamp.from(Instant.now());
     timestamp.setNanos(100);
-    String isoDateTime = DateTimeUtils.toIsoDateTimeString(timestamp);
+    String isoDateTime = DateTimeUtils.toIsoDateTimeString(timestamp, utcTimeZone);
     assertEquals("000000100", isoDateTime.substring(isoDateTime.lastIndexOf('.') + 1));
-    assertEquals(timestamp, DateTimeUtils.toTimestampFromIsoDateTime(isoDateTime));
+    assertEquals(timestamp, DateTimeUtils.toTimestampFromIsoDateTime(isoDateTime, utcTimeZone));
   }
 
   @Test
   public void testTimestampToIsoDateTimeNanos0s() {
     Timestamp timestamp = Timestamp.from(Instant.now());
     timestamp.setNanos(0);
-    String isoDateTime = DateTimeUtils.toIsoDateTimeString(timestamp);
+    String isoDateTime = DateTimeUtils.toIsoDateTimeString(timestamp, utcTimeZone);
     assertEquals("000000000", isoDateTime.substring(isoDateTime.lastIndexOf('.') + 1));
-    assertEquals(timestamp, DateTimeUtils.toTimestampFromIsoDateTime(isoDateTime));
+    assertEquals(timestamp, DateTimeUtils.toTimestampFromIsoDateTime(isoDateTime, utcTimeZone));
   }
 
   @Test
   public void testTimestampToIsoDateTimeNull() {
-    String isoDateTime = DateTimeUtils.toIsoDateTimeString(null);
+    String isoDateTime = DateTimeUtils.toIsoDateTimeString(null, utcTimeZone);
     assertNull(isoDateTime);
-    Timestamp timestamp = DateTimeUtils.toTimestampFromIsoDateTime(null);
+    Timestamp timestamp = DateTimeUtils.toTimestampFromIsoDateTime(null, utcTimeZone);
     assertNull(timestamp);
   }
 }

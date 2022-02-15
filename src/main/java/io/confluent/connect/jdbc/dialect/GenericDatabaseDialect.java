@@ -17,7 +17,10 @@ package io.confluent.connect.jdbc.dialect;
 
 import java.time.ZoneOffset;
 import java.util.TimeZone;
+
+import com.microsoft.sqlserver.jdbc.SQLServerConnection;
 import org.apache.kafka.common.config.AbstractConfig;
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -596,6 +599,56 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           exists ? "present" : "absent"
       );
       return exists;
+    }
+  }
+
+  public void setConnectionIsolationMode(Connection connection, String configValue) {
+    int isolationMode =
+            mapToAnsiSqlTransactionIsolationMode(
+                    JdbcSourceConnectorConfig.TransactionIsolationMode.valueOf(
+                            configValue
+                    )
+            );
+    if (isolationMode == -1) {
+      // not an ANSI-SQL isolation mode.
+      log.warn("Unable to set transaction.isolation.mode: "
+              +  configValue
+              +  ". This mode is not supported by the database."
+              + "No transaction isolation mode will be set for the queries");
+      return;
+    }
+    try {
+      DatabaseMetaData metadata = connection.getMetaData();
+      if (metadata.supportsTransactionIsolationLevel(isolationMode)) {
+        connection.setTransactionIsolation(isolationMode);
+      } else {
+        log.warn("Unable to set transaction.isolation.mode: "
+                +  configValue
+                +  ". This mode is not supported by the database."
+                + "No transaction isolation mode will be set for the queries");
+      }
+    }  catch (IllegalArgumentException ex) {
+      log.warn("Unable to read transaction.isolation.mode. No transaction isolation mode will be set for the queries");
+    } catch (SQLException ex) {
+      log.warn("Unable to set transaction.isolation.mode: " +  configValue
+              +  ". No transaction isolation mode will be set for the queries");
+    }
+  }
+
+  private static int mapToAnsiSqlTransactionIsolationMode(
+          JdbcSourceConnectorConfig.TransactionIsolationMode isolationMode
+  ) {
+    switch (isolationMode) {
+      case READ_UNCOMMITTED:
+        return Connection.TRANSACTION_READ_UNCOMMITTED;
+      case READ_COMMITTED:
+        return Connection.TRANSACTION_READ_COMMITTED;
+      case REPEATABLE_READ:
+        return Connection.TRANSACTION_REPEATABLE_READ;
+      case SERIALIZABLE:
+        return Connection.TRANSACTION_SERIALIZABLE;
+      default:
+        return -1;
     }
   }
 

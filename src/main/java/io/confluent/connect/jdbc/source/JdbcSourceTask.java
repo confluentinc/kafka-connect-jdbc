@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.source;
 
+import java.sql.DatabaseMetaData;
 import java.sql.SQLNonTransientException;
 import java.util.TimeZone;
 import org.apache.kafka.common.config.ConfigException;
@@ -105,6 +106,11 @@ public class JdbcSourceTask extends SourceTask {
     log.info("Using JDBC dialect {}", dialect.name());
 
     cachedConnectionProvider = connectionProvider(maxConnAttempts, retryBackoff);
+
+    String isolationModeString = config.getString(
+            JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG
+    );
+    dialect.setConnectionIsolationMode(cachedConnectionProvider.getConnection(), isolationModeString);
 
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
     String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);

@@ -202,6 +202,18 @@ public interface DatabaseDialect extends ConnectionProvider {
    */
   boolean tableExists(Connection connection, TableId tableId) throws SQLException;
 
+
+  /**
+   * Set the isolation mode for the connection.
+   * Isolation modes can differ by database so this provides an interface for
+   * the mode to be overridden.
+   *
+   * @param connection the database connection; may not be null
+   * @param configValue
+   * @throws SQLException if there's an error setting the isolation mode
+   */
+  void setConnectionIsolationMode(Connection connection, String configValue);
+
   /**
    * Create the definition for the columns described by the database metadata using the current
    * schema and catalog patterns defined in the configuration.

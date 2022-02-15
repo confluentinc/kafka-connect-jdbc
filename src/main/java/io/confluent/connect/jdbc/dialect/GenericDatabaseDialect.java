@@ -622,20 +622,15 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       if (metadata.supportsTransactionIsolationLevel(isolationMode)) {
         connection.setTransactionIsolation(isolationMode);
       } else {
-        log.warn("Unable to set transaction.isolation.mode: "
-                +  configValue
-                +  ". This mode is not supported by the database."
-                + "No transaction isolation mode will be set for the queries");
+        throw new ConfigException("Transaction Isolation level not supported by database");
       }
-    }  catch (IllegalArgumentException ex) {
-      log.warn("Unable to read transaction.isolation.mode. No transaction isolation mode will be set for the queries");
-    } catch (SQLException ex) {
+    } catch (SQLException | ConfigException ex) {
       log.warn("Unable to set transaction.isolation.mode: " +  configValue
-              +  ". No transaction isolation mode will be set for the queries");
+              +  ". No transaction isolation mode will be set for the queries: " + ex.getMessage());
     }
   }
 
-  private static int mapToAnsiSqlTransactionIsolationMode(
+  protected static int mapToAnsiSqlTransactionIsolationMode(
           JdbcSourceConnectorConfig.TransactionIsolationMode isolationMode
   ) {
     switch (isolationMode) {

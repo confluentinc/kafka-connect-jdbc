@@ -1391,7 +1391,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       case Types.TIMESTAMP: {
         return rs -> {
           Timestamp timestamp = rs.getTimestamp(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
-          return tsGranularity.fromTimestamp.apply(timestamp);
+          return tsGranularity.fromTimestamp.apply(timestamp, timeZone);
         };
       }
 

@@ -230,7 +230,7 @@ public class TimestampIncrementingCriteria {
   ) {
     caseAdjustedTimestampColumns.computeIfAbsent(schema, this::findCaseSensitiveTimestampColumns);
     for (String timestampColumn : caseAdjustedTimestampColumns.get(schema)) {
-      Timestamp ts = timestampGranularity.toTimestamp.apply(record.get(timestampColumn));
+      Timestamp ts = timestampGranularity.toTimestamp.apply(record.get(timestampColumn), timeZone);
       if (ts != null) {
         return ts;
       }

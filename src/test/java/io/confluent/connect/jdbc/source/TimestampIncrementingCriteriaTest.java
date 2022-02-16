@@ -221,8 +221,8 @@ public class TimestampIncrementingCriteriaTest {
         .field(TS2_COLUMN.name(), SchemaBuilder.STRING_SCHEMA)
         .build();
     record = new Struct(schema)
-        .put(TS1_COLUMN.name(), DateTimeUtils.toIsoDateTimeString(TS1))
-        .put(TS2_COLUMN.name(), DateTimeUtils.toIsoDateTimeString(TS2));
+        .put(TS1_COLUMN.name(), DateTimeUtils.toIsoDateTimeString(TS1, utcTimeZone))
+        .put(TS2_COLUMN.name(), DateTimeUtils.toIsoDateTimeString(TS2, utcTimeZone));
     assertExtractedOffset(-1, TS1, schema, record,
         TimestampGranularity.NANOS_ISO_DATETIME_STRING);
   }
@@ -273,8 +273,8 @@ public class TimestampIncrementingCriteriaTest {
         .field(TS2_COLUMN.name(), SchemaBuilder.STRING_SCHEMA)
         .build();
     record = new Struct(schema)
-        .put(TS1_COLUMN.name(), DateTimeUtils.toIsoDateTimeString(TS1))
-        .put(TS2_COLUMN.name(), DateTimeUtils.toIsoDateTimeString(TS2));
+        .put(TS1_COLUMN.name(), DateTimeUtils.toIsoDateTimeString(TS1, utcTimeZone))
+        .put(TS2_COLUMN.name(), DateTimeUtils.toIsoDateTimeString(TS2, utcTimeZone));
     assertExtractedOffset(-1, TS1, schema, record,
         TimestampGranularity.NANOS_STRING);
   }

@@ -32,6 +32,7 @@ import io.confluent.connect.jdbc.util.EnumRecommender;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TimeZoneValidator;
 
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import org.apache.kafka.common.config.AbstractConfig;
@@ -199,7 +200,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
           + "built-in representations \n"
           + "  * nanos_long: represents timestamp values as nanos since epoch\n"
           + "  * nanos_string: represents timestamp values as nanos since epoch in string\n"
-          + "  * nanos_iso_datetime_string: uses the iso format 'yyyy-MM-dd'T'HH:mm:ss.n'\n";
+          + "  * nanos_iso_datetime_string: uses iso format 'yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'\n";
   public static final String TIMESTAMP_GRANULARITY_DISPLAY = "Timestamp granularity for "
       + "timestamp columns";
   private static final EnumRecommender TIMESTAMP_GRANULARITY_RECOMMENDER =
@@ -820,16 +821,16 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     CONNECT_LOGICAL(optional -> optional
         ? org.apache.kafka.connect.data.Timestamp.builder().optional().build()
         : org.apache.kafka.connect.data.Timestamp.builder().build(),
-        timestamp -> timestamp,
-        timestamp -> (Timestamp) timestamp),
+        (timestamp, tz) -> timestamp,
+        (timestamp, tz) -> (Timestamp) timestamp),
 
     NANOS_LONG(optional -> optional ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA,
-        DateTimeUtils::toEpochNanos,
-        epochNanos -> DateTimeUtils.toTimestamp((Long) epochNanos)),
+        (timestamp, tz) -> DateTimeUtils.toEpochNanos(timestamp),
+        (epochNanos, tz) -> DateTimeUtils.toTimestamp((Long) epochNanos)),
 
     NANOS_STRING(optional -> optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA,
-        DateTimeUtils::toEpochNanosString,
-        epochNanosString -> {
+        (timestamp, tz) -> DateTimeUtils.toEpochNanosString(timestamp),
+        (epochNanosString, tz) -> {
           try {
             return DateTimeUtils.toTimestamp((String) epochNanosString);
           } catch (NumberFormatException  e) {
@@ -843,11 +844,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     NANOS_ISO_DATETIME_STRING(optional -> optional
         ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA,
         DateTimeUtils::toIsoDateTimeString,
-        isoDateTimeString -> DateTimeUtils.toTimestampFromIsoDateTime((String) isoDateTimeString));
+        (isoDateTimeString, tz) ->
+            DateTimeUtils.toTimestampFromIsoDateTime((String) isoDateTimeString, tz));
 
     public final Function<Boolean, Schema> schemaFunction;
-    public final Function<Timestamp, Object> fromTimestamp;
-    public final Function<Object, Timestamp> toTimestamp;
+    public final BiFunction<Timestamp, TimeZone, Object> fromTimestamp;
+    public final BiFunction<Object, TimeZone, Timestamp> toTimestamp;
 
     public static final String DEFAULT = CONNECT_LOGICAL.name().toLowerCase(Locale.ROOT);
 
@@ -864,8 +866,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     }
 
     TimestampGranularity(Function<Boolean, Schema> schemaFunction,
-        Function<Timestamp, Object> fromTimestamp,
-        Function<Object, Timestamp> toTimestamp) {
+        BiFunction<Timestamp, TimeZone, Object> fromTimestamp,
+        BiFunction<Object, TimeZone, Timestamp> toTimestamp) {
       this.schemaFunction = schemaFunction;
       this.fromTimestamp = fromTimestamp;
       this.toTimestamp = toTimestamp;

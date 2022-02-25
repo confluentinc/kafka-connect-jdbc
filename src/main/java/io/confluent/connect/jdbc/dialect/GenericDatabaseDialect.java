@@ -18,7 +18,6 @@ package io.confluent.connect.jdbc.dialect;
 import java.time.ZoneOffset;
 import java.util.TimeZone;
 
-import com.microsoft.sqlserver.jdbc.SQLServerConnection;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
@@ -79,6 +78,7 @@ import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.NumericMapping;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TimestampGranularity;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIsolationMode;
 import io.confluent.connect.jdbc.source.JdbcSourceTaskConfig;
 import io.confluent.connect.jdbc.source.TimestampIncrementingCriteria;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
@@ -602,17 +602,18 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     }
   }
 
-  public void setConnectionIsolationMode(Connection connection, String configValue) {
+  public void setConnectionIsolationMode(
+          Connection connection,
+          TransactionIsolationMode transactionIsolationMode
+  ) {
     int isolationMode =
             mapToAnsiSqlTransactionIsolationMode(
-                    JdbcSourceConnectorConfig.TransactionIsolationMode.valueOf(
-                            configValue
-                    )
+                    transactionIsolationMode
             );
     if (isolationMode == -1) {
       // not an ANSI-SQL isolation mode.
       log.warn("Unable to set transaction.isolation.mode: "
-              +  configValue
+              +  transactionIsolationMode.name()
               +  ". This mode is not supported by the database."
               + "No transaction isolation mode will be set for the queries");
       return;
@@ -625,7 +626,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         throw new ConfigException("Transaction Isolation level not supported by database");
       }
     } catch (SQLException | ConfigException ex) {
-      log.warn("Unable to set transaction.isolation.mode: " +  configValue
+      log.warn("Unable to set transaction.isolation.mode: " +  transactionIsolationMode.name()
               +  ". No transaction isolation mode will be set for the queries: " + ex.getMessage());
     }
   }

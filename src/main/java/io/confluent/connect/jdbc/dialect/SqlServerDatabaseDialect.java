@@ -406,24 +406,26 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
   }
 
   @Override
-  public void setConnectionIsolationMode(Connection connection, String configValue) {
+  public void setConnectionIsolationMode(
+          Connection connection,
+          TransactionIsolationMode transactionIsolationMode
+  ) {
     TransactionIsolationMode isolationMode = TransactionIsolationMode.valueOf(
-                    configValue
-            );
+            transactionIsolationMode.name()
+    );
 
     int mappedValue = mapToAnsiSqlTransactionIsolationMode(
                     isolationMode
             );
 
     try {
-      DatabaseMetaData metadata = connection.getMetaData();
+      DatabaseMetaData metadata =
+              connection.getMetaData();
 
       if (mappedValue == -1) {
         if (isolationMode == TransactionIsolationMode.SQL_SERVER_SNAPSHOT_ISOLATION) {
-          SQLServerConnection sqlServerConnection = (SQLServerConnection) connection;
-          if (metadata.supportsTransactionIsolationLevel(SQLServerConnection.TRANSACTION_SNAPSHOT)) {
-            sqlServerConnection.setTransactionIsolation(SQLServerConnection.TRANSACTION_SNAPSHOT);
-          }
+          Statement statement = connection.createStatement();
+          statement.execute("SET TRANSACTION ISOLATION LEVEL SNAPSHOT");
         } else {
           throw new ConfigException("Transaction Isolation level not supported by database");
         }
@@ -437,7 +439,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       }
     } catch (SQLException | ConfigException ex) {
       log.warn("Unable to set transaction.isolation.mode: "
-              +  configValue
+              +  transactionIsolationMode.name()
               +  ". This mode is not supported by the database."
               + "No transaction isolation mode will be set for the queries: "
               + ex.getMessage());

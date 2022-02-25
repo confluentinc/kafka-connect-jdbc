@@ -15,7 +15,6 @@
 
 package io.confluent.connect.jdbc.source;
 
-import java.sql.Connection;
 import java.sql.Timestamp;
 import java.time.ZoneId;
 import java.util.Arrays;
@@ -27,7 +26,6 @@ import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.atomic.AtomicReference;
 
-import com.microsoft.sqlserver.jdbc.SQLServerConnection;
 import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.EnumRecommender;
@@ -333,11 +331,13 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final String TABLE_TYPE_DISPLAY = "Table Types";
 
   //TODO: no default
-  public static final String TRANSACTION_ISOLATION_MODE_DEFAULT = TransactionIsolationMode.READ_COMMITTED.name();
+  public static final String TRANSACTION_ISOLATION_MODE_DEFAULT =
+          TransactionIsolationMode.DEFAULT.name();
   public static final String TRANSACTION_ISOLATION_MODE_CONFIG = "transaction.isolation.mode";
   private static final String TRANSACTION_ISOLATION_MODE_DOC =
-          "Mode to control which transaction isolation level is used when running queries against the database. Options"
-                  + " include:\n"
+          "Mode to control which transaction isolation level is used when running queries"
+                  + " against the database. Options include:\n"
+                  + "  * DEFAULT\n "
                   + "  * READ_UNCOMMITED\n"
                   + "  * READ_COMMITED\n"
                   + "  * REPEATABLE_READ\n"
@@ -584,8 +584,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         MODE_GROUP,
         ++orderInGroup,
         Width.MEDIUM,
-        QUERY_SUFFIX_DISPLAY)
-    .define(
+        QUERY_SUFFIX_DISPLAY
+    ).define(
         TRANSACTION_ISOLATION_MODE_CONFIG,
         Type.STRING,
         TRANSACTION_ISOLATION_MODE_DEFAULT,
@@ -595,7 +595,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.MEDIUM,
         TRANSACTION_ISOLATION_MODE_DISPLAY,
-        TRANSACTION_ISOLATION_MODE_RECOMMENDER);
+        TRANSACTION_ISOLATION_MODE_RECOMMENDER
+    );
   }
 
   private static final void addConnectorOptions(ConfigDef config) {
@@ -903,8 +904,10 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   }
 
   public enum TransactionIsolationMode {
-    READ_UNCOMMITTED, READ_COMMITTED, REPEATABLE_READ, SERIALIZABLE, SQL_SERVER_SNAPSHOT_ISOLATION
+    DEFAULT, READ_UNCOMMITTED, READ_COMMITTED,
+    REPEATABLE_READ, SERIALIZABLE, SQL_SERVER_SNAPSHOT_ISOLATION
   }
+
   protected JdbcSourceConnectorConfig(ConfigDef subclassConfigDef, Map<String, String> props) {
     super(subclassConfigDef, props);
   }

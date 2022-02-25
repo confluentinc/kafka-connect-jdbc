@@ -534,32 +534,32 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
 
     // READ_UNCOMMITTED
     dialect.setConnectionIsolationMode(conn,
-            JdbcSourceConnectorConfig.TransactionIsolationMode.READ_UNCOMMITTED.name()
+            JdbcSourceConnectorConfig.TransactionIsolationMode.READ_UNCOMMITTED
     );
     assertEquals(conn.getTransactionIsolation(), Connection.TRANSACTION_READ_UNCOMMITTED);
 
     // READ_COMMITTED
     dialect.setConnectionIsolationMode(conn,
-            JdbcSourceConnectorConfig.TransactionIsolationMode.READ_COMMITTED.name()
+            JdbcSourceConnectorConfig.TransactionIsolationMode.READ_COMMITTED
     );
     assertEquals(conn.getTransactionIsolation(), Connection.TRANSACTION_READ_COMMITTED);
 
     // REPEATABLE READ
     dialect.setConnectionIsolationMode(conn,
-            JdbcSourceConnectorConfig.TransactionIsolationMode.REPEATABLE_READ.name()
+            JdbcSourceConnectorConfig.TransactionIsolationMode.REPEATABLE_READ
     );
     assertEquals(conn.getTransactionIsolation(), Connection.TRANSACTION_REPEATABLE_READ);
 
     // SERIALIZABLE
     dialect.setConnectionIsolationMode(conn,
-            JdbcSourceConnectorConfig.TransactionIsolationMode.SERIALIZABLE.name()
+            JdbcSourceConnectorConfig.TransactionIsolationMode.SERIALIZABLE
     );
     assertEquals(conn.getTransactionIsolation(), Connection.TRANSACTION_SERIALIZABLE);
 
     // this transaction isolation mode is not supported
     // confirm no error is thrown
     dialect.setConnectionIsolationMode(conn,
-            JdbcSourceConnectorConfig.TransactionIsolationMode.SQL_SERVER_SNAPSHOT_ISOLATION.name()
+            JdbcSourceConnectorConfig.TransactionIsolationMode.SQL_SERVER_SNAPSHOT_ISOLATION
     );
     // confirm transaction isolation mode does not change.
     assertEquals(conn.getTransactionIsolation(), Connection.TRANSACTION_SERIALIZABLE);

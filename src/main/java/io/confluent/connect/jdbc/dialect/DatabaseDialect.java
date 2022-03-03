@@ -609,8 +609,8 @@ public interface DatabaseDialect extends ConnectionProvider {
   }
 
   /**
-   * @return true if you need to compare update counts from execute update
-   * to number of records
+   * @return true if you need to compare update counts from execute batch
+   *         to number of records
    */
   default boolean assertUpdateCount() {
     return true;

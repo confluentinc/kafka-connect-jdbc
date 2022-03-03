@@ -191,8 +191,9 @@ public class BufferedRecords {
     log.trace("{} records:{} resulting in totalUpdateCount:{} totalDeleteCount:{}",
         config.insertMode, records.size(), totalUpdateCount, totalDeleteCount
     );
-    if (totalUpdateCount.filter(total -> total != expectedCount).isPresent()
-        && config.insertMode == INSERT) {
+    if (dbDialect.assertUpdateCount()
+            && totalUpdateCount.filter(total -> total != expectedCount).isPresent()
+            && config.insertMode == INSERT) {
       throw new ConnectException(String.format(
           "Update count (%d) did not sum up to total number of records inserted (%d)",
           totalUpdateCount.get(),
@@ -219,6 +220,9 @@ public class BufferedRecords {
   private Optional<Long> executeUpdates() throws SQLException {
     Optional<Long> count = Optional.empty();
     for (int updateCount : updatePreparedStatement.executeBatch()) {
+      if (updateCount == Statement.EXECUTE_FAILED) {
+        throw new ConnectException("Execution failed for part of the batch update");
+      }
       if (updateCount != Statement.SUCCESS_NO_INFO) {
         count = count.isPresent()
             ? count.map(total -> total + updateCount)
@@ -232,6 +236,9 @@ public class BufferedRecords {
     long totalDeleteCount = 0;
     if (nonNull(deletePreparedStatement)) {
       for (int updateCount : deletePreparedStatement.executeBatch()) {
+        if (updateCount == Statement.EXECUTE_FAILED) {
+          throw new ConnectException("Execution failed for part of the batch delete");
+        }
         if (updateCount != Statement.SUCCESS_NO_INFO) {
           totalDeleteCount += updateCount;
         }

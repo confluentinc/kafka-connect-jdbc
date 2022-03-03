@@ -609,6 +609,14 @@ public interface DatabaseDialect extends ConnectionProvider {
   }
 
   /**
+   * @return true if you need to compare update counts from execute update
+   * to number of records
+   */
+  default boolean assertUpdateCount() {
+    return true;
+  }
+
+  /**
    * A function to bind the values from a sink record into a prepared statement.
    */
   @FunctionalInterface

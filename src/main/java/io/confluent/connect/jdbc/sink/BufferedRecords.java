@@ -21,10 +21,7 @@ import org.apache.kafka.connect.sink.SinkRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -219,9 +216,10 @@ public class BufferedRecords {
    */
   private Optional<Long> executeUpdates() throws SQLException {
     Optional<Long> count = Optional.empty();
+
     for (int updateCount : updatePreparedStatement.executeBatch()) {
       if (updateCount == Statement.EXECUTE_FAILED) {
-        throw new ConnectException("Execution failed for part of the batch update");
+        throw new BatchUpdateException("Execution failed for part of the batch update", new int[]{Statement.EXECUTE_FAILED});
       }
       if (updateCount != Statement.SUCCESS_NO_INFO) {
         count = count.isPresent()
@@ -237,7 +235,7 @@ public class BufferedRecords {
     if (nonNull(deletePreparedStatement)) {
       for (int updateCount : deletePreparedStatement.executeBatch()) {
         if (updateCount == Statement.EXECUTE_FAILED) {
-          throw new ConnectException("Execution failed for part of the batch delete");
+          throw new BatchUpdateException("Execution failed for part of the batch delete", new int[]{Statement.EXECUTE_FAILED});
         }
         if (updateCount != Statement.SUCCESS_NO_INFO) {
           totalDeleteCount += updateCount;

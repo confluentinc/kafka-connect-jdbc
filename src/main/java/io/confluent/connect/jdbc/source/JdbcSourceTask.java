@@ -92,6 +92,18 @@ public class JdbcSourceTask extends SourceTask {
       throw new ConnectException("Couldn't start JdbcSourceTask due to configuration error", e);
     }
 
+    List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
+    String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
+
+    if ((tables.isEmpty() && query.isEmpty())) {
+      throw new ConnectException("Task is being killed because it was not assigned a table nor a query to execute."
+              + " If run in table mode please make sure that the tables are exist on the database.");
+    } if ((!tables.isEmpty() && !query.isEmpty())) {
+      throw new ConnectException("Invalid configuration: each JdbcSourceTask must have at "
+              + "least one table assigned to it or one query specified");
+    }
+
+
     final String url = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
     final int maxConnAttempts = config.getInt(JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_CONFIG);
     final long retryBackoff = config.getLong(JdbcSourceConnectorConfig.CONNECTION_BACKOFF_CONFIG);
@@ -106,12 +118,6 @@ public class JdbcSourceTask extends SourceTask {
 
     cachedConnectionProvider = connectionProvider(maxConnAttempts, retryBackoff);
 
-    List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
-    String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
-    if ((tables.isEmpty() && query.isEmpty()) || (!tables.isEmpty() && !query.isEmpty())) {
-      throw new ConnectException("Invalid configuration: each JdbcSourceTask must have at "
-                                        + "least one table assigned to it or one query specified");
-    }
     TableQuerier.QueryMode queryMode = !query.isEmpty() ? TableQuerier.QueryMode.QUERY :
                                        TableQuerier.QueryMode.TABLE;
     List<String> tablesOrQuery = queryMode == TableQuerier.QueryMode.QUERY

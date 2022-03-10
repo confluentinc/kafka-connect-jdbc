@@ -217,9 +217,10 @@ public class BufferedRecords {
   private Optional<Long> executeUpdates() throws SQLException {
     Optional<Long> count = Optional.empty();
 
-    for (int updateCount : updatePreparedStatement.executeBatch()) {
+    int[] batchStatus = updatePreparedStatement.executeBatch();
+    for (int updateCount : batchStatus) {
       if (updateCount == Statement.EXECUTE_FAILED) {
-        throw new BatchUpdateException("Execution failed for part of the batch update", new int[]{Statement.EXECUTE_FAILED});
+        throw new BatchUpdateException("Execution failed for part of the batch update", batchStatus);
       }
       if (updateCount != Statement.SUCCESS_NO_INFO) {
         count = count.isPresent()
@@ -233,9 +234,10 @@ public class BufferedRecords {
   private long executeDeletes() throws SQLException {
     long totalDeleteCount = 0;
     if (nonNull(deletePreparedStatement)) {
-      for (int updateCount : deletePreparedStatement.executeBatch()) {
+      int[] batchStatus = deletePreparedStatement.executeBatch();
+      for (int updateCount : batchStatus) {
         if (updateCount == Statement.EXECUTE_FAILED) {
-          throw new BatchUpdateException("Execution failed for part of the batch delete", new int[]{Statement.EXECUTE_FAILED});
+          throw new BatchUpdateException("Execution failed for part of the batch delete", batchStatus);
         }
         if (updateCount != Statement.SUCCESS_NO_INFO) {
           totalDeleteCount += updateCount;

@@ -96,11 +96,18 @@ public class JdbcSourceTask extends SourceTask {
     String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
 
     if ((tables.isEmpty() && query.isEmpty())) {
-      throw new ConnectException("Task is being killed because it was not assigned a table nor a query to execute."
-              + " If run in table mode please make sure that the tables are exist on the database.");
-    } if ((!tables.isEmpty() && !query.isEmpty())) {
-      throw new ConnectException("Invalid configuration: each JdbcSourceTask must have at "
-              + "least one table assigned to it or one query specified");
+      throw new ConnectException("Task is being killed because"
+              + " it was not assigned a table nor a query to execute."
+              + " If run in table mode please make sure that the tables"
+              + " are exist on the database. If the table does exist on"
+              + " the database, we recommend using the fully qualified"
+              + " table name.");
+    }
+
+    if ((!tables.isEmpty() && !query.isEmpty())) {
+      throw new ConnectException("Invalid configuration: each JdbcSourceTask"
+              + " must have at least one table assigned to it or"
+              + " one query specified");
     }
 
 

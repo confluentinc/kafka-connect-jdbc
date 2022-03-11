@@ -17,10 +17,7 @@ package io.confluent.connect.jdbc.source;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsEqual.equalTo;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 import java.sql.Timestamp;
 import java.time.Duration;
@@ -863,6 +860,15 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     verifyPoll(2, "id", Arrays.asList(3, 4), true, false, false, TOPIC_PREFIX);
 
     PowerMock.verifyAll();
+  }
+
+  @Test (expected = ConnectException.class)
+  public void testTaskFailsIfNoQueryOrTablesConfigProvided() {
+    initializeTask();
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSourceTaskConfig.TABLES_CONFIG, "[]");
+    props.put(JdbcSourceConnectorConfig.QUERY_CONFIG, "");
+    task.start(props);
   }
 
   private void startTask(String timestampColumn, String incrementingColumn, String query) {

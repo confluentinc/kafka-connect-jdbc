@@ -154,7 +154,7 @@ public class JdbcSourceConnector extends SourceConnector {
                 + "the list of tables from the database yet"
         );
       } else if (currentTables.isEmpty()) {
-        taskConfigs = new ArrayList<>(1));
+        taskConfigs = new ArrayList<>(1);
         log.warn("No tables were found so there's no work to be done.");
         Map<String, String> taskProps = new HashMap<>(configProperties);
         taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, "[]");

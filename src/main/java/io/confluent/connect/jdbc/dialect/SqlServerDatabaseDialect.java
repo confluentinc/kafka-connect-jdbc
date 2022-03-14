@@ -27,7 +27,12 @@ import org.apache.kafka.connect.data.Timestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.sql.Types;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Calendar;
@@ -423,10 +428,17 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
               connection.getMetaData();
 
       if (mappedValue == -1) {
-        if (isolationMode == TransactionIsolationMode.SQL_SERVER_SNAPSHOT_ISOLATION) {
-          SQLServerConnection sqlServerConnection = (SQLServerConnection) connection;
-          if (metadata.supportsTransactionIsolationLevel(SQLServerConnection.TRANSACTION_SNAPSHOT)) {
-            sqlServerConnection.setTransactionIsolation(SQLServerConnection.TRANSACTION_SNAPSHOT);
+        if (isolationMode
+                == TransactionIsolationMode.SQL_SERVER_SNAPSHOT_ISOLATION
+        ) {
+          SQLServerConnection sqlServerConnection
+                  = (SQLServerConnection) connection;
+          if (metadata
+                  .supportsTransactionIsolationLevel(SQLServerConnection.TRANSACTION_SNAPSHOT)
+          ) {
+            sqlServerConnection.setTransactionIsolation(
+                    SQLServerConnection.TRANSACTION_SNAPSHOT
+            );
           }
         } else {
           throw new ConfigException("Transaction Isolation level not supported by database");

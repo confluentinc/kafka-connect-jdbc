@@ -330,20 +330,22 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "  In most cases it only makes sense to have either TABLE or VIEW.";
   private static final String TABLE_TYPE_DISPLAY = "Table Types";
 
-  //TODO: no default
   public static final String TRANSACTION_ISOLATION_MODE_DEFAULT =
           TransactionIsolationMode.DEFAULT.name();
   public static final String TRANSACTION_ISOLATION_MODE_CONFIG = "transaction.isolation.mode";
   private static final String TRANSACTION_ISOLATION_MODE_DOC =
-          "Mode to control which transaction isolation level is used when running queries"
-                  + " against the database. Options include:\n"
+          "Mode to control which transaction isolation level is used when running queries. "
+                  + "against the database. By default no explicit transaction isolation"
+                  + "mode is set. SQL_SERVER_SNAPSHOT_ISOLATION_MODE will only work"
+                  + "against a connector configured to write to Sql Server. "
+                  + "The Microsoft Sql Server driver is a requirement to use this feature. "
+                  + " Options include:\n"
                   + "  * DEFAULT\n "
                   + "  * READ_UNCOMMITED\n"
                   + "  * READ_COMMITED\n"
                   + "  * REPEATABLE_READ\n"
                   + "  * SERIALZABLE\n"
-                  + "  * SQL_SERVER_SNAPSHOT_ISOLATION_MODE\n"
-                  + "  fill me in.";
+                  + "  * SQL_SERVER_SNAPSHOT_ISOLATION_MODE\n";
   private static final String TRANSACTION_ISOLATION_MODE_DISPLAY = "Transaction Isolation Mode";
 
   private static final EnumRecommender TRANSACTION_ISOLATION_MODE_RECOMMENDER =

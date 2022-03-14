@@ -424,8 +424,10 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
 
       if (mappedValue == -1) {
         if (isolationMode == TransactionIsolationMode.SQL_SERVER_SNAPSHOT_ISOLATION) {
-          Statement statement = connection.createStatement();
-          statement.execute("SET TRANSACTION ISOLATION LEVEL SNAPSHOT");
+          SQLServerConnection sqlServerConnection = (SQLServerConnection) connection;
+          if (metadata.supportsTransactionIsolationLevel(SQLServerConnection.TRANSACTION_SNAPSHOT)) {
+            sqlServerConnection.setTransactionIsolation(SQLServerConnection.TRANSACTION_SNAPSHOT);
+          }
         } else {
           throw new ConfigException("Transaction Isolation level not supported by database");
         }

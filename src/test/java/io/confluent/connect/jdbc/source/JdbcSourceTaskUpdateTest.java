@@ -17,10 +17,12 @@ package io.confluent.connect.jdbc.source;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsEqual.equalTo;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.sql.Timestamp;
-import java.time.Duration;
 import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.Collections;
@@ -39,7 +41,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.powermock.api.easymock.PowerMock;
 import org.powermock.core.classloader.annotations.PowerMockIgnore;
-import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
 import io.confluent.connect.jdbc.util.DateTimeUtils;
@@ -868,6 +869,15 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     Map<String, String> props = new HashMap<>();
     props.put(JdbcSourceTaskConfig.TABLES_CONFIG, "[]");
     props.put(JdbcSourceConnectorConfig.QUERY_CONFIG, "");
+    task.start(props);
+  }
+
+  @Test (expected = ConnectException.class)
+  public void testTaskFailsIfBothQueryAndTablesConfigProvided() {
+    initializeTask();
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSourceTaskConfig.TABLES_CONFIG, "[dbo.table]");
+    props.put(JdbcSourceConnectorConfig.QUERY_CONFIG, "Select * from some table");
     task.start(props);
   }
 

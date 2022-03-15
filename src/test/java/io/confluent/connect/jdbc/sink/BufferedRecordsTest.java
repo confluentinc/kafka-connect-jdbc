@@ -19,8 +19,6 @@ import org.apache.kafka.common.config.ConfigException;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.TableDefinition;
 
-import java.sql.*;
-
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -33,6 +31,12 @@ import org.mockito.Matchers;
 import org.mockito.Mockito;
 
 import java.io.IOException;
+import java.sql.BatchUpdateException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Types;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;

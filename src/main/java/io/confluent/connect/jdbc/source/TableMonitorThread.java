@@ -19,6 +19,9 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.util.ConnectionProvider;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
+
+import org.apache.kafka.common.errors.TimeoutException;
+import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.connector.ConnectorContext;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
@@ -46,26 +49,32 @@ public class TableMonitorThread extends Thread {
   private final ConnectionProvider connectionProvider;
   private final ConnectorContext context;
   private final CountDownLatch shutdownLatch;
+  private final long startupMs;
   private final long pollMs;
   private final Set<String> whitelist;
   private final Set<String> blacklist;
   private final AtomicReference<List<TableId>> tables;
+  private final Time time;
 
   public TableMonitorThread(DatabaseDialect dialect,
       ConnectionProvider connectionProvider,
       ConnectorContext context,
+      long startupMs,
       long pollMs,
       Set<String> whitelist,
-      Set<String> blacklist
+      Set<String> blacklist,
+      Time time
   ) {
     this.dialect = dialect;
     this.connectionProvider = connectionProvider;
     this.context = context;
     this.shutdownLatch = new CountDownLatch(1);
+    this.startupMs = startupMs;
     this.pollMs = pollMs;
     this.whitelist = whitelist;
     this.blacklist = blacklist;
     this.tables = new AtomicReference<>();
+    this.time = time;
   }
 
   @Override
@@ -98,6 +107,7 @@ public class TableMonitorThread extends Thread {
    *         successfully yet
    */
   public List<TableId> tables() {
+    awaitTablesReady(startupMs);
     List<TableId> tablesSnapshot = tables.get();
     if (tablesSnapshot == null) {
       return null;
@@ -145,6 +155,15 @@ public class TableMonitorThread extends Thread {
     return tablesSnapshot;
   }
 
+  private void awaitTablesReady(long timeoutMs) {
+    try {
+      time.waitObject(tables, () -> tables.get() != null, time.milliseconds() + timeoutMs);
+    } catch (InterruptedException | TimeoutException e) {
+      log.info("Timed out or interrupted while awaiting for tables being read.");
+      return;
+    }
+  }
+
   public void shutdown() {
     log.info("Shutting down thread monitoring tables.");
     shutdownLatch.countDown();
@@ -189,6 +208,9 @@ public class TableMonitorThread extends Thread {
     }
 
     List<TableId> priorTablesSnapshot = tables.getAndSet(filteredTables);
+    synchronized (tables) {
+      tables.notifyAll();
+    }
     return !Objects.equals(priorTablesSnapshot, filteredTables);
   }
 

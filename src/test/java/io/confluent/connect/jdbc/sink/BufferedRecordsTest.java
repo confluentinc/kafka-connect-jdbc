@@ -18,7 +18,9 @@ package io.confluent.connect.jdbc.sink;
 import org.apache.kafka.common.config.ConfigException;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.TableDefinition;
-import java.sql.Types;
+
+import java.sql.*;
+
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -31,10 +33,6 @@ import org.mockito.Matchers;
 import org.mockito.Mockito;
 
 import java.io.IOException;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -453,8 +451,8 @@ public class BufferedRecordsTest {
 	    assertEquals(Collections.singletonList(recordB), buffer.flush());
   }
   
-  @Test
-  public void testFlushSuccessNoInfo() throws SQLException {
+  @Test(expected = BatchUpdateException.class)
+  public void testFlushExecuteFailed() throws SQLException {
     final String url = sqliteHelper.sqliteUri();
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
@@ -462,7 +460,7 @@ public class BufferedRecordsTest {
 
     int[] batchResponse = new int[2];
     batchResponse[0] = Statement.SUCCESS_NO_INFO;
-    batchResponse[1] = Statement.SUCCESS_NO_INFO;
+    batchResponse[1] = Statement.EXECUTE_FAILED;
 
     final ColumnDefinition colDefMock = mock(ColumnDefinition.class);
     when(colDefMock.type()).thenReturn(Types.VARCHAR);

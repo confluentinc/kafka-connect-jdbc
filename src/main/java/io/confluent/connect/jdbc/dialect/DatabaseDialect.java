@@ -608,7 +608,6 @@ public interface DatabaseDialect extends ConnectionProvider {
     bindField(statement, index, schema, value);
   }
 
-
   /**
    * A function to bind the values from a sink record into a prepared statement.
    */

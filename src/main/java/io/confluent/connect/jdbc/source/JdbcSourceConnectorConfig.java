@@ -340,7 +340,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
           TransactionIsolationMode.DEFAULT.name();
   public static final String TRANSACTION_ISOLATION_MODE_CONFIG = "transaction.isolation.mode";
   private static final String TRANSACTION_ISOLATION_MODE_DOC =
-          "Mode to control which transaction isolation level is used when running queries. "
+          "Mode to control which transaction isolation level is used when running queries "
                   + "against the database. By default no explicit transaction isolation"
                   + "mode is set. SQL_SERVER_SNAPSHOT_ISOLATION_MODE will only work"
                   + "against a connector configured to write to Sql Server. "

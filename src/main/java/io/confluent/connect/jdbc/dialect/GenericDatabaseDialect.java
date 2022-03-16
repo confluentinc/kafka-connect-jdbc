@@ -633,23 +633,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     }
   }
 
-  protected static int mapToAnsiSqlTransactionIsolationMode(
-          JdbcSourceConnectorConfig.TransactionIsolationMode isolationMode
-  ) {
-    switch (isolationMode) {
-      case READ_UNCOMMITTED:
-        return Connection.TRANSACTION_READ_UNCOMMITTED;
-      case READ_COMMITTED:
-        return Connection.TRANSACTION_READ_COMMITTED;
-      case REPEATABLE_READ:
-        return Connection.TRANSACTION_REPEATABLE_READ;
-      case SERIALIZABLE:
-        return Connection.TRANSACTION_SERIALIZABLE;
-      default:
-        return -1;
-    }
-  }
-
   protected String displayableTableTypes(String[] types, String delim) {
     return Arrays.stream(types).sorted().collect(Collectors.joining(delim));
   }

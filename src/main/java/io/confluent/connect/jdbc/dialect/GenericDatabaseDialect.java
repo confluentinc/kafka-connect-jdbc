@@ -606,16 +606,18 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           Connection connection,
           TransactionIsolationMode transactionIsolationMode
   ) {
-    int isolationMode =
-            mapToAnsiSqlTransactionIsolationMode(
-                    transactionIsolationMode
-            );
-    if (isolationMode == -1) {
-      // not an ANSI-SQL isolation mode.
-      log.warn("Unable to set transaction.isolation.mode: "
-              +  transactionIsolationMode.name()
-              +  ". This mode is not supported by the database."
-              + "No transaction isolation mode will be set for the queries");
+    if (transactionIsolationMode
+            == TransactionIsolationMode.DEFAULT) {
+      return;
+    }
+    int isolationMode = TransactionIsolationMode.get(
+            transactionIsolationMode
+    );
+    if (transactionIsolationMode
+            == TransactionIsolationMode.SQL_SERVER_SNAPSHOT_ISOLATION
+            && !name().equals(SqlServerDatabaseDialect.class.getSimpleName())) {
+      log.warn("Unable to set transaction.isolation.mode: " +  transactionIsolationMode.name()
+              +  ". This is only valid for a Connector with Sql Server dialect. ");
       return;
     }
     try {

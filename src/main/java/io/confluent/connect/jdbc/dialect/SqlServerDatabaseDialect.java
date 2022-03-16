@@ -15,10 +15,7 @@
 
 package io.confluent.connect.jdbc.dialect;
 
-import com.microsoft.sqlserver.jdbc.SQLServerConnection;
-import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIsolationMode;
 import org.apache.kafka.common.config.AbstractConfig;
-import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -27,8 +24,6 @@ import org.apache.kafka.connect.data.Timestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.Connection;
-import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -408,56 +403,6 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       }
     }
     verifiedSqlServerTimestamp = true;
-  }
-
-  @Override
-  public void setConnectionIsolationMode(
-          Connection connection,
-          TransactionIsolationMode transactionIsolationMode
-  ) {
-    TransactionIsolationMode isolationMode = TransactionIsolationMode.valueOf(
-            transactionIsolationMode.name()
-    );
-
-    int mappedValue = mapToAnsiSqlTransactionIsolationMode(
-                    isolationMode
-            );
-
-    try {
-      DatabaseMetaData metadata =
-              connection.getMetaData();
-
-      if (mappedValue == -1) {
-        if (isolationMode
-                == TransactionIsolationMode.SQL_SERVER_SNAPSHOT_ISOLATION
-        ) {
-          SQLServerConnection sqlServerConnection
-                  = (SQLServerConnection) connection;
-          if (metadata
-                  .supportsTransactionIsolationLevel(SQLServerConnection.TRANSACTION_SNAPSHOT)
-          ) {
-            sqlServerConnection.setTransactionIsolation(
-                    SQLServerConnection.TRANSACTION_SNAPSHOT
-            );
-          }
-        } else {
-          throw new ConfigException("Transaction Isolation level not supported by database");
-        }
-      } else {
-        // ANSI SQL transaction types.
-        if (metadata.supportsTransactionIsolationLevel(mappedValue)) {
-          connection.setTransactionIsolation(mappedValue);
-        } else {
-          throw new ConfigException("Transaction Isolation level not supported by database");
-        }
-      }
-    } catch (SQLException | ConfigException ex) {
-      log.warn("Unable to set transaction.isolation.mode: "
-              +  transactionIsolationMode.name()
-              +  ". This mode is not supported by the database."
-              + "No transaction isolation mode will be set for the queries: "
-              + ex.getMessage());
-    }
   }
 
   @Override

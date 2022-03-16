@@ -107,18 +107,17 @@ public class JdbcSourceTask extends SourceTask {
 
     cachedConnectionProvider = connectionProvider(maxConnAttempts, retryBackoff);
 
-    TransactionIsolationMode isolationMode = TransactionIsolationMode
-            .valueOf(
-                    config.getString(
-                            JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG
+
+    dialect.setConnectionIsolationMode(
+            cachedConnectionProvider.getConnection(),
+            TransactionIsolationMode
+                    .valueOf(
+                            config.getString(
+                                    JdbcSourceConnectorConfig
+                                            .TRANSACTION_ISOLATION_MODE_CONFIG
+                            )
                     )
-            );
-    if (isolationMode != TransactionIsolationMode.DEFAULT) {
-      dialect.setConnectionIsolationMode(
-              cachedConnectionProvider.getConnection(),
-              isolationMode
-      );
-    }
+    );
 
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
     String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);

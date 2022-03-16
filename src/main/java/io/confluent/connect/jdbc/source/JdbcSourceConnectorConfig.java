@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.source;
 
+import java.sql.Connection;
 import java.sql.Timestamp;
 import java.time.ZoneId;
 import java.util.Arrays;
@@ -907,8 +908,24 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public enum TransactionIsolationMode {
     DEFAULT, READ_UNCOMMITTED, READ_COMMITTED,
-    REPEATABLE_READ, SERIALIZABLE, SQL_SERVER_SNAPSHOT_ISOLATION
+    REPEATABLE_READ, SERIALIZABLE, SQL_SERVER_SNAPSHOT_ISOLATION;
+
+    public static int get(TransactionIsolationMode mode) {
+      switch (mode) {
+        case READ_UNCOMMITTED:
+          return Connection.TRANSACTION_READ_UNCOMMITTED;
+        case READ_COMMITTED:
+          return Connection.TRANSACTION_READ_COMMITTED;
+        case REPEATABLE_READ:
+          return Connection.TRANSACTION_REPEATABLE_READ;
+        case SERIALIZABLE:
+          return Connection.TRANSACTION_SERIALIZABLE;
+        default:
+          return -1;
+      }
+    }
   }
+
 
   protected JdbcSourceConnectorConfig(ConfigDef subclassConfigDef, Map<String, String> props) {
     super(subclassConfigDef, props);

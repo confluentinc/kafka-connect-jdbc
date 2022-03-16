@@ -344,13 +344,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
                   + "against the database. By default no explicit transaction isolation"
                   + "mode is set. SQL_SERVER_SNAPSHOT_ISOLATION_MODE will only work"
                   + "against a connector configured to write to Sql Server. "
-                  + "The Microsoft Sql Server driver is a requirement to use this feature. "
                   + " Options include:\n"
                   + "  * DEFAULT\n "
                   + "  * READ_UNCOMMITED\n"
                   + "  * READ_COMMITED\n"
                   + "  * REPEATABLE_READ\n"
-                  + "  * SERIALZABLE\n"
+                  + "  * SERIALIZABLE\n"
                   + "  * SQL_SERVER_SNAPSHOT_ISOLATION_MODE\n";
   private static final String TRANSACTION_ISOLATION_MODE_DISPLAY = "Transaction Isolation Mode";
 

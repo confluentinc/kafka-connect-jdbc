@@ -613,13 +613,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     int isolationMode = TransactionIsolationMode.get(
             transactionIsolationMode
     );
-    if (transactionIsolationMode
-            == TransactionIsolationMode.SQL_SERVER_SNAPSHOT_ISOLATION
-            && !name().equals(SqlServerDatabaseDialect.class.getSimpleName())) {
-      log.warn("Unable to set transaction.isolation.mode: " +  transactionIsolationMode.name()
-              +  ". This is only valid for a Connector with Sql Server dialect. ");
-      return;
-    }
     try {
       DatabaseMetaData metadata = connection.getMetaData();
       if (metadata.supportsTransactionIsolationLevel(isolationMode)) {

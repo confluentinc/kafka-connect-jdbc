@@ -27,6 +27,8 @@ import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.atomic.AtomicReference;
 
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.EnumRecommender;
@@ -35,7 +37,9 @@ import io.confluent.connect.jdbc.util.TimeZoneValidator;
 
 import java.util.function.Function;
 import java.util.regex.Pattern;
+
 import org.apache.kafka.common.config.AbstractConfig;
+import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Recommender;
@@ -43,6 +47,7 @@ import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.config.ConfigValue;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -352,11 +357,52 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final EnumRecommender TRANSACTION_ISOLATION_MODE_RECOMMENDER =
           EnumRecommender.in(TransactionIsolationMode.values());
 
+  private static final String SqlServerDatabaseDialectName = "SqlServerDatabaseDialect";
+
   public static ConfigDef baseConfigDef() {
     ConfigDef config = new ConfigDef();
     addDatabaseOptions(config);
     addModeOptions(config);
     addConnectorOptions(config);
+    return config;
+  }
+
+  public Config validateMultiConfigs(Config config) {
+    HashMap<String, ConfigValue> configValues = new HashMap<>();
+    config.configValues().stream()
+            .filter((configValue) ->
+                    configValue.name().equals(
+                            JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG
+                    )
+            ).forEach(configValue -> configValues.putIfAbsent(configValue.name(), configValue));
+
+    TransactionIsolationMode transactionIsolationMode =
+            TransactionIsolationMode.valueOf(
+                    this.getString(TRANSACTION_ISOLATION_MODE_CONFIG)
+            );
+    if (transactionIsolationMode == TransactionIsolationMode.SQL_SERVER_SNAPSHOT_ISOLATION) {
+      DatabaseDialect dialect;
+      final String dialectName = this.getString(JdbcSourceConnectorConfig.DIALECT_NAME_CONFIG);
+      if (dialectName != null && !dialectName.trim().isEmpty()) {
+        dialect = DatabaseDialects.create(dialectName, this);
+      } else {
+        dialect = DatabaseDialects.findBestFor(this.getString(CONNECTION_URL_CONFIG), this);
+      }
+      if (!dialect.name().equals(
+              DatabaseDialects.create(
+                      SqlServerDatabaseDialectName, this
+              ).name()
+      )
+      ) {
+        configValues
+                .get(JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG)
+                .addErrorMessage("Isolation mode of `"
+                        + TransactionIsolationMode.SQL_SERVER_SNAPSHOT_ISOLATION.name()
+                        + "` can only be configured with a Sql Server Dialect"
+          );
+      }
+    }
+
     return config;
   }
 

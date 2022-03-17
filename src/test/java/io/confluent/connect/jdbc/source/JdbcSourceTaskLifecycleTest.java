@@ -20,27 +20,32 @@ import org.apache.kafka.connect.source.SourceRecord;
 import org.easymock.EasyMock;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.Mockito;
 import org.powermock.api.easymock.PowerMock;
 import org.powermock.api.easymock.annotation.Mock;
 import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.modules.junit4.PowerMockRunner;
 
+import java.lang.reflect.Field;
 import java.sql.Connection;
+import java.sql.SQLException;
 import java.sql.SQLNonTransientException;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 
+import static org.easymock.EasyMock.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsInstanceOf.instanceOf;
 import static org.hamcrest.core.StringContains.containsString;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
+import static org.mockito.Mockito.when;
+
 
 @RunWith(PowerMockRunner.class)
 @PowerMockIgnore("javax.management.*")
@@ -307,6 +312,66 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
     });
     assertThat(e.getCause(), instanceOf(SQLNonTransientException.class));
     assertThat(e.getMessage(), containsString("not_existing_table"));
+  }
+
+  @Test(expected = ConnectException.class)
+  public void testTransientSQLExceptionRetries() throws Exception {
+
+    int retryMax = 1;
+    TableQuerier bulkTableQuerier = EasyMock.createMock(BulkTableQuerier.class);
+
+    // we try retryMax times (i.e 2 times) before we fail the task
+    for (int i = 0; i < retryMax+1; i++) {
+      expect(bulkTableQuerier.querying()).andReturn(true);
+      bulkTableQuerier.maybeStartQuery(anyObject());
+      expectLastCall().andThrow(new SQLException("This is a transient exception"));
+      bulkTableQuerier.reset(anyLong(), anyBoolean());
+    }
+
+    replay(bulkTableQuerier);
+    JdbcSourceTask mockedTask = setUpMockedTask(bulkTableQuerier, retryMax);
+
+    for (int i = 0; i < retryMax+1; i++) {
+      mockedTask.poll();
+    }
+  }
+
+
+  private JdbcSourceTask setUpMockedTask(TableQuerier bulkTableQuerier, int retryMax) throws Exception {
+    CachedConnectionProvider mockCachedConnectionProvider = EasyMock.createMock(CachedConnectionProvider.class);
+    expect(mockCachedConnectionProvider.getConnection()).andReturn(null);
+    expect(mockCachedConnectionProvider.getConnection()).andReturn(null);
+    replay(mockCachedConnectionProvider);
+
+    PriorityQueue<TableQuerier> priorityQueue = new PriorityQueue<>();
+    priorityQueue.add(bulkTableQuerier);
+
+    Map<TableQuerier, Integer> mockRetriesAttemptedPerTableQuerier = new HashMap<>();
+    mockRetriesAttemptedPerTableQuerier.put(bulkTableQuerier, 0);
+
+    JdbcSourceTask mockedTask = new JdbcSourceTask(time);
+
+    // everything that gets set in start()
+    Field running = mockedTask.getClass().getDeclaredField("running");
+    Field tableQueue = mockedTask.getClass().getDeclaredField("tableQueue");
+    Field cachedConnectionProvider = mockedTask.getClass().getDeclaredField("cachedConnectionProvider");
+    Field retriesAttemptedPerTableQuerier = mockedTask.getClass().getDeclaredField("retriesAttemptedPerTableQuerier");
+    Field max_retries_per_querier = mockedTask.getClass().getDeclaredField("max_retries_per_querier");
+
+
+    tableQueue.setAccessible(true);
+    running.setAccessible(true);
+    cachedConnectionProvider.setAccessible(true);
+    retriesAttemptedPerTableQuerier.setAccessible(true);
+    max_retries_per_querier.setAccessible(true);
+
+    tableQueue.set(mockedTask, priorityQueue);
+    running.set(mockedTask, new AtomicBoolean(true));
+    cachedConnectionProvider.set(mockedTask, mockCachedConnectionProvider);
+    retriesAttemptedPerTableQuerier.set(mockedTask, mockRetriesAttemptedPerTableQuerier);
+    max_retries_per_querier.set(mockedTask, retryMax); // set max retries config
+
+    return mockedTask;
   }
 
   private static void validatePollResultTable(List<SourceRecord> records,

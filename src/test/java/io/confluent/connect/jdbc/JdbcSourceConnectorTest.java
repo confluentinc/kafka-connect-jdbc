@@ -259,7 +259,7 @@ public class JdbcSourceConnectorTest {
   @Test
   public void testSqlServerIsolationModeWithCorrectDialect() {
 
-    props.put(JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG, "SQL_SERVER_SNAPSHOT_ISOLATION");
+    props.put(JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG, "SQL_SERVER_SNAPSHOT");
     props.put(JdbcSourceConnectorConfig.DIALECT_NAME_CONFIG, "SqlServerDatabaseDialect");
 
     Config config = connector.validate(props);
@@ -280,7 +280,7 @@ public class JdbcSourceConnectorTest {
 
   @Test
   public void testSqlServerIsolationModeIncorrectDialect() {
-    props.put(JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG, "SQL_SERVER_SNAPSHOT_ISOLATION");
+    props.put(JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG, "SQL_SERVER_SNAPSHOT");
     props.put(JdbcSourceConnectorConfig.DIALECT_NAME_CONFIG, "MySqlDatabaseDialect");
 
     Config config = connector.validate(props);
@@ -298,7 +298,7 @@ public class JdbcSourceConnectorTest {
     assertFalse(errors.isEmpty());
     assertEquals(1, errors.size());
     assertTrue(errors.get(0).contains(
-            "Isolation mode of `SQL_SERVER_SNAPSHOT_ISOLATION` can only be"
+            "Isolation mode of `SQL_SERVER_SNAPSHOT` can only be"
                     + " configured with a Sql Server Dialect")
     );
   }
@@ -311,7 +311,7 @@ public class JdbcSourceConnectorTest {
     sqlServerConnectionUrlTypes.add("jdbc:jtds:sqlserver://localhost;user=Me");
 
     for (String urlType : sqlServerConnectionUrlTypes) {
-      props.put(JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG, "SQL_SERVER_SNAPSHOT_ISOLATION");
+      props.put(JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG, "SQL_SERVER_SNAPSHOT");
       props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, urlType);
 
       Config config = connector.validate(props);
@@ -333,7 +333,7 @@ public class JdbcSourceConnectorTest {
 
   @Test
   public void testSqlServerIsolationModeWithIncorrectUrl() {
-    props.put(JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG, "SQL_SERVER_SNAPSHOT_ISOLATION");
+    props.put(JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG, "SQL_SERVER_SNAPSHOT");
     props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:mysql://localhost:3306/sakila?profileSQL=true");
 
     Config config = connector.validate(props);
@@ -351,7 +351,7 @@ public class JdbcSourceConnectorTest {
     assertFalse(errors.isEmpty());
     assertEquals(1, errors.size());
     assertTrue(errors.get(0).contains(
-            "Isolation mode of `SQL_SERVER_SNAPSHOT_ISOLATION` can only be"
+            "Isolation mode of `SQL_SERVER_SNAPSHOT` can only be"
                     + " configured with a Sql Server Dialect")
     );
 

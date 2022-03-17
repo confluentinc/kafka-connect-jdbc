@@ -27,6 +27,7 @@ import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.microsoft.sqlserver.jdbc.SQLServerConnection;
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
@@ -350,7 +351,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
                   + "  * READ_COMMITED\n"
                   + "  * REPEATABLE_READ\n"
                   + "  * SERIALIZABLE\n"
-                  + "  * SQL_SERVER_SNAPSHOT_ISOLATION_MODE\n";
+                  + "  * SQL_SERVER_SNAPSHOT\n";
   private static final String TRANSACTION_ISOLATION_MODE_DISPLAY = "Transaction Isolation Mode";
 
   private static final EnumRecommender TRANSACTION_ISOLATION_MODE_RECOMMENDER =
@@ -379,7 +380,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
             TransactionIsolationMode.valueOf(
                     this.getString(TRANSACTION_ISOLATION_MODE_CONFIG)
             );
-    if (transactionIsolationMode == TransactionIsolationMode.SQL_SERVER_SNAPSHOT_ISOLATION) {
+    if (transactionIsolationMode == TransactionIsolationMode.SQL_SERVER_SNAPSHOT) {
       DatabaseDialect dialect;
       final String dialectName = this.getString(JdbcSourceConnectorConfig.DIALECT_NAME_CONFIG);
       if (dialectName != null && !dialectName.trim().isEmpty()) {
@@ -396,7 +397,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         configValues
                 .get(JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG)
                 .addErrorMessage("Isolation mode of `"
-                        + TransactionIsolationMode.SQL_SERVER_SNAPSHOT_ISOLATION.name()
+                        + TransactionIsolationMode.SQL_SERVER_SNAPSHOT.name()
                         + "` can only be configured with a Sql Server Dialect"
           );
       }
@@ -953,7 +954,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public enum TransactionIsolationMode {
     DEFAULT, READ_UNCOMMITTED, READ_COMMITTED,
-    REPEATABLE_READ, SERIALIZABLE, SQL_SERVER_SNAPSHOT_ISOLATION;
+    REPEATABLE_READ, SERIALIZABLE, SQL_SERVER_SNAPSHOT;
 
     public static int get(TransactionIsolationMode mode) {
       switch (mode) {
@@ -965,6 +966,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
           return Connection.TRANSACTION_REPEATABLE_READ;
         case SERIALIZABLE:
           return Connection.TRANSACTION_SERIALIZABLE;
+        case SQL_SERVER_SNAPSHOT:
+          return SQLServerConnection.TRANSACTION_SNAPSHOT;
         default:
           return -1;
       }

@@ -559,7 +559,7 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
     // this transaction isolation mode is not supported. No error is expected.
     // Just a warning. Old isolation mode is maintained.
     dialect.setConnectionIsolationMode(conn,
-            JdbcSourceConnectorConfig.TransactionIsolationMode.SQL_SERVER_SNAPSHOT_ISOLATION
+            JdbcSourceConnectorConfig.TransactionIsolationMode.SQL_SERVER_SNAPSHOT
     );
     // confirm transaction isolation mode does not change.
     assertEquals(conn.getTransactionIsolation(), Connection.TRANSACTION_SERIALIZABLE);

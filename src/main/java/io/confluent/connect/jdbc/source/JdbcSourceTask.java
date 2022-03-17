@@ -67,7 +67,7 @@ public class JdbcSourceTask extends SourceTask {
   private JdbcSourceTaskConfig config;
   private DatabaseDialect dialect;
   private CachedConnectionProvider cachedConnectionProvider;
-  protected PriorityQueue<TableQuerier> tableQueue = new PriorityQueue<TableQuerier>();
+  private PriorityQueue<TableQuerier> tableQueue = new PriorityQueue<TableQuerier>();
   private final AtomicBoolean running = new AtomicBoolean(false);
   private final AtomicLong taskThreadId = new AtomicLong(0);
 

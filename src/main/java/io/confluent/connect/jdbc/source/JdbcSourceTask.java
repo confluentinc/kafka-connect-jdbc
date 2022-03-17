@@ -72,7 +72,7 @@ public class JdbcSourceTask extends SourceTask {
   private final AtomicLong taskThreadId = new AtomicLong(0);
 
   private Map<TableQuerier, Integer> retriesAttemptedPerTableQuerier;
-  private int max_retries_per_querier;
+  private int maxRetriesPerQuerier;
 
   public JdbcSourceTask() {
     this.time = new SystemTime();
@@ -295,7 +295,7 @@ public class JdbcSourceTask extends SourceTask {
     taskThreadId.set(Thread.currentThread().getId());
     log.info("Started JDBC source task");
 
-    max_retries_per_querier = config.getInt(JdbcSourceConnectorConfig.QUERY_RETRIES_CONFIG);
+    maxRetriesPerQuerier = config.getInt(JdbcSourceConnectorConfig.QUERY_RETRIES_CONFIG);
     retriesAttemptedPerTableQuerier = tableQueue.stream().collect(
             Collectors.toMap(Function.identity(), (q) -> 0));
   }
@@ -456,8 +456,8 @@ public class JdbcSourceTask extends SourceTask {
         retriesAttemptedPerTableQuerier.compute(querier, (k, v) -> v + 1);
         log.error("SQL exception while running query for table: {}", querier, sqle);
         resetAndRequeueHead(querier, true);
-        if (max_retries_per_querier > 0
-                && retriesAttemptedPerTableQuerier.get(querier) > max_retries_per_querier) {
+        if (maxRetriesPerQuerier > 0
+                && retriesAttemptedPerTableQuerier.get(querier) > maxRetriesPerQuerier) {
           closeResources();
           throw new ConnectException("Failed to Query table after retries", sqle);
         }

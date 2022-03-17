@@ -362,20 +362,20 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
     Field tableQueue = mockedTask.getClass().getDeclaredField("tableQueue");
     Field cachedConnectionProvider = mockedTask.getClass().getDeclaredField("cachedConnectionProvider");
     Field retriesAttemptedPerTableQuerier = mockedTask.getClass().getDeclaredField("retriesAttemptedPerTableQuerier");
-    Field max_retries_per_querier = mockedTask.getClass().getDeclaredField("max_retries_per_querier");
+    Field maxRetriesPerQuerier = mockedTask.getClass().getDeclaredField("maxRetriesPerQuerier");
 
 
     tableQueue.setAccessible(true);
     running.setAccessible(true);
     cachedConnectionProvider.setAccessible(true);
     retriesAttemptedPerTableQuerier.setAccessible(true);
-    max_retries_per_querier.setAccessible(true);
+    maxRetriesPerQuerier.setAccessible(true);
 
     tableQueue.set(mockedTask, priorityQueue);
     running.set(mockedTask, new AtomicBoolean(true));
     cachedConnectionProvider.set(mockedTask, mockCachedConnectionProvider);
     retriesAttemptedPerTableQuerier.set(mockedTask, mockRetriesAttemptedPerTableQuerier);
-    max_retries_per_querier.set(mockedTask, retryMax); // set max retries config
+    maxRetriesPerQuerier.set(mockedTask, retryMax); // set max retries config
 
     return mockedTask;
   }

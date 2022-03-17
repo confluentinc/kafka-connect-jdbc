@@ -343,7 +343,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final String TRANSACTION_ISOLATION_MODE_DOC =
           "Mode to control which transaction isolation level is used when running queries "
                   + "against the database. By default no explicit transaction isolation"
-                  + "mode is set. SQL_SERVER_SNAPSHOT_ISOLATION_MODE will only work"
+                  + "mode is set. SQL_SERVER_SNAPSHOT will only work"
                   + "against a connector configured to write to Sql Server. "
                   + " Options include:\n"
                   + "  * DEFAULT\n "

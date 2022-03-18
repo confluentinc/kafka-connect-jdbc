@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc;
 
+import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.connector.Task;
@@ -133,6 +134,15 @@ public class JdbcSourceConnector extends SourceConnector {
   @Override
   public Class<? extends Task> taskClass() {
     return JdbcSourceTask.class;
+  }
+
+  @Override
+  public Config validate(Map<String, String> connectorConfigs) {
+    Config config = super.validate(connectorConfigs);
+    JdbcSourceConnectorConfig jdbcSourceConnectorConfig
+            = new JdbcSourceConnectorConfig(connectorConfigs);
+    jdbcSourceConnectorConfig.validateMultiConfigs(config);
+    return config;
   }
 
   @Override

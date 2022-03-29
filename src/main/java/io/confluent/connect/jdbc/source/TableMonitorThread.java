@@ -159,7 +159,7 @@ public class TableMonitorThread extends Thread {
     try {
       time.waitObject(tables, () -> tables.get() != null, time.milliseconds() + timeoutMs);
     } catch (InterruptedException | TimeoutException e) {
-      log.info("Timed out or interrupted while awaiting for tables being read.");
+      log.warn("Timed out or interrupted while awaiting for tables being read.");
       return;
     }
   }

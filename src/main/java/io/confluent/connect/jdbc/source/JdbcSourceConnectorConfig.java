@@ -177,13 +177,10 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String TIMESTAMP_COLUMN_NAME_DEFAULT = "";
   private static final String TIMESTAMP_COLUMN_NAME_DISPLAY = "Timestamp Column Name";
 
+  /* The amount of time to wait for the table monitoring thread to complete initial table read */
   public static final String TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_CONFIG =
       "table.monitoring.startup.polling.limit.ms";
-  private static final String TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_DOC =
-      "The amount of time to wait for the table monitoring thread to complete initial table read.";
   public static final long TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_DEFAULT = 10 * 1000;
-  private static final String TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_DISPLAY =
-      "Table Monitoring Thread Startup Polling Limit (ms)";
 
   public static final String TABLE_POLL_INTERVAL_MS_CONFIG = "table.poll.interval.ms";
   private static final String TABLE_POLL_INTERVAL_MS_DOC =
@@ -562,16 +559,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.SHORT,
         BATCH_MAX_ROWS_DISPLAY
-    ).define(
+    ).defineInternal(
         TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_CONFIG,
         Type.LONG,
         TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_DEFAULT,
-        Importance.LOW,
-        TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_DOC,
-        CONNECTOR_GROUP,
-        ++orderInGroup,
-        Width.SHORT,
-        TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_DISPLAY
+        Importance.LOW
     ).define(
         TABLE_POLL_INTERVAL_MS_CONFIG,
         Type.LONG,

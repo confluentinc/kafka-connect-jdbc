@@ -425,6 +425,7 @@ public class JdbcSourceTask extends SourceTask {
 
         if (results.isEmpty()) {
           consecutiveEmptyResults.compute(querier, (k, v) -> v + 1);
+          querier.resetRetryCount();
           log.trace("No updates for {}", querier.toString());
 
           if (Collections.min(consecutiveEmptyResults.values())

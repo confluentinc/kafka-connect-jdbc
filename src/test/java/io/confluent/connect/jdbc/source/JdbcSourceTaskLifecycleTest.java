@@ -39,12 +39,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 
-import static org.easymock.EasyMock.anyBoolean;
-import static org.easymock.EasyMock.anyLong;
-import static org.easymock.EasyMock.anyObject;
-import static org.easymock.EasyMock.expect;
-import static org.easymock.EasyMock.expectLastCall;
-import static org.easymock.EasyMock.replay;
+import static org.easymock.EasyMock.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsInstanceOf.instanceOf;
 import static org.hamcrest.core.StringContains.containsString;
@@ -323,14 +318,17 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
   @Test(expected = ConnectException.class)
   public void testTransientSQLExceptionRetries() throws Exception {
 
-    int retryMax = 1;
+    int retryMax = 2; //max times to retry
     TableQuerier bulkTableQuerier = EasyMock.createMock(BulkTableQuerier.class);
 
-    // we try retryMax times (i.e 2 times) before we fail the task
     for (int i = 0; i < retryMax+1; i++) {
       expect(bulkTableQuerier.querying()).andReturn(true);
       bulkTableQuerier.maybeStartQuery(anyObject());
       expectLastCall().andThrow(new SQLException("This is a transient exception"));
+
+      expect(bulkTableQuerier.getAttemptedRetryCount()).andReturn(i);
+      bulkTableQuerier.incrementRetryCount();
+      expectLastCall().once();
       bulkTableQuerier.reset(anyLong(), anyBoolean());
     }
 
@@ -345,37 +343,21 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
 
   private JdbcSourceTask setUpMockedTask(TableQuerier bulkTableQuerier, int retryMax) throws Exception {
     CachedConnectionProvider mockCachedConnectionProvider = EasyMock.createMock(CachedConnectionProvider.class);
-    expect(mockCachedConnectionProvider.getConnection()).andReturn(null);
-    expect(mockCachedConnectionProvider.getConnection()).andReturn(null);
+    for (int i = 0; i < retryMax+1; i++) {
+      expect(mockCachedConnectionProvider.getConnection()).andReturn(null);
+    }
     replay(mockCachedConnectionProvider);
 
     PriorityQueue<TableQuerier> priorityQueue = new PriorityQueue<>();
     priorityQueue.add(bulkTableQuerier);
 
-    Map<TableQuerier, Integer> mockRetriesAttemptedPerTableQuerier = new HashMap<>();
-    mockRetriesAttemptedPerTableQuerier.put(bulkTableQuerier, 0);
 
     JdbcSourceTask mockedTask = new JdbcSourceTask(time);
+    mockedTask.start(singleTableConfig());
 
-    // everything that gets set in start()
-    Field running = mockedTask.getClass().getDeclaredField("running");
-    Field tableQueue = mockedTask.getClass().getDeclaredField("tableQueue");
-    Field cachedConnectionProvider = mockedTask.getClass().getDeclaredField("cachedConnectionProvider");
-    Field retriesAttemptedPerTableQuerier = mockedTask.getClass().getDeclaredField("retriesAttemptedPerTableQuerier");
-    Field maxRetriesPerQuerier = mockedTask.getClass().getDeclaredField("maxRetriesPerQuerier");
-
-
-    tableQueue.setAccessible(true);
-    running.setAccessible(true);
-    cachedConnectionProvider.setAccessible(true);
-    retriesAttemptedPerTableQuerier.setAccessible(true);
-    maxRetriesPerQuerier.setAccessible(true);
-
-    tableQueue.set(mockedTask, priorityQueue);
-    running.set(mockedTask, new AtomicBoolean(true));
-    cachedConnectionProvider.set(mockedTask, mockCachedConnectionProvider);
-    retriesAttemptedPerTableQuerier.set(mockedTask, mockRetriesAttemptedPerTableQuerier);
-    maxRetriesPerQuerier.set(mockedTask, retryMax); // set max retries config
+    mockedTask.tableQueue = priorityQueue;
+    mockedTask.cachedConnectionProvider = mockCachedConnectionProvider;
+    mockedTask.maxRetriesPerQuerier = retryMax;
 
     return mockedTask;
   }

@@ -187,6 +187,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "Use -1 to use the current time. If not specified, all data will be retrieved.";
   public static final String TIMESTAMP_INITIAL_DISPLAY = "Unix time value of initial timestamp";
 
+  /* The amount of time to wait for the table monitoring thread to complete initial table read */
+  public static final String TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_CONFIG =
+      "table.monitoring.startup.polling.limit.ms";
+  public static final long TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_DEFAULT = 10 * 1000;
+
   public static final String TABLE_POLL_INTERVAL_MS_CONFIG = "table.poll.interval.ms";
   private static final String TABLE_POLL_INTERVAL_MS_DOC =
       "Frequency in ms to poll for new or removed tables, which may result in updated task "
@@ -582,6 +587,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.SHORT,
         BATCH_MAX_ROWS_DISPLAY
+    ).defineInternal(
+        TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_CONFIG,
+        Type.LONG,
+        TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_DEFAULT,
+        Importance.LOW
     ).define(
         TABLE_POLL_INTERVAL_MS_CONFIG,
         Type.LONG,

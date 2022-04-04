@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc;
 
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.connector.Task;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceConnector;
@@ -92,6 +93,8 @@ public class JdbcSourceConnector extends SourceConnector {
     cachedConnectionProvider.getConnection();
 
     long tablePollMs = config.getLong(JdbcSourceConnectorConfig.TABLE_POLL_INTERVAL_MS_CONFIG);
+    long tableStartupLimitMs =
+        config.getLong(JdbcSourceConnectorConfig.TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_CONFIG);
     List<String> whitelist = config.getList(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG);
     Set<String> whitelistSet = whitelist.isEmpty() ? null : new HashSet<>(whitelist);
     List<String> blacklist = config.getList(JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG);
@@ -117,9 +120,11 @@ public class JdbcSourceConnector extends SourceConnector {
         dialect,
         cachedConnectionProvider,
         context,
+        tableStartupLimitMs,
         tablePollMs,
         whitelistSet,
-        blacklistSet
+        blacklistSet,
+        Time.SYSTEM
     );
     tableMonitorThread.start();
   }

@@ -330,6 +330,8 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
       expectLastCall().andThrow(new SQLException("This is a transient exception"));
 
       expect(bulkTableQuerier.getAttemptedRetryCount()).andReturn(i);
+      // Called another time in error logging
+      expect(bulkTableQuerier.getAttemptedRetryCount()).andReturn(i);
       bulkTableQuerier.incrementRetryCount();
       expectLastCall().once();
       bulkTableQuerier.reset(anyLong(), anyBoolean());

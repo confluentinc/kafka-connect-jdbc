@@ -66,6 +66,7 @@ public class JdbcSourceTask extends SourceTask {
   private Time time;
   private JdbcSourceTaskConfig config;
   private DatabaseDialect dialect;
+  //Visible for Testing
   CachedConnectionProvider cachedConnectionProvider;
   PriorityQueue<TableQuerier> tableQueue = new PriorityQueue<>();
   private final AtomicBoolean running = new AtomicBoolean(false);
@@ -416,6 +417,7 @@ public class JdbcSourceTask extends SourceTask {
         while (results.size() < batchMaxRows && (hadNext = querier.next())) {
           results.add(querier.extractRecord());
         }
+        querier.resetRetryCount();
 
         if (!hadNext) {
           // If we finished processing the results from the current query, we can reset and send
@@ -425,7 +427,6 @@ public class JdbcSourceTask extends SourceTask {
 
         if (results.isEmpty()) {
           consecutiveEmptyResults.compute(querier, (k, v) -> v + 1);
-          querier.resetRetryCount();
           log.trace("No updates for {}", querier.toString());
 
           if (Collections.min(consecutiveEmptyResults.values())
@@ -438,7 +439,6 @@ public class JdbcSourceTask extends SourceTask {
           }
         } else {
           consecutiveEmptyResults.put(querier, 0);
-          querier.resetRetryCount();
         }
 
         log.debug("Returning {} records for {}", results.size(), querier);
@@ -451,7 +451,14 @@ public class JdbcSourceTask extends SourceTask {
         closeResources();
         throw new ConnectException(sqle);
       } catch (SQLException sqle) {
-        log.error("SQL exception while running query for table: {}", querier, sqle);
+        log.error(
+                "SQL exception while running query for table: {}, {}."
+                        + " Attempting retry {} of {} attempts.",
+                querier,
+                sqle,
+                querier.getAttemptedRetryCount() + 1,
+                maxRetriesPerQuerier
+        );
         resetAndRequeueHead(querier, true);
         if (maxRetriesPerQuerier > 0
                 && querier.getAttemptedRetryCount() >= maxRetriesPerQuerier) {

@@ -37,7 +37,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 
-import static org.easymock.EasyMock.*;
+import static org.easymock.EasyMock.anyBoolean;
+import static org.easymock.EasyMock.anyLong;
+import static org.easymock.EasyMock.anyObject;
+import static org.easymock.EasyMock.expect;
+import static org.easymock.EasyMock.expectLastCall;
+import static org.easymock.EasyMock.replay;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsInstanceOf.instanceOf;
 import static org.hamcrest.core.StringContains.containsString;

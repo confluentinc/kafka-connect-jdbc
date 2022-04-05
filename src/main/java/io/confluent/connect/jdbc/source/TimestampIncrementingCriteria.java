@@ -41,11 +41,14 @@ import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 
+
 public class TimestampIncrementingCriteria {
+  JdbcSourceTask tn;
 
   /**
    * The values that can be used in a statement's WHERE clause.
    */
+
   public interface CriteriaValues {
 
     /**
@@ -292,7 +295,11 @@ public class TimestampIncrementingCriteria {
 
   protected String coalesceTimestampColumns(ExpressionBuilder builder) {
     if (timestampColumns.size() == 1) {
-      builder.append(timestampColumns.get(0));
+      if (tn.diaName.equals("Informix")) {
+        builder.append(timestampColumns.get(0).toString().replaceAll("\"",""));
+      } else {
+        builder.append(timestampColumns.get(0));
+      }
     } else {
       builder.append("COALESCE(");
       builder.appendList().delimitedBy(",").of(timestampColumns);

@@ -85,7 +85,7 @@ public class JdbcDbWriterTest {
     dialect = mock(DatabaseDialect.class);
     final DbStructure dbStructure = mock(DbStructure.class);
     return new JdbcDbWriter(config, dialect, dbStructure) {
-      protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
+      protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff, long connectionTTL) {
         CachedConnectionProvider mockConnectionProvider = mock(CachedConnectionProvider.class);
         when(mockConnectionProvider.getConnection()).thenReturn(mockConnection);
         return mockConnectionProvider;
@@ -531,5 +531,4 @@ public class JdbcDbWriterTest {
         )
     );
   }
-
 }

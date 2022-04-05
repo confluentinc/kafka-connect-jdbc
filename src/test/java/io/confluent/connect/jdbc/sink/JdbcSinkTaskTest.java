@@ -37,6 +37,7 @@ import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.CompletableFuture;
 
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -52,6 +53,8 @@ import org.junit.Before;
 import org.junit.Test;
 
 import io.confluent.connect.jdbc.util.DateTimeUtils;
+import org.mockito.Mockito;
+
 
 public class JdbcSinkTaskTest extends EasyMockSupport {
   private final SqliteHelper sqliteHelper = new SqliteHelper(getClass().getSimpleName());
@@ -302,6 +305,8 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     verifyAll();
   }
 
+
+
   @Test
   public void errorReporting() throws SQLException {
     List<SinkRecord> records = createRecordsList(1);
@@ -474,6 +479,35 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     task.put(records);
     verifyAll();
   }
+
+  @Test
+  public void testNoRecordsPutCallsHandleIdling() throws SQLException {
+    Map<String, String> props = setupBasicProps(5, 100L);
+    DatabaseDialect mockDialect = Mockito.mock(DatabaseDialect.class);
+
+    JdbcDbWriter wrt = Mockito.spy(new JdbcDbWriter(
+            new JdbcSinkConfig(props),
+            mockDialect,
+            Mockito.mock(DbStructure.class)
+    ));
+
+      JdbcSinkTask task = new JdbcSinkTask() {
+        @Override
+        void initWriter() {
+          this.writer = wrt;
+        }
+      };
+
+    task.initialize(ctx);
+      List<SinkRecord> records = createRecordsList(0);
+
+    task.start(props);
+    task.put(records);
+
+    Mockito.verify(wrt, Mockito.times(1)).handleIdling();
+  }
+
+
 
   private List<SinkRecord> createRecordsList(int batchSize) {
     List<SinkRecord> records = new ArrayList<>();

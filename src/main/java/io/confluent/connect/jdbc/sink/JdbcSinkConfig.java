@@ -103,6 +103,16 @@ public class JdbcSinkConfig extends AbstractConfig {
   public static final long CONNECTION_BACKOFF_DEFAULT =
       JdbcSourceConnectorConfig.CONNECTION_BACKOFF_DEFAULT;
 
+  public static final String CONNECTION_TTL_MS_CONFIG =
+          JdbcSourceConnectorConfig.CONNECTION_TTL_MS_CONFIG;
+  public static final String CONNECTION_TTL_MS_DOC =
+          JdbcSourceConnectorConfig.CONNECTION_TTL_MS_DOC;
+  public static final long CONNECTION_TTL_MS_DEFAULT =
+          JdbcSourceConnectorConfig.CONNECTION_TTL_MS_DEFAULT;
+  public static final String CONNECTION_TTL_MS_DISPLAY =
+          JdbcSourceConnectorConfig.CONNECTION_TTL_MS_DISPLAY;
+
+
   public static final String TABLE_NAME_FORMAT = "table.name.format";
   private static final String TABLE_NAME_FORMAT_DEFAULT = "${topic}";
   private static final String TABLE_NAME_FORMAT_DOC =
@@ -329,9 +339,23 @@ public class JdbcSinkConfig extends AbstractConfig {
             6,
             ConfigDef.Width.SHORT,
             CONNECTION_BACKOFF_DISPLAY
-        )
-        // Writes
-        .define(
+        ).define(
+            CONNECTION_TTL_MS_CONFIG,
+            ConfigDef.Type.LONG,
+            CONNECTION_TTL_MS_DEFAULT,
+            (String k, Object v) -> {
+              if (v == null) {
+                throw new ConfigException(k, v, "connection ttl must not be null.");
+              }
+            },
+            ConfigDef.Importance.MEDIUM,
+            CONNECTION_TTL_MS_DOC,
+            CONNECTION_GROUP,
+            7,
+            ConfigDef.Width.MEDIUM,
+            CONNECTION_TTL_MS_DISPLAY,
+            (ConfigDef.Recommender) null
+          ).define(
             INSERT_MODE,
             ConfigDef.Type.STRING,
             INSERT_MODE_DEFAULT,
@@ -491,7 +515,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             2,
             ConfigDef.Width.SHORT,
             RETRY_BACKOFF_MS_DISPLAY
-        );
+          );
 
   public final String connectorName;
   public final String connectionUrl;
@@ -499,6 +523,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final String connectionPassword;
   public final int connectionAttempts;
   public final long connectionBackoffMs;
+  public final long connectionTTL;
   public final String tableNameFormat;
   public final int batchSize;
   public final boolean deleteEnabled;
@@ -522,6 +547,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     connectionPassword = getPasswordValue(CONNECTION_PASSWORD);
     connectionAttempts = getInt(CONNECTION_ATTEMPTS);
     connectionBackoffMs = getLong(CONNECTION_BACKOFF);
+    connectionTTL = getLong(CONNECTION_TTL_MS_CONFIG);
     tableNameFormat = getString(TABLE_NAME_FORMAT).trim();
     batchSize = getInt(BATCH_SIZE);
     deleteEnabled = getBoolean(DELETE_ENABLED);

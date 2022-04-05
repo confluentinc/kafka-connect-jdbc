@@ -104,6 +104,19 @@ public class JdbcSourceTaskTestBase {
     return props;
   }
 
+  protected Map<String, String> singleTableConfig(boolean completeMapping, boolean validateNonNulls, int pollingInterval) {
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, db.getUrl());
+    props.put(JdbcSourceTaskConfig.TABLES_CONFIG, SINGLE_TABLE_NAME);
+    props.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
+    props.put(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG, TOPIC_PREFIX);
+    props.put(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG, String.valueOf(validateNonNulls));
+    props.put(JdbcSourceTaskConfig.NUMERIC_PRECISION_MAPPING_CONFIG, "true");
+    props.put(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG, String.valueOf(pollingInterval));
+
+    return props;
+  }
+
   protected Map<String, String> singleTableWithTimezoneConfig(
       boolean completeMapping,
       TimeZone tz) {

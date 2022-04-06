@@ -211,7 +211,6 @@ public interface DatabaseDialect extends ConnectionProvider {
    *
    * @param connection the database connection; may not be null
    * @param transactionIsolationMode the transaction isolation config
-   * @throws SQLException if there's an error setting the isolation mode
    */
   void setConnectionIsolationMode(
           Connection connection,

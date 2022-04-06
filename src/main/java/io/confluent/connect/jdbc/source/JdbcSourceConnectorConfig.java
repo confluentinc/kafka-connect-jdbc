@@ -317,6 +317,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       "Suffix to append at the end of the generated query.";
   public static final String QUERY_SUFFIX_DISPLAY = "Query suffix";
 
+  public static final String QUERY_RETRIES_CONFIG = "query.retry.attempts";
+  public static final String QUERY_RETRIES_DEFAULT = "-1";
+  public static final String QUERY_RETRIES_DOC =
+          "Number of times to retry SQL exceptions encountered when executing queries.";
+  public static final String QUERY_RETRIES_DISPLAY = "Query Retry Attempts";
+
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
 
@@ -651,6 +657,16 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Width.MEDIUM,
         TRANSACTION_ISOLATION_MODE_DISPLAY,
         TRANSACTION_ISOLATION_MODE_RECOMMENDER
+    ).define(
+        QUERY_RETRIES_CONFIG,
+        Type.INT,
+        QUERY_RETRIES_DEFAULT,
+        Importance.LOW,
+        QUERY_RETRIES_DOC,
+        MODE_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        QUERY_RETRIES_DISPLAY
     );
   }
 

@@ -149,12 +149,12 @@ public class JdbcSourceConnectorTest {
   }
 
   @Test
-  public void testNoTablesNoTasks() throws Exception {
+  public void testNoTablesSpawnsSingleTask() throws Exception {
     // Tests case where there are no readable tables and ensures that no tasks
     // are returned to be run
     connector.start(props);
     List<Map<String, String>> configs = connector.taskConfigs(3);
-    assertTrue(configs.isEmpty());
+    assertEquals(1, configs.size());
     connector.stop();
   }
 

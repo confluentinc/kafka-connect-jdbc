@@ -66,10 +66,13 @@ public class JdbcSourceTask extends SourceTask {
   private Time time;
   private JdbcSourceTaskConfig config;
   private DatabaseDialect dialect;
-  private CachedConnectionProvider cachedConnectionProvider;
-  private PriorityQueue<TableQuerier> tableQueue = new PriorityQueue<TableQuerier>();
+  //Visible for Testing
+  CachedConnectionProvider cachedConnectionProvider;
+  PriorityQueue<TableQuerier> tableQueue = new PriorityQueue<>();
   private final AtomicBoolean running = new AtomicBoolean(false);
   private final AtomicLong taskThreadId = new AtomicLong(0);
+
+  int maxRetriesPerQuerier;
 
   public JdbcSourceTask() {
     this.time = new SystemTime();
@@ -291,6 +294,8 @@ public class JdbcSourceTask extends SourceTask {
     running.set(true);
     taskThreadId.set(Thread.currentThread().getId());
     log.info("Started JDBC source task");
+
+    maxRetriesPerQuerier = config.getInt(JdbcSourceConnectorConfig.QUERY_RETRIES_CONFIG);
   }
 
   protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
@@ -412,6 +417,7 @@ public class JdbcSourceTask extends SourceTask {
         while (results.size() < batchMaxRows && (hadNext = querier.next())) {
           results.add(querier.extractRecord());
         }
+        querier.resetRetryCount();
 
         if (!hadNext) {
           // If we finished processing the results from the current query, we can reset and send
@@ -445,8 +451,21 @@ public class JdbcSourceTask extends SourceTask {
         closeResources();
         throw new ConnectException(sqle);
       } catch (SQLException sqle) {
-        log.error("SQL exception while running query for table: {}", querier, sqle);
+        log.error(
+                "SQL exception while running query for table: {}, {}."
+                        + " Attempting retry {} of {} attempts.",
+                querier,
+                sqle,
+                querier.getAttemptedRetryCount() + 1,
+                maxRetriesPerQuerier
+        );
         resetAndRequeueHead(querier, true);
+        if (maxRetriesPerQuerier > 0
+                && querier.getAttemptedRetryCount() >= maxRetriesPerQuerier) {
+          closeResources();
+          throw new ConnectException("Failed to Query table after retries", sqle);
+        }
+        querier.incrementRetryCount();
         return null;
       } catch (Throwable t) {
         log.error("Failed to run query for table: {}", querier, t);

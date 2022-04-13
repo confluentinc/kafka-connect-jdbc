@@ -1,4 +1,1 @@
-# See go/codeowners - automatically generated for confluentinc/kafka-connect-jdbc:
-*	@SamehTawfik
-*	@gharris1727
-*	@kkonstantine
+*	@confluentinc/connect

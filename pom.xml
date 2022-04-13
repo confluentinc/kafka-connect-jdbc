@@ -116,7 +116,6 @@
             <groupId>com.microsoft.sqlserver</groupId>
             <artifactId>mssql-jdbc</artifactId>
             <version>${mssqlserver.jdbc.driver.version}</version>
-            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>net.sourceforge.jtds</groupId>

@@ -152,7 +152,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     
     String queryString = builder.toString();
     recordQuery(queryString);
-    log.debug("{} prepared SQL query: {}", this, queryString);
+    log.trace("{} prepared SQL query: {}", this, queryString);
     stmt = dialect.createPreparedStatement(db, queryString);
   }
 

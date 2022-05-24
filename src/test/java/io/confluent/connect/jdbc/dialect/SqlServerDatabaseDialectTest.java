@@ -143,16 +143,16 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
   @Test
   public void shouldBuildCreateQueryStatement() {
     assertEquals(
-        "CREATE TABLE [myTable] (\n"
-        + "[c1] int NOT NULL,\n"
-        + "[c2] bigint NOT NULL,\n"
-        + "[c3] varchar(max) NOT NULL,\n"
-        + "[c4] varchar(max) NULL,\n"
-        + "[c5] date DEFAULT '2001-03-15',\n"
-        + "[c6] time DEFAULT '00:00:00.000',\n"
-        + "[c7] datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "[c8] decimal(38,4) NULL,\n"
-        + "[c9] bit DEFAULT 1,\n" +
+        "CREATE TABLE [myTable] ("+System.lineSeparator()
+        + "[c1] int NOT NULL,"+System.lineSeparator()
+        + "[c2] bigint NOT NULL,"+System.lineSeparator()
+        + "[c3] varchar(max) NOT NULL,"+System.lineSeparator()
+        + "[c4] varchar(max) NULL,"+System.lineSeparator()
+        + "[c5] date DEFAULT '2001-03-15',"+System.lineSeparator()
+        + "[c6] time DEFAULT '00:00:00.000',"+System.lineSeparator()
+        + "[c7] datetime2 DEFAULT '2001-03-15 00:00:00.000',"+System.lineSeparator()
+        + "[c8] decimal(38,4) NULL,"+System.lineSeparator()
+        + "[c9] bit DEFAULT 1,"+System.lineSeparator() +
         "PRIMARY KEY([c1]))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
@@ -160,16 +160,16 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
     quoteIdentfiiers = QuoteMethod.NEVER;
     dialect = createDialect();
     assertEquals(
-        "CREATE TABLE myTable (\n"
-        + "c1 int NOT NULL,\n"
-        + "c2 bigint NOT NULL,\n"
-        + "c3 varchar(max) NOT NULL,\n"
-        + "c4 varchar(max) NULL,\n"
-        + "c5 date DEFAULT '2001-03-15',\n"
-        + "c6 time DEFAULT '00:00:00.000',\n"
-        + "c7 datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
-        + "c8 decimal(38,4) NULL,\n"
-        + "c9 bit DEFAULT 1,\n" +
+        "CREATE TABLE myTable ("+System.lineSeparator()
+        + "c1 int NOT NULL,"+System.lineSeparator()
+        + "c2 bigint NOT NULL,"+System.lineSeparator()
+        + "c3 varchar(max) NOT NULL,"+System.lineSeparator()
+        + "c4 varchar(max) NULL,"+System.lineSeparator()
+        + "c5 date DEFAULT '2001-03-15',"+System.lineSeparator()
+        + "c6 time DEFAULT '00:00:00.000',"+System.lineSeparator()
+        + "c7 datetime2 DEFAULT '2001-03-15 00:00:00.000',"+System.lineSeparator()
+        + "c8 decimal(38,4) NULL,"+System.lineSeparator()
+        + "c9 bit DEFAULT 1,"+System.lineSeparator() +
         "PRIMARY KEY(c1))",
         dialect.buildCreateTableStatement(tableId, sinkRecordFields)
     );
@@ -179,15 +179,15 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
   public void shouldBuildAlterTableStatement() {
     assertStatements(
         new String[]{
-            "ALTER TABLE [myTable] ADD\n"
-            + "[c1] int NOT NULL,\n"
-            + "[c2] bigint NOT NULL,\n"
-            + "[c3] varchar(max) NOT NULL,\n"
-            + "[c4] varchar(max) NULL,\n"
-            + "[c5] date DEFAULT '2001-03-15',\n"
-            + "[c6] time DEFAULT '00:00:00.000',\n"
-            + "[c7] datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
-            + "[c8] decimal(38,4) NULL,\n"
+            "ALTER TABLE [myTable] ADD"+System.lineSeparator()
+            + "[c1] int NOT NULL,"+System.lineSeparator()
+            + "[c2] bigint NOT NULL,"+System.lineSeparator()
+            + "[c3] varchar(max) NOT NULL,"+System.lineSeparator()
+            + "[c4] varchar(max) NULL,"+System.lineSeparator()
+            + "[c5] date DEFAULT '2001-03-15',"+System.lineSeparator()
+            + "[c6] time DEFAULT '00:00:00.000',"+System.lineSeparator()
+            + "[c7] datetime2 DEFAULT '2001-03-15 00:00:00.000',"+System.lineSeparator()
+            + "[c8] decimal(38,4) NULL,"+System.lineSeparator()
             + "[c9] bit DEFAULT 1"
         },
         dialect.buildAlterTable(tableId, sinkRecordFields)
@@ -197,15 +197,15 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
     dialect = createDialect();
     assertStatements(
         new String[]{
-            "ALTER TABLE myTable ADD\n"
-            + "c1 int NOT NULL,\n"
-            + "c2 bigint NOT NULL,\n"
-            + "c3 varchar(max) NOT NULL,\n"
-            + "c4 varchar(max) NULL,\n"
-            + "c5 date DEFAULT '2001-03-15',\n"
-            + "c6 time DEFAULT '00:00:00.000',\n"
-            + "c7 datetime2 DEFAULT '2001-03-15 00:00:00.000',\n"
-            + "c8 decimal(38,4) NULL,\n"
+            "ALTER TABLE myTable ADD"+System.lineSeparator()
+            + "c1 int NOT NULL,"+System.lineSeparator()
+            + "c2 bigint NOT NULL,"+System.lineSeparator()
+            + "c3 varchar(max) NOT NULL,"+System.lineSeparator()
+            + "c4 varchar(max) NULL,"+System.lineSeparator()
+            + "c5 date DEFAULT '2001-03-15',"+System.lineSeparator()
+            + "c6 time DEFAULT '00:00:00.000',"+System.lineSeparator()
+            + "c7 datetime2 DEFAULT '2001-03-15 00:00:00.000',"+System.lineSeparator()
+            + "c8 decimal(38,4) NULL,"+System.lineSeparator()
             + "c9 bit DEFAULT 1"
         },
         dialect.buildAlterTable(tableId, sinkRecordFields)

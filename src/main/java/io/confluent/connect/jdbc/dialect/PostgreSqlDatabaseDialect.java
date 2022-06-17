@@ -571,4 +571,40 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     }
     return "";
   }
+
+  @Override
+  protected int decimalScale(ColumnDefinition defn) {
+    if (defn.scale() == NUMERIC_TYPE_SCALE_UNSET) {
+      return NUMERIC_TYPE_SCALE_HIGH;
+    }
+
+    // Postgres requires DECIMAL/NUMERIC columns to have a precision greater than zero
+    // If the precision appears to be zero, it's because the user didn't define a fixed precision
+    // for the column.
+    if (defn.precision() == 0) {
+      // In that case, a scale of zero indicates that there also isn't a fixed scale defined for
+      // the column. Instead of treating that column as if its scale is actually zero (which can
+      // cause issues since it may contain values that aren't possible with a scale of zero, like
+      // 12.12), we fall back on NUMERIC_TYPE_SCALE_HIGH to try to avoid loss of precision
+      if (defn.scale() == 0) {
+        log.debug(
+            "Column {} does not appear to have a fixed scale defined; defaulting to {}",
+            defn.id(),
+            NUMERIC_TYPE_SCALE_HIGH
+        );
+        return NUMERIC_TYPE_SCALE_HIGH;
+      } else {
+        // Should never happen, but if it does may signal an edge case
+        // that we need to add new logic for
+        log.warn(
+            "Column {} has a precision of zero, but a non-zero scale of {}",
+            defn.id(),
+            defn.scale()
+        );
+      }
+    }
+
+    return defn.scale();
+  }
+
 }

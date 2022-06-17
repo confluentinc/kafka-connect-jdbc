@@ -57,6 +57,8 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected SchemaMapping schemaMapping;
   private String loggedQueryString;
 
+  private int attemptedRetries;
+
   public TableQuerier(
       DatabaseDialect dialect,
       QueryMode mode,
@@ -71,6 +73,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     this.topicPrefix = topicPrefix;
     this.lastUpdate = 0;
     this.suffix = suffix;
+    this.attemptedRetries = 0;
   }
 
   public long getLastUpdate() {
@@ -117,6 +120,18 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     //     instead of constructing from scratch since it's almost always the same
     schemaMapping = null;
     lastUpdate = now;
+  }
+
+  public int getAttemptedRetryCount() {
+    return attemptedRetries;
+  }
+
+  public void incrementRetryCount() {
+    attemptedRetries++;
+  }
+
+  public void resetRetryCount() {
+    attemptedRetries = 0;
   }
 
   private void releaseLocksQuietly() {

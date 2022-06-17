@@ -79,7 +79,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
     assertPrimitiveMapping(Type.FLOAT64, "BINARY_DOUBLE");
     assertPrimitiveMapping(Type.BOOLEAN, "NUMBER(1,0)");
     assertPrimitiveMapping(Type.BYTES, "BLOB");
-    assertPrimitiveMapping(Type.STRING, "CLOB");
+    assertPrimitiveMapping(Type.STRING, "VARCHAR2(4000)");
   }
 
   @Test
@@ -99,7 +99,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
     verifyDataTypeMapping("BINARY_FLOAT", Schema.FLOAT32_SCHEMA);
     verifyDataTypeMapping("BINARY_DOUBLE", Schema.FLOAT64_SCHEMA);
     verifyDataTypeMapping("NUMBER(1,0)", Schema.BOOLEAN_SCHEMA);
-    verifyDataTypeMapping("CLOB", Schema.STRING_SCHEMA);
+    verifyDataTypeMapping("VARCHAR2(4000)", Schema.STRING_SCHEMA);
     verifyDataTypeMapping("BLOB", Schema.BYTES_SCHEMA);
     verifyDataTypeMapping("NUMBER(*,0)", Decimal.schema(0));
     verifyDataTypeMapping("NUMBER(*,42)", Decimal.schema(42));
@@ -126,8 +126,8 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
   @Test
   public void shouldBuildCreateQueryStatement() {
     String expected = "CREATE TABLE \"myTable\" (\n" + "\"c1\" NUMBER(10,0) NOT NULL,\n" +
-                      "\"c2\" NUMBER(19,0) NOT NULL,\n" + "\"c3\" CLOB NOT NULL,\n" +
-                      "\"c4\" CLOB NULL,\n" + "\"c5\" DATE DEFAULT '2001-03-15',\n" +
+                      "\"c2\" NUMBER(19,0) NOT NULL,\n" + "\"c3\" VARCHAR2(4000) NOT NULL,\n" +
+                      "\"c4\" VARCHAR2(4000) NULL,\n" + "\"c5\" DATE DEFAULT '2001-03-15',\n" +
                       "\"c6\" DATE DEFAULT '00:00:00.000',\n" +
                       "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" +
                       "\"c8\" NUMBER(*,4) NULL,\n" +
@@ -144,8 +144,8 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
             "ALTER TABLE \"myTable\" ADD(\n" +
             "\"c1\" NUMBER(10,0) NOT NULL,\n" +
             "\"c2\" NUMBER(19,0) NOT NULL,\n" +
-            "\"c3\" CLOB NOT NULL,\n" +
-            "\"c4\" CLOB NULL,\n" +
+            "\"c3\" VARCHAR2(4000) NOT NULL,\n" +
+            "\"c4\" VARCHAR2(4000) NULL,\n" +
             "\"c5\" DATE DEFAULT '2001-03-15',\n" +
             "\"c6\" DATE DEFAULT '00:00:00.000',\n" +
             "\"c7\" TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" +
@@ -163,8 +163,8 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
             "ALTER TABLE myTable ADD(\n" +
             "c1 NUMBER(10,0) NOT NULL,\n" +
             "c2 NUMBER(19,0) NOT NULL,\n" +
-            "c3 CLOB NOT NULL,\n" +
-            "c4 CLOB NULL,\n" +
+            "c3 VARCHAR2(4000) NOT NULL,\n" +
+            "c4 VARCHAR2(4000) NULL,\n" +
             "c5 DATE DEFAULT '2001-03-15',\n" +
             "c6 DATE DEFAULT '00:00:00.000',\n" +
             "c7 TIMESTAMP DEFAULT '2001-03-15 00:00:00.000',\n" +

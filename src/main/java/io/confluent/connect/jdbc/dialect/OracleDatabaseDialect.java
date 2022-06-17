@@ -200,7 +200,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "NUMBER(1,0)";
       case STRING:
-        return "CLOB";
+        return "VARCHAR2(4000)";
       case BYTES:
         return "BLOB";
       default:

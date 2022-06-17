@@ -32,6 +32,7 @@ import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIsolationMode;
 import io.confluent.connect.jdbc.source.TimestampIncrementingCriteria;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
@@ -201,6 +202,20 @@ public interface DatabaseDialect extends ConnectionProvider {
    * @throws SQLException if there is an error accessing the metadata
    */
   boolean tableExists(Connection connection, TableId tableId) throws SQLException;
+
+
+  /**
+   * Set the isolation mode for the connection.
+   * Isolation modes can differ by database so this provides an interface for
+   * the mode to be overridden.
+   *
+   * @param connection the database connection; may not be null
+   * @param transactionIsolationMode the transaction isolation config
+   */
+  void setConnectionIsolationMode(
+          Connection connection,
+          TransactionIsolationMode transactionIsolationMode
+  );
 
   /**
    * Create the definition for the columns described by the database metadata using the current

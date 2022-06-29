@@ -15,9 +15,21 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig.PrimaryKeyMode;
+import io.confluent.connect.jdbc.sink.PreparedStatementBinder;
+import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
+import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
+import io.confluent.connect.jdbc.util.TableDefinition;
+import java.io.ByteArrayInputStream;
+import java.io.StringReader;
+import java.nio.ByteBuffer;
+import java.sql.PreparedStatement;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
@@ -115,6 +127,91 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       return new TableId(tableId.catalogName(), "dbo", tableId.tableName());
     }
     return tableId;
+  }
+
+  @Override
+  public StatementBinder statementBinder(
+      PreparedStatement statement,
+      PrimaryKeyMode pkMode,
+      SchemaPair schemaPair,
+      FieldsMetadata fieldsMetadata,
+      TableDefinition tableDefinition,
+      InsertMode insertMode
+  ) {
+    return new PreparedStatementBinder(
+        this,
+        statement,
+        pkMode,
+        schemaPair,
+        fieldsMetadata,
+        tableDefinition,
+        insertMode
+    );
+  }
+
+  @Override
+  public void bindField(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
+      Object value,
+      ColumnDefinition colDef
+  ) throws SQLException {
+    if (value == null) {
+      Integer type = getSqlTypeForSchema(schema);
+      if (type != null) {
+        statement.setNull(index, type);
+      } else {
+        statement.setObject(index, null);
+      }
+    } else {
+      boolean bound = maybeBindLogical(statement, index, schema, value);
+      if (!bound) {
+        bound = maybeBindPrimitive(statement, index, schema, value, colDef);
+      }
+      if (!bound) {
+        throw new ConnectException("Unsupported source data type: " + schema.type());
+      }
+    }
+  }
+
+  protected boolean maybeBindPrimitive(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
+      Object value,
+      ColumnDefinition colDef
+  ) throws SQLException {
+    if (colDef == null) {
+      return super.maybeBindPrimitive(statement, index, schema, value);
+    }
+
+    if (schema.type() == Type.STRING) {
+      if (colDef.type() == Types.CLOB) {
+        statement.setCharacterStream(index, new StringReader((String) value));
+        return true;
+      } else if (colDef.type() == Types.NCLOB) {
+        statement.setNCharacterStream(index, new StringReader((String) value));
+        return true;
+      } else if (colDef.type() == Types.NVARCHAR || colDef.type() == Types.NCHAR) {
+        statement.setNString(index, (String) value);
+        return true;
+      } else {
+        return super.maybeBindPrimitive(statement, index, schema, value);
+      }
+    }
+
+    if (schema.type() == Type.BYTES && colDef.type() == Types.BLOB) {
+      if (value instanceof ByteBuffer) {
+        statement.setBlob(index, new ByteArrayInputStream(((ByteBuffer) value).array()));
+      } else if (value instanceof byte[]) {
+        statement.setBlob(index, new ByteArrayInputStream((byte[]) value));
+      } else {
+        return super.maybeBindPrimitive(statement, index, schema, value);
+      }
+      return true;
+    }
+    return super.maybeBindPrimitive(statement, index, schema, value);
   }
 
   /**

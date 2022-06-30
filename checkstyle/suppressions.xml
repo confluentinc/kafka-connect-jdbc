@@ -7,7 +7,7 @@
 <suppressions>
 
     <suppress checks="CyclomaticComplexity"
-              files="(BufferedRecords|DataConverter|DatabaseDialect|FieldsMetadata|HanaDialect|JdbcSourceTask|MySqlDatabaseDialect|OracleDatabaseDialect|PostgreSqlDatabaseDialect|PreparedStatementBinder|SqlServerDatabaseDialect|SqliteDatabaseDialect|TimestampIncrementingTableQuerier|GenericDatabaseDialect|SybaseDatabaseDialect|VerticaDatabaseDialect|SapHanaDatabaseDialect|TableId|ColumnDefinition|TableMonitorThread|JdbcSinkTask).java"/>
+              files="(BufferedRecords|DataConverter|DatabaseDialect|FieldsMetadata|HanaDialect|JdbcSourceTask|MySqlDatabaseDialect|OracleDatabaseDialect|PostgreSqlDatabaseDialect|RedshiftDialect|PreparedStatementBinder|SqlServerDatabaseDialect|SqliteDatabaseDialect|TimestampIncrementingTableQuerier|GenericDatabaseDialect|SybaseDatabaseDialect|VerticaDatabaseDialect|SapHanaDatabaseDialect|TableId|ColumnDefinition|TableMonitorThread|JdbcSinkTask).java"/>
 
     <suppress checks="ClassDataAbstractionCoupling"
               files="(DbDialect|JdbcSourceTask|GenericDatabaseDialect).java"/>
@@ -22,5 +22,5 @@
               files="(DataConverter|GenericDatabaseDialect|JdbcSourceTask).java"/>
 
     <suppress checks="ParameterNumber"
-              files="(ColumnDefinition|GenericDatabaseDialect|SqlServerDatabaseDialect|PostgreSqlDatabaseDialect|TimestampIncrementingTableQuerier).java"/>
+              files="(ColumnDefinition|GenericDatabaseDialect|SqlServerDatabaseDialect|PostgreSqlDatabaseDialect|RedshiftDialect|TimestampIncrementingTableQuerier).java"/>
 </suppressions>

@@ -301,6 +301,8 @@ public class RedshiftDialect extends GenericDatabaseDialect {
           return "TIME";
         case Timestamp.LOGICAL_NAME:
           return "TIMESTAMP";
+        case "io.debezium.time.ZonedTimestamp":
+          return "TIMESTAMPTZ";
         default:
           // fall through to normal types
       }

@@ -480,7 +480,12 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     );
     int index = 0;
     for (Schema schema : nullableTypes) {
-      verifyBindField(++index, schema, null).setObject(index, null);
+      final Integer sqlType = dialect.getSqlTypeForSchema(schema);
+      if (sqlType == null) {
+        verifyBindField(++index, schema, null).setObject(index, null);
+      } else {
+        verifyBindField(++index, schema, null).setNull(index, sqlType);
+      }
     }
   }
 

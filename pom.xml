@@ -57,7 +57,7 @@
         <commons-io.version>2.4</commons-io.version>
         <kafka.connect.maven.plugin.version>0.11.1</kafka.connect.maven.plugin.version>
         <sqlite-jdbc.version>3.25.2</sqlite-jdbc.version>
-        <oracle.jdbc.driver.version>19.7.0.0</oracle.jdbc.driver.version>
+        <oracle.jdbc.driver.version>21.6.0.0</oracle.jdbc.driver.version>
         <mssqlserver.jdbc.driver.version>8.4.1.jre8</mssqlserver.jdbc.driver.version>
         <postgresql.version>42.3.3</postgresql.version>
         <jtds.driver.version>1.3.1</jtds.driver.version>

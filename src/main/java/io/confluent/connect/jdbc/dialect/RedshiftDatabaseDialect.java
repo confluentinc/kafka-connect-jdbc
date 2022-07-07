@@ -55,24 +55,24 @@ import java.util.ArrayList;
 /**
  * A {@link DatabaseDialect} for RedshiftSQL.
  */
-public class RedshiftDialect extends GenericDatabaseDialect {
+public class RedshiftDatabaseDialect extends GenericDatabaseDialect {
 
-  private static final Logger log = LoggerFactory.getLogger(RedshiftDialect.class);
+  private static final Logger log = LoggerFactory.getLogger(RedshiftDatabaseDialect.class);
 
   // Visible for testing
   volatile int maxIdentifierLength = 0;
 
   /**
-   * The provider for {@link RedshiftDialect}.
+   * The provider for {@link RedshiftDatabaseDialect}.
    */
   public static class Provider extends SubprotocolBasedProvider {
     public Provider() {
-      super(RedshiftDialect.class.getSimpleName(), "postgresql");
+      super(RedshiftDatabaseDialect.class.getSimpleName(), "postgresql");
     }
 
     @Override
     public DatabaseDialect create(AbstractConfig config) {
-      return new RedshiftDialect(config);
+      return new RedshiftDatabaseDialect(config);
     }
   }
 
@@ -94,7 +94,7 @@ public class RedshiftDialect extends GenericDatabaseDialect {
    *
    * @param config the connector configuration; may not be null
    */
-  public RedshiftDialect(AbstractConfig config) {
+  public RedshiftDatabaseDialect(AbstractConfig config) {
     super(config, new IdentifierRules(".", "\"", "\""));
   }
 
@@ -322,7 +322,6 @@ public class RedshiftDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "BOOLEAN";
       case STRING:
-        // return "TEXT";
         return "VARCHAR(10000)";
       case BYTES:
         return "BYTEA";

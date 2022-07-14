@@ -326,11 +326,7 @@ public class RedshiftDatabaseDialect extends GenericDatabaseDialect {
       case BYTES:
         return "BYTEA";
       case ARRAY:
-        SinkRecordField childField = new SinkRecordField(
-            field.schema().valueSchema(),
-            field.name(),
-            field.isPrimaryKey());
-        return getSqlType(childField) + "[]";
+        return "SUPER";
       default:
         return super.getSqlType(field);
     }

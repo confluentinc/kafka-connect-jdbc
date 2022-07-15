@@ -326,7 +326,7 @@ public class RedshiftDatabaseDialect extends GenericDatabaseDialect {
       case BYTES:
         return "BYTEA";
       case ARRAY:
-        return "SUPER";
+        return "VARCHAR(60000)";
       default:
         return super.getSqlType(field);
     }

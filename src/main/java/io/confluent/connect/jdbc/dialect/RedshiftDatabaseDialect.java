@@ -49,6 +49,7 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.List;
 import java.util.ArrayList;
 
@@ -455,8 +456,7 @@ public class RedshiftDatabaseDialect extends GenericDatabaseDialect {
 
     switch (schema.type()) {
       case ARRAY: {
-        Class<?> valueClass = value.getClass();
-        Object newValue = null;
+        Class<?> valueClass = value.getClass();        
         Collection<?> valueCollection;
         if (Collection.class.isAssignableFrom(valueClass)) {
           valueCollection = (Collection<?>) value;
@@ -467,50 +467,18 @@ public class RedshiftDatabaseDialect extends GenericDatabaseDialect {
               String.format("Type '%s' is not supported for Array.", valueClass.getName()));
         }
 
-        // All typecasts below are based on pgjdbc's documentation on how to use
-        // primitive arrays
-        // - https://jdbc.postgresql.org/documentation/head/arrays.html
-        switch (schema.valueSchema().type()) {
-          case INT8: {
-            // Gotta do this the long way, as Postgres has no single-byte integer,
-            // so we want to cast to short as the next best thing, and we can't do that with
-            // toArray.
-
-            newValue = valueCollection.stream()
-                .map(o -> ((Byte) o).shortValue())
-                .toArray(Short[]::new);
-            break;
+        Object[] arr = valueCollection.toArray();
+        String listString = "";
+        if (arr.length > 0) {
+          if (arr[0] != null) {
+            listString = valueCollection.stream().map(Object::toString)
+                .collect(Collectors.joining(", "));
           }
-          case INT32:
-            newValue = valueCollection.toArray(new Integer[0]);
-            break;
-          case INT16:
-            newValue = valueCollection.toArray(new Short[0]);
-            break;
-          case BOOLEAN:
-            newValue = valueCollection.toArray(new Boolean[0]);
-            break;
-          case STRING:
-            newValue = valueCollection.toArray(new String[0]);
-            break;
-          case FLOAT64:
-            newValue = valueCollection.toArray(new Double[0]);
-            break;
-          case FLOAT32:
-            newValue = valueCollection.toArray(new Float[0]);
-            break;
-          case INT64:
-            newValue = valueCollection.toArray(new Long[0]);
-            break;
-          default:
-            break;
-        }
+        }    
 
-        if (newValue != null) {
-          statement.setObject(index, newValue, Types.ARRAY);
-          return true;
-        }
-        break;
+        statement.setString(index, (String) listString);
+
+        return true;
       }
       default:
         break;

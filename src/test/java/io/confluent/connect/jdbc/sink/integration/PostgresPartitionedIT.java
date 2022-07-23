@@ -1,7 +1,6 @@
 package io.confluent.connect.jdbc.sink.integration;
 
 import java.sql.*;
-import java.time.ZoneId;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.Map;
@@ -11,6 +10,7 @@ import java.util.concurrent.TimeUnit;
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.jdbc.integration.BaseConnectorIT;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;

@@ -286,6 +286,14 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final String MESSAGE_COLUMN_NAME_DISPLAY
           = "Column name contains message to be sent to topic";
 
+    public static final String KEY_COLUMN_NAME_CONFIG = "key.column.name";
+    public static final String KEY_COLUMN_NAME_DEFAULT = null;
+    private static final String KEY_COLUMN_NAME_DOC =
+            "Option indicates that kafka message key should be retrieved from given column name from database. "
+                    + "This feature should be used along with `TOPIC_NAME_BASED_ON_DATABASE_COLUMN_VALUE_CONFIG`.";
+    private static final String KEY_COLUMN_NAME_DISPLAY
+            = "Column name contains message key to be sent to topic";
+
 
   public static final String DB_TIMEZONE_CONFIG = "db.timezone";
   public static final String DB_TIMEZONE_DEFAULT = "UTC";
@@ -303,7 +311,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public static final String QUERY_SUFFIX_CONFIG = "query.suffix";
   public static final String QUERY_SUFFIX_DEFAULT = "";
-  public static final String QUERY_SUFFIX_DOC = 
+  public static final String QUERY_SUFFIX_DOC =
       "Suffix to append at the end of the generated query.";
   public static final String QUERY_SUFFIX_DISPLAY = "Query suffix";
 
@@ -674,6 +682,16 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.MEDIUM,
         MESSAGE_COLUMN_NAME_DISPLAY
+    ).define(
+        KEY_COLUMN_NAME_CONFIG,
+        Type.STRING,
+        KEY_COLUMN_NAME_DEFAULT,
+        Importance.MEDIUM,
+        KEY_COLUMN_NAME_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        KEY_COLUMN_NAME_DISPLAY
     ).define(
         DB_TIMEZONE_CONFIG,
         Type.STRING,

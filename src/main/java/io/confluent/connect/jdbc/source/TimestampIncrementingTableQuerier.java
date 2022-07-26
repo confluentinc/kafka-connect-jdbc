@@ -72,10 +72,13 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   private final String topicBasedOnDatabaseValue;
   private final String messageColumnName;
 
+  private final String keyColumnName;
+
   public TimestampIncrementingTableQuerier(DatabaseDialect dialect, QueryMode mode, String name,
                                            String topicPrefix,
                                            String topicBasedOnDatabaseValue,
                                            String messageColumnName,
+                                           String keyColumnName,
                                            List<String> timestampColumnNames,
                                            String incrementingColumnName,
                                            Map<String, Object> offsetMap, Long timestampDelay,
@@ -112,6 +115,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     this.timeZone = timeZone;
     this.topicBasedOnDatabaseValue = topicBasedOnDatabaseValue;
     this.messageColumnName = messageColumnName;
+    this.keyColumnName = keyColumnName;
   }
 
   /**
@@ -266,6 +270,11 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
                                        .map(databaseColumn -> record.getString("topic"))
                                        .orElse(topic);
     String message = record.getString(messageColumnName);
-    return new SourceRecord(partition, offset.toMap(), expectedTopicName, null, message);
+    if(keyColumnName != null) {
+        String key = record.getString(keyColumnName);
+        return new SourceRecord(partition, offset.toMap(), expectedTopicName, null, key, null, message);
+    } else {
+        return new SourceRecord(partition, offset.toMap(), expectedTopicName, null, message);
+    }
   }
 }

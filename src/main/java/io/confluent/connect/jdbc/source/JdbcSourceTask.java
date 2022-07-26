@@ -154,6 +154,7 @@ public class JdbcSourceTask extends SourceTask {
     String topicNameBasedOnDatabaseValue
         = config.getString(JdbcSourceTaskConfig.TOPIC_NAME_BASED_ON_DATABASE_COLUMN_VALUE_CONFIG);
     String messageColumnName = config.getString(JdbcSourceTaskConfig.MESSAGE_COLUMN_NAME_CONFIG);
+    String keyColumnName = config.getString(JdbcSourceTaskConfig.KEY_COLUMN_NAME_CONFIG);
     boolean validateNonNulls
         = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
     TimeZone timeZone = config.timeZone();
@@ -205,10 +206,10 @@ public class JdbcSourceTask extends SourceTask {
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(
             new BulkTableQuerier(
-                dialect, 
-                queryMode, 
-                tableOrQuery, 
-                topicPrefix, 
+                dialect,
+                queryMode,
+                tableOrQuery,
+                topicPrefix,
                 suffix
             )
         );
@@ -221,6 +222,7 @@ public class JdbcSourceTask extends SourceTask {
                 topicPrefix,
                 topicNameBasedOnDatabaseValue,
                 messageColumnName,
+                keyColumnName,
                 null,
                 incrementingColumn,
                 offset,
@@ -238,6 +240,7 @@ public class JdbcSourceTask extends SourceTask {
                 topicPrefix,
                 topicNameBasedOnDatabaseValue,
                 messageColumnName,
+                keyColumnName,
                 timestampColumns,
                 null,
                 offset,
@@ -255,6 +258,7 @@ public class JdbcSourceTask extends SourceTask {
                 topicPrefix,
                 topicNameBasedOnDatabaseValue,
                 messageColumnName,
+                keyColumnName,
                 timestampColumns,
                 incrementingColumn,
                 offset,

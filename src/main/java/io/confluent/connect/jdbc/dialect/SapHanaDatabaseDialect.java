@@ -73,7 +73,6 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
         case Decimal.LOGICAL_NAME:
           return "DECIMAL";
         case Date.LOGICAL_NAME:
-          return "DATE";
         case Time.LOGICAL_NAME:
           return "DATE";
         case Timestamp.LOGICAL_NAME:
@@ -166,10 +165,10 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
     final List<TableId> upperTableIds = super.tableIds(conn);
     List<TableId> extTableIds = new ArrayList<>();
     if (this.tableTypes.contains("VIEW")) {
-      String query = "select SCHEMA_NAME, VIEW_NAME from SYS.VIEWS "
-                + "WHERE SCHEMA_NAME = '" + schemaPattern() + "'";
+      final String query = "select SCHEMA_NAME, VIEW_NAME from SYS.VIEWS "
+              + "WHERE SCHEMA_NAME = '" + schemaPattern() + "'";
       try (ResultSet rsView = conn.createStatement()
-                .executeQuery(query)) {
+              .executeQuery(query)) {
         while (rsView.next()) {
           String schemaName = rsView.getString(1);
           String tableName = rsView.getString(2);
@@ -178,6 +177,7 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
             extTableIds.add(tableId);
           }
         }
+
       }
       extTableIds.addAll(upperTableIds);
     }

@@ -165,29 +165,30 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
     glog.debug("Using {} dialect to get {}", this, tableTypeDisplay);
     final List<TableId> upperTableIds = super.tableIds(conn);
     List<TableId> extTableIds = new ArrayList<>();
-
-    try (ResultSet rs = metadata.getTables(catalogPattern(), schemaPattern(), "%", tableTypes)) {
-      while (rs.next()) {
-        String catalogName = rs.getString(1);
-        String schemaName = rs.getString(2);
-        String tableName = rs.getString(3);
-        TableId tableId = new TableId(catalogName, schemaName, tableName);
-        if (includeTable(tableId)) {
-          extTableIds.add(tableId);
+    if (this.tableTypes.contains("VIEW")) {
+      String query = "select SCHEMA_NAME, VIEW_NAME from SYS.VIEWS "
+                + "WHERE SCHEMA_NAME = '" + schemaPattern() + "'";
+      try (ResultSet rsView = conn.createStatement()
+                .executeQuery(query)) {
+        while (rsView.next()) {
+          String schemaName = rsView.getString(1);
+          String tableName = rsView.getString(2);
+          TableId tableId = new TableId(null, schemaName, tableName);
+          if (includeTable(tableId)) {
+            extTableIds.add(tableId);
+          }
         }
       }
-
       extTableIds.addAll(upperTableIds);
     }
-
     return extTableIds;
   }
 
   /**
-   * The provider for {@link SapHanaDatabaseDialect}.
-   *
-   * <p>HANA url's are in the format: {@code jdbc:sap://$host:3(instance)(port)/}
-   */
+    * The provider for {@link SapHanaDatabaseDialect}.
+    *
+    * <p>HANA url's are in the format: {@code jdbc:sap://$host:3(instance)(port)/}
+    */
   public static class Provider extends SubprotocolBasedProvider {
     public Provider() {
       super(SapHanaDatabaseDialect.class.getSimpleName(), "sap");
@@ -198,5 +199,4 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
       return new SapHanaDatabaseDialect(config);
     }
   }
-
 }

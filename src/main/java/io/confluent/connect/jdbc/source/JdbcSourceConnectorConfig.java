@@ -388,33 +388,26 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
                     )
             ).forEach(configValue -> configValues.putIfAbsent(configValue.name(), configValue));
 
-    TransactionIsolationMode transactionIsolationMode =
-            TransactionIsolationMode.valueOf(
-                    this.getString(TRANSACTION_ISOLATION_MODE_CONFIG)
-            );
-    if (transactionIsolationMode == TransactionIsolationMode.SQL_SERVER_SNAPSHOT) {
-      DatabaseDialect dialect;
-      final String dialectName = this.getString(JdbcSourceConnectorConfig.DIALECT_NAME_CONFIG);
-      if (dialectName != null && !dialectName.trim().isEmpty()) {
-        dialect = DatabaseDialects.create(dialectName, this);
-      } else {
-        dialect = DatabaseDialects.findBestFor(this.getString(CONNECTION_URL_CONFIG), this);
-      }
-      if (!dialect.name().equals(
-              DatabaseDialects.create(
-                      SqlServerDatabaseDialectName, this
-              ).name()
-      )
-      ) {
-        configValues
-                .get(JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG)
-                .addErrorMessage("Isolation mode of `"
-                        + TransactionIsolationMode.SQL_SERVER_SNAPSHOT.name()
-                        + "` can only be configured with a Sql Server Dialect"
-          );
-      }
+    DatabaseDialect dialect;
+    final String dialectName = this.getString(JdbcSourceConnectorConfig.DIALECT_NAME_CONFIG);
+    if (dialectName != null && !dialectName.trim().isEmpty()) {
+      dialect = DatabaseDialects.create(dialectName, this);
+    } else {
+      dialect = DatabaseDialects.findBestFor(this.getString(CONNECTION_URL_CONFIG), this);
     }
-
+    if (!dialect.name().equals(
+            DatabaseDialects.create(
+                    SqlServerDatabaseDialectName, this
+            ).name()
+    )
+    ) {
+      configValues
+              .get(JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG)
+              .addErrorMessage("Isolation mode of `"
+                      + TransactionIsolationMode.SQL_SERVER_SNAPSHOT.name()
+                      + "` can only be configured with a Sql Server Dialect"
+              );
+    }
     return config;
   }
 

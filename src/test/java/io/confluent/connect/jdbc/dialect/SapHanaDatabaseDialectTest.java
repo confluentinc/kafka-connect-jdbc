@@ -18,15 +18,15 @@ package io.confluent.connect.jdbc.dialect;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 import org.apache.kafka.connect.data.*;
+import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Schema.Type;
+import org.apache.kafka.connect.data.Time;
+import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.runners.MockitoJUnitRunner;
 
-import java.sql.Connection;
-import java.sql.DatabaseMetaData;
-import java.sql.ResultSet;
-import java.sql.Statement;
+import java.sql.*;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
@@ -245,7 +245,7 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
     ResultSet secondary = mock(ResultSet.class);
     // ResultSet for Verification
     ResultSet primary = mock(ResultSet.class);
-    Statement state = mock(Statement.class);
+    PreparedStatement state = mock(PreparedStatement.class);
 
     when(secondary.next()).thenReturn(true).thenReturn(false);
     when(primary.next()).thenReturn(true).thenReturn(false);
@@ -253,8 +253,8 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
     doReturn(meta).when(conn).getMetaData();
     doReturn(secondary).when(meta).getTableTypes();
     doReturn(secondary).when(meta).getTables(any(), any(), any(), any());
-    when(conn.createStatement()).thenReturn(state);
-    when(state.executeQuery(any())).thenReturn(primary);
+    when(conn.prepareStatement(any())).thenReturn(state);
+    when(state.executeQuery()).thenReturn(primary);
 
     dialect.tableIds(conn);
 

@@ -31,6 +31,7 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -165,10 +166,10 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
     final List<TableId> upperTableIds = super.tableIds(conn);
     List<TableId> extTableIds = new ArrayList<>();
     if (this.tableTypes.contains("VIEW")) {
-      final String query = "select SCHEMA_NAME, VIEW_NAME from SYS.VIEWS "
-              + "WHERE SCHEMA_NAME = '" + schemaPattern() + "'";
-      try (ResultSet rsView = conn.createStatement()
-              .executeQuery(query)) {
+      PreparedStatement stmt = conn.prepareStatement("SELECT SCHEMA_NAME, VIEW_NAME "
+              + "from SYS.VIEWS WHERE SCHEMA_NAME=?");
+      stmt.setString(1, schemaPattern());
+      try (ResultSet rsView = stmt.executeQuery()) {
         while (rsView.next()) {
           String schemaName = rsView.getString(1);
           String tableName = rsView.getString(2);

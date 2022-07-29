@@ -109,8 +109,8 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
 
   @Override
   public String buildCreateTableStatement(
-        TableId table,
-        Collection<SinkRecordField> fields
+      TableId table,
+      Collection<SinkRecordField> fields
   ) {
     // Defaulting to Column Store
     return super.buildCreateTableStatement(table, fields)
@@ -119,8 +119,8 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
 
   @Override
   public List<String> buildAlterTable(
-        TableId table,
-        Collection<SinkRecordField> fields
+      TableId table,
+      Collection<SinkRecordField> fields
   ) {
     ExpressionBuilder builder = expressionBuilder();
     builder.append("ALTER TABLE ");
@@ -133,9 +133,9 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
 
   @Override
   public String buildUpsertQueryStatement(
-        TableId table,
-        Collection<ColumnId> keyColumns,
-        Collection<ColumnId> nonKeyColumns
+      TableId table,
+      Collection<ColumnId> keyColumns,
+      Collection<ColumnId> nonKeyColumns
   ) {
     // https://help.sap.com/hana_one/html/sql_replace_upsert.html
     ExpressionBuilder builder = expressionBuilder();

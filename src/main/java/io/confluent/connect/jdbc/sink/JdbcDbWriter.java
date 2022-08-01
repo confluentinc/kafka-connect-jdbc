@@ -45,8 +45,7 @@ public class JdbcDbWriter {
 
     this.cachedConnectionProvider = connectionProvider(
         config.connectionAttempts,
-        config.connectionBackoffMs
-    );
+        config.connectionBackoffMs);
   }
 
   protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
@@ -65,6 +64,10 @@ public class JdbcDbWriter {
     try {
       final Map<TableId, BufferedRecords> bufferByTable = new HashMap<>();
       for (SinkRecord record : records) {
+        boolean isEmptyRecord = record.value() == null && record.valueSchema() == null;
+        if (isEmptyRecord) {
+          continue;
+        }
         final TableId tableId = destinationTable(record.topic());
         BufferedRecords buffer = bufferByTable.get(tableId);
         if (buffer == null) {
@@ -102,8 +105,7 @@ public class JdbcDbWriter {
       throw new ConnectException(String.format(
           "Destination table name for topic '%s' is empty using the format string '%s'",
           topic,
-          config.tableNameFormat
-      ));
+          config.tableNameFormat));
     }
     return dbDialect.parseTableIdentifier(tableName);
   }

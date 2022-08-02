@@ -181,6 +181,10 @@ public class JdbcSourceTask extends SourceTask {
         = config.getList(JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
     Long timestampDelayInterval
         = config.getLong(JdbcSourceTaskConfig.TIMESTAMP_DELAY_INTERVAL_MS_CONFIG);
+    String topicNameBasedOnDatabaseValue
+        = config.getString(JdbcSourceTaskConfig.TOPIC_NAME_BASED_ON_DATABASE_COLUMN_VALUE_CONFIG);
+    String messageColumnName = config.getString(JdbcSourceTaskConfig.MESSAGE_COLUMN_NAME_CONFIG);
+    String keyColumnName = config.getString(JdbcSourceTaskConfig.KEY_COLUMN_NAME_CONFIG);
     boolean validateNonNulls
         = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
     TimeZone timeZone = config.timeZone();
@@ -234,10 +238,10 @@ public class JdbcSourceTask extends SourceTask {
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(
             new BulkTableQuerier(
-                dialect, 
-                queryMode, 
-                tableOrQuery, 
-                topicPrefix, 
+                dialect,
+                queryMode,
+                tableOrQuery,
+                topicPrefix,
                 suffix
             )
         );
@@ -248,6 +252,9 @@ public class JdbcSourceTask extends SourceTask {
                 queryMode,
                 tableOrQuery,
                 topicPrefix,
+                topicNameBasedOnDatabaseValue,
+                messageColumnName,
+                keyColumnName,
                 null,
                 incrementingColumn,
                 offset,
@@ -264,6 +271,9 @@ public class JdbcSourceTask extends SourceTask {
                 queryMode,
                 tableOrQuery,
                 topicPrefix,
+                topicNameBasedOnDatabaseValue,
+                messageColumnName,
+                keyColumnName,
                 timestampColumns,
                 offset,
                 timestampDelayInterval,
@@ -279,6 +289,9 @@ public class JdbcSourceTask extends SourceTask {
                 queryMode,
                 tableOrQuery,
                 topicPrefix,
+                topicNameBasedOnDatabaseValue,
+                messageColumnName,
+                keyColumnName,
                 timestampColumns,
                 incrementingColumn,
                 offset,

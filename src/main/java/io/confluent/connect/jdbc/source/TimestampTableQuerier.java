@@ -54,11 +54,15 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
   private PendingRecord nextRecord;
   private Timestamp latestCommittableTimestamp;
 
+  @SuppressWarnings("ParameterNumber")
   public TimestampTableQuerier(
       DatabaseDialect dialect,
       QueryMode mode,
       String name,
       String topicPrefix,
+      String topicBasedOnDatabaseValue,
+      String messageColumnName,
+      String keyColumnName,
       List<String> timestampColumnNames,
       Map<String, Object> offsetMap,
       Long timestampDelay,
@@ -71,6 +75,9 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
         mode,
         name,
         topicPrefix,
+        topicBasedOnDatabaseValue,
+        messageColumnName,
+        keyColumnName,
         timestampColumnNames,
         null,
         offsetMap,

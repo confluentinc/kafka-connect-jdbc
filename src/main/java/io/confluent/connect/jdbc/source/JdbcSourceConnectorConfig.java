@@ -297,6 +297,37 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final long TIMESTAMP_DELAY_INTERVAL_MS_DEFAULT = 0;
   private static final String TIMESTAMP_DELAY_INTERVAL_MS_DISPLAY = "Delay Interval (ms)";
 
+  public static final String TOPIC_NAME_BASED_ON_DATABASE_COLUMN_VALUE_CONFIG =
+          "topic.name.database.column";
+  public static final String TOPIC_NAME_BASED_ON_DATABASE_COLUMN_VALUE_DEFAULT = null;
+  private static final String TOPIC_NAME_BASED_ON_DATABASE_COLUMN_VALUE_DOC =
+      "Option indicates that topic name should be the same as a value retrieved from the database"
+      + " based on passed property for example you have table in a database with 3 columns "
+      + "(id, topic, payload) when you provide in this option value `topic` "
+      + "the connector will create a topic with name equals value from the column you provided."
+      + "This feature should be used along with `MESSAGE_COLUMN_NAME_CONFIG`.";
+  private static final String TOPIC_NAME_BASED_ON_DATABASE_COLUMN_VALUE_DISPLAY =
+      "Value from database column to create a topic";
+
+  public static final String MESSAGE_COLUMN_NAME_CONFIG = "message.column.name";
+  public static final String MESSAGE_COLUMN_NAME_DEFAULT = null;
+  private static final String MESSAGE_COLUMN_NAME_DOC =
+      "Option indicates that kafka message should be retrieved from given column name from "
+      + "database. This feature should be used along with "
+      + "`TOPIC_NAME_BASED_ON_DATABASE_COLUMN_VALUE_CONFIG`.";
+  private static final String MESSAGE_COLUMN_NAME_DISPLAY =
+      "Column name contains message to be sent to topic";
+
+  public static final String KEY_COLUMN_NAME_CONFIG = "key.column.name";
+  public static final String KEY_COLUMN_NAME_DEFAULT = null;
+  private static final String KEY_COLUMN_NAME_DOC =
+      "Option indicates that kafka message key should be retrieved from given column name "
+      + "from database. This feature should be used along with "
+      + "`TOPIC_NAME_BASED_ON_DATABASE_COLUMN_VALUE_CONFIG`.";
+  private static final String KEY_COLUMN_NAME_DISPLAY =
+      "Column name contains message key to be sent to topic";
+
+
   public static final String DB_TIMEZONE_CONFIG = "db.timezone";
   public static final String DB_TIMEZONE_DEFAULT = "UTC";
   private static final String DB_TIMEZONE_CONFIG_DOC =
@@ -313,7 +344,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public static final String QUERY_SUFFIX_CONFIG = "query.suffix";
   public static final String QUERY_SUFFIX_DEFAULT = "";
-  public static final String QUERY_SUFFIX_DOC = 
+  public static final String QUERY_SUFFIX_DOC =
       "Suffix to append at the end of the generated query.";
   public static final String QUERY_SUFFIX_DISPLAY = "Query suffix";
 
@@ -411,7 +442,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
                 .addErrorMessage("Isolation mode of `"
                         + TransactionIsolationMode.SQL_SERVER_SNAPSHOT.name()
                         + "` can only be configured with a Sql Server Dialect"
-          );
+            );
       }
     }
 
@@ -758,6 +789,36 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.MEDIUM,
         TIMESTAMP_DELAY_INTERVAL_MS_DISPLAY
+    ).define(
+        TOPIC_NAME_BASED_ON_DATABASE_COLUMN_VALUE_CONFIG,
+        Type.STRING,
+        TOPIC_NAME_BASED_ON_DATABASE_COLUMN_VALUE_DEFAULT,
+        Importance.HIGH,
+        TOPIC_NAME_BASED_ON_DATABASE_COLUMN_VALUE_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        TOPIC_NAME_BASED_ON_DATABASE_COLUMN_VALUE_DISPLAY
+    ).define(
+        MESSAGE_COLUMN_NAME_CONFIG,
+        Type.STRING,
+        MESSAGE_COLUMN_NAME_DEFAULT,
+        Importance.HIGH,
+        MESSAGE_COLUMN_NAME_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        MESSAGE_COLUMN_NAME_DISPLAY
+    ).define(
+        KEY_COLUMN_NAME_CONFIG,
+        Type.STRING,
+        KEY_COLUMN_NAME_DEFAULT,
+        Importance.MEDIUM,
+        KEY_COLUMN_NAME_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        KEY_COLUMN_NAME_DISPLAY
     ).define(
         DB_TIMEZONE_CONFIG,
         Type.STRING,

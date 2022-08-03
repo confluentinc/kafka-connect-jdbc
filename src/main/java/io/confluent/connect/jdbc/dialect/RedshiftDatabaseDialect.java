@@ -304,6 +304,8 @@ public class RedshiftDatabaseDialect extends GenericDatabaseDialect {
           return "TIMESTAMP";
         case "io.debezium.time.ZonedTimestamp":
           return "TIMESTAMPTZ";
+        case "io.debezium.time.MicroTimestamp":
+          return "TIMESTAMP";
         default:
           // fall through to normal types
       }
@@ -456,7 +458,7 @@ public class RedshiftDatabaseDialect extends GenericDatabaseDialect {
 
     switch (schema.type()) {
       case ARRAY: {
-        Class<?> valueClass = value.getClass();        
+        Class<?> valueClass = value.getClass();
         Collection<?> valueCollection;
         if (Collection.class.isAssignableFrom(valueClass)) {
           valueCollection = (Collection<?>) value;
@@ -474,7 +476,7 @@ public class RedshiftDatabaseDialect extends GenericDatabaseDialect {
             listString = valueCollection.stream().map(Object::toString)
                 .collect(Collectors.joining(", "));
           }
-        }    
+        }
 
         statement.setString(index, (String) listString);
 

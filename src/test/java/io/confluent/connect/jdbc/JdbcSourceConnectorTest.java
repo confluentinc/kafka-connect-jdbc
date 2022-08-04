@@ -360,6 +360,13 @@ public class JdbcSourceConnectorTest {
 
   }
 
+  @Test
+  public void testValidateConnectorPropertyWithoutDefaultValue() {
+    props.remove(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
+    Config config = connector.validate(props);
+  }
+
+
   private String tables(String... names) {
     List<TableId> tableIds = new ArrayList<>();
     for (String name : names) {

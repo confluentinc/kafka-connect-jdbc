@@ -50,6 +50,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+
+import javax.print.DocFlavor.STRING;
+
 import java.util.List;
 import java.util.ArrayList;
 
@@ -444,6 +447,11 @@ public class RedshiftDatabaseDialect extends GenericDatabaseDialect {
       Object value) {
     if (schemaName == null && Type.BOOLEAN.equals(type)) {
       builder.append((Boolean) value ? "TRUE" : "FALSE");
+    } else if (type == Type.STRING) {
+      String str = (String) value;      
+      int limit = 10000;
+      str = str.length() > limit ? str.substring(0, limit - 1000) : str;      
+      builder.appendStringQuoted(str);
     } else {
       super.formatColumnValue(builder, schemaName, schemaParameters, type, value);
     }
@@ -479,6 +487,14 @@ public class RedshiftDatabaseDialect extends GenericDatabaseDialect {
         }
 
         statement.setString(index, (String) listString);
+
+        return true;
+      }
+      case STRING: {
+        String str = (String) value;        
+        int limit = 10000;    
+        str = str.length() > limit ? str.substring(0, limit - 1000) : str;      
+        statement.setString(index, str);
 
         return true;
       }

@@ -15,6 +15,9 @@
 
 package io.confluent.connect.jdbc;
 
+import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG;
+
+import java.util.Optional;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
@@ -27,7 +30,13 @@ import org.apache.kafka.connect.util.ConnectorUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
@@ -39,8 +48,6 @@ import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.Version;
-
-import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG;
 
 /**
  * JdbcConnector is a Kafka Connect Connector implementation that watches a JDBC database and
@@ -142,13 +149,16 @@ public class JdbcSourceConnector extends SourceConnector {
   public Config validate(Map<String, String> connectorConfigs) {
     Config config = super.validate(connectorConfigs);
     configValue(config, TRANSACTION_ISOLATION_MODE_CONFIG)
-            .filter(txmode -> JdbcSourceConnectorConfig.TransactionIsolationMode.SQL_SERVER_SNAPSHOT.equals(
-                    JdbcSourceConnectorConfig.TransactionIsolationMode.valueOf(txmode.value().toString())))
-            .ifPresent(txmode -> {
-              JdbcSourceConnectorConfig jdbcSourceConnectorConfig
-                      = new JdbcSourceConnectorConfig(connectorConfigs);
-              jdbcSourceConnectorConfig.validateMultiConfigs(config);
-            });
+        .filter(
+            txmode ->
+                JdbcSourceConnectorConfig.TransactionIsolationMode.SQL_SERVER_SNAPSHOT.equals(
+                    JdbcSourceConnectorConfig.TransactionIsolationMode.valueOf(
+                        txmode.value().toString())))
+        .ifPresent(txmode -> {
+          JdbcSourceConnectorConfig jdbcSourceConnectorConfig
+              = new JdbcSourceConnectorConfig(connectorConfigs);
+          jdbcSourceConnectorConfig.validateMultiConfigs(config);
+        });
     return config;
   }
 
@@ -224,11 +234,12 @@ public class JdbcSourceConnector extends SourceConnector {
 
   private Optional<ConfigValue> configValue(Config config, String name) {
     return config.configValues()
-            .stream()
-            .filter(cfg -> name.equals(cfg.name())
-                    && cfg.errorMessages().isEmpty())
-            .findFirst();
+        .stream()
+        .filter(cfg -> name.equals(cfg.name())
+            && cfg.errorMessages().isEmpty())
+        .findFirst();
   }
+
   @Override
   public ConfigDef config() {
     return JdbcSourceConnectorConfig.CONFIG_DEF;

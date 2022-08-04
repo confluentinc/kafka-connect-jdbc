@@ -382,11 +382,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public Config validateMultiConfigs(Config config) {
     HashMap<String, ConfigValue> configValues = new HashMap<>();
     config.configValues().stream()
-            .filter((configValue) ->
-                    configValue.name().equals(
-                            JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG
-                    )
-            ).forEach(configValue -> configValues.putIfAbsent(configValue.name(), configValue));
+        .filter((configValue) ->
+            configValue.name().equals(
+                JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG
+            )
+        ).forEach(configValue -> configValues.putIfAbsent(configValue.name(), configValue));
 
     DatabaseDialect dialect;
     final String dialectName = this.getString(JdbcSourceConnectorConfig.DIALECT_NAME_CONFIG);
@@ -396,17 +396,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       dialect = DatabaseDialects.findBestFor(this.getString(CONNECTION_URL_CONFIG), this);
     }
     if (!dialect.name().equals(
-            DatabaseDialects.create(
-                    SqlServerDatabaseDialectName, this
-            ).name()
-    )
-    ) {
+        DatabaseDialects.create(SqlServerDatabaseDialectName, this).name())) {
       configValues
-              .get(JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG)
-              .addErrorMessage("Isolation mode of `"
-                      + TransactionIsolationMode.SQL_SERVER_SNAPSHOT.name()
-                      + "` can only be configured with a Sql Server Dialect"
-              );
+          .get(JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG)
+          .addErrorMessage("Isolation mode of `"
+              + TransactionIsolationMode.SQL_SERVER_SNAPSHOT.name()
+              + "` can only be configured with a Sql Server Dialect");
     }
     return config;
   }

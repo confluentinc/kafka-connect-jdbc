@@ -40,7 +40,7 @@ import static org.junit.Assert.assertEquals;
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG;
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG;
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG;
-import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG;
+import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TABLE_INCLUDE_CONFIG;
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.MODE_CONFIG;
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.MODE_TIMESTAMP;
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING;
@@ -254,7 +254,7 @@ public class MSSQLDateTimeIT extends BaseConnectorIT {
         props.put(CONNECTION_URL_CONFIG, MSSQL_URL);
         props.put(CONNECTION_USER_CONFIG, "sa");
         props.put(CONNECTION_PASSWORD_CONFIG, "reallyStrongPwd123");
-        props.put(TABLE_WHITELIST_CONFIG, MSSQL_Table);
+        props.put(TABLE_INCLUDE_CONFIG, MSSQL_Table);
         props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "start_time");
         props.put(TOPIC_PREFIX_CONFIG, "test-");
         props.put(POLL_INTERVAL_MS_CONFIG, "30");

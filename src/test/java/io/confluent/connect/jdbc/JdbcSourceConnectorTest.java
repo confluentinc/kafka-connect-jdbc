@@ -246,6 +246,14 @@ public class JdbcSourceConnectorTest {
   public void testConflictingQueryTableSettings() {
     final String sample_query = "SELECT foo, bar FROM sample_table";
     props.put(JdbcSourceConnectorConfig.QUERY_CONFIG, sample_query);
+    props.put(JdbcSourceConnectorConfig.TABLE_INCLUDE_CONFIG, "foo,bar");
+    connector.start(props);
+  }
+
+  @Test(expected = ConnectException.class)
+  public void testConflictingQueryTableSettingsLegacy() {
+    final String sample_query = "SELECT foo, bar FROM sample_table";
+    props.put(JdbcSourceConnectorConfig.QUERY_CONFIG, sample_query);
     props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "foo,bar");
     connector.start(props);
   }

@@ -199,14 +199,20 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "    Field(s) from the record value are used, which must be a struct.";
   private static final String PK_MODE_DISPLAY = "Primary Key Mode";
 
-  public static final String FIELDS_WHITELIST = "fields.whitelist";
-  private static final String FIELDS_WHITELIST_DEFAULT = "";
-  private static final String FIELDS_WHITELIST_DOC =
+  public static final String FIELDS_INCLUDE = "fields.include";
+  private static final String FIELDS_INCLUDE_DEFAULT = "";
+  private static final String FIELDS_INCLUDE_DOC =
       "List of comma-separated record value field names. If empty, all fields from the record "
       + "value are utilized, otherwise used to filter to the desired fields.\n"
       + "Note that ``" + PK_FIELDS + "`` is applied independently in the context of which field"
       + "(s) form the primary key columns in the destination database,"
       + " while this configuration is applicable for the other columns.";
+  private static final String FIELDS_INCLUDE_DISPLAY = "Fields Include";
+
+  public static final String FIELDS_WHITELIST = "fields.whitelist";
+  private static final String FIELDS_WHITELIST_DEFAULT = FIELDS_INCLUDE_DEFAULT;
+  private static final String FIELDS_WHITELIST_DOC =
+      "Deprecated. Use " + FIELDS_INCLUDE + " instead.";
   private static final String FIELDS_WHITELIST_DISPLAY = "Fields Whitelist";
 
   private static final ConfigDef.Range NON_NEGATIVE_INT_VALIDATOR = ConfigDef.Range.atLeast(0);
@@ -414,10 +420,21 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Width.LONG, PK_FIELDS_DISPLAY
         )
         .define(
+            FIELDS_INCLUDE,
+            ConfigDef.Type.LIST,
+            FIELDS_INCLUDE_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            FIELDS_INCLUDE_DOC,
+            DATAMAPPING_GROUP,
+            4,
+            ConfigDef.Width.LONG,
+            FIELDS_INCLUDE_DISPLAY
+        )
+        .define(
             FIELDS_WHITELIST,
             ConfigDef.Type.LIST,
             FIELDS_WHITELIST_DEFAULT,
-            ConfigDef.Importance.MEDIUM,
+            ConfigDef.Importance.LOW,
             FIELDS_WHITELIST_DOC,
             DATAMAPPING_GROUP,
             4,
@@ -509,7 +526,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final InsertMode insertMode;
   public final PrimaryKeyMode pkMode;
   public final List<String> pkFields;
-  public final Set<String> fieldsWhitelist;
+  public final Set<String> fieldsInclude;
   public final String dialectName;
   public final TimeZone timeZone;
   public final EnumSet<TableType> tableTypes;
@@ -533,7 +550,11 @@ public class JdbcSinkConfig extends AbstractConfig {
     pkMode = PrimaryKeyMode.valueOf(getString(PK_MODE).toUpperCase());
     pkFields = getList(PK_FIELDS);
     dialectName = getString(DIALECT_NAME_CONFIG);
-    fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
+    List<String> include = getList(FIELDS_INCLUDE);
+    if (include.isEmpty()) {
+      include = getList(FIELDS_WHITELIST);
+    }
+    fieldsInclude = new HashSet<>(include);
     String dbTimeZone = getString(DB_TIMEZONE_CONFIG);
     timeZone = TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
 

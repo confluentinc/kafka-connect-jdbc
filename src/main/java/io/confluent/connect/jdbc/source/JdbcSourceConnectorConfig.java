@@ -227,20 +227,32 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final String TABLE_POLL_INTERVAL_MS_DISPLAY
       = "Metadata Change Monitoring Interval (ms)";
 
+  public static final String TABLE_INCLUDE_CONFIG = "table.include";
+  private static final String TABLE_INCLUDE_DOC =
+      "List of tables to include in copying. If specified, ``table.exclude`` may not be set. "
+      + "Use a comma-separated list to specify multiple tables "
+      + "(for example, ``table.include: \"User, Address, Email\"``).";
+  public static final String TABLE_INCLUDE_DEFAULT = "";
+  private static final String TABLE_INCLUDE_DISPLAY = "Table Include";
+
   public static final String TABLE_WHITELIST_CONFIG = "table.whitelist";
   private static final String TABLE_WHITELIST_DOC =
-      "List of tables to include in copying. If specified, ``table.blacklist`` may not be set. "
-      + "Use a comma-separated list to specify multiple tables "
-      + "(for example, ``table.whitelist: \"User, Address, Email\"``).";
-  public static final String TABLE_WHITELIST_DEFAULT = "";
+      "Deprecated. Use " + TABLE_INCLUDE_CONFIG + " instead.";
+  public static final String TABLE_WHITELIST_DEFAULT = TABLE_INCLUDE_DEFAULT;
   private static final String TABLE_WHITELIST_DISPLAY = "Table Whitelist";
+
+  public static final String TABLE_EXCLUDE_CONFIG = "table.exclude";
+  private static final String TABLE_EXCLUDE_DOC =
+      "List of tables to exclude from copying. If specified, ``table.exclude`` may not be set. "
+      + "Use a comma-separated list to specify multiple tables "
+      + "(for example, ``table.exclude: \"User, Address, Email\"``).";
+  public static final String TABLE_EXCLUDE_DEFAULT = "";
+  private static final String TABLE_EXCLUDE_DISPLAY = "Table Exclude";
 
   public static final String TABLE_BLACKLIST_CONFIG = "table.blacklist";
   private static final String TABLE_BLACKLIST_DOC =
-      "List of tables to exclude from copying. If specified, ``table.whitelist`` may not be set. "
-      + "Use a comma-separated list to specify multiple tables "
-      + "(for example, ``table.blacklist: \"User, Address, Email\"``).";
-  public static final String TABLE_BLACKLIST_DEFAULT = "";
+      "Deprecated. Use " + TABLE_EXCLUDE_CONFIG + " instead.";
+  public static final String TABLE_BLACKLIST_DEFAULT = TABLE_EXCLUDE_DEFAULT;
   private static final String TABLE_BLACKLIST_DISPLAY = "Table Blacklist";
 
   public static final String SCHEMA_PATTERN_CONFIG = "schema.pattern";
@@ -429,7 +441,9 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.LONG,
         CONNECTION_URL_DISPLAY,
-        Arrays.asList(TABLE_WHITELIST_CONFIG, TABLE_BLACKLIST_CONFIG)
+        Arrays.asList(
+          TABLE_INCLUDE_CONFIG, TABLE_EXCLUDE_CONFIG,
+          TABLE_WHITELIST_CONFIG, TABLE_BLACKLIST_CONFIG)
     ).define(
         CONNECTION_USER_CONFIG,
         Type.STRING,
@@ -472,20 +486,40 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Width.SHORT,
         CONNECTION_BACKOFF_DISPLAY
     ).define(
+        TABLE_INCLUDE_CONFIG,
+        Type.LIST,
+        TABLE_INCLUDE_DEFAULT,
+        Importance.MEDIUM,
+        TABLE_INCLUDE_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        TABLE_INCLUDE_DISPLAY
+    ).define(
         TABLE_WHITELIST_CONFIG,
         Type.LIST,
         TABLE_WHITELIST_DEFAULT,
-        Importance.MEDIUM,
+        Importance.LOW,
         TABLE_WHITELIST_DOC,
         DATABASE_GROUP,
         ++orderInGroup,
         Width.LONG,
         TABLE_WHITELIST_DISPLAY
     ).define(
+        TABLE_EXCLUDE_CONFIG,
+        Type.LIST,
+        TABLE_EXCLUDE_DEFAULT,
+        Importance.MEDIUM,
+        TABLE_EXCLUDE_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        TABLE_EXCLUDE_DISPLAY
+    ).define(
         TABLE_BLACKLIST_CONFIG,
         Type.LIST,
         TABLE_BLACKLIST_DEFAULT,
-        Importance.MEDIUM,
+        Importance.LOW,
         TABLE_BLACKLIST_DOC,
         DATABASE_GROUP,
         ++orderInGroup,
@@ -795,6 +829,22 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public String topicPrefix() {
     return getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG).trim();
+  }
+
+  public List<String> tableInclude() {
+    List<String> include = getList(JdbcSourceConnectorConfig.TABLE_INCLUDE_CONFIG);
+    if (include.isEmpty()) {
+      include = getList(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG);
+    }
+    return include;
+  }
+
+  public List<String> tableExclude() {
+    List<String> exclude = getList(JdbcSourceConnectorConfig.TABLE_EXCLUDE_CONFIG);
+    if (exclude.isEmpty()) {
+      exclude = getList(JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG);
+    }
+    return exclude;
   }
 
   /**

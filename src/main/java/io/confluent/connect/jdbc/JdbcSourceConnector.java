@@ -96,25 +96,25 @@ public class JdbcSourceConnector extends SourceConnector {
     long tablePollMs = config.getLong(JdbcSourceConnectorConfig.TABLE_POLL_INTERVAL_MS_CONFIG);
     long tableStartupLimitMs =
         config.getLong(JdbcSourceConnectorConfig.TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_CONFIG);
-    List<String> whitelist = config.getList(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG);
-    Set<String> whitelistSet = whitelist.isEmpty() ? null : new HashSet<>(whitelist);
-    List<String> blacklist = config.getList(JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG);
-    Set<String> blacklistSet = blacklist.isEmpty() ? null : new HashSet<>(blacklist);
+    List<String> include = config.tableInclude();
+    Set<String> includeSet = include.isEmpty() ? null : new HashSet<>(include);
+    List<String> exclude = config.tableExclude();
+    Set<String> excludeSet = exclude.isEmpty() ? null : new HashSet<>(exclude);
 
-    if (whitelistSet != null && blacklistSet != null) {
-      throw new ConnectException(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + " and "
-                                 + JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG + " are "
+    if (includeSet != null && excludeSet != null) {
+      throw new ConnectException(JdbcSourceConnectorConfig.TABLE_INCLUDE_CONFIG + " and "
+                                 + JdbcSourceConnectorConfig.TABLE_EXCLUDE_CONFIG + " are "
                                  + "exclusive.");
     }
     String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
     if (!query.isEmpty()) {
-      if (whitelistSet != null || blacklistSet != null) {
+      if (includeSet != null || excludeSet != null) {
         throw new ConnectException(JdbcSourceConnectorConfig.QUERY_CONFIG + " may not be combined"
                                    + " with whole-table copying settings.");
       }
       // Force filtering out the entire set of tables since the one task we'll generate is for the
       // query.
-      whitelistSet = Collections.emptySet();
+      includeSet = Collections.emptySet();
 
     }
     tableMonitorThread = new TableMonitorThread(
@@ -123,8 +123,8 @@ public class JdbcSourceConnector extends SourceConnector {
         context,
         tableStartupLimitMs,
         tablePollMs,
-        whitelistSet,
-        blacklistSet,
+        includeSet,
+        excludeSet,
         Time.SYSTEM
     );
     if (query.isEmpty()) {

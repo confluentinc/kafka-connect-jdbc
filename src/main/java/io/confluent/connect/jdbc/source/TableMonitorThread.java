@@ -51,8 +51,8 @@ public class TableMonitorThread extends Thread {
   private final CountDownLatch shutdownLatch;
   private final long startupMs;
   private final long pollMs;
-  private final Set<String> whitelist;
-  private final Set<String> blacklist;
+  private final Set<String> include;
+  private final Set<String> exclude;
   private final AtomicReference<List<TableId>> tables;
   private final Time time;
 
@@ -61,8 +61,8 @@ public class TableMonitorThread extends Thread {
       ConnectorContext context,
       long startupMs,
       long pollMs,
-      Set<String> whitelist,
-      Set<String> blacklist,
+      Set<String> include,
+      Set<String> exclude,
       Time time
   ) {
     this.dialect = dialect;
@@ -71,8 +71,8 @@ public class TableMonitorThread extends Thread {
     this.shutdownLatch = new CountDownLatch(1);
     this.startupMs = startupMs;
     this.pollMs = pollMs;
-    this.whitelist = whitelist;
-    this.blacklist = blacklist;
+    this.include = include;
+    this.exclude = exclude;
     this.tables = new AtomicReference<>();
     this.time = time;
   }
@@ -135,13 +135,13 @@ public class TableMonitorThread extends Thread {
 
     if (!duplicates.isEmpty()) {
       String configText;
-      if (whitelist != null) {
-        configText = "'" + JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + "'";
-      } else if (blacklist != null) {
-        configText = "'" + JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG + "'";
+      if (include != null) {
+        configText = "'" + JdbcSourceConnectorConfig.TABLE_INCLUDE_CONFIG + "'";
+      } else if (exclude != null) {
+        configText = "'" + JdbcSourceConnectorConfig.TABLE_EXCLUDE_CONFIG + "'";
       } else {
-        configText = "'" + JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + "' or '"
-            + JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG + "'";
+        configText = "'" + JdbcSourceConnectorConfig.TABLE_INCLUDE_CONFIG + "' or '"
+            + JdbcSourceConnectorConfig.TABLE_EXCLUDE_CONFIG + "'";
       }
       String msg = "The connector uses the unqualified table name as the topic name and has "
           + "detected duplicate unqualified table names. This could lead to mixed data types in "
@@ -185,21 +185,21 @@ public class TableMonitorThread extends Thread {
     }
 
     final List<TableId> filteredTables = new ArrayList<>(allTables.size());
-    if (whitelist != null) {
+    if (include != null) {
       for (TableId table : allTables) {
         String fqn1 = dialect.expressionBuilder().append(table, QuoteMethod.NEVER).toString();
         String fqn2 = dialect.expressionBuilder().append(table, QuoteMethod.ALWAYS).toString();
-        if (whitelist.contains(fqn1) || whitelist.contains(fqn2)
-            || whitelist.contains(table.tableName())) {
+        if (include.contains(fqn1) || include.contains(fqn2)
+            || include.contains(table.tableName())) {
           filteredTables.add(table);
         }
       }
-    } else if (blacklist != null) {
+    } else if (exclude != null) {
       for (TableId table : allTables) {
         String fqn1 = dialect.expressionBuilder().append(table, QuoteMethod.NEVER).toString();
         String fqn2 = dialect.expressionBuilder().append(table, QuoteMethod.ALWAYS).toString();
-        if (!(blacklist.contains(fqn1) || blacklist.contains(fqn2)
-              || blacklist.contains(table.tableName()))) {
+        if (!(exclude.contains(fqn1) || exclude.contains(fqn2)
+              || exclude.contains(table.tableName()))) {
           filteredTables.add(table);
         }
       }

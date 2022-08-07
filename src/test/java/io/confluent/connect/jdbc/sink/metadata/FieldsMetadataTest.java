@@ -238,7 +238,7 @@ public class FieldsMetadataTest {
   }
 
   @Test
-  public void recordValuePkModeWithPkFieldsAndWhitelistFiltering() {
+  public void recordValuePkModeWithPkFieldsAndFiltering() {
     final Schema valueSchema =
         SchemaBuilder.struct()
             .field("field1", Schema.INT64_SCHEMA)
@@ -311,7 +311,7 @@ public class FieldsMetadataTest {
     return extract(pkMode, pkFields, Collections.<String>emptySet(), keySchema, valueSchema);
   }
 
-  private static FieldsMetadata extract(JdbcSinkConfig.PrimaryKeyMode pkMode, List<String> pkFields, Set<String> whitelist, Schema keySchema, Schema valueSchema) {
-    return FieldsMetadata.extract("table", pkMode, pkFields, whitelist, keySchema, valueSchema);
+  private static FieldsMetadata extract(JdbcSinkConfig.PrimaryKeyMode pkMode, List<String> pkFields, Set<String> include, Schema keySchema, Schema valueSchema) {
+    return FieldsMetadata.extract("table", pkMode, pkFields, include, keySchema, valueSchema);
   }
 }

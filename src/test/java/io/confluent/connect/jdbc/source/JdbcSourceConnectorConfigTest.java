@@ -28,6 +28,7 @@ import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -99,8 +100,8 @@ public class JdbcSourceConnectorConfigTest {
     configDef = JdbcSourceConnectorConfig.baseConfigDef();
     results = configDef.validate(props);
     // Should have no recommended values
-    assertWhitelistRecommendations();
-    assertBlacklistRecommendations();
+    assertIncludeRecommendations();
+    assertExcludeRecommendations();
   }
 
   @Test
@@ -110,8 +111,8 @@ public class JdbcSourceConnectorConfigTest {
     configDef = JdbcSourceConnectorConfig.baseConfigDef();
     results = configDef.validate(props);
     // Should have no recommended values
-    assertWhitelistRecommendations();
-    assertBlacklistRecommendations();
+    assertIncludeRecommendations();
+    assertExcludeRecommendations();
   }
 
   @Test
@@ -121,8 +122,8 @@ public class JdbcSourceConnectorConfigTest {
     props.put(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG, "VIEW");
     configDef = JdbcSourceConnectorConfig.baseConfigDef();
     results = configDef.validate(props);
-    assertWhitelistRecommendations();
-    assertBlacklistRecommendations();
+    assertIncludeRecommendations();
+    assertExcludeRecommendations();
   }
 
   @SuppressWarnings("unchecked")
@@ -253,6 +254,24 @@ public class JdbcSourceConnectorConfigTest {
     assertFalse(connectionAttemptsConfig.errorMessages().isEmpty());
   }
 
+  @Test
+  public void testIncludeExclude() {
+    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, db.getUrl());
+    props.put(JdbcSourceConnectorConfig.MODE_CONFIG, "bulk");
+
+    props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "t1,t2");
+    props.put(JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG, "t3,t4");
+    JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
+    assertEquals(Arrays.asList("t1", "t2"), config.tableInclude());
+    assertEquals(Arrays.asList("t3", "t4"), config.tableExclude());
+
+    props.put(JdbcSourceConnectorConfig.TABLE_INCLUDE_CONFIG, "t1");
+    props.put(JdbcSourceConnectorConfig.TABLE_EXCLUDE_CONFIG, "t4");
+    config = new JdbcSourceConnectorConfig(props);
+    assertEquals(Arrays.asList("t1"), config.tableInclude());
+    assertEquals(Arrays.asList("t4"), config.tableExclude());
+  }
+
   @SuppressWarnings("unchecked")
   protected <T> void assertContains(Collection<T> actual, T... expected) {
     for (T e : expected) {
@@ -274,12 +293,12 @@ public class JdbcSourceConnectorConfigTest {
   }
 
   @SuppressWarnings("unchecked")
-  protected <T> void assertWhitelistRecommendations(T... recommendedValues) {
-    assertContains(namedValue(results, JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG).recommendedValues(), recommendedValues);
+  protected <T> void assertIncludeRecommendations(T... recommendedValues) {
+    assertContains(namedValue(results, JdbcSourceConnectorConfig.TABLE_INCLUDE_CONFIG).recommendedValues(), recommendedValues);
   }
 
   @SuppressWarnings("unchecked")
-  protected <T> void assertBlacklistRecommendations(T... recommendedValues) {
-    assertContains(namedValue(results, JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG).recommendedValues(), recommendedValues);
+  protected <T> void assertExcludeRecommendations(T... recommendedValues) {
+    assertContains(namedValue(results, JdbcSourceConnectorConfig.TABLE_EXCLUDE_CONFIG).recommendedValues(), recommendedValues);
   }
 }

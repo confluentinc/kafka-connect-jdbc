@@ -116,7 +116,7 @@ public class BufferedRecords {
           tableId.tableName(),
           config.pkMode,
           config.pkFields,
-          config.fieldsWhitelist,
+          config.fieldsInclude,
           schemaPair
       );
       dbStructure.createOrAmendIfNecessary(

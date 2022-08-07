@@ -15,8 +15,10 @@
 package io.confluent.connect.jdbc.sink;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 
 import io.confluent.connect.jdbc.util.TableType;
@@ -27,6 +29,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class JdbcSinkConfigTest {
 
@@ -111,6 +114,20 @@ public class JdbcSinkConfigTest {
     props.put("table.types", "table \t \n");
     createConfig();
     assertTableTypes(TableType.TABLE);
+  }
+
+  @Test
+  public void testInclude() {
+    createConfig();
+    assertTrue(config.fieldsInclude.isEmpty());
+
+    props.put(JdbcSinkConfig.FIELDS_WHITELIST, "f1,f2");
+    createConfig();
+    assertEquals(new HashSet<>(Arrays.asList("f1", "f2")), config.fieldsInclude);
+
+    props.put(JdbcSinkConfig.FIELDS_INCLUDE, "f1");
+    createConfig();
+    assertEquals(Collections.singleton("f1"), config.fieldsInclude);
   }
 
   protected void createConfig() {

@@ -181,11 +181,11 @@ public class TableMonitorThreadTest {
   }
 
   @Test
-  public void testWhitelist() throws Exception {
-    Set<String> whitelist = new HashSet<>(Arrays.asList("foo", "bar"));
+  public void testInclude() throws Exception {
+    Set<String> include = new HashSet<>(Arrays.asList("foo", "bar"));
     EasyMock.expect(dialect.expressionBuilder()).andReturn(ExpressionBuilder.create()).anyTimes();
     tableMonitorThread = new TableMonitorThread(dialect, connectionProvider, context,
-        STARTUP_LIMIT, POLL_INTERVAL, whitelist, null, MockTime.SYSTEM);
+        STARTUP_LIMIT, POLL_INTERVAL, include, null, MockTime.SYSTEM);
     expectTableNames(LIST_FOO_BAR, shutdownThread());
     EasyMock.replay(connectionProvider, dialect);
 
@@ -197,11 +197,11 @@ public class TableMonitorThreadTest {
   }
 
   @Test
-  public void testBlacklist() throws Exception {
-    Set<String> blacklist = new HashSet<>(Arrays.asList("bar", "baz"));
+  public void testExclude() throws Exception {
+    Set<String> exclude = new HashSet<>(Arrays.asList("bar", "baz"));
     EasyMock.expect(dialect.expressionBuilder()).andReturn(ExpressionBuilder.create()).anyTimes();
     tableMonitorThread = new TableMonitorThread(dialect, connectionProvider, context,
-        STARTUP_LIMIT, POLL_INTERVAL, null, blacklist, MockTime.SYSTEM);
+        STARTUP_LIMIT, POLL_INTERVAL, null, exclude, MockTime.SYSTEM);
     expectTableNames(LIST_FOO_BAR_BAZ, shutdownThread());
     EasyMock.replay(connectionProvider, dialect);
 
@@ -281,11 +281,11 @@ public class TableMonitorThreadTest {
   }
 
   @Test
-  public void testDuplicateWithUnqualifiedWhitelist() throws Exception {
-    Set<String> whitelist = new HashSet<>(Arrays.asList("dup"));
+  public void testDuplicateWithUnqualifiedInclude() throws Exception {
+    Set<String> include = new HashSet<>(Arrays.asList("dup"));
     EasyMock.expect(dialect.expressionBuilder()).andReturn(ExpressionBuilder.create()).anyTimes();
     tableMonitorThread = new TableMonitorThread(dialect, connectionProvider, context,
-        STARTUP_LIMIT, POLL_INTERVAL, whitelist, null, MockTime.SYSTEM);
+        STARTUP_LIMIT, POLL_INTERVAL, include, null, MockTime.SYSTEM);
     expectTableNames(LIST_DUP_ONLY, shutdownThread());
     context.requestTaskReconfiguration();
     EasyMock.expectLastCall();
@@ -300,11 +300,11 @@ public class TableMonitorThreadTest {
   }
 
   @Test
-  public void testDuplicateWithUnqualifiedBlacklist() throws Exception {
-    Set<String> blacklist = new HashSet<>(Arrays.asList("foo"));
+  public void testDuplicateWithUnqualifiedExclude() throws Exception {
+    Set<String> exclude = new HashSet<>(Arrays.asList("foo"));
     EasyMock.expect(dialect.expressionBuilder()).andReturn(ExpressionBuilder.create()).anyTimes();
     tableMonitorThread = new TableMonitorThread(dialect, connectionProvider, context,
-        STARTUP_LIMIT, POLL_INTERVAL, null, blacklist, MockTime.SYSTEM);
+        STARTUP_LIMIT, POLL_INTERVAL, null, exclude, MockTime.SYSTEM);
     expectTableNames(LIST_DUP_WITH_ALL, shutdownThread());
     context.requestTaskReconfiguration();
     EasyMock.expectLastCall();
@@ -319,11 +319,11 @@ public class TableMonitorThreadTest {
   }
 
   @Test
-  public void testDuplicateWithQualifiedWhitelist() throws Exception {
-    Set<String> whitelist = new HashSet<>(Arrays.asList("dup1.dup", "foo"));
+  public void testDuplicateWithQualifiedInclude() throws Exception {
+    Set<String> include = new HashSet<>(Arrays.asList("dup1.dup", "foo"));
     EasyMock.expect(dialect.expressionBuilder()).andReturn(ExpressionBuilder.create()).anyTimes();
     tableMonitorThread = new TableMonitorThread(dialect, connectionProvider, context,
-        STARTUP_LIMIT, POLL_INTERVAL, whitelist, null, MockTime.SYSTEM);
+        STARTUP_LIMIT, POLL_INTERVAL, include, null, MockTime.SYSTEM);
     expectTableNames(LIST_DUP_WITH_ALL, shutdownThread());
     EasyMock.replay(connectionProvider, dialect);
 
@@ -334,11 +334,11 @@ public class TableMonitorThreadTest {
   }
 
   @Test
-  public void testDuplicateWithQualifiedBlacklist() throws Exception {
-    Set<String> blacklist = new HashSet<>(Arrays.asList("dup1.dup", "foo"));
+  public void testDuplicateWithQualifiedExclude() throws Exception {
+    Set<String> exclude = new HashSet<>(Arrays.asList("dup1.dup", "foo"));
     EasyMock.expect(dialect.expressionBuilder()).andReturn(ExpressionBuilder.create()).anyTimes();
     tableMonitorThread = new TableMonitorThread(dialect, connectionProvider, context,
-        STARTUP_LIMIT, POLL_INTERVAL, null, blacklist, MockTime.SYSTEM);
+        STARTUP_LIMIT, POLL_INTERVAL, null, exclude, MockTime.SYSTEM);
     expectTableNames(LIST_DUP_WITH_ALL, shutdownThread());
     EasyMock.replay(connectionProvider, dialect);
 

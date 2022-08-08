@@ -181,8 +181,8 @@ public class JdbcSourceTask extends SourceTask {
         = config.getList(JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
     Long timestampDelayInterval
         = config.getLong(JdbcSourceTaskConfig.TIMESTAMP_DELAY_INTERVAL_MS_CONFIG);
-    String topicNameBasedOnDatabaseValue
-        = config.getString(JdbcSourceTaskConfig.TOPIC_NAME_BASED_ON_DATABASE_COLUMN_VALUE_CONFIG);
+    String topicColumnName
+        = config.getString(JdbcSourceTaskConfig.TOPIC_COLUMN_NAME_CONFIG);
     String messageColumnName = config.getString(JdbcSourceTaskConfig.MESSAGE_COLUMN_NAME_CONFIG);
     String keyColumnName = config.getString(JdbcSourceTaskConfig.KEY_COLUMN_NAME_CONFIG);
     boolean validateNonNulls
@@ -252,7 +252,7 @@ public class JdbcSourceTask extends SourceTask {
                 queryMode,
                 tableOrQuery,
                 topicPrefix,
-                topicNameBasedOnDatabaseValue,
+                topicColumnName,
                 messageColumnName,
                 keyColumnName,
                 null,
@@ -271,7 +271,7 @@ public class JdbcSourceTask extends SourceTask {
                 queryMode,
                 tableOrQuery,
                 topicPrefix,
-                topicNameBasedOnDatabaseValue,
+                topicColumnName,
                 messageColumnName,
                 keyColumnName,
                 timestampColumns,
@@ -289,7 +289,7 @@ public class JdbcSourceTask extends SourceTask {
                 queryMode,
                 tableOrQuery,
                 topicPrefix,
-                topicNameBasedOnDatabaseValue,
+                topicColumnName,
                 messageColumnName,
                 keyColumnName,
                 timestampColumns,

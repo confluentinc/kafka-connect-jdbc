@@ -297,10 +297,9 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final long TIMESTAMP_DELAY_INTERVAL_MS_DEFAULT = 0;
   private static final String TIMESTAMP_DELAY_INTERVAL_MS_DISPLAY = "Delay Interval (ms)";
 
-  public static final String TOPIC_NAME_BASED_ON_DATABASE_COLUMN_VALUE_CONFIG =
-          "topic.name.database.column";
-  public static final String TOPIC_NAME_BASED_ON_DATABASE_COLUMN_VALUE_DEFAULT = null;
-  private static final String TOPIC_NAME_BASED_ON_DATABASE_COLUMN_VALUE_DOC =
+  public static final String TOPIC_COLUMN_NAME_CONFIG = "topic.name.database.column";
+  public static final String TOPIC_COLUMN_NAME_DEFAULT = null;
+  private static final String TOPIC_COLUMN_NAME_DOC =
       "Option indicates that topic name should be the same as a value retrieved from the database"
       + " based on passed property for example you have table in a database with 3 columns "
       + "(id, topic, payload) when you provide in this option value `topic` "
@@ -790,11 +789,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Width.MEDIUM,
         TIMESTAMP_DELAY_INTERVAL_MS_DISPLAY
     ).define(
-        TOPIC_NAME_BASED_ON_DATABASE_COLUMN_VALUE_CONFIG,
+            TOPIC_COLUMN_NAME_CONFIG,
         Type.STRING,
-        TOPIC_NAME_BASED_ON_DATABASE_COLUMN_VALUE_DEFAULT,
+            TOPIC_COLUMN_NAME_DEFAULT,
         Importance.HIGH,
-        TOPIC_NAME_BASED_ON_DATABASE_COLUMN_VALUE_DOC,
+            TOPIC_COLUMN_NAME_DOC,
         CONNECTOR_GROUP,
         ++orderInGroup,
         Width.MEDIUM,

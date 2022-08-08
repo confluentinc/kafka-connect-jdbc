@@ -16,7 +16,6 @@
 package io.confluent.connect.jdbc.source;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
-import java.util.Optional;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
@@ -77,14 +76,14 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   private String incrementingColumnName;
   private final long timestampDelay;
   private final TimeZone timeZone;
-  private final String topicBasedOnDatabaseValue;
-  private final String messageColumnName;
+  protected final String topicColumnName;
+  protected final String messageColumnName;
 
-  private final String keyColumnName;
+  protected final String keyColumnName;
 
   public TimestampIncrementingTableQuerier(DatabaseDialect dialect, QueryMode mode, String name,
                                            String topicPrefix,
-                                           String topicBasedOnDatabaseValue,
+                                           String topicColumnName,
                                            String messageColumnName,
                                            String keyColumnName,
                                            List<String> timestampColumnNames,
@@ -123,7 +122,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
 
     this.timeZone = timeZone;
     this.timestampGranularity = timestampGranularity;
-    this.topicBasedOnDatabaseValue = topicBasedOnDatabaseValue;
+    this.topicColumnName = topicColumnName;
     this.messageColumnName = messageColumnName;
     this.keyColumnName = keyColumnName;
   }
@@ -235,10 +234,11 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
         throw new DataException(e);
       }
     }
-    if (isColumnValueDrivenTopicFeature()) {
-      return sourceRecordForColumnDrivenTopic(record);
-    }
     offset = criteria.extractValues(schemaMapping.schema(), record, offset, timestampGranularity);
+    if (isColumnValueDrivenTopicFeature()) {
+      return sourceRecordForColumnDrivenTopic(
+          topicColumnName, messageColumnName, keyColumnName, partition, record, offset);
+    }
     return new SourceRecord(partition, offset.toMap(), topic, record.schema(), record);
   }
 
@@ -284,21 +284,25 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
            + '}';
   }
 
-  private boolean isColumnValueDrivenTopicFeature() {
-    return topicBasedOnDatabaseValue != null && messageColumnName != null;
+  protected boolean isColumnValueDrivenTopicFeature() {
+    return topicColumnName != null && messageColumnName != null;
   }
 
-  private SourceRecord sourceRecordForColumnDrivenTopic(Struct record) {
-    String expectedTopicName = Optional.ofNullable(topicBasedOnDatabaseValue)
-                                       .map(databaseColumn -> record.getString("topic"))
-                                       .orElse(topic);
+  protected static SourceRecord sourceRecordForColumnDrivenTopic(
+        String topicColumnName,
+        String messageColumnName,
+        String keyColumnName,
+        Map<String, String> partition,
+        Struct record,
+        TimestampIncrementingOffset offset) {
+    String topic = record.getString(topicColumnName);
     String message = record.getString(messageColumnName);
     if (keyColumnName != null) {
       String key = record.getString(keyColumnName);
       return new SourceRecord(
               partition,
               offset.toMap(),
-              expectedTopicName,
+              topic,
               null,
               key,
               null,
@@ -308,7 +312,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
       return new SourceRecord(
               partition,
               offset.toMap(),
-              expectedTopicName,
+              topic,
               null,
               message
       );

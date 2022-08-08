@@ -60,7 +60,7 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
       QueryMode mode,
       String name,
       String topicPrefix,
-      String topicBasedOnDatabaseValue,
+      String topicColumnName,
       String messageColumnName,
       String keyColumnName,
       List<String> timestampColumnNames,
@@ -75,7 +75,7 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
         mode,
         name,
         topicPrefix,
-        topicBasedOnDatabaseValue,
+        topicColumnName,
         messageColumnName,
         keyColumnName,
         timestampColumnNames,
@@ -158,7 +158,9 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
     this.offset = criteria.extractValues(schemaMapping.schema(), record, offset,
         timestampGranularity);
     Timestamp timestamp = offset.hasTimestampOffset() ? offset.getTimestampOffset() : null;
-    return new PendingRecord(partition, timestamp, topic, record.schema(), record);
+    return new PendingRecord(
+        partition, timestamp, topic, topicColumnName, messageColumnName, keyColumnName,
+        record.schema(), record, isColumnValueDrivenTopicFeature());
   }
 
   private boolean canCommitTimestamp(Timestamp current, Timestamp next) {
@@ -185,21 +187,33 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
     private final Map<String, String> partition;
     private final Timestamp timestamp;
     private final String topic;
+    private final String topicColumnName;
+    private final String messageColumnName;
+    private final String keyColumnName;
     private final Schema valueSchema;
-    private final Object value;
+    private final Struct record;
+    private final boolean columnValueDrivenTopicFeature;
 
     public PendingRecord(
         Map<String, String> partition,
         Timestamp timestamp,
         String topic,
+        String topicColumnName,
+        String messageColumnName,
+        String keyColumnName,
         Schema valueSchema,
-        Object value
+        Struct record,
+        boolean columnValueDrivenTopicFeature
     ) {
       this.partition = partition;
       this.timestamp = timestamp;
       this.topic = topic;
+      this.topicColumnName = topicColumnName;
+      this.messageColumnName = messageColumnName;
+      this.keyColumnName = keyColumnName;
       this.valueSchema = valueSchema;
-      this.value = value;
+      this.record = record;
+      this.columnValueDrivenTopicFeature = columnValueDrivenTopicFeature;
     }
 
     /**
@@ -215,9 +229,14 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
      */
     public SourceRecord record(Timestamp offsetTimestamp) {
       TimestampIncrementingOffset offset = new TimestampIncrementingOffset(offsetTimestamp, null);
+      if (columnValueDrivenTopicFeature) {
+        return sourceRecordForColumnDrivenTopic(
+                topicColumnName, messageColumnName, keyColumnName, partition, record, offset);
+      }
       return new SourceRecord(
-          partition, offset.toMap(), topic, valueSchema, value
+          partition, offset.toMap(), topic, valueSchema, record
       );
     }
+
   }
 }

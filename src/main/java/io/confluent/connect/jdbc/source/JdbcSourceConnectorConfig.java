@@ -71,6 +71,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
           + "``jdbc:sqlserver://localhost;instance=SQLEXPRESS;"
           + "databaseName=db_name``";
   private static final String CONNECTION_URL_DISPLAY = "JDBC URL";
+  private static final String CONNECTION_URL_DEFAULT = "";
 
   public static final String CONNECTION_USER_CONFIG = CONNECTION_PREFIX + "user";
   private static final String CONNECTION_USER_DOC = "JDBC connection user.";
@@ -423,6 +424,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     config.define(
         CONNECTION_URL_CONFIG,
         Type.STRING,
+        CONNECTION_URL_DEFAULT,
         Importance.HIGH,
         CONNECTION_URL_DOC,
         DATABASE_GROUP,
@@ -787,10 +789,6 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public JdbcSourceConnectorConfig(Map<String, ?> props) {
     super(CONFIG_DEF, props);
-    String mode = getString(JdbcSourceConnectorConfig.MODE_CONFIG);
-    if (mode.equals(JdbcSourceConnectorConfig.MODE_UNSPECIFIED)) {
-      throw new ConfigException("Query mode must be specified");
-    }
   }
 
   public String topicPrefix() {

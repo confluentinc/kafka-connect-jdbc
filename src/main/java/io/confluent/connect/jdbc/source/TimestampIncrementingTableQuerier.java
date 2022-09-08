@@ -33,6 +33,9 @@ import java.util.Collections;
 import java.util.TimeZone;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.*;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TimestampGranularity;
@@ -77,6 +80,8 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   private final long timestampDelay;
   private final TimeZone timeZone;
 
+  private String prevMacroResult;
+
   public TimestampIncrementingTableQuerier(DatabaseDialect dialect, QueryMode mode, String name,
                                            String topicPrefix,
                                            List<String> timestampColumnNames,
@@ -115,12 +120,65 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
 
     this.timeZone = timeZone;
     this.timestampGranularity = timestampGranularity;
+    this.prevMacroResult = "";
   }
 
   /**
    * JDBC TypeName constant for SQL Server's DATETIME columns.
    */
   private static String DATETIME = "datetime";
+
+  /**
+   * 매크로가 포함된 쿼리를 렌더링
+   */
+  protected String renderQuery(String query) {
+    Pattern p = Pattern.compile("(.*)\\{\\{(.*)\\}\\}(.*)$", Pattern.DOTALL | Pattern.MULTILINE);
+    Matcher m = p.matcher(query);
+    if (m.matches()) {
+      String head = m.group(1);
+      String macro = m.group(2);
+      String tail = m.group(3);
+      String []elms = macro.trim().split(" ");
+      int delta = Integer.parseInt(elms[1]);
+      DateTimeFormatter fmt = DateTimeFormatter.ofPattern(elms[2]);
+      ZonedDateTime now = ZonedDateTime.now();
+      switch (elms[0]) {
+        // 날짜 증가 후 포매팅
+        case "DayAddFmt":
+          macro = now.plusDays(delta).format(fmt);
+          break;
+        // 지연이 있는 날짜 증가 후 포매팅
+        case "DayAddFmtDelay":
+          int minute_delay = Integer.parseInt(elms[3]);
+          macro = now.minusMinutes(minute_delay).plusDays(delta).format(fmt);
+          break;
+        // 시간 증가 후 포매팅
+        case "HourAddFmt":
+          macro = now.plusHours(delta).format(fmt);
+          break;
+        // 분 증가 후 포매팅
+        case "MinAddFmt":
+          macro = now.plusMinutes(delta).format(fmt);
+          break;
+        // 지연이 있는 분 증가 후 포매팅
+        case "MinAddFmtDelay":
+          int second_delay = Integer.parseInt(elms[3]);
+          macro = now.minusSeconds(second_delay).plusMinutes(delta).format(fmt);
+          break;
+        default:
+          assert false;
+      }
+      query = head + macro + tail;
+      // 매크로 결과가 이전과 다르면 쿼리 캐쉬 무효화
+      if (prevMacroResult != macro) {
+        log.warn("invalidate query cache.");
+        stmt = null;
+        prevMacroResult = macro;
+      }
+    }
+    log.warn("renderedQuery: ", query.toString());
+    return query;
+  }
 
   @Override
   protected void createPreparedStatement(Connection db) throws SQLException {
@@ -138,7 +196,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
         builder.append(tableId);
         break;
       case QUERY:
-        builder.append(query);
+        builder.append(renderQuery(query));
         break;
       default:
         throw new ConnectException("Unknown mode encountered when preparing query: " + mode);
@@ -153,6 +211,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     String queryString = builder.toString();
     recordQuery(queryString);
     log.trace("{} prepared SQL query: {}", this, queryString);
+
     stmt = dialect.createPreparedStatement(db, queryString);
   }
 

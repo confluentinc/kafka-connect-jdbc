@@ -80,7 +80,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   private final long timestampDelay;
   private final TimeZone timeZone;
 
-  private String prevMacroResult;
+  private String prevRenderedQuery;
 
   public TimestampIncrementingTableQuerier(DatabaseDialect dialect, QueryMode mode, String name,
                                            String topicPrefix,
@@ -120,7 +120,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
 
     this.timeZone = timeZone;
     this.timestampGranularity = timestampGranularity;
-    this.prevMacroResult = "";
+    this.prevRenderedQuery = "";
   }
 
   /**
@@ -131,53 +131,53 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   /**
    * 매크로가 포함된 쿼리를 렌더링
    */
-  protected String renderQuery(String query) {
+  protected String renderQuery(String qry) {
     Pattern p = Pattern.compile("(.*)\\{\\{(.*)\\}\\}(.*)$", Pattern.DOTALL | Pattern.MULTILINE);
-    Matcher m = p.matcher(query);
-    if (m.matches()) {
-      String head = m.group(1);
-      String macro = m.group(2);
-      String tail = m.group(3);
-      String []elms = macro.trim().split(" ");
-      int delta = Integer.parseInt(elms[1]);
-      DateTimeFormatter fmt = DateTimeFormatter.ofPattern(elms[2]);
-      ZonedDateTime now = ZonedDateTime.now();
-      switch (elms[0]) {
-        // 날짜 증가 후 포매팅
-        case "DayAddFmt":
-          macro = now.plusDays(delta).format(fmt);
-          break;
-        // 지연이 있는 날짜 증가 후 포매팅
-        case "DayAddFmtDelay":
-          int minute_delay = Integer.parseInt(elms[3]);
-          macro = now.minusMinutes(minute_delay).plusDays(delta).format(fmt);
-          break;
-        // 시간 증가 후 포매팅
-        case "HourAddFmt":
-          macro = now.plusHours(delta).format(fmt);
-          break;
-        // 분 증가 후 포매팅
-        case "MinAddFmt":
-          macro = now.plusMinutes(delta).format(fmt);
-          break;
-        // 지연이 있는 분 증가 후 포매팅
-        case "MinAddFmtDelay":
-          int second_delay = Integer.parseInt(elms[3]);
-          macro = now.minusSeconds(second_delay).plusMinutes(delta).format(fmt);
-          break;
-        default:
-          assert false;
+    while (true) {
+      Matcher m = p.matcher(qry);
+      if (m.matches()) {
+        String head = m.group(1);
+        String macro = m.group(2);
+        String tail = m.group(3);
+        String[] elms = macro.trim().split(" ");
+        int delta = Integer.parseInt(elms[1]);
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern(elms[2]);
+        ZonedDateTime now = ZonedDateTime.now();
+        String cmd = elms[0].trim();
+        switch (cmd) {
+          case "DayAddFmt":
+            macro = now.plusDays(delta).format(fmt);
+            break;
+          case "DayAddFmtDelay":
+            int minute_delay = Integer.parseInt(elms[3]);
+            macro = now.minusMinutes(minute_delay).plusDays(delta).format(fmt);
+            break;
+          case "HourAddFmt":
+            macro = now.plusHours(delta).format(fmt);
+            break;
+          case "MinAddFmt":
+            macro = now.plusMinutes(delta).format(fmt);
+            break;
+          case "MinAddFmtDelay":
+            int second_delay = Integer.parseInt(elms[3]);
+            macro = now.minusSeconds(second_delay).plusMinutes(delta).format(fmt);
+            break;
+          default:
+            assert false;
+        }
+        qry = head + macro + tail;
       }
-      query = head + macro + tail;
-      // 매크로 결과가 이전과 다르면 쿼리 캐쉬 무효화
-      if (prevMacroResult != macro) {
-        log.warn("invalidate query cache.");
-        stmt = null;
-        prevMacroResult = macro;
-      }
+      else
+        break;
     }
-    log.warn("renderedQuery: ", query.toString());
-    return query;
+    if (!prevRenderedQuery.equals(qry)) {
+      log.warn("invalidate qry cache.");
+      stmt = null;
+      prevRenderedQuery = qry;
+      log.warn("renderedQuery: " + qry);
+    }
+
+    return qry;
   }
 
   @Override

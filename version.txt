@@ -1,2 +1,2 @@
 ##This file must be updated at package time to have a valid package##
-invalid
+10.5.2

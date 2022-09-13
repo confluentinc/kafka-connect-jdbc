@@ -23,6 +23,10 @@
       - 0 시에서 30분 미만 지난 경우 : `SELECT * FROM log_20220906`
       - 0 시에서 30분 이상 지난 경우 : `SELECT * FROM log_20220907`
 
+>
+> 로테이션이 지연되어 대상 테이블이 존재하지 않는 동안에는 커넥터에서 에러가 발생하며 데이터 수집이 지연된다.
+> 이런 경우 `DayAddFmtDelay` 에 충분한 지연 값을 주어 DB 에서 로테이션이 완전히 수행된 후 매크로의 결과 날짜가 변경되도록 하면 로그 수집 지연을 막을 수 있다.
+
 ## 설치용 파일
 
 릴리즈에서 압축 파일을 내려 받아 Kafka 의 `connectors` 디렉토리에 설치 후 사용한다. 자세한 것은 Confluent 문서의 [Install the connector manually](https://docs.confluent.io/kafka-connectors/jdbc/current/index.html#install-the-connector-manually) 부분을 참고한다.

@@ -19,9 +19,12 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsEqual.equalTo;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.ZoneOffset;
@@ -865,15 +868,98 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     PowerMock.verifyAll();
   }
 
+  @Test
+  public void testCustomQueryMultipleRecordsWithDBPartition() throws Exception {
+    expectInitializeNoOffsets(Arrays.asList(JOIN_QUERY_PARTITION));
+
+    PowerMock.replayAll();
+
+    db.createTable(JOIN_TABLE_NAME, "user_id", "INT", "name", "VARCHAR(64)");
+    db.insert(JOIN_TABLE_NAME, "user_id", 1, "name", "Alice");
+    db.insert(JOIN_TABLE_NAME, "user_id", 2, "name", "Bob");
+
+    // Manage these manually so we can verify the emitted values
+    db.createTable(SINGLE_TABLE_NAME,
+        "modified", "TIMESTAMP NOT NULL",
+        "id", "INT",
+        "user_id", "INT");
+    db.insert(SINGLE_TABLE_NAME,
+        "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_TIME_ZONE),
+        "id", 1,
+        "user_id", 1);
+
+    startTask("modified", null, "SELECT \"test\".\"modified\", \"test\".\"id\", \"test\""
+        + ".\"user_id\", \"users\".\"name\" FROM \"test\" JOIN \"users\" "
+        + "ON (\"test\".\"user_id\" = \"users\".\"user_id\")", 3);
+
+    verifyTimestampFirstPoll(TOPIC_PREFIX);
+
+    db.insert(SINGLE_TABLE_NAME,
+        "modified", DateTimeUtils.formatTimestamp(new Timestamp(11L), UTC_TIME_ZONE),
+        "id", 2,
+        "user_id", 1);
+    db.insert(SINGLE_TABLE_NAME,
+        "modified", DateTimeUtils.formatTimestamp(new Timestamp(11L), UTC_TIME_ZONE),
+        "id", 3,
+        "user_id", 2);
+    db.insert(SINGLE_TABLE_NAME,
+        "modified", DateTimeUtils.formatTimestamp(new Timestamp(12L), UTC_TIME_ZONE),
+        "id", 4,
+        "user_id", 2);
+
+    db.insert(SINGLE_TABLE_NAME,
+        "modified", DateTimeUtils.formatTimestamp(new Timestamp(13L), UTC_TIME_ZONE),
+        "id", 5,
+        "user_id", 2);
+
+    verifyPoll(3, "id", Arrays.asList(2, 3, 4), true, false, false, TOPIC_PREFIX);
+
+    // Repeated timestamp
+    db.insert(SINGLE_TABLE_NAME,
+        "modified", DateTimeUtils.formatTimestamp(new Timestamp(13L), UTC_TIME_ZONE),
+        "id", 6,
+        "user_id", 2);
+
+
+    db.insert(SINGLE_TABLE_NAME,
+        "modified", DateTimeUtils.formatTimestamp(new Timestamp(14L), UTC_TIME_ZONE),
+        "id", 7,
+        "user_id", 2);
+
+
+    // close the derby DB
+    db.close();
+
+    // assert failure by empty response
+    List<SourceRecord> records = task.poll();
+    assertNull(records);
+
+    // reconn
+    db.connect();
+
+    // last polled timestamp is 13, poll for records >12, hence repeat of 5
+    verifyPoll(3, "id", Arrays.asList(5, 6, 7), true, false, false, TOPIC_PREFIX);
+
+    PowerMock.verifyAll();
+  }
+
   private void startTask(String timestampColumn, String incrementingColumn, String query) {
     startTask(timestampColumn, incrementingColumn, query, 0L, "UTC");
   }
 
+  private void startTask(String timestampColumn, String incrementingColumn, String query, int batchSize) {
+    startTask(timestampColumn, incrementingColumn, query, 0L, "UTC", null, batchSize);
+  }
+
   private void startTask(String timestampColumn, String incrementingColumn, String query, Long delay, String timeZone) {
-    startTask(timestampColumn, incrementingColumn, query, delay, timeZone, null);
+    startTask(timestampColumn, incrementingColumn, query, delay, timeZone, null,null);
   }
 
   private void startTask(String timestampColumn, String incrementingColumn, String query, Long delay, String timeZone, Long timestampInitial) {
+    startTask(timestampColumn, incrementingColumn, query, delay, timeZone, timestampInitial, null);
+  }
+
+  private void startTask(String timestampColumn, String incrementingColumn, String query, Long delay, String timeZone, Long timestampInitial, Integer batchSize) {
     String mode = null;
     if (timestampColumn != null && incrementingColumn != null) {
       mode = JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING;
@@ -906,6 +992,11 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     if (timeZone != null) {
       taskConfig.put(JdbcSourceConnectorConfig.DB_TIMEZONE_CONFIG, timeZone);
     }
+
+    if (batchSize != null) {
+      taskConfig.put(JdbcSourceTaskConfig.BATCH_MAX_ROWS_CONFIG, batchSize.toString());
+    }
+
     task.start(taskConfig);
   }
 
@@ -1056,7 +1147,11 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     for(SourceRecord record : records) {
       Timestamp timestampValue = (Timestamp) ((Struct)record.value()).get("modified");
       Timestamp offsetValue = TimestampIncrementingOffset.fromMap(record.sourceOffset()).getTimestampOffset();
-      assertEquals(timestampValue, offsetValue);
+      assertTrue(
+          String.format("Invalid timestamp: {} and offset{} combination.", timestampValue,
+              offsetValue),
+          timestampValue.compareTo(offsetValue) >= 0
+      );
     }
   }
 

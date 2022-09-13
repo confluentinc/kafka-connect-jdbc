@@ -45,7 +45,7 @@
 - `Include in project build` 체크
 - `Output Directory` 경로 확인 후 `OK` 누름
 - 이제 프로젝트를 빌드하면 자동으로 아카이브가 만들어지고, 아까 확인한 `Output Directory` 아래 `out/artifacts` 디렉토리로 가서 생성된 `kafka-connect-jdbc` 디렉토리 확인
-- 이 디렉토리를 `.zip` 으로 압축하여 배포
+- 이 디렉토리를 `.zip` 으로 압축하여 배포 (필요시 파일에 원본 버전 명기)
 
 ## 원본 JDBC 커넥터가 업데이트된 경우 패치할 것
 

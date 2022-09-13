@@ -129,6 +129,8 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
         || canCommitTimestamp(currentRecord.timestamp(), nextRecord.timestamp())) {
       latestCommittableTimestamp = currentRecord.timestamp();
     }
+    // set current in memory offset to the latestCommittableTimestamp
+    this.offset = new TimestampIncrementingOffset(latestCommittableTimestamp, null);
     return currentRecord.record(latestCommittableTimestamp);
   }
 
@@ -145,8 +147,13 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
         throw new DataException(e);
       }
     }
-    this.offset = criteria.extractValues(schemaMapping.schema(), record, offset);
-    Timestamp timestamp = offset.hasTimestampOffset() ? offset.getTimestampOffset() : null;
+    // Use the extracted timestamp as the record's timestamp
+    TimestampIncrementingOffset timestampOffset = criteria.extractValues(
+        schemaMapping.schema(),
+        record,
+        offset
+    );
+    Timestamp timestamp = timestampOffset.hasTimestampOffset() ? timestampOffset.getTimestampOffset() : null;
     return new PendingRecord(partition, timestamp, topic, record.schema(), record);
   }
 

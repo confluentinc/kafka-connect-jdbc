@@ -77,127 +77,224 @@ SELECT * FROM log
 
 ```diff
 diff --git a/src/main/java/io/confluent/connect/jdbc/source/TableQuerier.java b/src/main/java/io/confluent/connect/jdbc/source/TableQuerier.java
-index 25fcf155..77774c86 100644
+index 77774c86..25fcf155 100644
 --- a/src/main/java/io/confluent/connect/jdbc/source/TableQuerier.java
 +++ b/src/main/java/io/confluent/connect/jdbc/source/TableQuerier.java
-@@ -23,6 +23,8 @@ import java.sql.Connection;
+@@ -23,8 +23,6 @@ import java.sql.Connection;
  import java.sql.PreparedStatement;
  import java.sql.ResultSet;
  import java.sql.SQLException;
-+import java.util.regex.Matcher;
-+import java.util.regex.Pattern;
-
+-import java.util.regex.Matcher;
+-import java.util.regex.Pattern;
+ 
  import io.confluent.connect.jdbc.dialect.DatabaseDialect;
  import io.confluent.connect.jdbc.util.ExpressionBuilder;
-@@ -43,7 +45,8 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
-
+@@ -45,8 +43,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
+ 
    protected final DatabaseDialect dialect;
    protected final QueryMode mode;
--  protected final String query;
-+  protected String query;
-+  protected final String fbquery;
+-  protected String query;
+-  protected final String fbquery;
++  protected final String query;
    protected final String topicPrefix;
    protected final TableId tableId;
    protected final String suffix;
-@@ -53,6 +56,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
+@@ -56,7 +53,6 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
    protected long lastUpdate;
    protected Connection db;
    protected PreparedStatement stmt;
-+  protected PreparedStatement fbstmt;
+-  protected PreparedStatement fbstmt;
    protected ResultSet resultSet;
    protected SchemaMapping schemaMapping;
    private String loggedQueryString;
-@@ -69,13 +73,33 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
+@@ -73,33 +69,13 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
      this.dialect = dialect;
      this.mode = mode;
      this.tableId = mode.equals(QueryMode.TABLE) ? dialect.parseTableIdentifier(nameOrQuery) : null;
--    this.query = mode.equals(QueryMode.QUERY) ? nameOrQuery : null;
-+    String[] queries = splitFallbackQuery(nameOrQuery);
-+    this.query = mode.equals(QueryMode.QUERY) ? queries[0] : null;
-+    this.fbquery = mode.equals(QueryMode.QUERY) ? queries[1] : null;
-+    if (this.fbquery.length() > 0) {
-+      log.warn("Found fallback query: " + this.fbquery);
-+    }
+-    String[] queries = splitFallbackQuery(nameOrQuery);
+-    this.query = mode.equals(QueryMode.QUERY) ? queries[0] : null;
+-    this.fbquery = mode.equals(QueryMode.QUERY) ? queries[1] : null;
+-    if (this.fbquery.length() > 0) {
+-      log.warn("Found fallback query: " + this.fbquery);
+-    }
++    this.query = mode.equals(QueryMode.QUERY) ? nameOrQuery : null;
      this.topicPrefix = topicPrefix;
      this.lastUpdate = 0;
      this.suffix = suffix;
      this.attemptedRetries = 0;
    }
-
-+  protected String[] splitFallbackQuery(String query) {
-+    Pattern p = Pattern.compile("(.*)\\s+-----\\s+(.*)$", Pattern.DOTALL | Pattern.MULTILINE);
-+    Matcher m = p.matcher(query);
-+    String[] queries = new String[2];
-+    if (m.matches()) {
-+      queries[0] = m.group(1);
-+      queries[1] = m.group(2);
-+    }
-+    else {
-+      queries[0] = query;
-+      queries[1] = "";
-+    }
-+    return queries;
-+  }
-+
+ 
+-  protected String[] splitFallbackQuery(String query) {
+-    Pattern p = Pattern.compile("(.*)\\s+-----\\s+(.*)$", Pattern.DOTALL | Pattern.MULTILINE);
+-    Matcher m = p.matcher(query);
+-    String[] queries = new String[2];
+-    if (m.matches()) {
+-      queries[0] = m.group(1);
+-      queries[1] = m.group(2);
+-    }
+-    else {
+-      queries[0] = query;
+-      queries[1] = "";
+-    }
+-    return queries;
+-  }
+-
    public long getLastUpdate() {
      return lastUpdate;
    }
-@@ -84,7 +108,18 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
+@@ -108,18 +84,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
      if (stmt != null) {
        return stmt;
      }
-+    // Create base query statement
-+    createPreparedStatement(db);
-+
-+    // Create fallback query statement
-+    PreparedStatement ostmt = stmt;
-+    String oquery = query;
-+    query = fbquery;
+-    // Create base query statement
+-    createPreparedStatement(db);
+-
+-    // Create fallback query statement
+-    PreparedStatement ostmt = stmt;
+-    String oquery = query;
+-    query = fbquery;
      createPreparedStatement(db);
-+    fbstmt = stmt;
-+    query = oquery;
-+    stmt = ostmt;
-+
+-    fbstmt = stmt;
+-    query = oquery;
+-    stmt = ostmt;
+-
      return stmt;
    }
-
+ 
 diff --git a/src/main/java/io/confluent/connect/jdbc/source/TimestampIncrementingTableQuerier.java b/src/main/java/io/confluent/connect/jdbc/source/TimestampIncrementingTableQuerier.java
-index dae2477c..54dd1408 100644
+index 54dd1408..11d1217f 100644
 --- a/src/main/java/io/confluent/connect/jdbc/source/TimestampIncrementingTableQuerier.java
 +++ b/src/main/java/io/confluent/connect/jdbc/source/TimestampIncrementingTableQuerier.java
-@@ -171,7 +171,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
+@@ -33,9 +33,6 @@ import java.util.Collections;
+ import java.util.TimeZone;
+ import java.util.List;
+ import java.util.Map;
+-import java.util.regex.*;
+-import java.time.ZonedDateTime;
+-import java.time.format.DateTimeFormatter;
+ 
+ import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+ import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TimestampGranularity;
+@@ -80,8 +77,6 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
+   private final long timestampDelay;
+   private final TimeZone timeZone;
+ 
+-  private String prevRenderedQuery;
+-
+   public TimestampIncrementingTableQuerier(DatabaseDialect dialect, QueryMode mode, String name,
+                                            String topicPrefix,
+                                            List<String> timestampColumnNames,
+@@ -120,7 +115,6 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
+ 
+     this.timeZone = timeZone;
+     this.timestampGranularity = timestampGranularity;
+-    this.prevRenderedQuery = "";
+   }
+ 
+   /**
+@@ -128,58 +122,6 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
+    */
+   private static String DATETIME = "datetime";
+ 
+-  /**
+-   * 매크로가 포함된 쿼리를 렌더링
+-   */
+-  protected String renderQuery(String qry) {
+-    Pattern p = Pattern.compile("(.*)\\{\\{(.*)\\}\\}(.*)$", Pattern.DOTALL | Pattern.MULTILINE);
+-    while (true) {
+-      Matcher m = p.matcher(qry);
+-      if (m.matches()) {
+-        String head = m.group(1);
+-        String macro = m.group(2);
+-        String tail = m.group(3);
+-        String[] elms = macro.trim().split(" ");
+-        int delta = Integer.parseInt(elms[1]);
+-        DateTimeFormatter fmt = DateTimeFormatter.ofPattern(elms[2]);
+-        ZonedDateTime now = ZonedDateTime.now();
+-        String cmd = elms[0].trim();
+-        switch (cmd) {
+-          case "DayAddFmt":
+-            macro = now.plusDays(delta).format(fmt);
+-            break;
+-          case "DayAddFmtDelay":
+-            int minute_delay = Integer.parseInt(elms[3]);
+-            macro = now.minusMinutes(minute_delay).plusDays(delta).format(fmt);
+-            break;
+-          case "HourAddFmt":
+-            macro = now.plusHours(delta).format(fmt);
+-            break;
+-          case "MinAddFmt":
+-            macro = now.plusMinutes(delta).format(fmt);
+-            break;
+-          case "MinAddFmtDelay":
+-            int second_delay = Integer.parseInt(elms[3]);
+-            macro = now.minusSeconds(second_delay).plusMinutes(delta).format(fmt);
+-            break;
+-          default:
+-            assert false;
+-        }
+-        qry = head + macro + tail;
+-      }
+-      else
+-        break;
+-    }
+-    if (!prevRenderedQuery.equals(qry)) {
+-      log.warn("invalidate query cache.");
+-      stmt = null;
+-      prevRenderedQuery = qry;
+-      log.warn("renderedQuery: " + qry);
+-    }
+-
+-    return qry;
+-  }
+-
+   @Override
+   protected void createPreparedStatement(Connection db) throws SQLException {
+     findDefaultAutoIncrementingColumn(db);
+@@ -196,7 +138,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
+         builder.append(tableId);
          break;
-     }
-     if (!prevRenderedQuery.equals(qry)) {
-+      log.warn("invalidate query cache.");
-       stmt = null;
-       prevRenderedQuery = qry;
-       log.warn("renderedQuery: " + qry);
-@@ -265,8 +265,25 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
+       case QUERY:
+-        builder.append(renderQuery(query));
++        builder.append(query);
+         break;
+       default:
+         throw new ConnectException("Unknown mode encountered when preparing query: " + mode);
+@@ -211,7 +153,6 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
+     String queryString = builder.toString();
+     recordQuery(queryString);
+     log.trace("{} prepared SQL query: {}", this, queryString);
+-
+     stmt = dialect.createPreparedStatement(db, queryString);
+   }
+ 
+@@ -265,25 +206,8 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
    @Override
    protected ResultSet executeQuery() throws SQLException {
      criteria.setQueryParameters(stmt, this);
-+    criteria.setQueryParameters(fbstmt, this);
+-    criteria.setQueryParameters(fbstmt, this);
      log.trace("Statement to execute: {}", stmt.toString());
-+    try {
-+      return stmt.executeQuery();
-+    }
-+    catch(SQLException e) {
-+      log.warn("Base query exception: " + e);
-+      if (fbquery.length() > 0) {
-+        log.warn("Try fallback query.");
-+        try {
-+          return fbstmt.executeQuery();
-+        } catch(SQLException e2) {
-+          log.warn("Fallback query exception: " + e2);
-+          throw e2;
-+        }
-+      } else {
-+        throw e;
-+      }
-+    }
+-    try {
+-      return stmt.executeQuery();
+-    }
+-    catch(SQLException e) {
+-      log.warn("Base query exception: " + e);
+-      if (fbquery.length() > 0) {
+-        log.warn("Try fallback query.");
+-        try {
+-          return fbstmt.executeQuery();
+-        } catch(SQLException e2) {
+-          log.warn("Fallback query exception: " + e2);
+-          throw e2;
+-        }
+-      } else {
+-        throw e;
+-      }
+-    }
++    return stmt.executeQuery();
    }
-
+ 
+   @Override
 ```
 
 > 새로운 버전을 적용한 뒤에는 `version.txt` 파일에 적용한 버전을 명기하도록 하자.

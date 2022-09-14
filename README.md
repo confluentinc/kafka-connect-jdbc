@@ -41,13 +41,13 @@ SELECT * FROM
 SELECT * FROM log
 ```
 
-위 쿼리를 API 를 통한 JDBC 소스 커넥터 등록시 'query' 의 값으로 주면, 먼저 위쪽의 동적 날짜 생성 매크로가 있는 쿼리 (기본 쿼리) 를 시도하고, 그것이 실패하면 아래쪽의 쿼리 (폴백 쿼리) 를 실행하는 식이다.
+위 쿼리를 API 를 통한 JDBC 소스 커넥터 등록시 `query` 의 값으로 주면, 먼저 위쪽의 동적 날짜 생성 매크로가 있는 쿼리 (기본 쿼리) 를 시도하고, 그것이 실패하면 아래쪽의 쿼리 (폴백 쿼리) 를 실행하는 식이다.
 
 이렇게 하면 테이블 로테이션이 늦어져도 커넥터에서 에러가 발생하지 않기에 최신 데이터 수급에 문제가 없다.
 
 ## 설치용 파일
 
-릴리즈에서 압축 파일을 내려 받아 Kafka 의 `connectors` 디렉토리에 설치 후 사용한다. 자세한 것은 Confluent 문서의 [Install the connector manually](https://docs.confluent.io/kafka-connectors/jdbc/current/index.html#install-the-connector-manually) 부분을 참고한다.
+[릴리즈 페이지](https://github.com/haje01/kafka-connect-jdbc/releases) 에서 압축 파일을 내려 받아 Kafka 의 `connectors` 디렉토리에 설치 후 사용한다. 자세한 것은 Confluent 문서의 [Install the connector manually](https://docs.confluent.io/kafka-connectors/jdbc/current/index.html#install-the-connector-manually) 부분을 참고한다.
 
 ### 직접 설치용 빌드 만들기
 이 저장소에서 릴리즈되는 압축 파일을 사용하면 편리하지만, 만약 직접 빌드가 필요한 경우를 위해 관련 내용을 설명한다. 나의 경우 무료인 IntelliJ IDEA (커뮤니티 버전, 2022.1) 을 사용하고 있기에, 그것을 기준으로 설명하겠다.

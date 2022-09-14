@@ -9,8 +9,9 @@
 - 이에 쿼리에 테이블 로테이션을 지원하기 위한 간단한 매크로 기능을 도입
 
 ## 수정된 내용
-
 수정은 향후 업데이트시 작업을 최소화 하기 위해 가급적 원본에서 작은 범위의 수정만 가하도록 하였다.
+
+### 동적 날짜 생성
 
 일반적인 쿼리에 동적으로 변하는 날짜를 지원하기 위해 아래와 같은 매크로 기능이 추가되었다. 실제 쿼리 실행시는 `{{ }}` 로 표시된 매크로가 구체적인 문자열로 바뀌어 실행된다 (현재는 `incrementing` 또는 `timestamp+incrementing` 모드에서 이용 가능).
 
@@ -23,9 +24,26 @@
       - 0 시에서 30분 미만 지난 경우 : `SELECT * FROM log_20220906`
       - 0 시에서 30분 이상 지난 경우 : `SELECT * FROM log_20220907`
 
->
-> 로테이션이 지연되어 대상 테이블이 존재하지 않는 동안에는 커넥터에서 에러가 발생하며 데이터 수집도 지연된다.
-> 이런 경우 `DayAddFmtDelay` 에 충분한 지연 값을 주어 DB 에서 로테이션이 완전히 수행된 후 매크로의 결과 날짜가 변경되도록 하면 로그 수집 지연을 막을 수 있다.
+### 폴백 쿼리 
+
+위의 동적 날짜 생성을 이용해 로테이션된 테이블을 쿼리했을 때 해당 테이블이 아직 존재하지 않는 경우 커넥터에서 에러가 발생하는데, 이때 로테이션된 테이블외에 현재 테이블에 들어온 내용도 Kafka 로 가져오기 못하기에 최신 데이터 수급에 지연이 생긴다. 
+
+이런 경우 폴백 쿼리 (Fallback Query) 를 이용할 수 있다. 아래는 동적 날짜 생성과 폴백 쿼리를 함께 사용하는 MSSQL 용 쿼리의 예이다. 폴백 쿼리는 기본 쿼리 아래 `-----` (대쉬 `-` 5 개) 를 구분자로 하여 기술한다.
+
+```sql
+SELECT * FROM 
+(
+    SELECT * FROM log_{{ DayAddFmt -1 yyyyMMdd }}
+    UNION ALL
+    SELECT * FROM log
+) AS T
+-----
+SELECT * FROM log
+```
+
+위 쿼리를 API 를 통한 JDBC 소스 커넥터 등록시 'query' 의 값으로 주면, 먼저 위쪽의 동적 날짜 생성 매크로가 있는 쿼리 (기본 쿼리) 를 시도하고, 그것이 실패하면 아래쪽의 쿼리 (폴백 쿼리) 를 실행하는 식이다.
+
+이렇게 하면 테이블 로테이션이 늦어져도 커넥터에서 에러가 발생하지 않기에 최신 데이터 수급에 문제가 없다.
 
 ## 설치용 파일
 
@@ -58,113 +76,131 @@
 먼저 [원본 저장소에서 싱크하기](https://stackoverflow.com/questions/7244321/how-do-i-update-or-sync-a-forked-repository-on-github) 를 참고하여 원본 JDBC 커넥터의 최신본을 받아온 후 `TimestampIncrementingTableQuerier.java` 코드를 아래와 같이 수정한다.
 
 ```diff
-diff --git a/src/main/java/io/confluent/connect/jdbc/source/TimestampIncrementingTableQuerier.java b/src/main/java/io/confluent/connect/jdbc/source/TimestampIncrementingTableQuerier.java
-index 11d1217f..2185f6a0 100644
---- a/src/main/java/io/confluent/connect/jdbc/source/TimestampIncrementingTableQuerier.java
-+++ b/src/main/java/io/confluent/connect/jdbc/source/TimestampIncrementingTableQuerier.java
-@@ -33,6 +33,9 @@ import java.util.Collections;
- import java.util.TimeZone;
- import java.util.List;
- import java.util.Map;
-+import java.util.regex.*;
-+import java.time.ZonedDateTime;
-+import java.time.format.DateTimeFormatter;
+diff --git a/src/main/java/io/confluent/connect/jdbc/source/TableQuerier.java b/src/main/java/io/confluent/connect/jdbc/source/TableQuerier.java
+index 25fcf155..77774c86 100644
+--- a/src/main/java/io/confluent/connect/jdbc/source/TableQuerier.java
++++ b/src/main/java/io/confluent/connect/jdbc/source/TableQuerier.java
+@@ -23,6 +23,8 @@ import java.sql.Connection;
+ import java.sql.PreparedStatement;
+ import java.sql.ResultSet;
+ import java.sql.SQLException;
++import java.util.regex.Matcher;
++import java.util.regex.Pattern;
 
  import io.confluent.connect.jdbc.dialect.DatabaseDialect;
- import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TimestampGranularity;
-@@ -77,6 +80,8 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
-   private final long timestampDelay;
-   private final TimeZone timeZone;
+ import io.confluent.connect.jdbc.util.ExpressionBuilder;
+@@ -43,7 +45,8 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
 
-+  private String prevMacroResult;
-+
-   public TimestampIncrementingTableQuerier(DatabaseDialect dialect, QueryMode mode, String name,
-                                            String topicPrefix,
-                                            List<String> timestampColumnNames,
-@@ -115,6 +120,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
-
-     this.timeZone = timeZone;
-     this.timestampGranularity = timestampGranularity;
-+    this.prevMacroResult = "";
+   protected final DatabaseDialect dialect;
+   protected final QueryMode mode;
+-  protected final String query;
++  protected String query;
++  protected final String fbquery;
+   protected final String topicPrefix;
+   protected final TableId tableId;
+   protected final String suffix;
+@@ -53,6 +56,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
+   protected long lastUpdate;
+   protected Connection db;
+   protected PreparedStatement stmt;
++  protected PreparedStatement fbstmt;
+   protected ResultSet resultSet;
+   protected SchemaMapping schemaMapping;
+   private String loggedQueryString;
+@@ -69,13 +73,33 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
+     this.dialect = dialect;
+     this.mode = mode;
+     this.tableId = mode.equals(QueryMode.TABLE) ? dialect.parseTableIdentifier(nameOrQuery) : null;
+-    this.query = mode.equals(QueryMode.QUERY) ? nameOrQuery : null;
++    String[] queries = splitFallbackQuery(nameOrQuery);
++    this.query = mode.equals(QueryMode.QUERY) ? queries[0] : null;
++    this.fbquery = mode.equals(QueryMode.QUERY) ? queries[1] : null;
++    if (this.fbquery.length() > 0) {
++      log.warn("Found fallback query: " + this.fbquery);
++    }
+     this.topicPrefix = topicPrefix;
+     this.lastUpdate = 0;
+     this.suffix = suffix;
+     this.attemptedRetries = 0;
    }
 
-   /**
-@@ -122,6 +128,58 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
-    */
-   private static String DATETIME = "datetime";
-
-+  /**
-+   * 매크로가 포함된 쿼리를 렌더링
-+   */
-+  protected String renderQuery(String query) {
-+    Pattern p = Pattern.compile("(.*)\\{\\{(.*)\\}\\}(.*)$", Pattern.DOTALL | Pattern.MULTILINE);
++  protected String[] splitFallbackQuery(String query) {
++    Pattern p = Pattern.compile("(.*)\\s+-----\\s+(.*)$", Pattern.DOTALL | Pattern.MULTILINE);
 +    Matcher m = p.matcher(query);
++    String[] queries = new String[2];
 +    if (m.matches()) {
-+      String head = m.group(1);
-+      String macro = m.group(2);
-+      String tail = m.group(3);
-+      String []elms = macro.trim().split(" ");
-+      int delta = Integer.parseInt(elms[1]);
-+      DateTimeFormatter fmt = DateTimeFormatter.ofPattern(elms[2]);
-+      ZonedDateTime now = ZonedDateTime.now();
-+      switch (elms[0]) {
-+        // 날짜 증가 후 포매팅
-+        case "DayAddFmt":
-+          macro = now.plusDays(delta).format(fmt);
-+          break;
-+        // 지연이 있는 날짜 증가 후 포매팅
-+        case "DayAddFmtDelay":
-+          int minute_delay = Integer.parseInt(elms[3]);
-+          macro = now.minusMinutes(minute_delay).plusDays(delta).format(fmt);
-+          break;
-+        // 시간 증가 후 포매팅
-+        case "HourAddFmt":
-+          macro = now.plusHours(delta).format(fmt);
-+          break;
-+        // 분 증가 후 포매팅
-+        case "MinAddFmt":
-+          macro = now.plusMinutes(delta).format(fmt);
-+          break;
-+        // 지연이 있는 분 증가 후 포매팅
-+        case "MinAddFmtDelay":
-+          int second_delay = Integer.parseInt(elms[3]);
-+          macro = now.minusSeconds(second_delay).plusMinutes(delta).format(fmt);
-+          break;
-+        default:
-+          assert false;
-+      }
-+      query = head + macro + tail;
-+      // 매크로 결과가 이전과 다르면 쿼리 캐쉬 무효화
-+      if (prevMacroResult != macro) {
-+        log.warn("invalidate query cache.");
-+        stmt = null;
-+        prevMacroResult = macro;
-+      }
++      queries[0] = m.group(1);
++      queries[1] = m.group(2);
 +    }
-+    log.warn("renderedQuery: ", query.toString());
-+    return query;
++    else {
++      queries[0] = query;
++      queries[1] = "";
++    }
++    return queries;
 +  }
 +
-   @Override
-   protected void createPreparedStatement(Connection db) throws SQLException {
-     findDefaultAutoIncrementingColumn(db);
-@@ -138,7 +196,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
-         builder.append(tableId);
-         break;
-       case QUERY:
--        builder.append(query);
-+        builder.append(renderQuery(query));
-         break;
-       default:
-         throw new ConnectException("Unknown mode encountered when preparing query: " + mode);
-@@ -153,6 +211,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
-     String queryString = builder.toString();
-     recordQuery(queryString);
-     log.trace("{} prepared SQL query: {}", this, queryString);
-+
-     stmt = dialect.createPreparedStatement(db, queryString);
+   public long getLastUpdate() {
+     return lastUpdate;
    }
+@@ -84,7 +108,18 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
+     if (stmt != null) {
+       return stmt;
+     }
++    // Create base query statement
++    createPreparedStatement(db);
++
++    // Create fallback query statement
++    PreparedStatement ostmt = stmt;
++    String oquery = query;
++    query = fbquery;
+     createPreparedStatement(db);
++    fbstmt = stmt;
++    query = oquery;
++    stmt = ostmt;
++
+     return stmt;
+   }
+
+diff --git a/src/main/java/io/confluent/connect/jdbc/source/TimestampIncrementingTableQuerier.java b/src/main/java/io/confluent/connect/jdbc/source/TimestampIncrementingTableQuerier.java
+index dae2477c..54dd1408 100644
+--- a/src/main/java/io/confluent/connect/jdbc/source/TimestampIncrementingTableQuerier.java
++++ b/src/main/java/io/confluent/connect/jdbc/source/TimestampIncrementingTableQuerier.java
+@@ -171,7 +171,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
+         break;
+     }
+     if (!prevRenderedQuery.equals(qry)) {
++      log.warn("invalidate query cache.");
+       stmt = null;
+       prevRenderedQuery = qry;
+       log.warn("renderedQuery: " + qry);
+@@ -265,8 +265,25 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
+   @Override
+   protected ResultSet executeQuery() throws SQLException {
+     criteria.setQueryParameters(stmt, this);
++    criteria.setQueryParameters(fbstmt, this);
+     log.trace("Statement to execute: {}", stmt.toString());
++    try {
++      return stmt.executeQuery();
++    }
++    catch(SQLException e) {
++      log.warn("Base query exception: " + e);
++      if (fbquery.length() > 0) {
++        log.warn("Try fallback query.");
++        try {
++          return fbstmt.executeQuery();
++        } catch(SQLException e2) {
++          log.warn("Fallback query exception: " + e2);
++          throw e2;
++        }
++      } else {
++        throw e;
++      }
++    }
+   }
+
 ```
+
+> 새로운 버전을 적용한 뒤에는 `version.txt` 파일에 적용한 버전을 명기하도록 하자.
 
 아래는 원본의 설명.
 

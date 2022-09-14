@@ -23,6 +23,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
@@ -43,7 +45,8 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
 
   protected final DatabaseDialect dialect;
   protected final QueryMode mode;
-  protected final String query;
+  protected String query;
+  protected final String fbquery;
   protected final String topicPrefix;
   protected final TableId tableId;
   protected final String suffix;
@@ -53,6 +56,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected long lastUpdate;
   protected Connection db;
   protected PreparedStatement stmt;
+  protected PreparedStatement fbstmt;
   protected ResultSet resultSet;
   protected SchemaMapping schemaMapping;
   private String loggedQueryString;
@@ -69,11 +73,31 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     this.dialect = dialect;
     this.mode = mode;
     this.tableId = mode.equals(QueryMode.TABLE) ? dialect.parseTableIdentifier(nameOrQuery) : null;
-    this.query = mode.equals(QueryMode.QUERY) ? nameOrQuery : null;
+    String[] queries = splitFallbackQuery(nameOrQuery);
+    this.query = mode.equals(QueryMode.QUERY) ? queries[0] : null;
+    this.fbquery = mode.equals(QueryMode.QUERY) ? queries[1] : null;
+    if (this.fbquery.length() > 0) {
+      log.warn("Found fallback query: " + this.fbquery);
+    }
     this.topicPrefix = topicPrefix;
     this.lastUpdate = 0;
     this.suffix = suffix;
     this.attemptedRetries = 0;
+  }
+
+  protected String[] splitFallbackQuery(String query) {
+    Pattern p = Pattern.compile("(.*)\\s+-----\\s+(.*)$", Pattern.DOTALL | Pattern.MULTILINE);
+    Matcher m = p.matcher(query);
+    String[] queries = new String[2];
+    if (m.matches()) {
+      queries[0] = m.group(1);
+      queries[1] = m.group(2);
+    }
+    else {
+      queries[0] = query;
+      queries[1] = "";
+    }
+    return queries;
   }
 
   public long getLastUpdate() {
@@ -84,7 +108,18 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     if (stmt != null) {
       return stmt;
     }
+    // Create base query statement
     createPreparedStatement(db);
+
+    // Create fallback query statement
+    PreparedStatement ostmt = stmt;
+    String oquery = query;
+    query = fbquery;
+    createPreparedStatement(db);
+    fbstmt = stmt;
+    query = oquery;
+    stmt = ostmt;
+
     return stmt;
   }
 

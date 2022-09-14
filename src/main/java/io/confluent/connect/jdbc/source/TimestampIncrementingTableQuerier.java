@@ -171,7 +171,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
         break;
     }
     if (!prevRenderedQuery.equals(qry)) {
-      log.warn("invalidate qry cache.");
+      log.warn("invalidate query cache.");
       stmt = null;
       prevRenderedQuery = qry;
       log.warn("renderedQuery: " + qry);
@@ -265,8 +265,25 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   @Override
   protected ResultSet executeQuery() throws SQLException {
     criteria.setQueryParameters(stmt, this);
+    criteria.setQueryParameters(fbstmt, this);
     log.trace("Statement to execute: {}", stmt.toString());
-    return stmt.executeQuery();
+    try {
+      return stmt.executeQuery();
+    }
+    catch(SQLException e) {
+      log.warn("Base query exception: " + e);
+      if (fbquery.length() > 0) {
+        log.warn("Try fallback query.");
+        try {
+          return fbstmt.executeQuery();
+        } catch(SQLException e2) {
+          log.warn("Fallback query exception: " + e2);
+          throw e2;
+        }
+      } else {
+        throw e;
+      }
+    }
   }
 
   @Override

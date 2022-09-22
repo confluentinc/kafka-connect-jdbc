@@ -21,7 +21,9 @@ import java.util.stream.Collectors;
 
 public enum TableType {
 
-  TABLE("TABLE", "Table"), VIEW("VIEW", "View");
+  TABLE("TABLE", "Table"),
+  PARTITIONED_TABLE("PARTITIONED TABLE", "Partitioned Table"),
+  VIEW("VIEW", "View");
 
   private final String value;
   private final String capitalCase;

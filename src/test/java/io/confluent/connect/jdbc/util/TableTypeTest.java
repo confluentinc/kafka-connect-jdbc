@@ -25,6 +25,7 @@ import static org.junit.Assert.assertArrayEquals;
 public class TableTypeTest {
 
   private static EnumSet<TableType> TABLE_ONLY = types(TableType.TABLE);
+  private static EnumSet<TableType> PARTITIONED_TABLE_ONLY = types(TableType.PARTITIONED_TABLE);
   private static EnumSet<TableType> VIEW_ONLY = types(TableType.VIEW);
   private static EnumSet<TableType> TABLE_AND_VIEW = types(TableType.TABLE, TableType.VIEW);
 
@@ -56,6 +57,7 @@ public class TableTypeTest {
   public void shouldComputeJdbcTypeArray() {
     assertArrayEquals(array("TABLE"), TableType.asJdbcTableTypeArray(TABLE_ONLY));
     assertArrayEquals(array("VIEW"), TableType.asJdbcTableTypeArray(VIEW_ONLY));
+    assertArrayEquals(array("PARTITIONED TABLE"), TableType.asJdbcTableTypeArray(PARTITIONED_TABLE_ONLY));
     assertArrayEquals(array("TABLE", "VIEW"), TableType.asJdbcTableTypeArray(TABLE_AND_VIEW));
   }
 

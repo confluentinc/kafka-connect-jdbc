@@ -2,6 +2,8 @@ package io.confluent.connect.jdbc.sink.integration;
 
 import io.confluent.connect.jdbc.integration.BaseConnectorIT;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -32,6 +34,8 @@ import java.util.concurrent.TimeUnit;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.CONNECTOR_CLASS_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.KEY_CONVERTER_CLASS_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class MicrosoftSqlServerSinkIT extends BaseConnectorIT {
     private static final Logger log = LoggerFactory.getLogger(MicrosoftSqlServerSinkIT.class);
@@ -47,7 +51,7 @@ public class MicrosoftSqlServerSinkIT extends BaseConnectorIT {
     @ClassRule
     @SuppressWarnings("deprecation")
     public static final FixedHostPortGenericContainer mssqlServer =
-            new FixedHostPortGenericContainer<>("microsoft/mssql-server-linux:latest")
+            new FixedHostPortGenericContainer<>("mcr.microsoft.com/mssql/server:2019-latest")
                     .withEnv("ACCEPT_EULA","Y")
                     .withEnv("SA_PASSWORD", PASS)
                     .withFixedExposedPort(1433, 1433);
@@ -145,6 +149,46 @@ public class MicrosoftSqlServerSinkIT extends BaseConnectorIT {
         connect.kafka().produce(table, null, kafkaValue);
 
         waitForCommittedRecords(CONNECTOR_NAME, Collections.singleton(table), 1, 1, TimeUnit.MINUTES.toMillis(2));
+    }
+
+    @Test
+    public void verifyUnicodeWorksWhenSendStringParametersAsUnicodeEqualsFalse() throws Exception {
+        final String table = "table_with_unicode_fields";
+
+        props = configProperties(table);
+
+        // create table
+        String sql = "CREATE TABLE dbo." + table
+            + " (id int, unicode_field NVARCHAR(50));";
+        PreparedStatement createStmt = connection.prepareStatement(sql);
+        executeSQL(createStmt);
+
+        props.put(JdbcSinkConfig.CONNECTION_URL, MSSQL_URL + ";sendStringParametersAsUnicode=false");
+
+        connect.kafka().createTopic(table, 1);
+        configureAndWaitForConnector(1);
+
+        final Schema schema = SchemaBuilder.struct().name("com.example.UnicodeField")
+            .field("id", Schema.INT32_SCHEMA)
+            .field("unicode_field", Schema.OPTIONAL_STRING_SCHEMA)
+            .build();
+        final Struct struct = new Struct(schema)
+            .put("id", 1)
+            .put("unicode_field", "एम एस सीक्वल सर्वर");
+
+        String kafkaValue = new String(jsonConverter.fromConnectData(table, schema, struct));
+        connect.kafka().produce(table, null, kafkaValue);
+
+        waitForCommittedRecords(CONNECTOR_NAME, Collections.singleton(table), 1, 1, TimeUnit.MINUTES.toMillis(2));
+
+        try (Statement s = connection.createStatement()) {
+            try (ResultSet rs = s.executeQuery("SELECT * FROM dbo." + table)) {
+                assertTrue(rs.next());
+                assertEquals((int)struct.getInt32("id"), rs.getInt("id"));
+                assertEquals(struct.getString("unicode_field"), rs.getNString("unicode_field"));
+            }
+        }
+
     }
 
     private Map<String, String> configProperties(String topic) {

@@ -906,24 +906,16 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
         "user_id", 2);
 
     db.insert(SINGLE_TABLE_NAME,
-        "modified", DateTimeUtils.formatTimestamp(new Timestamp(13L), UTC_TIME_ZONE),
+        "modified", DateTimeUtils.formatTimestamp(new Timestamp(12L), UTC_TIME_ZONE),
         "id", 5,
         "user_id", 2);
 
-    verifyPoll(3, "id", Arrays.asList(2, 3, 4), true, false, false, TOPIC_PREFIX);
-
-    // Repeated timestamp
     db.insert(SINGLE_TABLE_NAME,
         "modified", DateTimeUtils.formatTimestamp(new Timestamp(13L), UTC_TIME_ZONE),
         "id", 6,
         "user_id", 2);
 
-
-    db.insert(SINGLE_TABLE_NAME,
-        "modified", DateTimeUtils.formatTimestamp(new Timestamp(14L), UTC_TIME_ZONE),
-        "id", 7,
-        "user_id", 2);
-
+    verifyPoll(3, "id", Arrays.asList(2, 3, 5), true, false, false, TOPIC_PREFIX);
 
     // close the derby DB
     db.close();
@@ -936,7 +928,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     db.connect();
 
     // last polled timestamp is 13, poll for records >12, hence repeat of 5
-    verifyPoll(3, "id", Arrays.asList(5, 6, 7), true, false, false, TOPIC_PREFIX);
+    verifyPoll(3, "id", Arrays.asList(4, 5, 6), true, false, false, TOPIC_PREFIX);
 
     PowerMock.verifyAll();
   }
@@ -1164,7 +1156,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
       Timestamp timestampValue = (Timestamp) ((Struct)record.value()).get("modified");
       Timestamp offsetValue = TimestampIncrementingOffset.fromMap(record.sourceOffset()).getTimestampOffset();
       assertTrue(
-          String.format("Invalid timestamp: {} and offset{} combination.", timestampValue,
+          String.format("Invalid timestamp {} and offset {} combination.", timestampValue,
               offsetValue),
           timestampValue.compareTo(offsetValue) >= 0
       );

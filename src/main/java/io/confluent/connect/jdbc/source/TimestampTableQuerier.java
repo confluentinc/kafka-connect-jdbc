@@ -128,9 +128,9 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
     if (nextRecord == null
         || canCommitTimestamp(currentRecord.timestamp(), nextRecord.timestamp())) {
       latestCommittableTimestamp = currentRecord.timestamp();
+      // set current in memory offset to the latestCommittableTimestamp
+      this.offset = new TimestampIncrementingOffset(latestCommittableTimestamp, null);
     }
-    // set current in memory offset to the latestCommittableTimestamp
-    this.offset = new TimestampIncrementingOffset(latestCommittableTimestamp, null);
     return currentRecord.record(offset);
   }
 

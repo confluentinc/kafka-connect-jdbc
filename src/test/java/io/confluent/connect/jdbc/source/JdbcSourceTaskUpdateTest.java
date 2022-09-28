@@ -922,14 +922,14 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     // close the derby DB
     db.close();
 
-    // assert failure by empty response
+    // assert exception by empty response
     List<SourceRecord> records = task.poll();
     assertNull(records);
 
     // reconn
     db.connect();
 
-    // last polled timestamp is 13, poll for records >12, hence repeat of 5
+    // last committed timestamp is 11, poll for records >11, hence repeat of 4
     verifyPoll(3, "id", Arrays.asList(4, 5, 6), true, false, false, TOPIC_PREFIX);
 
     PowerMock.verifyAll();
@@ -944,7 +944,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   }
 
   private void startTask(String timestampColumn, String incrementingColumn, String query, Long delay, String timeZone) {
-    startTask(timestampColumn, incrementingColumn, query, delay, timeZone, null,null);
+    startTask(timestampColumn, incrementingColumn, query, delay, timeZone, null, null);
   }
 
   private void startTask(String timestampColumn, String incrementingColumn, String query, Long delay, String timeZone, Long timestampInitial) {

@@ -128,8 +128,10 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
     if (nextRecord == null
         || canCommitTimestamp(currentRecord.timestamp(), nextRecord.timestamp())) {
       latestCommittableTimestamp = currentRecord.timestamp();
+      // set current in memory offset to the latestCommittableTimestamp
+      this.offset = new TimestampIncrementingOffset(latestCommittableTimestamp, null);
     }
-    return currentRecord.record(latestCommittableTimestamp);
+    return currentRecord.record(offset);
   }
 
   private PendingRecord doExtractRecord() {
@@ -145,8 +147,15 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
         throw new DataException(e);
       }
     }
-    this.offset = criteria.extractValues(schemaMapping.schema(), record, offset);
-    Timestamp timestamp = offset.hasTimestampOffset() ? offset.getTimestampOffset() : null;
+    // Use the extracted timestamp as the record's timestamp
+    TimestampIncrementingOffset timestampOffset = criteria.extractValues(
+        schemaMapping.schema(),
+        record,
+        offset
+    );
+    Timestamp timestamp = timestampOffset.hasTimestampOffset()
+                          ? timestampOffset.getTimestampOffset()
+                          : null;
     return new PendingRecord(partition, timestamp, topic, record.schema(), record);
   }
 
@@ -199,11 +208,10 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
     }
 
     /**
-     * @param offsetTimestamp the timestamp to use for the record's offset; may be null
+     * @param offset offset with timestamp to use for the record's offset; may be null
      * @return a {@link SourceRecord} whose source offset contains the provided timestamp
      */
-    public SourceRecord record(Timestamp offsetTimestamp) {
-      TimestampIncrementingOffset offset = new TimestampIncrementingOffset(offsetTimestamp, null);
+    public SourceRecord record(TimestampIncrementingOffset offset) {
       return new SourceRecord(
           partition, offset.toMap(), topic, valueSchema, value
       );

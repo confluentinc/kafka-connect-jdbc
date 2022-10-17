@@ -115,7 +115,7 @@ index 25fcf155..77774c86 100644
 +    String[] queries = splitFallbackQuery(nameOrQuery);
 +    this.query = mode.equals(QueryMode.QUERY) ? queries[0] : null;
 +    this.fbquery = mode.equals(QueryMode.QUERY) ? queries[1] : null;
-+    if (this.fbquery.length() > 0) {
++    if (this.fbquery != null && this.fbquery.length() > 0) {
 +      log.warn("Found fallback query: " + this.fbquery);
 +    }
      this.topicPrefix = topicPrefix;

@@ -18,6 +18,7 @@ package io.confluent.connect.jdbc.util;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -27,12 +28,22 @@ public class TableDefinition {
   private final TableId id;
   private final Map<String, ColumnDefinition> columnsByName = new LinkedHashMap<>();
   private final Map<String, String> pkColumnNames = new LinkedHashMap<>();
+  private final TableType type;
 
   public TableDefinition(
       TableId id,
       Iterable<ColumnDefinition> columns
   ) {
+    this(id, columns, TableType.TABLE);
+  }
+
+  public TableDefinition(
+      TableId id,
+      Iterable<ColumnDefinition> columns,
+      TableType type
+  ) {
     this.id = id;
+    this.type = Objects.requireNonNull(type);
     for (ColumnDefinition defn : columns) {
       String columnName = defn.id().name();
       columnsByName.put(
@@ -50,6 +61,10 @@ public class TableDefinition {
 
   public TableId id() {
     return id;
+  }
+
+  public TableType type() {
+    return type;
   }
 
   public int columnCount() {
@@ -84,14 +99,20 @@ public class TableDefinition {
     }
     if (obj instanceof TableDefinition) {
       TableDefinition that = (TableDefinition) obj;
-      return this.id.equals(that.id()) && this.definitionsForColumns()
-                                              .equals(that.definitionsForColumns());
+      return Objects.equals(this.id(), that.id())
+             && Objects.equals(this.type(), that.type())
+             && Objects.equals(this.definitionsForColumns(), that.definitionsForColumns());
     }
     return false;
   }
 
   @Override
   public String toString() {
-    return "Table{" + "name='" + id + '\'' + ", columns=" + definitionsForColumns() + '}';
+    return String.format(
+        "Table{name='%s', type=%s columns=%s}",
+        id,
+        type,
+        definitionsForColumns()
+    );
   }
 }

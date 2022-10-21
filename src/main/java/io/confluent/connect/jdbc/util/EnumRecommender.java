@@ -48,6 +48,21 @@ public class EnumRecommender implements ConfigDef.Validator, ConfigDef.Recommend
 
   @Override
   public void ensureValid(String key, Object value) {
+    if (value instanceof List) {
+      List<?> values = (List<?>) value;
+      for (Object v : values) {
+        if (v == null) {
+          validate(key, null);
+        } else {
+          validate(key, v);
+        }
+      }
+    } else {
+      validate(key, value);
+    }
+  }
+
+  protected void validate(String key, Object value) {
     // calling toString on itself because IDE complains if the Object is passed.
     if (value != null && !validValues.contains(value.toString())) {
       throw new ConfigException(key, value, "Invalid enumerator");

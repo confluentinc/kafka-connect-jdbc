@@ -204,6 +204,23 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
     assertEquals("INTEGER", defn.definitionForColumn("id").typeName());
   }
 
+  @Test
+  public void testBuildCreateTableStatement() {
+    newDialectFor(TABLE_TYPES, null);
+    assertEquals(
+        "INSERT INTO \"myTable\"(\"id1\",\"id2\",\"columnA\",\"columnB\",\"columnC\",\"columnD\") VALUES(?,?,?,?,?,?)",
+        dialect.buildInsertStatement(tableId, pkColumns, columnsAtoD));
+  }
+
+  @Test
+  public void testBuildDeleteStatement() {
+    newDialectFor(TABLE_TYPES, null);
+    assertEquals(
+        "DELETE FROM \"myTable\" WHERE \"id1\" = ? AND \"id2\" = ?",
+        dialect.buildDeleteStatement(tableId, pkColumns)
+    );
+  }
+
   protected void assertTableNames(
       Set<String> tableTypes,
       String schemaPattern,

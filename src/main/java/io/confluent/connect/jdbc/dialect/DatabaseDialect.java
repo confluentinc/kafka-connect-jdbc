@@ -361,6 +361,23 @@ public interface DatabaseDialect extends ConnectionProvider {
   );
 
   /**
+   * Build the DELETE prepared statement expression for the given table and its columns. Variables
+   * for each key column should also appear in the WHERE clause of the statement.
+   *
+   * @param table         the identifier of the table; may not be null
+   * @param keyColumns    the identifiers of the columns in the primary/unique key; may not be null
+   *                      but may be empty
+   * @return the delete statement; may not be null
+   * @throws UnsupportedOperationException if the dialect does not support deletes
+   */
+  default String buildDeleteStatement(
+      TableId table,
+      Collection<ColumnId> keyColumns
+  ) {
+    throw new UnsupportedOperationException();
+  }
+
+  /**
    * Build the DROP TABLE statement expression for the given table.
    *
    * @param table   the identifier of the table; may not be null
@@ -433,6 +450,22 @@ public interface DatabaseDialect extends ConnectionProvider {
   }
 
   /**
+   * Validate if dialect specific column types are compatible with connector.
+   * Sometimes JDBC treats some column types in a SQL database the same
+   * (eg, MSSQL Server's DATETIME and DATETIME2 are considered {@link java.sql.Time}).
+   * This function is used to handle these specifc column types.
+   *
+   * @param rsMetadata          the result set metadata; may not be null
+   * @param columns             columns to check; may not be null
+   * @throws ConnectException   if column type not compatible with connector
+   *                            or if there is an error accessing the result set metadata
+   */
+  void validateSpecificColumnTypes(
+          ResultSetMetaData rsMetadata,
+          List<ColumnId> columns
+  ) throws ConnectException;
+
+  /**
    * Method that binds a value with the given schema at the specified variable within a prepared
    * statement.
    * @param statement the prepared statement; may not be null
@@ -450,8 +483,8 @@ public interface DatabaseDialect extends ConnectionProvider {
       Object value
   ) throws SQLException;
 
-  /**
-   * Method that binds a value with the given schema at the specified variable within a prepared
+
+  /** Method that binds a value with the given schema at the specified variable within a prepared
    * statement. By default, the behavior is the same as the other overloaded method with the extra
    * parameter colDef. This overloading method is introduced to deprecate the other overloaded
    * method eventually.

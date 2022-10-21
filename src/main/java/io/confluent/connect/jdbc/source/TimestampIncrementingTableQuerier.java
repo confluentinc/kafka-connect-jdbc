@@ -15,7 +15,6 @@
 
 package io.confluent.connect.jdbc.source;
 
-import java.util.TimeZone;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
@@ -26,10 +25,12 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.TimeZone;
 import java.util.List;
 import java.util.Map;
 
@@ -64,6 +65,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   );
 
   protected final List<String> timestampColumnNames;
+  protected TimestampIncrementingOffset committedOffset;
   protected TimestampIncrementingOffset offset;
   protected TimestampIncrementingCriteria criteria;
   protected final Map<String, String> partition;
@@ -84,7 +86,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     this.timestampColumnNames = timestampColumnNames != null
         ? timestampColumnNames : Collections.emptyList();
     this.timestampDelay = timestampDelay;
-    this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
+    this.committedOffset = this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
 
     this.timestampColumns = new ArrayList<>();
     for (String timestampColumn : this.timestampColumnNames) {
@@ -110,6 +112,11 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
 
     this.timeZone = timeZone;
   }
+
+  /**
+   * JDBC TypeName constant for SQL Server's DATETIME columns.
+   */
+  private static String DATETIME = "datetime";
 
   @Override
   protected void createPreparedStatement(Connection db) throws SQLException {
@@ -141,6 +148,24 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     recordQuery(queryString);
     log.debug("{} prepared SQL query: {}", this, queryString);
     stmt = dialect.createPreparedStatement(db, queryString);
+  }
+
+  @Override
+  public void maybeStartQuery(Connection db) throws SQLException, ConnectException {
+    if (resultSet == null) {
+      this.db = db;
+      stmt = getOrCreatePreparedStatement(db);
+      resultSet = executeQuery();
+      String schemaName = tableId != null ? tableId.tableName() : null; // backwards compatible
+      ResultSetMetaData metadata = resultSet.getMetaData();
+      dialect.validateSpecificColumnTypes(metadata, timestampColumns);
+      schemaMapping = SchemaMapping.create(schemaName, metadata, dialect);
+    }
+
+    // This is called everytime during poll() before extracting records,
+    // to ensure that the previous run succeeded, allowing us to move the committedOffset forward.
+    // This action is a no-op for the first poll()
+    this.committedOffset = this.offset;
   }
 
   private void findDefaultAutoIncrementingColumn(Connection db) throws SQLException {
@@ -195,6 +220,16 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     }
     offset = criteria.extractValues(schemaMapping.schema(), record, offset);
     return new SourceRecord(partition, offset.toMap(), topic, record.schema(), record);
+  }
+
+  @Override
+  public void reset(long now, boolean resetOffset) {
+    // the task is being reset, any uncommitted offset needs to be reset as well
+    // use the previous committedOffset to set the running offset
+    if (resetOffset) {
+      this.offset = this.committedOffset;
+    }
+    super.reset(now, resetOffset);
   }
 
   @Override

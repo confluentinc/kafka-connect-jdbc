@@ -335,7 +335,7 @@ public class JdbcSourceTask extends SourceTask {
         if (!hadNext) {
           // If we finished processing the results from the current query, we can reset and send
           // the querier to the tail of the queue
-          resetAndRequeueHead(querier);
+          resetAndRequeueHead(querier, false);
         }
 
         if (results.isEmpty()) {
@@ -358,10 +358,10 @@ public class JdbcSourceTask extends SourceTask {
         return results;
       } catch (SQLException sqle) {
         log.error("Failed to run query for table {}: {}", querier.toString(), sqle);
-        resetAndRequeueHead(querier);
+        resetAndRequeueHead(querier, true);
         return null;
       } catch (Throwable t) {
-        resetAndRequeueHead(querier);
+        resetAndRequeueHead(querier, true);
         // This task has failed, so close any resources (may be reopened if needed) before throwing
         closeResources();
         throw t;
@@ -371,17 +371,17 @@ public class JdbcSourceTask extends SourceTask {
     // Only in case of shutdown
     final TableQuerier querier = tableQueue.peek();
     if (querier != null) {
-      resetAndRequeueHead(querier);
+      resetAndRequeueHead(querier, true);
     }
     closeResources();
     return null;
   }
 
-  private void resetAndRequeueHead(TableQuerier expectedHead) {
+  private void resetAndRequeueHead(TableQuerier expectedHead, boolean resetOffset) {
     log.debug("Resetting querier {}", expectedHead.toString());
     TableQuerier removedQuerier = tableQueue.poll();
     assert removedQuerier == expectedHead;
-    expectedHead.reset(time.milliseconds());
+    expectedHead.reset(time.milliseconds(), resetOffset);
     tableQueue.add(expectedHead);
   }
 

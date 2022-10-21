@@ -153,6 +153,12 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
   }
 
   @Override
+  public void reset(long now, boolean resetOffset) {
+    this.nextRecord = null;
+    super.reset(now, resetOffset);
+  }
+
+  @Override
   public String toString() {
     return "TimestampTableQuerier{"
         + "table=" + tableId

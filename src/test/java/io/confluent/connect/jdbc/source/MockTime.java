@@ -18,6 +18,7 @@ package io.confluent.connect.jdbc.source;
 import org.apache.kafka.common.utils.Time;
 
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 /**
  * A clock that you can manually advance by calling sleep
@@ -58,4 +59,8 @@ public class MockTime implements Time {
         this.nanos += TimeUnit.NANOSECONDS.convert(ms, TimeUnit.MILLISECONDS);
     }
 
+    @Override
+    public void waitObject(Object obj, Supplier<Boolean> condition, long timeoutMs) {
+        throw new UnsupportedOperationException();
+    }
 }

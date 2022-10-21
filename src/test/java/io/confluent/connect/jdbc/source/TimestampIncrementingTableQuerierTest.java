@@ -115,6 +115,8 @@ public class TimestampIncrementingTableQuerierTest {
     expect(dialect.createPreparedStatement(eq(db), anyObject())).andReturn(stmt);
     expect(dialect.expressionBuilder()).andReturn(expressionBuilder);
     expect(dialect.criteriaFor(anyObject(), anyObject())).andReturn(criteria);
+    dialect.validateSpecificColumnTypes(anyObject(), anyObject());
+    expectLastCall();
     criteria.whereClause(expressionBuilder);
     expectLastCall();
     criteria.setQueryParameters(eq(stmt), anyObject());
@@ -210,7 +212,7 @@ public class TimestampIncrementingTableQuerierTest {
 
     assertFalse(querier.next());
 
-    querier.reset(0);
+    querier.reset(0, true);
     querier.maybeStartQuery(db);
 
     assertNextRecord(querier, initialOffset);

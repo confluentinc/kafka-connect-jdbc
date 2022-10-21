@@ -1434,6 +1434,24 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     throw new UnsupportedOperationException();
   }
 
+  @Override
+  public final String buildDeleteStatement(
+      TableId table,
+      Collection<ColumnId> keyColumns
+  ) {
+    ExpressionBuilder builder = expressionBuilder();
+    builder.append("DELETE FROM ");
+    builder.append(table);
+    if (!keyColumns.isEmpty()) {
+      builder.append(" WHERE ");
+      builder.appendList()
+          .delimitedBy(" AND ")
+          .transformedBy(ExpressionBuilder.columnNamesWith(" = ?"))
+          .of(keyColumns);
+    }
+    return builder.toString();
+  }
+
   @SuppressWarnings("deprecation")
   @Override
   public StatementBinder statementBinder(
@@ -1630,6 +1648,12 @@ public class GenericDatabaseDialect implements DatabaseDialect {
            .of(fields);
     return Collections.singletonList(builder.toString());
   }
+
+  @Override
+  public void validateSpecificColumnTypes(
+          ResultSetMetaData rsMetadata,
+          List<ColumnId> columns
+  ) throws ConnectException { }
 
   protected List<String> extractPrimaryKeyFieldNames(Collection<SinkRecordField> fields) {
     final List<String> pks = new ArrayList<>();

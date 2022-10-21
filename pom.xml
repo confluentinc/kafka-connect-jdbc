@@ -22,7 +22,7 @@
     <parent>
         <groupId>io.confluent</groupId>
         <artifactId>common</artifactId>
-        <version>5.2.8-SNAPSHOT</version>
+        <version>5.3.9-SNAPSHOT</version>
     </parent>
 
     <groupId>io.confluent</groupId>
@@ -81,7 +81,12 @@
             <artifactId>connect-api</artifactId>
             <scope>provided</scope>
         </dependency>
-
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>connect-runtime</artifactId>
+            <version>${kafka.version}</version>
+            <scope>provided</scope>
+        </dependency>
          <!-- JDBC drivers, only included in runtime so they get packaged -->
         <dependency>
             <groupId>org.xerial</groupId>
@@ -163,6 +168,12 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <groupId>com.microsoft.sqlserver</groupId>
+            <artifactId>mssql-jdbc</artifactId>
+            <version>8.4.1.jre11</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>connect-runtime</artifactId>
             <version>${kafka.version}</version>
@@ -196,6 +207,12 @@
             <version>${kafka.version}</version>
             <classifier>test</classifier>
             <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
+            <version>1.15.0-rc2</version>
             <scope>test</scope>
         </dependency>
 

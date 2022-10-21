@@ -248,7 +248,7 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
     ExpressionBuilder builder = expressionBuilder();
     builder.append("merge into ");
     builder.append(table);
-    builder.append(" with (HOLDLOCK) AS target using (select ");
+    builder.append(" AS target using (select ");
     builder.appendList()
            .delimitedBy(", ")
            .transformedBy(ExpressionBuilder.columnNamesWithPrefix("? AS "))
@@ -276,7 +276,7 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
            .delimitedBy(",")
            .transformedBy(ExpressionBuilder.columnNamesWithPrefix("incoming."))
            .of(nonKeyColumns, keyColumns);
-    builder.append(");");
+    builder.append(")");
     return builder.toString();
   }
 

@@ -15,7 +15,6 @@
 
 package io.confluent.connect.jdbc.sink;
 
-import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,6 +46,12 @@ public class DbStructure {
   }
 
   /**
+   * Create or amend table.
+   *
+   * @param config the connector configuration
+   * @param connection the database connection handle
+   * @param tableId the table ID
+   * @param fieldsMetadata the fields metadata
    * @return whether a DDL operation was performed
    * @throws SQLException if a DDL operation was deemed necessary but failed
    */
@@ -55,7 +60,7 @@ public class DbStructure {
       final Connection connection,
       final TableId tableId,
       final FieldsMetadata fieldsMetadata
-  ) throws SQLException {
+  ) throws SQLException, TableAlterOrCreateException {
     if (tableDefns.get(connection, tableId) == null) {
       // Table does not yet exist, so attempt to create it ...
       try {
@@ -69,10 +74,34 @@ public class DbStructure {
           }
         } catch (SQLException e) {
           throw sqle;
+        } catch (TableAlterOrCreateException te) {
+          log.warn(te.getMessage());
+          throw te;
         }
       }
     }
     return amendIfNecessary(config, connection, tableId, fieldsMetadata, config.maxRetries);
+  }
+
+  /**
+   * Get the definition for the table with the given ID. This returns a cached definition if
+   * there is one; otherwise, it reads the definition from the database
+   *
+   * @param connection the connection that may be used to fetch the table definition if not
+   *                   already known; may not be null
+   * @param tableId    the ID of the table; may not be null
+   * @return the table definition; or null if the table does not exist
+   * @throws SQLException if there is an error getting the definition from the database
+   */
+  public TableDefinition tableDefinition(
+      Connection connection,
+      TableId tableId
+  ) throws SQLException {
+    TableDefinition defn = tableDefns.get(connection, tableId);
+    if (defn != null) {
+      return defn;
+    }
+    return tableDefns.refresh(connection, tableId);
   }
 
   /**
@@ -83,9 +112,9 @@ public class DbStructure {
       final Connection connection,
       final TableId tableId,
       final FieldsMetadata fieldsMetadata
-  ) throws SQLException {
+  ) throws SQLException, TableAlterOrCreateException {
     if (!config.autoCreate) {
-      throw new ConnectException(
+      throw new TableAlterOrCreateException(
           String.format("Table %s is missing and auto-creation is disabled", tableId)
       );
     }
@@ -104,21 +133,13 @@ public class DbStructure {
       final TableId tableId,
       final FieldsMetadata fieldsMetadata,
       final int maxRetries
-  ) throws SQLException {
+  ) throws SQLException, TableAlterOrCreateException {
     // NOTE:
     //   The table might have extra columns defined (hopefully with default values), which is not
     //   a case we check for here.
     //   We also don't check if the data types for columns that do line-up are compatible.
 
     final TableDefinition tableDefn = tableDefns.get(connection, tableId);
-    if (tableDefn == null) {
-      throw new SQLException(
-          "Table with id " + tableId +  "does not exist in database."
-              + " Since we've either already auto-created the table or confirmed"
-              + " it existed before this point, it must mean this user does not"
-              + " have the permission to read the column data for this table."
-      );
-    }
 
     // FIXME: SQLite JDBC driver seems to not always return the PK column names?
     //    if (!tableMetadata.getPrimaryKeyColumnNames().equals(fieldsMetadata.keyFieldNames)) {
@@ -145,7 +166,7 @@ public class DbStructure {
         break;
       case VIEW:
       default:
-        throw new ConnectException(
+        throw new TableAlterOrCreateException(
             String.format(
                 "%s %s is missing fields (%s) and ALTER %s is unsupported",
                 type.capitalized(),
@@ -158,7 +179,7 @@ public class DbStructure {
 
     for (SinkRecordField missingField: missingFields) {
       if (!missingField.isOptional() && missingField.defaultValue() == null) {
-        throw new ConnectException(String.format(
+        throw new TableAlterOrCreateException(String.format(
             "Cannot ALTER %s %s to add missing field %s, as the field is not optional and does "
             + "not have a default value",
             type.jdbcName(),
@@ -169,7 +190,7 @@ public class DbStructure {
     }
 
     if (!config.autoEvolve) {
-      throw new ConnectException(String.format(
+      throw new TableAlterOrCreateException(String.format(
           "%s %s is missing fields (%s) and auto-evolution is disabled",
           type.capitalized(),
           tableId,
@@ -189,7 +210,7 @@ public class DbStructure {
       dbDialect.applyDdlStatements(connection, amendTableQueries);
     } catch (SQLException sqle) {
       if (maxRetries <= 0) {
-        throw new ConnectException(
+        throw new TableAlterOrCreateException(
             String.format(
                 "Failed to amend %s '%s' to add missing fields: %s",
                 type,
@@ -211,16 +232,7 @@ public class DbStructure {
       );
     }
 
-    if (tableDefns.refresh(connection, tableId) == null) {
-      // Refresh should not make the table null.
-      throw new SQLException(
-        "Table with id " + tableId +  "does not exist in database."
-                + " Since we've either already auto-created the table or confirmed"
-                + " it existed before this point, it must mean this user does not"
-                + " have the permission to read the column data for this table."
-      );
-    }
-
+    tableDefns.refresh(connection, tableId);
     return true;
   }
 
@@ -269,10 +281,5 @@ public class DbStructure {
     }
 
     return missingFieldsIgnoreCase;
-  }
-
-  protected TableDefinition tableDefinition(Connection connection, TableId tableId)
-      throws SQLException {
-    return tableDefns.get(connection, tableId);
   }
 }

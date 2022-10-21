@@ -315,9 +315,15 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   /**
    * Add or modify any connection properties based upon the {@link #config configuration}.
    *
-   * <p>By default this method does nothing and returns the {@link Properties} object supplied as a
-   * parameter, but subclasses can override it to add/remove properties used to create new
-   * connections.
+   * <p>By default this method adds any {@code connection.*} properties (except those predefined
+   * by the connector's ConfigDef, such as {@code connection.url}, {@code connection.user},
+   * {@code connection.password}, {@code connection.attempts}, etc.) only after removing the
+   * {@code connection.} prefix. This allows users to add any additional DBMS-specific properties
+   * for the database to the connector configuration by prepending the DBMS-specific
+   * properties with the {@code connection.} prefix.
+   *
+   * <p>Subclasses that don't wish to support this behavior can override this method without
+   * calling this super method.
    *
    * @param properties the properties that will be passed to the {@link DriverManager}'s {@link
    *                   DriverManager#getConnection(String, Properties) getConnection(...) method};
@@ -326,6 +332,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
    *     should be returned; never null
    */
   protected Properties addConnectionProperties(Properties properties) {
+    // Get the set of config keys that are known to the connector
+    Set<String> configKeys = config.values().keySet();
+    // Add any configuration property that begins with 'connection.` and that is not known
+    config.originalsWithPrefix(JdbcSourceConnectorConfig.CONNECTION_PREFIX).forEach((k,v) -> {
+      if (!configKeys.contains(JdbcSourceConnectorConfig.CONNECTION_PREFIX + k)) {
+        properties.put(k, v);
+      }
+    });
     return properties;
   }
 
@@ -425,6 +439,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
    * <p>This method can be overridden to exclude certain database tables.
    *
    * @param table the identifier of the table; may be null
+   * @return true if the table should be included; false otherwise
    */
   protected boolean includeTable(TableId table) {
     return true;
@@ -1174,6 +1189,17 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         statement.executeUpdate(ddlStatement);
       }
     }
+    try {
+      connection.commit();
+    } catch (Exception e) {
+      try {
+        connection.rollback();
+      } catch (SQLException sqle) {
+        e.addSuppressed(sqle);
+      } finally {
+        throw e;
+      }
+    }
   }
 
   @Override
@@ -1447,6 +1473,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   @Override
+  @SuppressWarnings("deprecation")
   public String buildInsertStatement(
       TableId table,
       Collection<ColumnId> keyColumns,
@@ -1467,6 +1494,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   @Override
+  @SuppressWarnings("deprecation")
   public String buildUpdateStatement(
       TableId table,
       Collection<ColumnId> keyColumns,
@@ -1491,6 +1519,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   @Override
+  @SuppressWarnings("deprecation")
   public String buildUpsertQueryStatement(
       TableId table,
       Collection<ColumnId> keyColumns,
@@ -1545,7 +1574,12 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       Object value
   ) throws SQLException {
     if (value == null) {
-      statement.setObject(index, null);
+      Integer type = getSqlTypeForSchema(schema);
+      if (type != null) {
+        statement.setNull(index, type);
+      } else {
+        statement.setObject(index, null);
+      }
     } else {
       boolean bound = maybeBindLogical(statement, index, schema, value);
       if (!bound) {
@@ -1555,6 +1589,18 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         throw new ConnectException("Unsupported source data type: " + schema.type());
       }
     }
+  }
+
+  /**
+   * Dialects not supporting `setObject(index, null)` can override this method
+   * to provide a specific sqlType, as per the JDBC documentation
+   * https://docs.oracle.com/javase/7/docs/api/java/sql/PreparedStatement.html
+   *
+   * @param schema the schema
+   * @return the SQL type
+   */
+  protected Integer getSqlTypeForSchema(Schema schema) {
+    return null;
   }
 
   protected boolean maybeBindPrimitive(

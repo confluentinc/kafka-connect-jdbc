@@ -23,6 +23,7 @@ Contributions can only be accepted if they contain appropriate testing. For exam
 
 - Source Code: https://github.com/confluentinc/kafka-connect-jdbc
 - Issue Tracker: https://github.com/confluentinc/kafka-connect-jdbc/issues
+- Learn how to work with the connector's source code by reading our [Development and Contribution guidelines](CONTRIBUTING.md).
 
 # Information
 

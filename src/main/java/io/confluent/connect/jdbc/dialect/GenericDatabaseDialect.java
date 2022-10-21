@@ -17,7 +17,9 @@ package io.confluent.connect.jdbc.dialect;
 
 import java.time.ZoneOffset;
 import java.util.TimeZone;
+
 import org.apache.kafka.common.config.AbstractConfig;
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -76,6 +78,7 @@ import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.NumericMapping;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TimestampGranularity;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIsolationMode;
 import io.confluent.connect.jdbc.source.JdbcSourceTaskConfig;
 import io.confluent.connect.jdbc.source.TimestampIncrementingCriteria;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
@@ -596,6 +599,30 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           exists ? "present" : "absent"
       );
       return exists;
+    }
+  }
+
+  public void setConnectionIsolationMode(
+          Connection connection,
+          TransactionIsolationMode transactionIsolationMode
+  ) {
+    if (transactionIsolationMode
+            == TransactionIsolationMode.DEFAULT) {
+      return;
+    }
+    int isolationMode = TransactionIsolationMode.get(
+            transactionIsolationMode
+    );
+    try {
+      DatabaseMetaData metadata = connection.getMetaData();
+      if (metadata.supportsTransactionIsolationLevel(isolationMode)) {
+        connection.setTransactionIsolation(isolationMode);
+      } else {
+        throw new ConfigException("Transaction Isolation level not supported by database");
+      }
+    } catch (SQLException | ConfigException ex) {
+      log.warn("Unable to set transaction.isolation.mode: " +  transactionIsolationMode.name()
+              +  ". No transaction isolation mode will be set for the queries: " + ex.getMessage());
     }
   }
 

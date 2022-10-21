@@ -16,6 +16,7 @@
 package io.confluent.connect.jdbc.dialect;
 
 import org.apache.kafka.common.config.AbstractConfig;
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -524,6 +525,44 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
     verifyWriteColumnSpec("foo DUMMY NOT NULL", new SinkRecordField(Schema.INT32_SCHEMA, "foo", false));
     verifyWriteColumnSpec("foo DUMMY NOT NULL", new SinkRecordField(Schema.OPTIONAL_INT32_SCHEMA, "foo", true));
     verifyWriteColumnSpec("foo DUMMY NULL", new SinkRecordField(Schema.OPTIONAL_INT32_SCHEMA, "foo", false));
+  }
+
+  @Test
+  public void setTransactionIsolationModes() throws SQLException {
+    GenericDatabaseDialect dialect = dummyDialect();
+    Connection conn = db.getConnection();
+
+    // READ_UNCOMMITTED
+    dialect.setConnectionIsolationMode(conn,
+            JdbcSourceConnectorConfig.TransactionIsolationMode.READ_UNCOMMITTED
+    );
+    assertEquals(conn.getTransactionIsolation(), Connection.TRANSACTION_READ_UNCOMMITTED);
+
+    // READ_COMMITTED
+    dialect.setConnectionIsolationMode(conn,
+            JdbcSourceConnectorConfig.TransactionIsolationMode.READ_COMMITTED
+    );
+    assertEquals(conn.getTransactionIsolation(), Connection.TRANSACTION_READ_COMMITTED);
+
+    // REPEATABLE READ
+    dialect.setConnectionIsolationMode(conn,
+            JdbcSourceConnectorConfig.TransactionIsolationMode.REPEATABLE_READ
+    );
+    assertEquals(conn.getTransactionIsolation(), Connection.TRANSACTION_REPEATABLE_READ);
+
+    // SERIALIZABLE
+    dialect.setConnectionIsolationMode(conn,
+            JdbcSourceConnectorConfig.TransactionIsolationMode.SERIALIZABLE
+    );
+    assertEquals(conn.getTransactionIsolation(), Connection.TRANSACTION_SERIALIZABLE);
+
+    // this transaction isolation mode is not supported. No error is expected.
+    // Just a warning. Old isolation mode is maintained.
+    dialect.setConnectionIsolationMode(conn,
+            JdbcSourceConnectorConfig.TransactionIsolationMode.SQL_SERVER_SNAPSHOT
+    );
+    // confirm transaction isolation mode does not change.
+    assertEquals(conn.getTransactionIsolation(), Connection.TRANSACTION_SERIALIZABLE);
   }
 
   @Test

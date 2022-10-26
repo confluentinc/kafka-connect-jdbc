@@ -141,7 +141,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
 
     if (schema.type() == Type.STRING) {
       if (colDef.type() == Types.CLOB) {
-        statement.setCharacterStream(index, new StringReader((String) value));
+        statement.setCharacterStream(index, new StringReader((String) value),((String) value).length());
         return true;
       } else if (colDef.type() == Types.NCLOB) {
         statement.setNCharacterStream(index, new StringReader((String) value));

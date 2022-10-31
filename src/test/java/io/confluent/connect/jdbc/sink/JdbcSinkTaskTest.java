@@ -21,6 +21,8 @@ import static org.easymock.EasyMock.expectLastCall;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.Matchers.any;
+import static org.mockito.Mockito.doThrow;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -52,6 +54,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import io.confluent.connect.jdbc.util.DateTimeUtils;
+import org.mockito.Mockito;
 
 public class JdbcSinkTaskTest extends EasyMockSupport {
   private final SqliteHelper sqliteHelper = new SqliteHelper(getClass().getSimpleName());
@@ -300,6 +303,34 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     }
 
     verifyAll();
+  }
+
+  @Test
+  public void retryOnConnectException() throws SQLException {
+    final int maxRetries = 2;
+    final int retryBackoffMs = 1000;
+
+    List<SinkRecord> records = createRecordsList(1);
+    JdbcDbWriter mockWriter = Mockito.mock(JdbcDbWriter.class);
+    doThrow(new ConnectException("error")).when(mockWriter).write(any());
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(Mockito.mock(SinkTaskContext.class));
+
+    Map<String, String> props = setupBasicProps(maxRetries, retryBackoffMs);
+    task.start(props);
+
+    try {
+      task.put(records);
+      fail();
+    } catch (RetriableException expected) {
+      assertEquals(SQLException.class, expected.getCause().getClass());
+      assertTrue(expected.getMessage().contains("ConnectException"));
+    }
   }
 
   @Test

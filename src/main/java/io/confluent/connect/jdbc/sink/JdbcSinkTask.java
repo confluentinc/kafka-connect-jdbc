@@ -15,6 +15,8 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import static io.confluent.connect.jdbc.util.ExceptionUtil.iterator;
+
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -88,24 +90,24 @@ public class JdbcSinkTask extends SinkTask {
       } else {
         throw tace;
       }
-    } catch (SQLException sqle) {
+    } catch (ConnectException | SQLException ex) {
       log.warn(
           "Write of {} records failed, remainingRetries={}",
           records.size(),
           remainingRetries,
-          sqle
+          ex
       );
       int totalExceptions = 0;
-      for (Throwable e :sqle) {
+      for (Throwable e : iterator(ex)) {
         totalExceptions++;
       }
-      SQLException sqlAllMessagesException = getAllMessagesException(sqle);
+      Exception allMessagesException = getAllMessagesException(ex);
       if (remainingRetries > 0) {
         writer.closeQuietly();
         initWriter();
         remainingRetries--;
         context.timeout(config.retryBackoffMs);
-        throw new RetriableException(sqlAllMessagesException);
+        throw new RetriableException(allMessagesException);
       } else {
         if (reporter != null) {
           unrollAndRetry(records);
@@ -116,10 +118,10 @@ public class JdbcSinkTask extends SinkTask {
                   + "For complete details on each exception, please enable DEBUG logging.",
               totalExceptions);
           int exceptionCount = 1;
-          for (Throwable e : sqle) {
+          for (Throwable e : iterator(ex)) {
             log.debug("Exception {}:", exceptionCount++, e);
           }
-          throw new ConnectException(sqlAllMessagesException);
+          throw new ConnectException(allMessagesException);
         }
       }
     }
@@ -135,21 +137,19 @@ public class JdbcSinkTask extends SinkTask {
         reporter.report(record, tace);
         writer.closeQuietly();
       } catch (SQLException sqle) {
-        SQLException sqlAllMessagesException = getAllMessagesException(sqle);
-        reporter.report(record, sqlAllMessagesException);
+        Exception allMessagesException = getAllMessagesException(sqle);
+        reporter.report(record, allMessagesException);
         writer.closeQuietly();
       }
     }
   }
 
-  private SQLException getAllMessagesException(SQLException sqle) {
-    String sqleAllMessages = "Exception chain:" + System.lineSeparator();
-    for (Throwable e : sqle) {
-      sqleAllMessages += e + System.lineSeparator();
+  private Exception getAllMessagesException(Throwable ex) {
+    StringBuilder allMessages = new StringBuilder("Exception chain:" + System.lineSeparator());
+    for (Throwable e : iterator(ex)) {
+      allMessages.append(e).append(System.lineSeparator());
     }
-    SQLException sqlAllMessagesException = new SQLException(sqleAllMessages);
-    sqlAllMessagesException.setNextException(sqle);
-    return sqlAllMessagesException;
+    return new SQLException(allMessages.toString());
   }
 
   @Override

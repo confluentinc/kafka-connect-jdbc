@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import io.confluent.connect.jdbc.util.LogUtil;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -93,7 +94,7 @@ public class JdbcSinkTask extends SinkTask {
           "Write of {} records failed, remainingRetries={}",
           records.size(),
           remainingRetries,
-          sqle
+          LogUtil.trimSensitiveData(sqle)
       );
       int totalExceptions = 0;
       for (Throwable e :sqle) {
@@ -117,7 +118,7 @@ public class JdbcSinkTask extends SinkTask {
               totalExceptions);
           int exceptionCount = 1;
           for (Throwable e : sqle) {
-            log.debug("Exception {}:", exceptionCount++, e);
+            log.debug("Exception {}:", exceptionCount++, LogUtil.trimSensitiveData(e));
           }
           throw new ConnectException(sqlAllMessagesException);
         }
@@ -145,10 +146,10 @@ public class JdbcSinkTask extends SinkTask {
   private SQLException getAllMessagesException(SQLException sqle) {
     String sqleAllMessages = "Exception chain:" + System.lineSeparator();
     for (Throwable e : sqle) {
-      sqleAllMessages += e + System.lineSeparator();
+      sqleAllMessages += LogUtil.trimSensitiveData(e) + System.lineSeparator();
     }
     SQLException sqlAllMessagesException = new SQLException(sqleAllMessages);
-    sqlAllMessagesException.setNextException(sqle);
+    sqlAllMessagesException.setNextException(LogUtil.trimSensitiveData(sqle));
     return sqlAllMessagesException;
   }
 

@@ -18,6 +18,7 @@ package io.confluent.connect.jdbc.util;
 import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.postgresql.util.PSQLException;
 
 import java.sql.BatchUpdateException;
 import java.sql.SQLException;
@@ -140,6 +141,27 @@ public class LogUtilTest {
     SQLException expectedTrimmed = new SQLException("e1");
     BatchUpdateException e3 = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\")",
             new int[0]);
+    expectedTrimmed.setNextException(e3);
+
+    SQLException actualTrimmed = LogUtil.trimSensitiveData(e1);
+    assertEqualsSQLException(expectedTrimmed, actualTrimmed);
+  }
+
+  @Test
+  public void testBatchExceptionWithChild() {
+    SQLException e1 = new SQLException("e1");
+    BatchUpdateException e2 = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\") " +
+        "VALUES ('1','2','3',NULL) was aborted: ERROR: null value in column \"c4\" violates not-null constraint.",
+        new int[0]);
+    SQLException p1 = new SQLException("ERROR: null value in column \"c4\" violates "
+        + "not-null constraint\n Detail: Failing row contains ('1','2','3',NULL).");
+
+    e2.setNextException(p1);
+    e1.setNextException(e2);
+
+    SQLException expectedTrimmed = new SQLException("e1");
+    BatchUpdateException e3 = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\")",
+        new int[0]);
     expectedTrimmed.setNextException(e3);
 
     SQLException actualTrimmed = LogUtil.trimSensitiveData(e1);

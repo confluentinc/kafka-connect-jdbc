@@ -119,7 +119,7 @@ public class JdbcSinkTask extends SinkTask {
               totalExceptions);
           int exceptionCount = 1;
           for (Throwable e : trimmedException) {
-            log.debug("Exception {}:", exceptionCount++, LogUtil.trimSensitiveData(e));
+            log.debug("Exception {}:", exceptionCount++, e);
           }
           throw new ConnectException(sqlAllMessagesException);
         }

@@ -167,8 +167,6 @@ public class LogUtilTest {
     SQLException actualTrimmed = LogUtil.trimSensitiveData(e1);
     assertEqualsSQLException(expectedTrimmed, actualTrimmed);
   }
-
-
   private static void assertEqualsSQLException(SQLException expected, SQLException actual) {
     if (expected == actual) {
       return;

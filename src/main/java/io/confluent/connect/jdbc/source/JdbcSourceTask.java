@@ -230,6 +230,8 @@ public class JdbcSourceTask extends SourceTask {
       String topicPrefix = config.topicPrefix();
       JdbcSourceConnectorConfig.TimestampGranularity timestampGranularity
           = JdbcSourceConnectorConfig.TimestampGranularity.get(config);
+      
+      int queryTimeout = config.getInt(JdbcSourceTaskConfig.QUERY_TIMEOUT_S_CONFIG);
 
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(
@@ -238,7 +240,8 @@ public class JdbcSourceTask extends SourceTask {
                 queryMode, 
                 tableOrQuery, 
                 topicPrefix, 
-                suffix
+                suffix,
+                queryTimeout
             )
         );
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)) {
@@ -254,7 +257,8 @@ public class JdbcSourceTask extends SourceTask {
                 timestampDelayInterval,
                 timeZone,
                 suffix,
-                timestampGranularity
+                timestampGranularity,
+                queryTimeout
             )
         );
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
@@ -269,7 +273,8 @@ public class JdbcSourceTask extends SourceTask {
                 timestampDelayInterval,
                 timeZone,
                 suffix,
-                timestampGranularity
+                timestampGranularity,
+                queryTimeout
             )
         );
       } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
@@ -285,7 +290,8 @@ public class JdbcSourceTask extends SourceTask {
                 timestampDelayInterval,
                 timeZone,
                 suffix,
-                timestampGranularity
+                timestampGranularity,
+                queryTimeout
             )
         );
       }

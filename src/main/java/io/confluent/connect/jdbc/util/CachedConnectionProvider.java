@@ -34,6 +34,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
 
   private int count = 0;
   private Connection connection;
+  private volatile boolean isRunning = true;
 
   public CachedConnectionProvider(
       ConnectionProvider provider,
@@ -73,7 +74,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
 
   private void newConnection() throws SQLException {
     int attempts = 0;
-    while (attempts < maxConnectionAttempts) {
+    while (isRunning) {
       try {
         ++count;
         log.info("Attempting to open connection #{} to {}", count, provider);
@@ -82,7 +83,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
         return;
       } catch (SQLException sqle) {
         attempts++;
-        if (attempts < maxConnectionAttempts) {
+        if (isRunning && attempts < maxConnectionAttempts) {
           log.info("Unable to connect to database on attempt {}/{}. Will retry in {} ms.", attempts,
                    maxConnectionAttempts, connectionRetryBackoff, sqle
           );
@@ -99,7 +100,12 @@ public class CachedConnectionProvider implements ConnectionProvider {
   }
 
   @Override
-  public synchronized void close() {
+  public void close() {
+    isRunning = false;
+    closeConnection();
+  }
+
+  private synchronized void closeConnection() {
     if (connection != null) {
       try {
         log.info("Closing connection #{} to {}", count, provider);

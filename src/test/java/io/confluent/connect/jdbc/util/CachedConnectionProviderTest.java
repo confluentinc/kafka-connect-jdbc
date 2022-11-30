@@ -27,9 +27,6 @@ import org.powermock.modules.junit4.PowerMockRunner;
 
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import static org.junit.Assert.assertNotNull;
 
@@ -73,44 +70,6 @@ public class CachedConnectionProviderTest {
     assertNotNull(connectionProvider.getConnection());
 
     PowerMock.verifyAll();
-  }
-
-  @Test
-  public void retryTillClose() throws SQLException {
-    final CountDownLatch latch = new CountDownLatch(1);
-    ConnectionProvider connectionProvider = new CachedConnectionProvider(
-            new ConnectionProvider() {
-                @Override
-                public Connection getConnection() throws SQLException {
-                    latch.countDown();
-                    throw new SQLException("test");
-                }
-
-                @Override
-                public boolean isConnectionValid(Connection connection, int timeout) throws SQLException {
-                    return false;
-                }
-
-                @Override
-                public void close() {
-                }
-            }, Integer.MAX_VALUE, 100L);
-
-    ExecutorService executorService = Executors.newSingleThreadExecutor();
-    executorService.execute(() -> {
-        try {
-            latch.await();
-            connectionProvider.close();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-    });
-
-    try {
-        connectionProvider.getConnection();
-    } catch (ConnectException ce) {
-        assertNotNull(ce);
-    }
   }
 
 }

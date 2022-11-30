@@ -376,7 +376,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       builder.append(" WHERE ");
       builder.appendList()
              .delimitedBy(" AND ")
-             .transformedBy(ExpressionBuilder.columnNamesWith(" = ?"))
+             .transformedBy(this.columnNamesWithValueVariables(definition))
              .of(keyColumns);
     }
     return builder.toString();
@@ -421,6 +421,25 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
               .delimitedBy(",")
               .transformedBy(transform)
               .of(nonKeyColumns);
+    }
+    return builder.toString();
+  }
+
+  @Override
+  public final String buildDeleteStatement(
+          TableId table,
+          Collection<ColumnId> keyColumns,
+          TableDefinition definition
+  ) {
+    ExpressionBuilder builder = expressionBuilder();
+    builder.append("DELETE FROM ");
+    builder.append(table);
+    if (!keyColumns.isEmpty()) {
+      builder.append(" WHERE ");
+      builder.appendList()
+              .delimitedBy(" AND ")
+              .transformedBy(this.columnNamesWithValueVariables(definition))
+              .of(keyColumns);
     }
     return builder.toString();
   }

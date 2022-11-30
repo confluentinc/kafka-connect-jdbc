@@ -52,6 +52,7 @@ import static org.apache.kafka.connect.runtime.ConnectorConfig.ERRORS_TOLERANCE_
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_NAME_CONFIG;
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_REPLICATION_FACTOR_CONFIG;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -287,6 +288,45 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     }
   }
 
+  @Test
+  public void testDeleteFromTableWithUuidPk() throws SQLException, InterruptedException {
+    createTableWithUuidPk();
+    props.put(JdbcSinkConfig.AUTO_EVOLVE, "true");
+    props.put(JdbcSinkConfig.PK_MODE, "record_key");
+    props.put(JdbcSinkConfig.PK_FIELDS, "userid");
+    props.put(JdbcSinkConfig.DELETE_ENABLED, "true");
+    connect.configureConnector("jdbc-sink-connector", props);
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+
+    final Schema keySchema = SchemaBuilder.struct().name("com.example.PersonKey")
+            .field("userid", Schema.STRING_SCHEMA);
+    final Schema schema = SchemaBuilder.struct().name("com.example.Person")
+            .field("userid", Schema.STRING_SCHEMA)
+            .field("firstName", Schema.STRING_SCHEMA)
+            .field("lastName", Schema.STRING_SCHEMA)
+            .build();
+
+    String uuid = UUID.randomUUID().toString();
+    final Struct keyStruct = new Struct(keySchema)
+            .put("userid", uuid);
+    final Struct insertStruct = new Struct(schema)
+            .put("userid", uuid)
+            .put("firstName", "Steve")
+            .put("lastName", "Stevenson");
+
+
+    produceRecordWithKey(keySchema, keyStruct, schema, insertStruct);
+    produceRecordWithKey(keySchema, keyStruct, schema, null);
+
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
+      try (Statement s = c.createStatement()) {
+        try (ResultSet rs = s.executeQuery("SELECT * FROM " + tableName)) {
+          assertFalse(rs.next());
+        }
+      }
+    }
+  }
+
   private void assertJDBCArray(ResultSet rs, String fieldName, Struct struct) throws SQLException {
     Array array = rs.getArray(fieldName);
     assertNotNull(array);
@@ -348,6 +388,13 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     LOG.info("Created table {} with UUID column", tableName);
   }
 
+  private void createTableWithUuidPk() throws SQLException {
+    LOG.info("Creating table {} with UUID pk", tableName);
+    createTable("CREATE TABLE %s(userid UUID PRIMARY KEY, firstName TEXT, lastName TEXT)");
+    LOG.info("Created table {} with UUID pk", tableName);
+  }
+
+
   private void createTableWithLessFields() throws SQLException {
     LOG.info("Creating table {} with less fields", tableName);
     createTable("CREATE TABLE %s(firstName TEXT, jsonid json, userid UUID)");
@@ -363,5 +410,11 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
   private void produceRecord(Schema schema, Struct struct) {
     String kafkaValue = new String(jsonConverter.fromConnectData(tableName, schema, struct));
     connect.kafka().produce(tableName, null, kafkaValue);
+  }
+
+  private void produceRecordWithKey(Schema keySchema, Struct key, Schema valueSchema, Struct value) {
+    String kafkaValue = value != null ? new String(jsonConverter.fromConnectData(tableName, valueSchema, value)): null;
+    String kafkaKey = key != null ? new String(jsonConverter.fromConnectData(tableName, keySchema, key)): null;
+    connect.kafka().produce(tableName, kafkaKey, kafkaValue);
   }
 }

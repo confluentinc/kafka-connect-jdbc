@@ -99,13 +99,13 @@ public class CachedConnectionProvider implements ConnectionProvider {
     }
   }
 
-  @Override
-  public void close() {
-    isRunning = false;
-    closeConnection();
+  public void close(boolean stopping) {
+    isRunning = !stopping;
+    close();
   }
 
-  private synchronized void closeConnection() {
+  @Override
+  public synchronized void close() {
     if (connection != null) {
       try {
         log.info("Closing connection #{} to {}", count, provider);

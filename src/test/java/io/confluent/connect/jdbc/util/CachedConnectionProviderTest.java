@@ -79,7 +79,7 @@ public class CachedConnectionProviderTest {
   @Test
   public void retryTillClose() throws SQLException {
     final CountDownLatch latch = new CountDownLatch(1);
-    ConnectionProvider connectionProvider = new CachedConnectionProvider(
+    CachedConnectionProvider connectionProvider = new CachedConnectionProvider(
             new ConnectionProvider() {
                 @Override
                 public Connection getConnection() throws SQLException {
@@ -101,7 +101,7 @@ public class CachedConnectionProviderTest {
     executorService.execute(() -> {
         try {
             latch.await();
-            connectionProvider.close();
+            connectionProvider.close(true);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }

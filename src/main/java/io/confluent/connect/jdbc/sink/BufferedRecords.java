@@ -15,6 +15,8 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import java.sql.ParameterMetaData;
+import net.sourceforge.jtds.jdbc.JtdsPreparedStatement;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
@@ -178,8 +180,10 @@ public class BufferedRecords {
     log.debug("Flushing {} buffered records", records.size());
     for (SinkRecord record : records) {
       if (isNull(record.value()) && nonNull(deleteStatementBinder)) {
+        log.info("Record Structure {}", record);
         deleteStatementBinder.bindRecord(record);
       } else {
+        log.info("Record Structure {}", record);
         updateStatementBinder.bindRecord(record);
       }
     }
@@ -193,6 +197,17 @@ public class BufferedRecords {
   }
 
   private void executeUpdates() throws SQLException {
+    log.info("Printing prepared statement {}", updatePreparedStatement.toString());
+    log.info("Printing parameter metadata");
+
+    ParameterMetaData parameterMetaData = updatePreparedStatement.getParameterMetaData();
+    for (int i = 0; i < parameterMetaData.getParameterCount(); i++) {
+      log.info("Parameter index {}, Parameter mode {}, Parameter type {}, Parameter class {}, " +
+              "Parameter is null? {}", i,
+          parameterMetaData.getParameterMode(i), parameterMetaData.getParameterTypeName(i),
+          parameterMetaData.getParameterClassName(i), parameterMetaData.isNullable(i));
+    }
+
     int[] batchStatus = updatePreparedStatement.executeBatch();
     for (int updateCount : batchStatus) {
       if (updateCount == Statement.EXECUTE_FAILED) {

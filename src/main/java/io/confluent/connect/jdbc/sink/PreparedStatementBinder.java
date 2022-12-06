@@ -82,8 +82,7 @@ public class PreparedStatementBinder implements StatementBinder {
   }
 
   @Override
-  public void
-  bindRecord(SinkRecord record) throws SQLException {
+  public void bindRecord(SinkRecord record) throws SQLException {
     final Struct valueStruct = (Struct) record.value();
     final boolean isDelete = isNull(valueStruct);
     // Assumption: the relevant SQL has placeholders for keyFieldNames first followed by

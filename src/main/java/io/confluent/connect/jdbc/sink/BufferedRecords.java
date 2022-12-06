@@ -16,7 +16,6 @@
 package io.confluent.connect.jdbc.sink;
 
 import java.sql.ParameterMetaData;
-import net.sourceforge.jtds.jdbc.JtdsPreparedStatement;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
@@ -202,10 +201,10 @@ public class BufferedRecords {
 
     ParameterMetaData parameterMetaData = updatePreparedStatement.getParameterMetaData();
     for (int i = 0; i < parameterMetaData.getParameterCount(); i++) {
-      log.info("Parameter index {}, Parameter mode {}, Parameter type {}, Parameter class {}, " +
-              "Parameter is null? {}", i,
-          parameterMetaData.getParameterMode(i), parameterMetaData.getParameterTypeName(i),
-          parameterMetaData.getParameterClassName(i), parameterMetaData.isNullable(i));
+      log.info("Parameter index {}, Parameter mode {}, Parameter type {}, Parameter class {}, "
+              + "Parameter is null? {}", i, parameterMetaData.getParameterMode(i),
+          parameterMetaData.getParameterTypeName(i), parameterMetaData.getParameterClassName(i),
+          parameterMetaData.isNullable(i));
     }
 
     int[] batchStatus = updatePreparedStatement.executeBatch();

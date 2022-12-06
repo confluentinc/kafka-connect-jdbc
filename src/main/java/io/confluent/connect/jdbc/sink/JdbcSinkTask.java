@@ -130,6 +130,7 @@ public class JdbcSinkTask extends SinkTask {
 
   private void unrollAndRetry(Collection<SinkRecord> records) {
     writer.closeQuietly();
+    initWriter();
     for (SinkRecord record : records) {
       try {
         writer.write(Collections.singletonList(record));

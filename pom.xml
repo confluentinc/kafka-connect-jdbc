@@ -130,7 +130,7 @@
             <groupId>net.sourceforge.jtds</groupId>
             <artifactId>jtds</artifactId>
             <version>${jtds.driver.version}</version>
-<!--            <scope>runtime</scope>-->
+            <scope>runtime</scope>
         </dependency>
 
         <dependency>

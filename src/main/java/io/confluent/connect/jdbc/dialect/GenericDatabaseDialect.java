@@ -251,15 +251,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     if (jdbcDriverInfo == null) {
       jdbcDriverInfo = createJdbcDriverInfo(connection);
     }
-    try {
-      log.info("Jdbc Driver Info {}", jdbcDriverInfo.toString());
-      DatabaseMetaData dm = connection.getMetaData();
-      log.info("Database Info, Product name: {}, Product Version: {}, Driver Name: {}, " +
-          "Driver Version {} ", dm.getDatabaseProductName(), dm.getDatabaseProductVersion(),
-          dm.getDriverName(), dm.getDriverVersion());
-    } catch (Throwable t) {
-      log.info("Something went wrong in fetching jdbc and database metadata");
-    }
     connections.add(connection);
     return connection;
   }

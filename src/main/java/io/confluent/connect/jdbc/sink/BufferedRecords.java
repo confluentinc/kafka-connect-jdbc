@@ -15,9 +15,7 @@
 
 package io.confluent.connect.jdbc.sink;
 
-import java.sql.ParameterMetaData;
 import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.slf4j.Logger;
@@ -180,14 +178,8 @@ public class BufferedRecords {
     log.debug("Flushing {} buffered records", records.size());
     for (SinkRecord record : records) {
       if (isNull(record.value()) && nonNull(deleteStatementBinder)) {
-        log.info("Record Structure {}", record);
         deleteStatementBinder.bindRecord(record);
       } else {
-        log.info("Record Structure {}", record);
-        if (record.valueSchema().type().equals(Type.STRUCT)) {
-          log.info("Record Value Schema Struct fields {}",
-              record.valueSchema().fields().toString());
-        }
         updateStatementBinder.bindRecord(record);
       }
     }
@@ -201,21 +193,6 @@ public class BufferedRecords {
   }
 
   private void executeUpdates() throws SQLException {
-    log.info("Printing prepared statement {}", updatePreparedStatement.toString());
-    log.info("Printing parameter metadata");
-
-    ParameterMetaData parameterMetaData = updatePreparedStatement.getParameterMetaData();
-    for (int i = 1; i <= parameterMetaData.getParameterCount(); i++) {
-      try {
-        log.info("Parameter index {}, Parameter mode {}, Parameter type {}, Parameter class {}, "
-                + "Parameter is null? {}", i, parameterMetaData.getParameterMode(i),
-            parameterMetaData.getParameterType(i), parameterMetaData.getParameterClassName(i),
-            parameterMetaData.isNullable(i));
-      } catch (Throwable e) {
-        log.debug("Failed to log parameter with index {}", i, e);
-      }
-    }
-
     int[] batchStatus = updatePreparedStatement.executeBatch();
     for (int updateCount : batchStatus) {
       if (updateCount == Statement.EXECUTE_FAILED) {

@@ -205,7 +205,7 @@ public class BufferedRecords {
     log.info("Printing parameter metadata");
 
     ParameterMetaData parameterMetaData = updatePreparedStatement.getParameterMetaData();
-    for (int i = 0; i < parameterMetaData.getParameterCount(); i++) {
+    for (int i = 1; i <= parameterMetaData.getParameterCount(); i++) {
       try {
         log.info("Parameter index {}, Parameter mode {}, Parameter type {}, Parameter class {}, "
                 + "Parameter is null? {}", i, parameterMetaData.getParameterMode(i),

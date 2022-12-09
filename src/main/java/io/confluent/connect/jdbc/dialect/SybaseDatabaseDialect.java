@@ -15,6 +15,13 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig.PrimaryKeyMode;
+import io.confluent.connect.jdbc.sink.PreparedStatementBinder;
+import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
+import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.TableDefinition;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -37,6 +44,7 @@ import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.TableId;
+import org.apache.kafka.connect.errors.ConnectException;
 
 /**
  * A {@link DatabaseDialect} for SQL Server.
@@ -45,6 +53,7 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
   /**
    * The provider for {@link SybaseDatabaseDialect}.
    */
+
   public static class Provider extends SubprotocolBasedProvider {
     public Provider() {
       super(SybaseDatabaseDialect.class.getSimpleName(), "microsoft:sqlserver", "sqlserver",
@@ -133,6 +142,52 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
         return "image";
       default:
         return super.getSqlType(field);
+    }
+  }
+
+  @Override
+  public StatementBinder statementBinder(
+      PreparedStatement statement,
+      PrimaryKeyMode pkMode,
+      SchemaPair schemaPair,
+      FieldsMetadata fieldsMetadata,
+      TableDefinition tableDefinition,
+      InsertMode insertMode
+  ) {
+    return new PreparedStatementBinder(
+        this,
+        statement,
+        pkMode,
+        schemaPair,
+        fieldsMetadata,
+        tableDefinition,
+        insertMode
+    );
+  }
+
+  @Override
+  public void bindField(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
+      Object value,
+      ColumnDefinition colDef
+  ) throws SQLException {
+    if (value == null) {
+      Integer type = getSqlTypeForSchema(schema);
+      if (type != null) {
+        statement.setNull(index, type);
+      } else {
+        statement.setObject(index, null, colDef.type());
+      }
+    } else {
+      boolean bound = maybeBindLogical(statement, index, schema, value);
+      if (!bound) {
+        bound = maybeBindPrimitive(statement, index, schema, value);
+      }
+      if (!bound) {
+        throw new ConnectException("Unsupported source data type: " + schema.type());
+      }
     }
   }
 

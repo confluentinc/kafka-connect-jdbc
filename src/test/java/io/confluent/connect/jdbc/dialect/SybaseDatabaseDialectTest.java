@@ -20,6 +20,7 @@ import static org.junit.Assert.assertEquals;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.time.ZoneOffset;
 import java.util.Calendar;
 import java.util.List;
@@ -363,6 +364,21 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
       Timestamp.SCHEMA,
       new java.util.Date(100)
     ).setTimestamp(index, new java.sql.Timestamp(100), utcCalendar);
+  }
+
+  @Test
+  public void bindNullFieldsToColumnDefinitionTypes() throws SQLException {
+    int index = ThreadLocalRandom.current().nextInt();
+    // ColumnDefinition is mocked in BaseDialectTest based on schema type
+    verifyBindField(++index, Schema.INT8_SCHEMA, null).setObject(index, null, Types.NUMERIC);
+    verifyBindField(++index, Schema.INT16_SCHEMA, null).setObject(index, null, Types.NUMERIC);
+    verifyBindField(++index, Schema.INT32_SCHEMA, null).setObject(index, null, Types.NUMERIC);
+    verifyBindField(++index, Schema.INT64_SCHEMA, null).setObject(index, null, Types.NUMERIC);
+    verifyBindField(++index, Schema.BOOLEAN_SCHEMA, null).setObject(index, null, Types.NUMERIC);
+    verifyBindField(++index, Schema.FLOAT32_SCHEMA, null).setObject(index, null, 100);
+    verifyBindField(++index, Schema.FLOAT64_SCHEMA, null).setObject(index, null, 101);
+    verifyBindField(++index, Schema.BYTES_SCHEMA, null).setObject(index, null, Types.BLOB);
+    verifyBindField(++index, Schema.STRING_SCHEMA, null).setObject(index, null, Types.CLOB);
   }
 
   @Test

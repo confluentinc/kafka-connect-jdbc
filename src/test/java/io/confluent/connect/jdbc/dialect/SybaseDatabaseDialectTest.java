@@ -366,8 +366,9 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
     ).setTimestamp(index, new java.sql.Timestamp(100), utcCalendar);
   }
 
+  @Override
   @Test
-  public void bindNullFieldsToColumnDefinitionTypes() throws SQLException {
+  public void bindFieldNull() throws SQLException {
     int index = ThreadLocalRandom.current().nextInt();
     // ColumnDefinition is mocked in BaseDialectTest based on schema type
     verifyBindField(++index, Schema.INT8_SCHEMA, null).setObject(index, null, Types.NUMERIC);
@@ -379,6 +380,10 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
     verifyBindField(++index, Schema.FLOAT64_SCHEMA, null).setObject(index, null, 101);
     verifyBindField(++index, Schema.BYTES_SCHEMA, null).setObject(index, null, Types.BLOB);
     verifyBindField(++index, Schema.STRING_SCHEMA, null).setObject(index, null, Types.CLOB);
+    verifyBindField(++index, Decimal.schema(0), null).setObject(index, null, Types.NUMERIC);
+    verifyBindField(++index, Date.SCHEMA, null).setObject(index, null, Types.DATE);
+    verifyBindField(++index, Time.SCHEMA, null).setObject(index, null, Types.DATE);
+    verifyBindField(++index, Timestamp.SCHEMA, null).setObject(index, null, Types.TIMESTAMP);
   }
 
   @Test

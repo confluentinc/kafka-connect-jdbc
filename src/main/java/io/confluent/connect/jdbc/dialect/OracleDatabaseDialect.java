@@ -140,8 +140,22 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     }
 
     if (schema.type() == Type.STRING) {
-      if (colDef.type() == Types.CLOB) {
-        statement.setCharacterStream(index, new StringReader((String) value));
+     if (colDef.type() == Types.CLOB) {
+        boolean valueBind = false;
+        if (this.config instanceof JdbcSinkConfig) {
+          String insertMode = ((JdbcSinkConfig)this.config).getString(JdbcSinkConfig.INSERT_MODE);
+          if (insertMode != null && !insertMode.isEmpty()) {
+            if (JdbcSinkConfig.InsertMode.valueOf(insertMode.toUpperCase())
+                == JdbcSinkConfig.InsertMode.INSERT) {
+              statement.setCharacterStream(index, new StringReader((String) value),
+                   ((String) value).length());
+              valueBind = true;
+            }
+          }
+        }
+        if (!valueBind) {
+          statement.setCharacterStream(index, new StringReader((String) value));
+        }
         return true;
       } else if (colDef.type() == Types.NCLOB) {
         statement.setNCharacterStream(index, new StringReader((String) value));

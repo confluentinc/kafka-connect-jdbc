@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig.PrimaryKeyMode;
 import io.confluent.connect.jdbc.sink.PreparedStatementBinder;
@@ -141,7 +142,27 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
 
     if (schema.type() == Type.STRING) {
       if (colDef.type() == Types.CLOB) {
-        statement.setCharacterStream(index, new StringReader((String) value));
+        final int upsertValueLimit = 4000;
+        boolean valueBinded = false;
+        long valueLength = ((String) value).length();
+        if (this.config instanceof JdbcSinkConfig) {
+          String insertMode = this.config.getString(JdbcSinkConfig.INSERT_MODE);
+          if (insertMode != null && !insertMode.isEmpty()) {
+            // UPSERT mode uses MERGE statement in the query. The oracle driver requires values of
+            // length more than 4000 to be LOB binded in this case.
+            if (InsertMode.valueOf(insertMode.toUpperCase()) == InsertMode.UPSERT) {
+              if (valueLength < upsertValueLimit) {
+                statement.setCharacterStream(index, new StringReader((String) value), valueLength);
+              } else {
+                statement.setCharacterStream(index, new StringReader((String) value));
+              }
+              valueBinded = true;
+            }
+          }
+        }
+        if (!valueBinded) {
+          statement.setCharacterStream(index, new StringReader((String) value), valueLength);
+        }
         return true;
       } else if (colDef.type() == Types.NCLOB) {
         statement.setNCharacterStream(index, new StringReader((String) value));

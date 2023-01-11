@@ -94,6 +94,7 @@ import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.TableType;
+import io.confluent.connect.jdbc.util.UpdateDropCondition;
 
 /**
  * A {@link DatabaseDialect} implementation that provides functionality based upon JDBC and SQL.
@@ -1565,6 +1566,17 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       Collection<ColumnId> keyColumns,
       Collection<ColumnId> nonKeyColumns
   ) {
+    return buildUpdateStatement(table, keyColumns, nonKeyColumns,
+            (Collection<UpdateDropCondition>) null);
+  }
+
+  @SuppressWarnings("deprecation")
+  public String buildUpdateStatement(
+          TableId table,
+          Collection<ColumnId> keyColumns,
+          Collection<ColumnId> nonKeyColumns,
+          Collection<UpdateDropCondition> conditions
+  ) {
     ExpressionBuilder builder = expressionBuilder();
     builder.append("UPDATE ");
     builder.append(table);
@@ -1573,8 +1585,32 @@ public class GenericDatabaseDialect implements DatabaseDialect {
            .delimitedBy(", ")
            .transformedBy(ExpressionBuilder.columnNamesWith(" = ?"))
            .of(nonKeyColumns);
-    if (!keyColumns.isEmpty()) {
+
+    Transform<UpdateDropCondition> transformCondition = (bld, condition) -> {
+      bld.appendColumnName(condition.field().name());
+      bld.append(" ");
+      bld.append(condition.operator());
+      bld.append(" ?");
+    };
+
+    boolean keyColumnsEmpty = !keyColumns.isEmpty();
+    boolean conditionsEmpty = conditions != null && !conditions.isEmpty();
+
+    if (keyColumnsEmpty || conditionsEmpty) {
       builder.append(" WHERE ");
+    }
+
+    if (conditionsEmpty) {
+      builder.appendList()
+              .delimitedBy(" AND ")
+              .transformedBy(transformCondition)
+              .of(conditions);
+      if (keyColumnsEmpty) {
+        builder.append(" AND ");
+      }
+    }
+
+    if (keyColumnsEmpty) {
       builder.appendList()
              .delimitedBy(" AND ")
              .transformedBy(ExpressionBuilder.columnNamesWith(" = ?"))
@@ -1590,6 +1626,20 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       Collection<ColumnId> keyColumns,
       Collection<ColumnId> nonKeyColumns
   ) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  @SuppressWarnings("deprecation")
+  public String buildUpsertQueryStatement(
+      TableId table,
+      Collection<ColumnId> keyColumns,
+      Collection<ColumnId> nonKeyColumns,
+      Collection<UpdateDropCondition> conditions
+  ) {
+    if (conditions == null || conditions.isEmpty()) {
+      return buildUpsertQueryStatement(table, keyColumns, nonKeyColumns);
+    }
     throw new UnsupportedOperationException();
   }
 

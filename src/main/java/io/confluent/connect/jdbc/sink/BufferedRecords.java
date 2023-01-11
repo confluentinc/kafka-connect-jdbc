@@ -252,7 +252,8 @@ public class BufferedRecords {
               tableId,
               asColumns(fieldsMetadata.keyFieldNames),
               asColumns(fieldsMetadata.nonKeyFieldNames),
-              dbStructure.tableDefinition(connection, tableId)
+              dbStructure.tableDefinition(connection, tableId),
+              config.updateDropConditions
           );
         } catch (UnsupportedOperationException e) {
           throw new ConnectException(String.format(
@@ -266,7 +267,8 @@ public class BufferedRecords {
             tableId,
             asColumns(fieldsMetadata.keyFieldNames),
             asColumns(fieldsMetadata.nonKeyFieldNames),
-            dbStructure.tableDefinition(connection, tableId)
+            dbStructure.tableDefinition(connection, tableId),
+            config.updateDropConditions
         );
       default:
         throw new ConnectException("Invalid insert mode");

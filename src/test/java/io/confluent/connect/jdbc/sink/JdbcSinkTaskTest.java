@@ -83,15 +83,15 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
       0
   );
 
-//  @Before
-//  public void setUp() throws IOException, SQLException {
-//    sqliteHelper.setUp();
-//  }
+  @Before
+  public void setUp() throws IOException, SQLException {
+    sqliteHelper.setUp();
+  }
 
-//  @After
-//  public void tearDown() throws IOException, SQLException {
-//    sqliteHelper.tearDown();
-//  }
+  @After
+  public void tearDown() throws IOException, SQLException {
+    sqliteHelper.tearDown();
+  }
 
   @Test
   public void putPropagatesToDbWithAutoCreateAndPkModeKafka() throws Exception {

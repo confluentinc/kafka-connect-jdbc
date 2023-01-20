@@ -44,12 +44,15 @@ public class JdbcSinkTask extends SinkTask {
   JdbcDbWriter writer;
   int remainingRetries;
 
+  boolean shouldTrimSensitiveLogs;
+
   @Override
   public void start(final Map<String, String> props) {
     log.info("Starting JDBC Sink task");
     config = new JdbcSinkConfig(props);
     initWriter();
     remainingRetries = config.maxRetries;
+    shouldTrimSensitiveLogs = config.trimSensitiveLogsEnabled;
     try {
       reporter = context.errantRecordReporter();
     } catch (NoSuchMethodError | NoClassDefFoundError e) {
@@ -90,7 +93,8 @@ public class JdbcSinkTask extends SinkTask {
         throw tace;
       }
     } catch (SQLException sqle) {
-      SQLException trimmedException = LogUtil.trimSensitiveData(sqle);
+      SQLException trimmedException = shouldTrimSensitiveLogs
+              ? LogUtil.trimSensitiveData(sqle) : sqle;
       log.warn(
           "Write of {} records failed, remainingRetries={}",
           records.size(),
@@ -147,7 +151,8 @@ public class JdbcSinkTask extends SinkTask {
 
   private SQLException getAllMessagesException(SQLException sqle) {
     String sqleAllMessages = "Exception chain:" + System.lineSeparator();
-    SQLException trimmedException = LogUtil.trimSensitiveData(sqle);
+    SQLException trimmedException = shouldTrimSensitiveLogs
+            ? LogUtil.trimSensitiveData(sqle) : sqle;
     for (Throwable e : trimmedException) {
       sqleAllMessages += e + System.lineSeparator();
     }

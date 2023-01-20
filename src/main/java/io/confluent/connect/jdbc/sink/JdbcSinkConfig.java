@@ -255,6 +255,8 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "view definition does not match the records' schemas (regardless of ``"
       + AUTO_EVOLVE + "``).";
 
+  public static final String TRIM_SENSITIVE_LOG_ENABLED = "trim.sensitive.log";
+  private static final String TRIM_SENSITIVE_LOG_ENABLED_DEFAULT = "false";
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
 
@@ -492,6 +494,12 @@ public class JdbcSinkConfig extends AbstractConfig {
             2,
             ConfigDef.Width.SHORT,
             RETRY_BACKOFF_MS_DISPLAY
+        )
+        .defineInternal(
+            TRIM_SENSITIVE_LOG_ENABLED,
+            ConfigDef.Type.BOOLEAN,
+            TRIM_SENSITIVE_LOG_ENABLED_DEFAULT,
+            ConfigDef.Importance.LOW
         );
 
   public final String connectorName;
@@ -515,6 +523,8 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final TimeZone timeZone;
   public final EnumSet<TableType> tableTypes;
 
+  public final boolean trimSensitiveLogsEnabled;
+
   public JdbcSinkConfig(Map<?, ?> props) {
     super(CONFIG_DEF, props);
     connectorName = ConfigUtils.connectorName(props);
@@ -537,7 +547,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
     String dbTimeZone = getString(DB_TIMEZONE_CONFIG);
     timeZone = TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
-
+    trimSensitiveLogsEnabled = getBoolean(TRIM_SENSITIVE_LOG_ENABLED);
     if (deleteEnabled && pkMode != PrimaryKeyMode.RECORD_KEY) {
       throw new ConfigException(
           "Primary key mode must be 'record_key' when delete support is enabled");

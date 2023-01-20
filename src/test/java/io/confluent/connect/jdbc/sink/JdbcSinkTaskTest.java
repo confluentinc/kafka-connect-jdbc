@@ -25,6 +25,9 @@ import static org.junit.Assert.fail;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.sql.BatchUpdateException;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.ZoneOffset;
@@ -474,7 +477,40 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     task.put(records);
     verifyAll();
   }
+  @Test
+  public void testGetAllMessagesExceptionWithoutTrim() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+    JdbcSinkTask task = new JdbcSinkTask();
+    SQLException exception = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\") " +
+            "VALUES ('1','2','3',NULL) was aborted: ERROR: null value in column \"c4\" violates not-null constraint\n" +
+            "  Detail: Failing row contains (1, 2, 3, null).  Call getNextException to see other errors in the batch.",
+            new int[0]);
+    String exceptedExceptionMessage = "Exception chain:" + System.lineSeparator() + exception + System.lineSeparator();
+    Method privateMethod = JdbcSinkTask.class.getDeclaredMethod("getAllMessagesException", SQLException.class);
+    task.shouldTrimSensitiveLogs = false;
+    privateMethod.setAccessible(true);
 
+    SQLException result = (SQLException) privateMethod.invoke(task, exception);
+    assertEquals(exceptedExceptionMessage, result.getMessage());
+
+    privateMethod.setAccessible(false);
+  }
+
+  @Test
+  public void testGetAllMessagesExceptionTrimmed() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+    JdbcSinkTask task = new JdbcSinkTask();
+    SQLException exception = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\") " +
+            "VALUES ('1','2','3',NULL) was aborted: ERROR: null value in column \"c4\" violates not-null constraint\n" +
+            "  Detail: Failing row contains (1, 2, 3, null).  Call getNextException to see other errors in the batch.",
+            new int[0]);
+    Method privateMethod = JdbcSinkTask.class.getDeclaredMethod("getAllMessagesException", SQLException.class);
+    privateMethod.setAccessible(true);
+    task.shouldTrimSensitiveLogs = true;
+
+    SQLException result = (SQLException) privateMethod.invoke(task, exception);
+    assertTrue(!result.getLocalizedMessage().contains("VALUES"));
+
+    privateMethod.setAccessible(false);
+  }
   private List<SinkRecord> createRecordsList(int batchSize) {
     List<SinkRecord> records = new ArrayList<>();
     for (int i = 0; i < batchSize; i++) {

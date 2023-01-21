@@ -18,9 +18,7 @@ package io.confluent.connect.jdbc.sink;
 import static org.easymock.EasyMock.anyObject;
 import static org.easymock.EasyMock.expect;
 import static org.easymock.EasyMock.expectLastCall;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -478,38 +476,75 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     verifyAll();
   }
   @Test
-  public void testGetAllMessagesExceptionWithoutTrim() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-    JdbcSinkTask task = new JdbcSinkTask();
+  public void testExceptionWithoutTrim() throws SQLException {
+    List<SinkRecord> records = createRecordsList(1);
     SQLException exception = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\") " +
             "VALUES ('1','2','3',NULL) was aborted: ERROR: null value in column \"c4\" violates not-null constraint\n" +
             "  Detail: Failing row contains (1, 2, 3, null).  Call getNextException to see other errors in the batch.",
             new int[0]);
-    String exceptedExceptionMessage = "Exception chain:" + System.lineSeparator() + exception + System.lineSeparator();
-    Method privateMethod = JdbcSinkTask.class.getDeclaredMethod("getAllMessagesException", SQLException.class);
-    task.shouldTrimSensitiveLogs = false;
-    privateMethod.setAccessible(true);
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
 
-    SQLException result = (SQLException) privateMethod.invoke(task, exception);
-    assertEquals(exceptedExceptionMessage, result.getMessage());
+    Map<String, String> props = setupBasicProps(0, 0);
+    props.put("trim.sensitive.log","false");
 
-    privateMethod.setAccessible(false);
+    mockWriter.write(records);
+    expectLastCall().andThrow(exception).times(1);
+
+    mockWriter.closeQuietly();
+    expect(ctx.errantRecordReporter()).andReturn(null);
+
+    replayAll();
+
+    task.initialize(ctx);
+    task.start(props);
+
+    try {
+      task.put(records);
+      fail();
+    } catch (ConnectException expected) {
+      assertTrue(expected.getLocalizedMessage().contains("VALUES"));
+    }
   }
 
   @Test
-  public void testGetAllMessagesExceptionTrimmed() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-    JdbcSinkTask task = new JdbcSinkTask();
+  public void testTrimmedException() throws SQLException {
+    List<SinkRecord> records = createRecordsList(1);
     SQLException exception = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\") " +
             "VALUES ('1','2','3',NULL) was aborted: ERROR: null value in column \"c4\" violates not-null constraint\n" +
             "  Detail: Failing row contains (1, 2, 3, null).  Call getNextException to see other errors in the batch.",
             new int[0]);
-    Method privateMethod = JdbcSinkTask.class.getDeclaredMethod("getAllMessagesException", SQLException.class);
-    privateMethod.setAccessible(true);
-    task.shouldTrimSensitiveLogs = true;
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
 
-    SQLException result = (SQLException) privateMethod.invoke(task, exception);
-    assertTrue(!result.getLocalizedMessage().contains("VALUES"));
+    Map<String, String> props = setupBasicProps(0, 0);
+    props.put("trim.sensitive.log","true");
 
-    privateMethod.setAccessible(false);
+    mockWriter.write(records);
+    expectLastCall().andThrow(exception).times(1);
+
+    mockWriter.closeQuietly();
+    expect(ctx.errantRecordReporter()).andReturn(null);
+
+    replayAll();
+
+    task.initialize(ctx);
+    task.start(props);
+
+    try {
+      task.put(records);
+      fail();
+    } catch (ConnectException expected) {
+      assertFalse(expected.getLocalizedMessage().contains("VALUES"));
+    }
   }
   private List<SinkRecord> createRecordsList(int batchSize) {
     List<SinkRecord> records = new ArrayList<>();

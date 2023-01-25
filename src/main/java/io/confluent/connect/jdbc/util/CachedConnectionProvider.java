@@ -67,8 +67,10 @@ public class CachedConnectionProvider implements ConnectionProvider {
         newConnection();
       }
     } catch (SQLException sqle) {
+      log.error(sqle.toString());
       throw new ConnectException(sqle);
     }
+    log.info("Database connection established.");
     return connection;
   }
 

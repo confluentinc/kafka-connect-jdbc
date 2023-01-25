@@ -83,6 +83,9 @@ public class JdbcDbWriter {
   TableId destinationTable(String topic) {
     final String tableName = config.tableNameFormat.replace("${topic}", topic);
     if (tableName.isEmpty()) {
+      log.error(String.format(
+              "Destination table name for topic '%s' is empty using the format string '%s'",
+              topic, config.tableNameFormat));
       throw new ConnectException(String.format(
           "Destination table name for topic '%s' is empty using the format string '%s'",
           topic,

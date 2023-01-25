@@ -64,6 +64,7 @@ public class BulkTableQuerier extends TableQuerier {
         stmt = dialect.createPreparedStatement(db, query);
         break;
       default:
+        log.error("Unknown mode: " + mode);
         throw new ConnectException("Unknown mode: " + mode);
     }
   }
@@ -103,6 +104,7 @@ public class BulkTableQuerier extends TableQuerier {
         topic = topicPrefix;
         break;
       default:
+        log.error("Unexpected query mode: " + mode);
         throw new ConnectException("Unexpected query mode: " + mode);
     }
     return new SourceRecord(partition, null, topic, record.schema(), record);

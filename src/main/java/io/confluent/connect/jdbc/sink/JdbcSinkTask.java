@@ -16,6 +16,7 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import jdk.internal.org.jline.utils.Log;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -46,6 +47,7 @@ public class JdbcSinkTask extends SinkTask {
     log.info("Starting JDBC Sink task");
     config = new JdbcSinkConfig(props);
     initWriter();
+    log.info("JDBC writer initialized");
     remainingRetries = config.maxRetries;
   }
 
@@ -75,7 +77,7 @@ public class JdbcSinkTask extends SinkTask {
     try {
       writer.write(records);
     } catch (SQLException sqle) {
-      log.warn(
+      log.error(
           "Write of {} records failed, remainingRetries={}",
           records.size(),
           remainingRetries,
@@ -97,8 +99,9 @@ public class JdbcSinkTask extends SinkTask {
             totalExceptions);
         int exceptionCount = 1;
         for (Throwable e : sqle) {
-          log.debug("Exception {}:", exceptionCount++, e);
+          log.error("Exception {}:", exceptionCount++, e);
         }
+        log.error(sqleAllMessages);
         throw new ConnectException(sqlAllMessagesException);
       } else {
         writer.closeQuietly();

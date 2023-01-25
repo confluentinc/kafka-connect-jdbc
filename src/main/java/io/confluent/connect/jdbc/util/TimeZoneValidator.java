@@ -30,6 +30,7 @@ public class TimeZoneValidator implements ConfigDef.Validator {
   public void ensureValid(String name, Object value) {
     if (value != null) {
       if (!Arrays.asList(TimeZone.getAvailableIDs()).contains(value.toString())) {
+        log.error("Invalid time zone identifier");
         throw new ConfigException(name, value, "Invalid time zone identifier");
       }
     }

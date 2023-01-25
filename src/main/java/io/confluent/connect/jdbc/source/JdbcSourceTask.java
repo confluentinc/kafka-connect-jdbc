@@ -86,9 +86,11 @@ public class JdbcSourceTask extends SourceTask {
     try {
       config = new JdbcSourceTaskConfig(properties);
     } catch (ConfigException e) {
+      log.error("Couldn't start JdbcSourceTask due to configuration error", e);
       throw new ConnectException("Couldn't start JdbcSourceTask due to configuration error", e);
     }
 
+    log.info("Connector version: " + version());
     final String url = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
     final int maxConnAttempts = config.getInt(JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_CONFIG);
     final long retryBackoff = config.getLong(JdbcSourceConnectorConfig.CONNECTION_BACKOFF_CONFIG);
@@ -106,6 +108,8 @@ public class JdbcSourceTask extends SourceTask {
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
     String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
     if ((tables.isEmpty() && query.isEmpty()) || (!tables.isEmpty() && !query.isEmpty())) {
+      log.error("Invalid configuration: each JdbcSourceTask must have at "
+              + "least one table assigned to it or one query specified");
       throw new ConnectException("Invalid configuration: each JdbcSourceTask must have at "
                                         + "least one table assigned to it or one query specified");
     }
@@ -139,6 +143,7 @@ public class JdbcSourceTask extends SourceTask {
                                                   JdbcSourceConnectorConstants.QUERY_NAME_VALUE));
           break;
         default:
+          log.error("Unknown query mode: " + queryMode);
           throw new ConnectException("Unknown query mode: " + queryMode);
       }
       offsets = context.offsetStorageReader().offsets(partitions);
@@ -178,6 +183,7 @@ public class JdbcSourceTask extends SourceTask {
           tablePartitionsToCheck = Collections.singletonList(partition);
           break;
         default:
+          log.error("Unexpected query mode: " + queryMode);
           throw new ConnectException("Unexpected query mode: " + queryMode);
       }
 
@@ -425,6 +431,9 @@ public class JdbcSourceTask extends SourceTask {
       if ((incrementalMode.equals(JdbcSourceConnectorConfig.MODE_INCREMENTING)
            || incrementalMode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING))
           && incrementingOptional) {
+        log.error("Cannot make incremental queries using incrementing column "
+                + incrementingColumn + " on " + table + " because this column "
+                + "is nullable.");
         throw new ConnectException("Cannot make incremental queries using incrementing column "
                                    + incrementingColumn + " on " + table + " because this column "
                                    + "is nullable.");
@@ -432,12 +441,17 @@ public class JdbcSourceTask extends SourceTask {
       if ((incrementalMode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP)
            || incrementalMode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING))
           && !atLeastOneTimestampNotOptional) {
+        log.error("Cannot make incremental queries using timestamp columns "
+                + timestampColumns + " on " + table + " because all of these "
+                + "columns nullable.");
         throw new ConnectException("Cannot make incremental queries using timestamp columns "
                                    + timestampColumns + " on " + table + " because all of these "
                                    + "columns "
                                    + "nullable.");
       }
     } catch (SQLException e) {
+      log.error("Failed trying to validate that columns used for offsets are NOT"
+              + " NULL", e);
       throw new ConnectException("Failed trying to validate that columns used for offsets are NOT"
                                  + " NULL", e);
     }

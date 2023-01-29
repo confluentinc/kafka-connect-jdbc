@@ -114,14 +114,14 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   public void reset(long now, boolean resetOffset) {
     closeResultSetQuietly();
     closeStatementQuietly();
-    releaseLocksQuietly();
+    commitQuietly();
     // TODO: Can we cache this and quickly check that it's identical for the next query
     //     instead of constructing from scratch since it's almost always the same
     schemaMapping = null;
     lastUpdate = now;
   }
 
-  private void releaseLocksQuietly() {
+  private void commitQuietly() {
     if (db != null) {
       try {
         db.commit();

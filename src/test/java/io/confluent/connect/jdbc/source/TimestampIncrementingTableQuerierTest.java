@@ -98,6 +98,7 @@ public class TimestampIncrementingTableQuerierTest {
         INCREMENTING_COLUMN,
         initialOffset.toMap(),
         10211197100L, // Timestamp delay
+        12511117500L, // Timestamp keep
         TimeZone.getTimeZone("UTC"),
         "",
         JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL

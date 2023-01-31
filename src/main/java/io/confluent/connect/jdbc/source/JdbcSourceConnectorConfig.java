@@ -298,6 +298,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final long TIMESTAMP_DELAY_INTERVAL_MS_DEFAULT = 0;
   private static final String TIMESTAMP_DELAY_INTERVAL_MS_DISPLAY = "Delay Interval (ms)";
 
+  public static final String TIMESTAMP_KEEP_INTERVAL_MS_CONFIG =
+      "timestamp.keep.interval.ms";
+  private static final String TIMESTAMP_KEEP_INTERVAL_MS_DOC =
+      "How far into the past to query rows with certain timestamp which we fetched last time. "
+      + "You may choose this to allow processing of rows with earlier timestamps for long running "
+      + "transactions where incrementing column is associated with the instant when transaction "
+      + "completed. As opposed to ``timestamp.delay.interval.ms`` this will not cause any fetching "
+      + "delay. Configuration is applicable only in ``timestamp+incrementing`` mode.";
+  public static final long TIMESTAMP_KEEP_INTERVAL_MS_DEFAULT = 0;
+  private static final String TIMESTAMP_KEEP_INTERVAL_MS_DISPLAY = "Keep Interval (ms)";
+
   public static final String DB_TIMEZONE_CONFIG = "db.timezone";
   public static final String DB_TIMEZONE_DEFAULT = "UTC";
   private static final String DB_TIMEZONE_CONFIG_DOC =
@@ -760,6 +771,16 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.MEDIUM,
         TIMESTAMP_DELAY_INTERVAL_MS_DISPLAY
+    ).define(
+        TIMESTAMP_KEEP_INTERVAL_MS_CONFIG,
+        Type.LONG,
+        TIMESTAMP_KEEP_INTERVAL_MS_DEFAULT,
+        Importance.HIGH,
+        TIMESTAMP_KEEP_INTERVAL_MS_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        TIMESTAMP_KEEP_INTERVAL_MS_DISPLAY
     ).define(
         DB_TIMEZONE_CONFIG,
         Type.STRING,

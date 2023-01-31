@@ -75,6 +75,7 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
         null,
         offsetMap,
         timestampDelay,
+        0L,
         timeZone,
         suffix,
         timestampGranularity

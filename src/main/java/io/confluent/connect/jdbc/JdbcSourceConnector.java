@@ -205,7 +205,7 @@ public class JdbcSourceConnector extends SourceConnector {
       // Ignore, shouldn't be interrupted
     } finally {
       try {
-        cachedConnectionProvider.close();
+        cachedConnectionProvider.close(true);
       } finally {
         try {
           if (dialect != null) {

@@ -366,7 +366,7 @@ public class JdbcSourceTask extends SourceTask {
     log.info("Closing resources for JDBC source task");
     try {
       if (cachedConnectionProvider != null) {
-        cachedConnectionProvider.close();
+        cachedConnectionProvider.close(true);
       }
     } catch (Throwable t) {
       log.warn("Error while closing the connections", t);

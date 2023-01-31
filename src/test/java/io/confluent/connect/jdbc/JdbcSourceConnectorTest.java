@@ -136,8 +136,8 @@ public class JdbcSourceConnectorTest {
     // Since we're just testing start/stop, we don't worry about the value here but need to stub
     // something since the background thread will be started and try to lookup metadata.
     EasyMock.expect(conn.getMetaData()).andStubThrow(new SQLException());
-    // Close will be invoked both for the SQLExeption and when the connector is stopped
-    mockCachedConnectionProvider.close();
+    // Close with stopping will be invoked when the connector is stopped
+    mockCachedConnectionProvider.close(true);
     PowerMock.expectLastCall().atLeastOnce();
 
     PowerMock.replayAll();

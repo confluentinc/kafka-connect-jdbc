@@ -98,6 +98,8 @@ public class JdbcSourceTask extends SourceTask {
 
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
     String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
+    List<JdbcSourceConnectorConfig.QueryParameter> queryParameters
+            = JdbcSourceConnectorConfig.QueryParameter.get(config);
 
     if ((tables.isEmpty() && query.isEmpty())) {
       throw new ConnectException("Task is being killed because"
@@ -249,6 +251,7 @@ public class JdbcSourceTask extends SourceTask {
                 tableOrQuery,
                 topicPrefix,
                 null,
+                queryParameters,
                 incrementingColumn,
                 offset,
                 timestampDelayInterval,
@@ -265,6 +268,7 @@ public class JdbcSourceTask extends SourceTask {
                 tableOrQuery,
                 topicPrefix,
                 timestampColumns,
+                queryParameters,
                 offset,
                 timestampDelayInterval,
                 timeZone,
@@ -280,6 +284,7 @@ public class JdbcSourceTask extends SourceTask {
                 tableOrQuery,
                 topicPrefix,
                 timestampColumns,
+                queryParameters,
                 incrementingColumn,
                 offset,
                 timestampDelayInterval,

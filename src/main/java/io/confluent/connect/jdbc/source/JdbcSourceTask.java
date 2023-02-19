@@ -51,6 +51,7 @@ import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.Version;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIsolationMode;
 
 /**
  * JdbcSourceTask is a Kafka Connect SourceTask implementation that reads from JDBC databases and
@@ -65,10 +66,13 @@ public class JdbcSourceTask extends SourceTask {
   private Time time;
   private JdbcSourceTaskConfig config;
   private DatabaseDialect dialect;
-  private CachedConnectionProvider cachedConnectionProvider;
-  private PriorityQueue<TableQuerier> tableQueue = new PriorityQueue<TableQuerier>();
+  //Visible for Testing
+  CachedConnectionProvider cachedConnectionProvider;
+  PriorityQueue<TableQuerier> tableQueue = new PriorityQueue<>();
   private final AtomicBoolean running = new AtomicBoolean(false);
   private final AtomicLong taskThreadId = new AtomicLong(0);
+
+  int maxRetriesPerQuerier;
 
   public JdbcSourceTask() {
     this.time = new SystemTime();
@@ -92,6 +96,24 @@ public class JdbcSourceTask extends SourceTask {
       throw new ConnectException("Couldn't start JdbcSourceTask due to configuration error", e);
     }
 
+    List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
+    String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
+
+    if ((tables.isEmpty() && query.isEmpty())) {
+      throw new ConnectException("Task is being killed because"
+              + " it was not assigned a table nor a query to execute."
+              + " If run in table mode please make sure that the tables"
+              + " exist on the database. If the table does exist on"
+              + " the database, we recommend using the fully qualified"
+              + " table name.");
+    }
+
+    if ((!tables.isEmpty() && !query.isEmpty())) {
+      throw new ConnectException("Invalid configuration: a JdbcSourceTask"
+              + " cannot have both a table and a query assigned to it");
+    }
+
+
     final String url = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
     final int maxConnAttempts = config.getInt(JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_CONFIG);
     final long retryBackoff = config.getLong(JdbcSourceConnectorConfig.CONNECTION_BACKOFF_CONFIG);
@@ -106,12 +128,17 @@ public class JdbcSourceTask extends SourceTask {
 
     cachedConnectionProvider = connectionProvider(maxConnAttempts, retryBackoff);
 
-    List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
-    String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
-    if ((tables.isEmpty() && query.isEmpty()) || (!tables.isEmpty() && !query.isEmpty())) {
-      throw new ConnectException("Invalid configuration: each JdbcSourceTask must have at "
-                                        + "least one table assigned to it or one query specified");
-    }
+
+    dialect.setConnectionIsolationMode(
+            cachedConnectionProvider.getConnection(),
+            TransactionIsolationMode
+                    .valueOf(
+                            config.getString(
+                                    JdbcSourceConnectorConfig
+                                            .TRANSACTION_ISOLATION_MODE_CONFIG
+                            )
+                    )
+    );
     TableQuerier.QueryMode queryMode = !query.isEmpty() ? TableQuerier.QueryMode.QUERY :
                                        TableQuerier.QueryMode.TABLE;
     List<String> tablesOrQuery = queryMode == TableQuerier.QueryMode.QUERY
@@ -267,6 +294,8 @@ public class JdbcSourceTask extends SourceTask {
     running.set(true);
     taskThreadId.set(Thread.currentThread().getId());
     log.info("Started JDBC source task");
+
+    maxRetriesPerQuerier = config.getInt(JdbcSourceConnectorConfig.QUERY_RETRIES_CONFIG);
   }
 
   protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
@@ -388,6 +417,7 @@ public class JdbcSourceTask extends SourceTask {
         while (results.size() < batchMaxRows && (hadNext = querier.next())) {
           results.add(querier.extractRecord());
         }
+        querier.resetRetryCount();
 
         if (!hadNext) {
           // If we finished processing the results from the current query, we can reset and send
@@ -421,8 +451,21 @@ public class JdbcSourceTask extends SourceTask {
         closeResources();
         throw new ConnectException(sqle);
       } catch (SQLException sqle) {
-        log.error("SQL exception while running query for table: {}", querier, sqle);
+        log.error(
+                "SQL exception while running query for table: {}, {}."
+                        + " Attempting retry {} of {} attempts.",
+                querier,
+                sqle,
+                querier.getAttemptedRetryCount() + 1,
+                maxRetriesPerQuerier
+        );
         resetAndRequeueHead(querier, true);
+        if (maxRetriesPerQuerier > 0
+                && querier.getAttemptedRetryCount() >= maxRetriesPerQuerier) {
+          closeResources();
+          throw new ConnectException("Failed to Query table after retries", sqle);
+        }
+        querier.incrementRetryCount();
         return null;
       } catch (Throwable t) {
         log.error("Failed to run query for table: {}", querier, t);

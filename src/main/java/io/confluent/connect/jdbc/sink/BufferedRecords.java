@@ -25,11 +25,11 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.BatchUpdateException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
@@ -39,7 +39,6 @@ import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.TableId;
 
-import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode.INSERT;
 import static java.util.Objects.isNull;
 import static java.util.Objects.nonNull;
 
@@ -184,28 +183,8 @@ public class BufferedRecords {
         updateStatementBinder.bindRecord(record);
       }
     }
-    Optional<Long> totalUpdateCount = executeUpdates();
-    long totalDeleteCount = executeDeletes();
-
-    final long expectedCount = updateRecordCount();
-    log.trace("{} records:{} resulting in totalUpdateCount:{} totalDeleteCount:{}",
-        config.insertMode, records.size(), totalUpdateCount, totalDeleteCount
-    );
-    if (totalUpdateCount.filter(total -> total != expectedCount).isPresent()
-        && config.insertMode == INSERT) {
-      throw new ConnectException(String.format(
-          "Update count (%d) did not sum up to total number of records inserted (%d)",
-          totalUpdateCount.get(),
-          expectedCount
-      ));
-    }
-    if (!totalUpdateCount.isPresent()) {
-      log.info(
-          "{} records:{} , but no count of the number of rows it affected is available",
-          config.insertMode,
-          records.size()
-      );
-    }
+    executeUpdates();
+    executeDeletes();
 
     final List<SinkRecord> flushedRecords = records;
     records = new ArrayList<>();
@@ -213,39 +192,26 @@ public class BufferedRecords {
     return flushedRecords;
   }
 
-  /**
-   * @return an optional count of all updated rows or an empty optional if no info is available
-   */
-  private Optional<Long> executeUpdates() throws SQLException {
-    Optional<Long> count = Optional.empty();
-    for (int updateCount : updatePreparedStatement.executeBatch()) {
-      if (updateCount != Statement.SUCCESS_NO_INFO) {
-        count = count.isPresent()
-            ? count.map(total -> total + updateCount)
-            : Optional.of((long) updateCount);
+  private void executeUpdates() throws SQLException {
+    int[] batchStatus = updatePreparedStatement.executeBatch();
+    for (int updateCount : batchStatus) {
+      if (updateCount == Statement.EXECUTE_FAILED) {
+        throw new BatchUpdateException(
+                "Execution failed for part of the batch update", batchStatus);
       }
     }
-    return count;
   }
 
-  private long executeDeletes() throws SQLException {
-    long totalDeleteCount = 0;
+  private void executeDeletes() throws SQLException {
     if (nonNull(deletePreparedStatement)) {
-      for (int updateCount : deletePreparedStatement.executeBatch()) {
-        if (updateCount != Statement.SUCCESS_NO_INFO) {
-          totalDeleteCount += updateCount;
+      int[] batchStatus = deletePreparedStatement.executeBatch();
+      for (int updateCount : batchStatus) {
+        if (updateCount == Statement.EXECUTE_FAILED) {
+          throw new BatchUpdateException(
+                  "Execution failed for part of the batch delete", batchStatus);
         }
       }
     }
-    return totalDeleteCount;
-  }
-
-  private long updateRecordCount() {
-    return records
-        .stream()
-        // ignore deletes
-        .filter(record -> nonNull(record.value()) || !config.deleteEnabled)
-        .count();
   }
 
   public void close() throws SQLException {

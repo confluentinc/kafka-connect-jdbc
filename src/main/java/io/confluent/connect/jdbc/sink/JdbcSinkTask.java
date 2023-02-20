@@ -16,7 +16,6 @@
 
 package io.confluent.connect.jdbc.sink;
 
-import jdk.internal.org.jline.utils.Log;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -77,7 +76,7 @@ public class JdbcSinkTask extends SinkTask {
     try {
       writer.write(records);
     } catch (SQLException sqle) {
-      log.error(
+      log.warn(
           "Write of {} records failed, remainingRetries={}",
           records.size(),
           remainingRetries,

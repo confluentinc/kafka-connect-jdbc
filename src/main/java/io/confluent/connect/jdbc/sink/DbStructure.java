@@ -85,7 +85,6 @@ public class DbStructure {
       final FieldsMetadata fieldsMetadata
   ) throws SQLException {
     if (!config.autoCreate) {
-      log.error("Table " + tableId + " is missing and auto-creation is disabled");
       throw new ConnectException(
           String.format("Table %s is missing and auto-creation is disabled", tableId)
       );
@@ -132,8 +131,6 @@ public class DbStructure {
 
     for (SinkRecordField missingField: missingFields) {
       if (!missingField.isOptional() && missingField.defaultValue() == null) {
-        log.error("Cannot ALTER to add missing field " + missingField
-                + ", as it is not optional and does not have a default value");
         throw new ConnectException(
             "Cannot ALTER to add missing field " + missingField
             + ", as it is not optional and does not have a default value"
@@ -142,9 +139,6 @@ public class DbStructure {
     }
 
     if (!config.autoEvolve) {
-      log.error(String.format(
-              "Table %s is missing fields (%s) and auto-evolution is disabled",
-              tableId, missingFields));
       throw new ConnectException(String.format(
           "Table %s is missing fields (%s) and auto-evolution is disabled",
           tableId,

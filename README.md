@@ -28,7 +28,7 @@
 
 위의 동적 날짜 생성을 이용해 로테이션된 테이블을 쿼리했을 때 해당 테이블이 로테이션 지연 등의 이유로 아직 존재하지 않으면 커넥터에서 에러가 발생한다. 이렇게 되면 커넥터는 잠시 후 다시 시도하게 되는데, 이 과정에서 오프셋이 커밋되지 못해 메시지 중복이 발생하게 된다.
 
-이런 경우 폴백 쿼리 (Fallback Query) 를 이용할 수 있다. 폴백 쿼리는 기본 쿼리 아래 `-----` (대쉬 `-` 5 개) 를 구분자로 하여 기술한다. 아래는 동적 날짜 생성과 폴백 쿼리를 함께 사용하는 MSSQL 용 쿼리의 예이다.
+이런 경우 폴백 쿼리 (Fallback Query) 를 이용할 수 있다. 폴백 쿼리는 기본 쿼리 아래 `=====` (emd `=` 5 개) 를 구분자로 하여 기술한다. 아래는 동적 날짜 생성과 폴백 쿼리를 함께 사용하는 MSSQL 용 쿼리의 예이다.
 
 ```sql
 SELECT * FROM 
@@ -37,7 +37,7 @@ SELECT * FROM
     UNION ALL
     SELECT * FROM log
 ) AS T
------
+=====
 SELECT CONVERT(DATETIME, '1971-01-01 00:00:01.000') AS RegDate AS T
 ```
 
@@ -125,7 +125,7 @@ index 25fcf155..77774c86 100644
    }
  
 +  protected String[] splitFallbackQuery(String query) {
-+    Pattern p = Pattern.compile("(.*)\\s+-----\\s+(.*)$", Pattern.DOTALL | Pattern.MULTILINE);
++    Pattern p = Pattern.compile("(.*)\\s+=====\\s+(.*)$", Pattern.DOTALL | Pattern.MULTILINE);
 +    Matcher m = p.matcher(query);
 +    String[] queries = new String[2];
 +    if (m.matches()) {

@@ -86,7 +86,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   }
 
   protected String[] splitFallbackQuery(String query) {
-    Pattern p = Pattern.compile("(.*)\\s+-----\\s+(.*)$", Pattern.DOTALL | Pattern.MULTILINE);
+    Pattern p = Pattern.compile("(.*)\\s+=====\\s+(.*)$", Pattern.DOTALL | Pattern.MULTILINE);
     Matcher m = p.matcher(query);
     String[] queries = new String[2];
     if (m.matches()) {

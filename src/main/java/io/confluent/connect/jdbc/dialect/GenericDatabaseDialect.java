@@ -488,8 +488,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     try (ResultSet rs = metadata.getTableTypes()) {
       while (rs.next()) {
         String tableType = rs.getString(1);
-        if (tableType != null && uppercaseTypes.contains(tableType.toUpperCase(Locale.ROOT))) {
-          matchingTableTypes.add(tableType);
+        if (tableType != null && uppercaseTypes.contains(tableType.trim().toUpperCase(Locale.ROOT))) {
+          matchingTableTypes.add(tableType.trim());
         }
       }
     }

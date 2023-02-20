@@ -162,6 +162,8 @@ public class DatabaseDialects {
         return provider.create(config);
       }
     }
+    log.error("Unable to find dialect with name '" + dialectName + "' in the available dialects: "
+            + dialectNames);
     throw new ConnectException(
         "Unable to find dialect with name '" + dialectName + "' in the available dialects: "
         + dialectNames
@@ -169,10 +171,12 @@ public class DatabaseDialects {
   }
 
   static JdbcUrlInfo extractJdbcUrlInfo(final String url) {
+    log.info("Validating JDBC URL.");
     Matcher matcher = PROTOCOL_PATTERN.matcher(url);
     if (matcher.matches()) {
       return new JdbcUrlDetails(matcher.group(1), matcher.group(2), url);
     }
+    log.error("Not a valid JDBC URL: " + url);
     throw new ConnectException("Not a valid JDBC URL: " + url);
   }
 

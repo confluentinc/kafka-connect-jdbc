@@ -90,6 +90,7 @@ public class JdbcSourceConnector extends SourceConnector {
     cachedConnectionProvider = connectionProvider(maxConnectionAttempts, connectionRetryBackoff);
 
     // Initial connection attempt
+    log.info("Initial connection attempt with the database.");
     cachedConnectionProvider.getConnection();
 
     long tablePollMs = config.getLong(JdbcSourceConnectorConfig.TABLE_POLL_INTERVAL_MS_CONFIG);
@@ -99,14 +100,14 @@ public class JdbcSourceConnector extends SourceConnector {
     Set<String> blacklistSet = blacklist.isEmpty() ? null : new HashSet<>(blacklist);
 
     if (whitelistSet != null && blacklistSet != null) {
-      throw new ConnectException(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + " and "
+      throw new ConfigException(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + " and "
                                  + JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG + " are "
                                  + "exclusive.");
     }
     String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
     if (!query.isEmpty()) {
       if (whitelistSet != null || blacklistSet != null) {
-        throw new ConnectException(JdbcSourceConnectorConfig.QUERY_CONFIG + " may not be combined"
+        throw new ConfigException(JdbcSourceConnectorConfig.QUERY_CONFIG + " may not be combined"
                                    + " with whole-table copying settings.");
       }
       // Force filtering out the entire set of tables since the one task we'll generate is for the

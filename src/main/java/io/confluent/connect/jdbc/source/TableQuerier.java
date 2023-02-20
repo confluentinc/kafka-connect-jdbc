@@ -89,6 +89,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   }
 
   public void maybeStartQuery(Connection db) throws SQLException {
+    log.trace("Creating prepared statement.");
     if (resultSet == null) {
       this.db = db;
       stmt = getOrCreatePreparedStatement(db);
@@ -96,6 +97,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
       String schemaName = tableId != null ? tableId.tableName() : null; // backwards compatible
       schemaMapping = SchemaMapping.create(schemaName, resultSet.getMetaData(), dialect);
     }
+    log.trace("Prepared statement created.");
   }
 
   protected abstract ResultSet executeQuery() throws SQLException;

@@ -20,6 +20,7 @@ import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.ConnectException;
 import java.sql.Connection;
 import java.sql.SQLException;
 
@@ -58,6 +59,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
 
   @Override
   public synchronized Connection getConnection() {
+    log.debug("Trying to establish connection with the database.");
     try {
       if (connection == null) {
         newConnection();
@@ -67,10 +69,10 @@ public class CachedConnectionProvider implements ConnectionProvider {
         newConnection();
       }
     } catch (SQLException sqle) {
-      log.error(sqle.toString());
+      log.debug("Could not establish connection with database.");
       throw new ConnectException(sqle);
     }
-    log.info("Database connection established.");
+    log.debug("Database connection established.");
     return connection;
   }
 
@@ -92,7 +94,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
     while (attempts < maxConnectionAttempts) {
       try {
         ++count;
-        log.info("Attempting to open connection #{} to {}", count, provider);
+        log.debug("Attempting to open connection #{} to {}", count, provider);
         connection = provider.getConnection();
         onConnect(connection);
         return;
@@ -108,7 +110,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
             // this is ok because just woke up early
           }
         } else {
-          throw sqle;
+          throw new ConnectException("Could not connect to database.", sqle);
         }
       }
     }
@@ -118,7 +120,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
   public synchronized void close() {
     if (connection != null) {
       try {
-        log.info("Closing connection #{} to {}", count, provider);
+        log.debug("Closing connection #{} to {}", count, provider);
         connection.close();
       } catch (SQLException sqle) {
         log.warn("Ignoring error closing connection", sqle);

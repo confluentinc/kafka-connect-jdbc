@@ -101,7 +101,6 @@ public class JdbcSinkTask extends SinkTask {
         for (Throwable e : sqle) {
           log.error("Exception {}:", exceptionCount++, e);
         }
-        log.error(sqleAllMessages);
         throw new ConnectException(sqlAllMessagesException);
       } else {
         writer.closeQuietly();

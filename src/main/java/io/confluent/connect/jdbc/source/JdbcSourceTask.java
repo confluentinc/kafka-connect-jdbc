@@ -86,11 +86,9 @@ public class JdbcSourceTask extends SourceTask {
     try {
       config = new JdbcSourceTaskConfig(properties);
     } catch (ConfigException e) {
-      log.error("Couldn't start JdbcSourceTask due to configuration error", e);
       throw new ConnectException("Couldn't start JdbcSourceTask due to configuration error", e);
     }
 
-    log.info("Connector version: " + version());
     final String url = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
     final int maxConnAttempts = config.getInt(JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_CONFIG);
     final long retryBackoff = config.getLong(JdbcSourceConnectorConfig.CONNECTION_BACKOFF_CONFIG);
@@ -99,6 +97,7 @@ public class JdbcSourceTask extends SourceTask {
     if (dialectName != null && !dialectName.trim().isEmpty()) {
       dialect = DatabaseDialects.create(dialectName, config);
     } else {
+      log.info("Finding the database dialect that is best fit for the provided JDBC URL.");
       dialect = DatabaseDialects.findBestFor(url, config);
     }
     log.info("Using JDBC dialect {}", dialect.name());
@@ -108,8 +107,6 @@ public class JdbcSourceTask extends SourceTask {
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
     String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
     if ((tables.isEmpty() && query.isEmpty()) || (!tables.isEmpty() && !query.isEmpty())) {
-      log.error("Invalid configuration: each JdbcSourceTask must have at "
-              + "least one table assigned to it or one query specified");
       throw new ConnectException("Invalid configuration: each JdbcSourceTask must have at "
                                         + "least one table assigned to it or one query specified");
     }
@@ -307,7 +304,7 @@ public class JdbcSourceTask extends SourceTask {
 
   @Override
   public List<SourceRecord> poll() throws InterruptedException {
-    log.trace("{} Polling for new data");
+    log.trace("Polling for new data");
 
     Map<TableQuerier, Integer> consecutiveEmptyResults = tableQueue.stream().collect(
         Collectors.toMap(Function.identity(), (q) -> 0));

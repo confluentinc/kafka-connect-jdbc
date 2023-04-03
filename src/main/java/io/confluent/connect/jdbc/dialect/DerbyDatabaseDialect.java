@@ -72,18 +72,7 @@ public class DerbyDatabaseDialect extends GenericDatabaseDialect {
   @Override
   protected String getSqlType(SinkRecordField field) {
     if (field.schemaName() != null) {
-      switch (field.schemaName()) {
-        case Decimal.LOGICAL_NAME:
-          return "DECIMAL(31," + field.schemaParameters().get(Decimal.SCALE_FIELD) + ")";
-        case Date.LOGICAL_NAME:
-          return "DATE";
-        case Time.LOGICAL_NAME:
-          return "TIME";
-        case Timestamp.LOGICAL_NAME:
-          return "TIMESTAMP";
-        default:
-          // fall through to normal types
-      }
+      return getSchemaName(field);
     }
     switch (field.schemaType()) {
       case INT8:

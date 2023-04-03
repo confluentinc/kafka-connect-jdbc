@@ -272,7 +272,10 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       Connection connection,
       int timeout
   ) throws SQLException {
-    if (jdbcDriverInfo().jdbcMajorVersion() >= 4) {
+
+    SqlServerDatabaseDialect sqlServerDatabaseDialect = new SqlServerDatabaseDialect(config);
+
+    if (sqlServerDatabaseDialect.jdbcDriverInfo().jdbcMajorVersion() >= 4) {
       return connection.isValid(timeout);
     }
     // issue a test query ...
@@ -304,17 +307,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
    */
   protected String checkConnectionQuery() {
     return "SELECT 1";
-  }
-
-  protected JdbcDriverInfo jdbcDriverInfo() {
-    if (jdbcDriverInfo == null) {
-      try (Connection connection = getConnection()) {
-        jdbcDriverInfo = createJdbcDriverInfo(connection);
-      } catch (SQLException e) {
-        throw new ConnectException("Unable to get JDBC driver information", e);
-      }
-    }
-    return jdbcDriverInfo;
   }
 
   protected JdbcDriverInfo createJdbcDriverInfo(Connection connection) throws SQLException {
@@ -1252,8 +1244,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   public ColumnConverter createColumnConverter(
       ColumnMapping mapping
   ) {
+    SqlServerDatabaseDialect sqlServerDatabaseDialect = new SqlServerDatabaseDialect(config);
     return columnConverterFor(mapping, mapping.columnDefn(), mapping.columnNumber(),
-                              jdbcDriverInfo().jdbcVersionAtLeast(4, 0)
+            sqlServerDatabaseDialect.jdbcDriverInfo().jdbcVersionAtLeast(4, 0)
     );
   }
 
@@ -1409,7 +1402,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       // Date is day + month + year
       case Types.DATE: {
         return rs -> rs.getDate(col,
-            DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone(ZoneOffset.UTC)));
+                DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone(ZoneOffset.UTC)));
       }
 
       // Time is a time of day -- hour, minute, seconds, nanoseconds
@@ -1949,6 +1942,21 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         "%s (%s) type doesn't have a mapping to the SQL database column type", f.schemaName(),
         f.schemaType()
     ));
+  }
+
+  protected String getSchemaName(SinkRecordField field) {
+    switch (field.schemaName()) {
+      case Decimal.LOGICAL_NAME:
+        return "DECIMAL(31," + field.schemaParameters().get(Decimal.SCALE_FIELD) + ")";
+      case Date.LOGICAL_NAME:
+        return "DATE";
+      case Time.LOGICAL_NAME:
+        return "TIME";
+      case org.apache.kafka.connect.data.Timestamp.LOGICAL_NAME:
+        return "TIMESTAMP";
+      default:
+        return "";
+    }
   }
 
   /**

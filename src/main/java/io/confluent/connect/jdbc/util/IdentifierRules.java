@@ -140,13 +140,7 @@ public class IdentifierRules {
         }
         segment = fqn.substring(lead.length(), end);
         fqn = fqn.substring(end + trail.length());
-        if (fqn.startsWith(delim)) {
-          fqn = fqn.substring(delim.length());
-          if (fqn.isEmpty()) {
-            throw new IllegalArgumentException(
-                "Failure parsing fully qualified identifier; ends in delimiter " + orig);
-          }
-        }
+        fqn = removeLeadingDelimiter(fqn, delim);
       } else {
         index = fqn.indexOf(delim, 0);
         if (index == -1) {
@@ -155,15 +149,27 @@ public class IdentifierRules {
         } else {
           segment = fqn.substring(0, index);
           fqn = fqn.substring(index + delim.length());
-          if (fqn.isEmpty()) {
-            throw new IllegalArgumentException(
-                "Failure parsing fully qualified identifier; ends in delimiter " + orig);
-          }
+          isFqnEmpty(fqn);
         }
       }
       parts.add(segment);
     } while (fqn.length() > 0);
     return parts;
+  }
+
+  private void isFqnEmpty(String fqn) {
+    if (fqn.isEmpty()) {
+      throw new IllegalArgumentException(
+              "Failure parsing fully qualified identifier; ends in delimiter " + fqn);
+    }
+  }
+
+  private String removeLeadingDelimiter(String fqn, String delim) {
+    if (fqn.startsWith(delim)) {
+      fqn = fqn.substring(delim.length());
+      isFqnEmpty(fqn);
+    }
+    return fqn;
   }
 
   /**

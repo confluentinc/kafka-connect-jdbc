@@ -71,7 +71,7 @@ public class JdbcDbWriter {
           buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
           bufferByTable.put(tableId, buffer);
         }
-        buffer.add(record);
+        buffer.addRecords(record);
       }
       for (Map.Entry<TableId, BufferedRecords> entry : bufferByTable.entrySet()) {
         TableId tableId = entry.getKey();

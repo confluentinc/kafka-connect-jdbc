@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.util.*;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -26,11 +27,7 @@ import org.apache.kafka.connect.data.Timestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
-import java.sql.Types;
+import java.sql.*;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Calendar;
@@ -47,13 +44,6 @@ import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
-import io.confluent.connect.jdbc.util.ColumnDefinition;
-import io.confluent.connect.jdbc.util.ColumnId;
-import io.confluent.connect.jdbc.util.DateTimeUtils;
-import io.confluent.connect.jdbc.util.ExpressionBuilder;
-import io.confluent.connect.jdbc.util.IdentifierRules;
-import io.confluent.connect.jdbc.util.TableDefinition;
-import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.ColumnDefinition.Mutability;
 import io.confluent.connect.jdbc.util.ColumnDefinition.Nullability;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -71,6 +61,9 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
    * JDBC Type constant for SQL Server's custom data types.
    */
   static final int DATETIMEOFFSET = -155;
+
+  private volatile JdbcDriverInfo jdbcDriverInfo;
+
 
   /**
    * This is the format of the string form of DATETIMEOFFSET values, and used to parse such
@@ -214,6 +207,17 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
               + "Error:" + e.toString());
     }
     return (jdbcDatabaseMajorVersionValue >= MSSQL_2016_VERSION);
+  }
+
+  protected JdbcDriverInfo jdbcDriverInfo() {
+    if (jdbcDriverInfo == null) {
+      try (Connection connection = getConnection()) {
+        jdbcDriverInfo = createJdbcDriverInfo(connection);
+      } catch (SQLException e) {
+        throw new ConnectException("Unable to get JDBC driver information", e);
+      }
+    }
+    return jdbcDriverInfo;
   }
 
   @Override

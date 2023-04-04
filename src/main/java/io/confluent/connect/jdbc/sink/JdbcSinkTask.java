@@ -62,7 +62,7 @@ public class JdbcSinkTask extends SinkTask {
   }
 
   void initWriter() {
-    if (config.dialectName != null && !config.dialectName.trim().isEmpty()) {
+    if (checkDialectName()) {
       dialect = DatabaseDialects.create(config.dialectName, config);
     } else {
       dialect = DatabaseDialects.findBestFor(config.connectionUrl, config);
@@ -70,6 +70,10 @@ public class JdbcSinkTask extends SinkTask {
     final DbStructure dbStructure = new DbStructure(dialect);
     log.info("Initializing writer using SQL dialect: {}", dialect.getClass().getSimpleName());
     writer = new JdbcDbWriter(config, dialect, dbStructure);
+  }
+
+  public boolean checkDialectName() {
+    return config.dialectName != null && !config.dialectName.trim().isEmpty();
   }
 
   @Override

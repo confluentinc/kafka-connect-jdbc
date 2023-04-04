@@ -16,7 +16,6 @@
 package io.confluent.connect.jdbc.sink;
 
 import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -77,7 +76,7 @@ public class BufferedRecords {
     this.recordValidator = RecordValidator.create(config);
   }
 
-  public List<SinkRecord> add(SinkRecord record) throws SQLException, TableAlterOrCreateException {
+  public List<SinkRecord> addRecords(SinkRecord record) throws SQLException, TableAlterOrCreateException {
     recordValidator.validate(record);
     final List<SinkRecord> flushed = new ArrayList<>();
 
@@ -125,8 +124,11 @@ public class BufferedRecords {
           tableId,
           fieldsMetadata
       );
-      final String insertSql = getInsertSql();
-      final String deleteSql = getDeleteSql();
+
+      SqlStatement sqlStatement = new SqlStatement(config,dbDialect,tableId,dbStructure,connection);
+
+      final String insertSql = sqlStatement.getInsertSql();
+      final String deleteSql = sqlStatement.getDeleteSql();
       log.debug(
           "{} sql: {} deleteSql: {} meta: {}",
           config.insertMode,
@@ -230,81 +232,9 @@ public class BufferedRecords {
     }
   }
 
-  private String getInsertSql() throws SQLException {
-    switch (config.insertMode) {
-      case INSERT:
-        return dbDialect.buildInsertStatement(
-            tableId,
-            asColumns(fieldsMetadata.keyFieldNames),
-            asColumns(fieldsMetadata.nonKeyFieldNames),
-            dbStructure.tableDefinition(connection, tableId)
-        );
-      case UPSERT:
-        if (fieldsMetadata.keyFieldNames.isEmpty()) {
-          throw new ConnectException(String.format(
-              "Write to table '%s' in UPSERT mode requires key field names to be known, check the"
-                  + " primary key configuration",
-              tableId
-          ));
-        }
-        try {
-          return dbDialect.buildUpsertQueryStatement(
-              tableId,
-              asColumns(fieldsMetadata.keyFieldNames),
-              asColumns(fieldsMetadata.nonKeyFieldNames),
-              dbStructure.tableDefinition(connection, tableId)
-          );
-        } catch (UnsupportedOperationException e) {
-          throw new ConnectException(String.format(
-              "Write to table '%s' in UPSERT mode is not supported with the %s dialect.",
-              tableId,
-              dbDialect.name()
-          ));
-        }
-      case UPDATE:
-        return dbDialect.buildUpdateStatement(
-            tableId,
-            asColumns(fieldsMetadata.keyFieldNames),
-            asColumns(fieldsMetadata.nonKeyFieldNames),
-            dbStructure.tableDefinition(connection, tableId)
-        );
-      default:
-        throw new ConnectException("Invalid insert mode");
-    }
-  }
-
-  private String getDeleteSql() {
-    String sql = null;
-    if (config.deleteEnabled) {
-      switch (config.pkMode) {
-        case RECORD_KEY:
-          if (fieldsMetadata.keyFieldNames.isEmpty()) {
-            throw new ConnectException("Require primary keys to support delete");
-          }
-          try {
-            sql = dbDialect.buildDeleteStatement(
-                tableId,
-                asColumns(fieldsMetadata.keyFieldNames)
-            );
-          } catch (UnsupportedOperationException e) {
-            throw new ConnectException(String.format(
-                "Deletes to table '%s' are not supported with the %s dialect.",
-                tableId,
-                dbDialect.name()
-            ));
-          }
-          break;
-
-        default:
-          throw new ConnectException("Deletes are only supported for pk.mode record_key");
-      }
-    }
-    return sql;
-  }
-
   private Collection<ColumnId> asColumns(Collection<String> names) {
     return names.stream()
-        .map(name -> new ColumnId(tableId, name))
-        .collect(Collectors.toList());
+            .map(name -> new ColumnId(tableId, name))
+            .collect(Collectors.toList());
   }
 }

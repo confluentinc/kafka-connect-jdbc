@@ -15,28 +15,6 @@
 
 package io.confluent.connect.jdbc.dialect;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Map;
-import org.apache.kafka.common.config.AbstractConfig;
-import org.apache.kafka.common.utils.Utils;
-import org.apache.kafka.connect.data.Date;
-import org.apache.kafka.connect.data.Decimal;
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.Schema.Type;
-import org.apache.kafka.connect.data.SchemaBuilder;
-import org.apache.kafka.connect.data.Time;
-import org.apache.kafka.connect.data.Timestamp;
-
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Types;
-import java.util.Collection;
-import java.util.Set;
-import java.util.UUID;
-
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
@@ -47,16 +25,40 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
+import org.apache.kafka.common.config.AbstractConfig;
+import org.apache.kafka.common.utils.Utils;
+import org.apache.kafka.connect.data.Date;
+import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.Schema.Type;
+import org.apache.kafka.connect.data.SchemaBuilder;
+import org.apache.kafka.connect.data.Time;
+import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.DataException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Types;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * A {@link DatabaseDialect} for PostgreSQL.
  */
 public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
-  private final Logger log = LoggerFactory.getLogger(PostgreSqlDatabaseDialect.class);
+  private static final Logger log = LoggerFactory.getLogger(PostgreSqlDatabaseDialect.class);
+
+  // Visible for testing
+  volatile int maxIdentifierLength = 0;
 
   /**
    * The provider for {@link PostgreSqlDatabaseDialect}.
@@ -94,6 +96,70 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    */
   public PostgreSqlDatabaseDialect(AbstractConfig config) {
     super(config, new IdentifierRules(".", "\"", "\""));
+  }
+
+  @Override
+  public Connection getConnection() throws SQLException {
+    Connection result = super.getConnection();
+    synchronized (this) {
+      if (maxIdentifierLength <= 0) {
+        maxIdentifierLength = computeMaxIdentifierLength(result);
+      }
+    }
+    return result;
+  }
+
+  static int computeMaxIdentifierLength(Connection connection) {
+    String warningMessage = "Unable to query database for maximum table name length; "
+        + "the connector may fail to write to tables with long names";
+    // https://stackoverflow.com/questions/27865770/how-long-can-postgresql-table-names-be/27865772#27865772
+    String nameLengthQuery = "SELECT length(repeat('1234567890', 1000)::NAME);";
+    
+    int result;
+    try (ResultSet rs = connection.createStatement().executeQuery(nameLengthQuery)) {
+      if (rs.next()) {
+        result = rs.getInt(1);
+        if (result <= 0) {
+          log.warn(
+              "Cannot accommodate maximum table name length of {} as it is not positive; "
+                  + "table name truncation will be disabled, "
+                  + "and the connector may fail to write to tables with long names",
+              result);
+          result = Integer.MAX_VALUE;
+        } else {
+          log.info(
+              "Maximum table name length for database is {} bytes",
+              result
+          );
+        }
+      } else {
+        log.warn(warningMessage);
+        result = Integer.MAX_VALUE;
+      }
+    } catch (SQLException e) {
+      log.warn(warningMessage, e);
+      result = Integer.MAX_VALUE;
+    }
+    return result;
+  }
+
+  @Override
+  public TableId parseTableIdentifier(String fqn) {
+    TableId result = super.parseTableIdentifier(fqn);
+    if (maxIdentifierLength > 0 && result.tableName().length() > maxIdentifierLength) {
+      String newTableName = result.tableName().substring(0, maxIdentifierLength);
+      log.debug(
+          "Truncating table name from {} to {} in order to respect maximum name length",
+          result.tableName(),
+          newTableName
+      );
+      result = new TableId(
+          result.catalogName(),
+          result.schemaName(),
+          newTableName
+      );
+    }
+    return result;
   }
 
   /**
@@ -505,4 +571,40 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     }
     return "";
   }
+
+  @Override
+  protected int decimalScale(ColumnDefinition defn) {
+    if (defn.scale() == NUMERIC_TYPE_SCALE_UNSET) {
+      return NUMERIC_TYPE_SCALE_HIGH;
+    }
+
+    // Postgres requires DECIMAL/NUMERIC columns to have a precision greater than zero
+    // If the precision appears to be zero, it's because the user didn't define a fixed precision
+    // for the column.
+    if (defn.precision() == 0) {
+      // In that case, a scale of zero indicates that there also isn't a fixed scale defined for
+      // the column. Instead of treating that column as if its scale is actually zero (which can
+      // cause issues since it may contain values that aren't possible with a scale of zero, like
+      // 12.12), we fall back on NUMERIC_TYPE_SCALE_HIGH to try to avoid loss of precision
+      if (defn.scale() == 0) {
+        log.debug(
+            "Column {} does not appear to have a fixed scale defined; defaulting to {}",
+            defn.id(),
+            NUMERIC_TYPE_SCALE_HIGH
+        );
+        return NUMERIC_TYPE_SCALE_HIGH;
+      } else {
+        // Should never happen, but if it does may signal an edge case
+        // that we need to add new logic for
+        log.warn(
+            "Column {} has a precision of zero, but a non-zero scale of {}",
+            defn.id(),
+            defn.scale()
+        );
+      }
+    }
+
+    return defn.scale();
+  }
+
 }

@@ -249,11 +249,14 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String TABLE_TYPES_DOC =
       "The comma-separated types of database tables to which the sink connector can write. "
       + "By default this is ``" + TableType.TABLE + "``, but any combination of ``"
-      + TableType.TABLE + "`` and ``" + TableType.VIEW + "`` is allowed. Not all databases "
-      + "support writing to views, and when they do the the sink connector will fail if the "
+      + TableType.TABLE + "``, ``" + TableType.PARTITIONED_TABLE + "`` and ``"
+      + TableType.VIEW + "`` is allowed. Not all databases support writing to views, "
+      + "and when they do the sink connector will fail if the "
       + "view definition does not match the records' schemas (regardless of ``"
       + AUTO_EVOLVE + "``).";
 
+  public static final String TRIM_SENSITIVE_LOG_ENABLED = "trim.sensitive.log";
+  private static final String TRIM_SENSITIVE_LOG_ENABLED_DEFAULT = "false";
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
 
@@ -509,6 +512,12 @@ public class JdbcSinkConfig extends AbstractConfig {
             2,
             ConfigDef.Width.SHORT,
             RETRY_BACKOFF_MS_DISPLAY
+        )
+        .defineInternal(
+            TRIM_SENSITIVE_LOG_ENABLED,
+            ConfigDef.Type.BOOLEAN,
+            TRIM_SENSITIVE_LOG_ENABLED_DEFAULT,
+            ConfigDef.Importance.LOW
         );
 
   public final String connectorName;
@@ -533,6 +542,8 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final EnumSet<TableType> tableTypes;
   public final boolean useHoldlockInMerge;
 
+  public final boolean trimSensitiveLogsEnabled;
+
   public JdbcSinkConfig(Map<?, ?> props) {
     super(CONFIG_DEF, props);
     connectorName = ConfigUtils.connectorName(props);
@@ -556,7 +567,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     String dbTimeZone = getString(DB_TIMEZONE_CONFIG);
     timeZone = TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
     useHoldlockInMerge = getBoolean(MSSQL_USE_MERGE_HOLDLOCK);
-
+    trimSensitiveLogsEnabled = getBoolean(TRIM_SENSITIVE_LOG_ENABLED);
     if (deleteEnabled && pkMode != PrimaryKeyMode.RECORD_KEY) {
       throw new ConfigException(
           "Primary key mode must be 'record_key' when delete support is enabled");

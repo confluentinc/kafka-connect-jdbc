@@ -15,8 +15,10 @@
 
 package io.confluent.connect.jdbc;
 
+import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.connector.Task;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceConnector;
@@ -92,6 +94,8 @@ public class JdbcSourceConnector extends SourceConnector {
     cachedConnectionProvider.getConnection();
 
     long tablePollMs = config.getLong(JdbcSourceConnectorConfig.TABLE_POLL_INTERVAL_MS_CONFIG);
+    long tableStartupLimitMs =
+        config.getLong(JdbcSourceConnectorConfig.TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_CONFIG);
     List<String> whitelist = config.getList(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG);
     Set<String> whitelistSet = whitelist.isEmpty() ? null : new HashSet<>(whitelist);
     List<String> blacklist = config.getList(JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG);
@@ -117,9 +121,11 @@ public class JdbcSourceConnector extends SourceConnector {
         dialect,
         cachedConnectionProvider,
         context,
+        tableStartupLimitMs,
         tablePollMs,
         whitelistSet,
-        blacklistSet
+        blacklistSet,
+        Time.SYSTEM
     );
     if (query.isEmpty()) {
       tableMonitorThread.start();
@@ -136,6 +142,15 @@ public class JdbcSourceConnector extends SourceConnector {
   }
 
   @Override
+  public Config validate(Map<String, String> connectorConfigs) {
+    Config config = super.validate(connectorConfigs);
+    JdbcSourceConnectorConfig jdbcSourceConnectorConfig
+            = new JdbcSourceConnectorConfig(connectorConfigs);
+    jdbcSourceConnectorConfig.validateMultiConfigs(config);
+    return config;
+  }
+
+  @Override
   public List<Map<String, String>> taskConfigs(int maxTasks) {
     String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
     List<Map<String, String>> taskConfigs;
@@ -147,9 +162,18 @@ public class JdbcSourceConnector extends SourceConnector {
       return taskConfigs;
     } else {
       List<TableId> currentTables = tableMonitorThread.tables();
-      if (currentTables.isEmpty()) {
+      if (currentTables == null) {
         taskConfigs = Collections.emptyList();
-        log.warn("No tasks will be run because no tables were found");
+        log.info(
+            "No tasks will be run because the connector has not been able to read "
+                + "the list of tables from the database yet"
+        );
+      } else if (currentTables.isEmpty()) {
+        taskConfigs = new ArrayList<>(1);
+        log.warn("No tables were found so there's no work to be done.");
+        Map<String, String> taskProps = new HashMap<>(configProperties);
+        taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, "[]");
+        taskConfigs.add(taskProps);
       } else {
         int numGroups = Math.min(currentTables.size(), maxTasks);
         List<List<TableId>> tablesGrouped =
@@ -181,7 +205,7 @@ public class JdbcSourceConnector extends SourceConnector {
       // Ignore, shouldn't be interrupted
     } finally {
       try {
-        cachedConnectionProvider.close();
+        cachedConnectionProvider.close(true);
       } finally {
         try {
           if (dialect != null) {

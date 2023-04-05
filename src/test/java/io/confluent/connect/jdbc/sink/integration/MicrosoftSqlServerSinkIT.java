@@ -2,6 +2,8 @@ package io.confluent.connect.jdbc.sink.integration;
 
 import io.confluent.connect.jdbc.integration.BaseConnectorIT;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -27,18 +29,18 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import static org.apache.kafka.connect.runtime.ConnectorConfig.CONNECTOR_CLASS_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.KEY_CONVERTER_CLASS_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class MicrosoftSqlServerSinkIT extends BaseConnectorIT {
     private static final Logger log = LoggerFactory.getLogger(MicrosoftSqlServerSinkIT.class);
     private static final String CONNECTOR_NAME = "jdbc-sink-connector";
-    private static final int TASKS_MAX = 3;
     private static final String MSSQL_URL = "jdbc:sqlserver://0.0.0.0:1433";
-    private static final String MSSQL_Table = "example_table";
-    private static final List<String> KAFKA_TOPICS = Collections.singletonList(MSSQL_Table);
     private Map<String, String> props;
     private Connection connection;
     private JsonConverter jsonConverter;
@@ -47,8 +49,9 @@ public class MicrosoftSqlServerSinkIT extends BaseConnectorIT {
     private static final String PASS = "reallyStrongPwd123"; // test creds
 
     @ClassRule
+    @SuppressWarnings("deprecation")
     public static final FixedHostPortGenericContainer mssqlServer =
-            new FixedHostPortGenericContainer<>("microsoft/mssql-server-linux:latest")
+            new FixedHostPortGenericContainer<>("mcr.microsoft.com/mssql/server:2019-latest")
                     .withEnv("ACCEPT_EULA","Y")
                     .withEnv("SA_PASSWORD", PASS)
                     .withFixedExposedPort(1433, 1433);
@@ -77,20 +80,22 @@ public class MicrosoftSqlServerSinkIT extends BaseConnectorIT {
      */
     @Test
     public void verifyConnectorFailsWhenTableNameS() throws Exception {
+        final String table = "example_table";
+
         // Setup up props for the sink connector
-        props = configProperties();
+        props = configProperties(table);
 
         // create table
-        String sql = "CREATE TABLE guest." + MSSQL_Table
+        String sql = "CREATE TABLE guest." + table
                 + " (id int NULL, last_name VARCHAR(50), created_at DATETIME2 NOT NULL);";
         PreparedStatement createStmt = connection.prepareStatement(sql);
         executeSQL(createStmt);
 
         // Create topic in Kafka
-        KAFKA_TOPICS.forEach(topic -> connect.kafka().createTopic(topic, 1));
+        connect.kafka().createTopic(table, 1);
 
         // Configure sink connector
-        configureAndWaitForConnector();
+        configureAndWaitForConnector(1);
 
         //create record and produce it
         Timestamp t = Timestamp.from(
@@ -106,23 +111,87 @@ public class MicrosoftSqlServerSinkIT extends BaseConnectorIT {
                 .put("last_name", "Brams")
                 .put("created_at", t);
 
-        String kafkaValue = new String(jsonConverter.fromConnectData(MSSQL_Table, schema, struct));
-        connect.kafka().produce(MSSQL_Table, null, kafkaValue);
-
-        //sleep till it fails
-        Thread.sleep(Duration.ofSeconds(30).toMillis());
+        String kafkaValue = new String(jsonConverter.fromConnectData(table, schema, struct));
+        connect.kafka().produce(table, null, kafkaValue);
 
         //verify that connector failed because it cannot find the table.
         assertTasksFailedWithTrace(
                 CONNECTOR_NAME,
-                Math.min(KAFKA_TOPICS.size(), TASKS_MAX),
+                1,
                 "Table \"dbo\".\""
-                    + MSSQL_Table
+                    + table
                     + "\" is missing and auto-creation is disabled"
         );
     }
 
-    private Map<String, String> configProperties() {
+    /**
+     * Verify that inserting a null BYTES value succeeds.
+     */
+    @Test
+    public void verifyNullBYTESValue() throws Exception {
+        final String table = "optional_bytes";
+
+        props = configProperties(table);
+        props.put("auto.create", "true");
+
+        connect.kafka().createTopic(table, 1);
+        configureAndWaitForConnector(1);
+
+        final Schema schema = SchemaBuilder.struct().name("com.example.OptionalBytes")
+                .field("id", Schema.INT32_SCHEMA)
+                .field("optional_bytes", Schema.OPTIONAL_BYTES_SCHEMA)
+                .build();
+        final Struct struct = new Struct(schema)
+                .put("id", 1)
+                .put("optional_bytes", null);
+
+        String kafkaValue = new String(jsonConverter.fromConnectData(table, schema, struct));
+        connect.kafka().produce(table, null, kafkaValue);
+
+        waitForCommittedRecords(CONNECTOR_NAME, Collections.singleton(table), 1, 1, TimeUnit.MINUTES.toMillis(2));
+    }
+
+    @Test
+    public void verifyUnicodeWorksWhenSendStringParametersAsUnicodeEqualsFalse() throws Exception {
+        final String table = "table_with_unicode_fields";
+
+        props = configProperties(table);
+
+        // create table
+        String sql = "CREATE TABLE dbo." + table
+            + " (id int, unicode_field NVARCHAR(50));";
+        PreparedStatement createStmt = connection.prepareStatement(sql);
+        executeSQL(createStmt);
+
+        props.put(JdbcSinkConfig.CONNECTION_URL, MSSQL_URL + ";sendStringParametersAsUnicode=false");
+
+        connect.kafka().createTopic(table, 1);
+        configureAndWaitForConnector(1);
+
+        final Schema schema = SchemaBuilder.struct().name("com.example.UnicodeField")
+            .field("id", Schema.INT32_SCHEMA)
+            .field("unicode_field", Schema.OPTIONAL_STRING_SCHEMA)
+            .build();
+        final Struct struct = new Struct(schema)
+            .put("id", 1)
+            .put("unicode_field", "एम एस सीक्वल सर्वर");
+
+        String kafkaValue = new String(jsonConverter.fromConnectData(table, schema, struct));
+        connect.kafka().produce(table, null, kafkaValue);
+
+        waitForCommittedRecords(CONNECTOR_NAME, Collections.singleton(table), 1, 1, TimeUnit.MINUTES.toMillis(2));
+
+        try (Statement s = connection.createStatement()) {
+            try (ResultSet rs = s.executeQuery("SELECT * FROM dbo." + table)) {
+                assertTrue(rs.next());
+                assertEquals((int)struct.getInt32("id"), rs.getInt("id"));
+                assertEquals(struct.getString("unicode_field"), rs.getNString("unicode_field"));
+            }
+        }
+
+    }
+
+    private Map<String, String> configProperties(String topic) {
         // Create a hashmap to setup sink connector config properties
         Map<String, String> props = new HashMap<>();
 
@@ -138,7 +207,7 @@ public class MicrosoftSqlServerSinkIT extends BaseConnectorIT {
         props.put(JdbcSinkConfig.CONNECTION_USER, USER);
         props.put(JdbcSinkConfig.CONNECTION_PASSWORD, PASS);
         props.put("pk.mode", "none");
-        props.put("topics", MSSQL_Table);
+        props.put("topics", topic);
         return props;
     }
 
@@ -151,12 +220,11 @@ public class MicrosoftSqlServerSinkIT extends BaseConnectorIT {
         }
     }
 
-    private void configureAndWaitForConnector() throws Exception {
+    private void configureAndWaitForConnector(int numTasks) throws Exception {
         // start a sink connector
         connect.configureConnector(CONNECTOR_NAME, props);
 
         // wait for tasks to spin up
-        int minimumNumTasks = Math.min(KAFKA_TOPICS.size(), TASKS_MAX);
-        waitForConnectorToStart(CONNECTOR_NAME, minimumNumTasks);
+        waitForConnectorToStart(CONNECTOR_NAME, numTasks);
     }
 }

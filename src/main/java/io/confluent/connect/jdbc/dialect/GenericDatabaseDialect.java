@@ -17,7 +17,9 @@ package io.confluent.connect.jdbc.dialect;
 
 import java.time.ZoneOffset;
 import java.util.TimeZone;
+
 import org.apache.kafka.common.config.AbstractConfig;
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -75,6 +77,8 @@ import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.NumericMapping;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TimestampGranularity;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIsolationMode;
 import io.confluent.connect.jdbc.source.JdbcSourceTaskConfig;
 import io.confluent.connect.jdbc.source.TimestampIncrementingCriteria;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
@@ -152,6 +156,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   private volatile JdbcDriverInfo jdbcDriverInfo;
   private final int batchMaxRows;
   private final TimeZone timeZone;
+  private final JdbcSourceConnectorConfig.TimestampGranularity tsGranularity;
 
   /**
    * Create a new dialect instance with the given connector configuration.
@@ -207,6 +212,12 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       timeZone = ((JdbcSinkConfig) config).timeZone;
     } else {
       timeZone = TimeZone.getTimeZone(ZoneOffset.UTC);
+    }
+
+    if (config instanceof JdbcSourceConnectorConfig) {
+      tsGranularity = TimestampGranularity.get((JdbcSourceConnectorConfig) config);
+    } else {
+      tsGranularity = TimestampGranularity.CONNECT_LOGICAL;
     }
   }
 
@@ -477,8 +488,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     try (ResultSet rs = metadata.getTableTypes()) {
       while (rs.next()) {
         String tableType = rs.getString(1);
-        if (tableType != null && uppercaseTypes.contains(tableType.toUpperCase(Locale.ROOT))) {
-          matchingTableTypes.add(tableType);
+        if (tableType != null) {
+          tableType = tableType.trim();
+          if (uppercaseTypes.contains(tableType.toUpperCase(Locale.ROOT))) {
+            matchingTableTypes.add(tableType);
+          }
         }
       }
     }
@@ -588,6 +602,30 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           exists ? "present" : "absent"
       );
       return exists;
+    }
+  }
+
+  public void setConnectionIsolationMode(
+          Connection connection,
+          TransactionIsolationMode transactionIsolationMode
+  ) {
+    if (transactionIsolationMode
+            == TransactionIsolationMode.DEFAULT) {
+      return;
+    }
+    int isolationMode = TransactionIsolationMode.get(
+            transactionIsolationMode
+    );
+    try {
+      DatabaseMetaData metadata = connection.getMetaData();
+      if (metadata.supportsTransactionIsolationLevel(isolationMode)) {
+        connection.setTransactionIsolation(isolationMode);
+      } else {
+        throw new ConfigException("Transaction Isolation level not supported by database");
+      }
+    } catch (SQLException | ConfigException ex) {
+      log.warn("Unable to set transaction.isolation.mode: " +  transactionIsolationMode.name()
+              +  ". No transaction isolation mode will be set for the queries: " + ex.getMessage());
     }
   }
 
@@ -1154,11 +1192,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
       // Timestamp is a date + time
       case Types.TIMESTAMP: {
-        SchemaBuilder tsSchemaBuilder = org.apache.kafka.connect.data.Timestamp.builder();
-        if (optional) {
-          tsSchemaBuilder.optional();
-        }
-        builder.field(fieldName, tsSchemaBuilder.build());
+        builder.field(fieldName, tsGranularity.schemaFunction.apply(optional));
         break;
       }
 
@@ -1199,6 +1233,17 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     try (Statement statement = connection.createStatement()) {
       for (String ddlStatement : statements) {
         statement.executeUpdate(ddlStatement);
+      }
+    }
+    try {
+      connection.commit();
+    } catch (Exception e) {
+      try {
+        connection.rollback();
+      } catch (SQLException sqle) {
+        e.addSuppressed(sqle);
+      } finally {
+        throw e;
       }
     }
   }
@@ -1374,7 +1419,10 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
       // Timestamp is a date + time
       case Types.TIMESTAMP: {
-        return rs -> rs.getTimestamp(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
+        return rs -> {
+          Timestamp timestamp = rs.getTimestamp(col, DateTimeUtils.getTimeZoneCalendar(timeZone));
+          return tsGranularity.fromTimestamp.apply(timestamp, timeZone);
+        };
       }
 
       // Datalink is basically a URL -> string

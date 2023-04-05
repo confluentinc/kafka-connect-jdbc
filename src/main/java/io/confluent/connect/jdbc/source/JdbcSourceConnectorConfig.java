@@ -15,6 +15,8 @@
 
 package io.confluent.connect.jdbc.source;
 
+import java.sql.Connection;
+import java.sql.Timestamp;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -25,13 +27,21 @@ import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.microsoft.sqlserver.jdbc.SQLServerConnection;
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
+import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.EnumRecommender;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TimeZoneValidator;
 
+import java.util.function.BiFunction;
+import java.util.function.Function;
 import java.util.regex.Pattern;
+
 import org.apache.kafka.common.config.AbstractConfig;
+import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Recommender;
@@ -39,7 +49,10 @@ import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.config.ConfigValue;
 import org.apache.kafka.common.utils.Time;
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -58,6 +71,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
           + "``jdbc:sqlserver://localhost;instance=SQLEXPRESS;"
           + "databaseName=db_name``";
   private static final String CONNECTION_URL_DISPLAY = "JDBC URL";
+  private static final String CONNECTION_URL_DEFAULT = "";
 
   public static final String CONNECTION_USER_CONFIG = CONNECTION_PREFIX + "user";
   private static final String CONNECTION_USER_DOC = "JDBC connection user.";
@@ -187,6 +201,24 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "Use -1 to use the current time. If not specified, all data will be retrieved.";
   public static final String TIMESTAMP_INITIAL_DISPLAY = "Unix time value of initial timestamp";
 
+  public static final String TIMESTAMP_GRANULARITY_CONFIG = "timestamp.granularity";
+  public static final String TIMESTAMP_GRANULARITY_DOC =
+      "Define the granularity of the Timestamp column. Options include: \n"
+          + "  * connect_logical (default): represents timestamp values using Kafka Connect's "
+          + "built-in representations \n"
+          + "  * nanos_long: represents timestamp values as nanos since epoch\n"
+          + "  * nanos_string: represents timestamp values as nanos since epoch in string\n"
+          + "  * nanos_iso_datetime_string: uses iso format 'yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'\n";
+  public static final String TIMESTAMP_GRANULARITY_DISPLAY = "Timestamp granularity for "
+      + "timestamp columns";
+  private static final EnumRecommender TIMESTAMP_GRANULARITY_RECOMMENDER =
+      EnumRecommender.in(TimestampGranularity.values());
+
+  /* The amount of time to wait for the table monitoring thread to complete initial table read */
+  public static final String TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_CONFIG =
+      "table.monitoring.startup.polling.limit.ms";
+  public static final long TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_DEFAULT = 10 * 1000;
+
   public static final String TABLE_POLL_INTERVAL_MS_CONFIG = "table.poll.interval.ms";
   private static final String TABLE_POLL_INTERVAL_MS_DOC =
       "Frequency in ms to poll for new or removed tables, which may result in updated task "
@@ -286,6 +318,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       "Suffix to append at the end of the generated query.";
   public static final String QUERY_SUFFIX_DISPLAY = "Query suffix";
 
+  public static final String QUERY_RETRIES_CONFIG = "query.retry.attempts";
+  public static final String QUERY_RETRIES_DEFAULT = "-1";
+  public static final String QUERY_RETRIES_DOC =
+          "Number of times to retry SQL exceptions encountered when executing queries.";
+  public static final String QUERY_RETRIES_DISPLAY = "Query Retry Attempts";
+
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
 
@@ -312,6 +350,28 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "  In most cases it only makes sense to have either TABLE or VIEW.";
   private static final String TABLE_TYPE_DISPLAY = "Table Types";
 
+  public static final String TRANSACTION_ISOLATION_MODE_DEFAULT =
+          TransactionIsolationMode.DEFAULT.name();
+  public static final String TRANSACTION_ISOLATION_MODE_CONFIG = "transaction.isolation.mode";
+  private static final String TRANSACTION_ISOLATION_MODE_DOC =
+          "Mode to control which transaction isolation level is used when running queries "
+                  + "against the database. By default no explicit transaction isolation"
+                  + "mode is set. SQL_SERVER_SNAPSHOT will only work"
+                  + "against a connector configured to write to Sql Server. "
+                  + " Options include:\n"
+                  + "  * DEFAULT\n "
+                  + "  * READ_UNCOMMITED\n"
+                  + "  * READ_COMMITED\n"
+                  + "  * REPEATABLE_READ\n"
+                  + "  * SERIALIZABLE\n"
+                  + "  * SQL_SERVER_SNAPSHOT\n";
+  private static final String TRANSACTION_ISOLATION_MODE_DISPLAY = "Transaction Isolation Mode";
+
+  private static final EnumRecommender TRANSACTION_ISOLATION_MODE_RECOMMENDER =
+          EnumRecommender.in(TransactionIsolationMode.values());
+
+  private static final String SqlServerDatabaseDialectName = "SqlServerDatabaseDialect";
+
   public static ConfigDef baseConfigDef() {
     ConfigDef config = new ConfigDef();
     addDatabaseOptions(config);
@@ -320,11 +380,51 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     return config;
   }
 
+  public Config validateMultiConfigs(Config config) {
+    HashMap<String, ConfigValue> configValues = new HashMap<>();
+    config.configValues().stream()
+            .filter((configValue) ->
+                    configValue.name().equals(
+                            JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG
+                    )
+            ).forEach(configValue -> configValues.putIfAbsent(configValue.name(), configValue));
+
+    TransactionIsolationMode transactionIsolationMode =
+            TransactionIsolationMode.valueOf(
+                    this.getString(TRANSACTION_ISOLATION_MODE_CONFIG)
+            );
+    if (transactionIsolationMode == TransactionIsolationMode.SQL_SERVER_SNAPSHOT) {
+      DatabaseDialect dialect;
+      final String dialectName = this.getString(JdbcSourceConnectorConfig.DIALECT_NAME_CONFIG);
+      if (dialectName != null && !dialectName.trim().isEmpty()) {
+        dialect = DatabaseDialects.create(dialectName, this);
+      } else {
+        dialect = DatabaseDialects.findBestFor(this.getString(CONNECTION_URL_CONFIG), this);
+      }
+      if (!dialect.name().equals(
+              DatabaseDialects.create(
+                      SqlServerDatabaseDialectName, this
+              ).name()
+      )
+      ) {
+        configValues
+                .get(JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG)
+                .addErrorMessage("Isolation mode of `"
+                        + TransactionIsolationMode.SQL_SERVER_SNAPSHOT.name()
+                        + "` can only be configured with a Sql Server Dialect"
+          );
+      }
+    }
+
+    return config;
+  }
+
   private static final void addDatabaseOptions(ConfigDef config) {
     int orderInGroup = 0;
     config.define(
         CONNECTION_URL_CONFIG,
         Type.STRING,
+        CONNECTION_URL_DEFAULT,
         Importance.HIGH,
         CONNECTION_URL_DOC,
         DATABASE_GROUP,
@@ -547,7 +647,29 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         MODE_GROUP,
         ++orderInGroup,
         Width.MEDIUM,
-        QUERY_SUFFIX_DISPLAY);
+        QUERY_SUFFIX_DISPLAY
+    ).define(
+        TRANSACTION_ISOLATION_MODE_CONFIG,
+        Type.STRING,
+        TRANSACTION_ISOLATION_MODE_DEFAULT,
+        Importance.LOW,
+        TRANSACTION_ISOLATION_MODE_DOC,
+        MODE_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        TRANSACTION_ISOLATION_MODE_DISPLAY,
+        TRANSACTION_ISOLATION_MODE_RECOMMENDER
+    ).define(
+        QUERY_RETRIES_CONFIG,
+        Type.INT,
+        QUERY_RETRIES_DEFAULT,
+        Importance.LOW,
+        QUERY_RETRIES_DOC,
+        MODE_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        QUERY_RETRIES_DISPLAY
+    );
   }
 
   private static final void addConnectorOptions(ConfigDef config) {
@@ -582,6 +704,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.SHORT,
         BATCH_MAX_ROWS_DISPLAY
+    ).defineInternal(
+        TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_CONFIG,
+        Type.LONG,
+        TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_DEFAULT,
+        Importance.LOW
     ).define(
         TABLE_POLL_INTERVAL_MS_CONFIG,
         Type.LONG,
@@ -643,17 +770,25 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         CONNECTOR_GROUP,
         ++orderInGroup,
         Width.MEDIUM,
-        DB_TIMEZONE_CONFIG_DISPLAY);
+        DB_TIMEZONE_CONFIG_DISPLAY
+    ).define(
+        TIMESTAMP_GRANULARITY_CONFIG,
+        Type.STRING,
+        TimestampGranularity.DEFAULT,
+        TIMESTAMP_GRANULARITY_RECOMMENDER,
+        Importance.LOW,
+        TIMESTAMP_GRANULARITY_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        TIMESTAMP_GRANULARITY_DISPLAY,
+        TIMESTAMP_GRANULARITY_RECOMMENDER);
   }
 
   public static final ConfigDef CONFIG_DEF = baseConfigDef();
 
   public JdbcSourceConnectorConfig(Map<String, ?> props) {
     super(CONFIG_DEF, props);
-    String mode = getString(JdbcSourceConnectorConfig.MODE_CONFIG);
-    if (mode.equals(JdbcSourceConnectorConfig.MODE_UNSPECIFIED)) {
-      throw new ConfigException("Query mode must be specified");
-    }
   }
 
   public String topicPrefix() {
@@ -785,6 +920,86 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       return NumericMapping.NONE;
     }
   }
+
+  public enum TimestampGranularity {
+    CONNECT_LOGICAL(optional -> optional
+        ? org.apache.kafka.connect.data.Timestamp.builder().optional().build()
+        : org.apache.kafka.connect.data.Timestamp.builder().build(),
+        (timestamp, tz) -> timestamp,
+        (timestamp, tz) -> (Timestamp) timestamp),
+
+    NANOS_LONG(optional -> optional ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA,
+        (timestamp, tz) -> DateTimeUtils.toEpochNanos(timestamp),
+        (epochNanos, tz) -> DateTimeUtils.toTimestamp((Long) epochNanos)),
+
+    NANOS_STRING(optional -> optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA,
+        (timestamp, tz) -> DateTimeUtils.toEpochNanosString(timestamp),
+        (epochNanosString, tz) -> {
+          try {
+            return DateTimeUtils.toTimestamp((String) epochNanosString);
+          } catch (NumberFormatException  e) {
+            throw new ConnectException(
+                "Invalid value for timestamp column with nanos-string granularity: "
+                    + epochNanosString
+                    + e.getMessage());
+          }
+        }),
+
+    NANOS_ISO_DATETIME_STRING(optional -> optional
+        ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA,
+        DateTimeUtils::toIsoDateTimeString,
+        (isoDateTimeString, tz) ->
+            DateTimeUtils.toTimestampFromIsoDateTime((String) isoDateTimeString, tz));
+
+    public final Function<Boolean, Schema> schemaFunction;
+    public final BiFunction<Timestamp, TimeZone, Object> fromTimestamp;
+    public final BiFunction<Object, TimeZone, Timestamp> toTimestamp;
+
+    public static final String DEFAULT = CONNECT_LOGICAL.name().toLowerCase(Locale.ROOT);
+
+    private static final Map<String, TimestampGranularity> reverse = new HashMap<>(values().length);
+    static {
+      for (TimestampGranularity val : values()) {
+        reverse.put(val.name().toLowerCase(Locale.ROOT), val);
+      }
+    }
+
+    public static TimestampGranularity get(JdbcSourceConnectorConfig config) {
+      String tsGranularity = config.getString(TIMESTAMP_GRANULARITY_CONFIG);
+      return reverse.get(tsGranularity.toLowerCase(Locale.ROOT));
+    }
+
+    TimestampGranularity(Function<Boolean, Schema> schemaFunction,
+        BiFunction<Timestamp, TimeZone, Object> fromTimestamp,
+        BiFunction<Object, TimeZone, Timestamp> toTimestamp) {
+      this.schemaFunction = schemaFunction;
+      this.fromTimestamp = fromTimestamp;
+      this.toTimestamp = toTimestamp;
+    }
+  }
+
+  public enum TransactionIsolationMode {
+    DEFAULT, READ_UNCOMMITTED, READ_COMMITTED,
+    REPEATABLE_READ, SERIALIZABLE, SQL_SERVER_SNAPSHOT;
+
+    public static int get(TransactionIsolationMode mode) {
+      switch (mode) {
+        case READ_UNCOMMITTED:
+          return Connection.TRANSACTION_READ_UNCOMMITTED;
+        case READ_COMMITTED:
+          return Connection.TRANSACTION_READ_COMMITTED;
+        case REPEATABLE_READ:
+          return Connection.TRANSACTION_REPEATABLE_READ;
+        case SERIALIZABLE:
+          return Connection.TRANSACTION_SERIALIZABLE;
+        case SQL_SERVER_SNAPSHOT:
+          return SQLServerConnection.TRANSACTION_SNAPSHOT;
+        default:
+          return -1;
+      }
+    }
+  }
+
 
   protected JdbcSourceConnectorConfig(ConfigDef subclassConfigDef, Map<String, String> props) {
     super(subclassConfigDef, props);

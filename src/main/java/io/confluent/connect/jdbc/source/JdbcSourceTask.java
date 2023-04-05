@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.source;
 
+import java.sql.SQLNonTransientException;
 import java.util.TimeZone;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.SystemTime;
@@ -39,6 +40,7 @@ import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -49,6 +51,7 @@ import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.Version;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIsolationMode;
 
 /**
  * JdbcSourceTask is a Kafka Connect SourceTask implementation that reads from JDBC databases and
@@ -63,9 +66,13 @@ public class JdbcSourceTask extends SourceTask {
   private Time time;
   private JdbcSourceTaskConfig config;
   private DatabaseDialect dialect;
-  private CachedConnectionProvider cachedConnectionProvider;
-  private PriorityQueue<TableQuerier> tableQueue = new PriorityQueue<TableQuerier>();
+  //Visible for Testing
+  CachedConnectionProvider cachedConnectionProvider;
+  PriorityQueue<TableQuerier> tableQueue = new PriorityQueue<>();
   private final AtomicBoolean running = new AtomicBoolean(false);
+  private final AtomicLong taskThreadId = new AtomicLong(0);
+
+  int maxRetriesPerQuerier;
 
   public JdbcSourceTask() {
     this.time = new SystemTime();
@@ -89,6 +96,24 @@ public class JdbcSourceTask extends SourceTask {
       throw new ConnectException("Couldn't start JdbcSourceTask due to configuration error", e);
     }
 
+    List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
+    String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
+
+    if ((tables.isEmpty() && query.isEmpty())) {
+      throw new ConnectException("Task is being killed because"
+              + " it was not assigned a table nor a query to execute."
+              + " If run in table mode please make sure that the tables"
+              + " exist on the database. If the table does exist on"
+              + " the database, we recommend using the fully qualified"
+              + " table name.");
+    }
+
+    if ((!tables.isEmpty() && !query.isEmpty())) {
+      throw new ConnectException("Invalid configuration: a JdbcSourceTask"
+              + " cannot have both a table and a query assigned to it");
+    }
+
+
     final String url = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
     final int maxConnAttempts = config.getInt(JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_CONFIG);
     final long retryBackoff = config.getLong(JdbcSourceConnectorConfig.CONNECTION_BACKOFF_CONFIG);
@@ -103,12 +128,17 @@ public class JdbcSourceTask extends SourceTask {
 
     cachedConnectionProvider = connectionProvider(maxConnAttempts, retryBackoff);
 
-    List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
-    String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
-    if ((tables.isEmpty() && query.isEmpty()) || (!tables.isEmpty() && !query.isEmpty())) {
-      throw new ConnectException("Invalid configuration: each JdbcSourceTask must have at "
-                                        + "least one table assigned to it or one query specified");
-    }
+
+    dialect.setConnectionIsolationMode(
+            cachedConnectionProvider.getConnection(),
+            TransactionIsolationMode
+                    .valueOf(
+                            config.getString(
+                                    JdbcSourceConnectorConfig
+                                            .TRANSACTION_ISOLATION_MODE_CONFIG
+                            )
+                    )
+    );
     TableQuerier.QueryMode queryMode = !query.isEmpty() ? TableQuerier.QueryMode.QUERY :
                                        TableQuerier.QueryMode.TABLE;
     List<String> tablesOrQuery = queryMode == TableQuerier.QueryMode.QUERY
@@ -198,6 +228,8 @@ public class JdbcSourceTask extends SourceTask {
       offset = computeInitialOffset(tableOrQuery, offset, timeZone);
 
       String topicPrefix = config.topicPrefix();
+      JdbcSourceConnectorConfig.TimestampGranularity timestampGranularity
+          = JdbcSourceConnectorConfig.TimestampGranularity.get(config);
 
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(
@@ -221,22 +253,23 @@ public class JdbcSourceTask extends SourceTask {
                 offset,
                 timestampDelayInterval,
                 timeZone,
-                suffix
+                suffix,
+                timestampGranularity
             )
         );
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
         tableQueue.add(
-            new TimestampIncrementingTableQuerier(
+            new TimestampTableQuerier(
                 dialect,
                 queryMode,
                 tableOrQuery,
                 topicPrefix,
                 timestampColumns,
-                null,
                 offset,
                 timestampDelayInterval,
                 timeZone,
-                suffix
+                suffix,
+                timestampGranularity
             )
         );
       } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
@@ -251,14 +284,18 @@ public class JdbcSourceTask extends SourceTask {
                 offset,
                 timestampDelayInterval,
                 timeZone,
-                suffix
+                suffix,
+                timestampGranularity
             )
         );
       }
     }
 
     running.set(true);
+    taskThreadId.set(Thread.currentThread().getId());
     log.info("Started JDBC source task");
+
+    maxRetriesPerQuerier = config.getInt(JdbcSourceConnectorConfig.QUERY_RETRIES_CONFIG);
   }
 
   protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
@@ -315,16 +352,21 @@ public class JdbcSourceTask extends SourceTask {
   @Override
   public void stop() throws ConnectException {
     log.info("Stopping JDBC source task");
+
+    // In earlier versions of Kafka, stop() was not called from the task thread. In this case, all
+    // resources are closed at the end of 'poll()' when no longer running or if there is an error.
     running.set(false);
-    // All resources are closed at the end of 'poll()' when no longer running or
-    // if there is an error
+
+    if (taskThreadId.longValue() == Thread.currentThread().getId()) {
+      shutdown();
+    }
   }
 
   protected void closeResources() {
     log.info("Closing resources for JDBC source task");
     try {
       if (cachedConnectionProvider != null) {
-        cachedConnectionProvider.close();
+        cachedConnectionProvider.close(true);
       }
     } catch (Throwable t) {
       log.warn("Error while closing the connections", t);
@@ -375,11 +417,12 @@ public class JdbcSourceTask extends SourceTask {
         while (results.size() < batchMaxRows && (hadNext = querier.next())) {
           results.add(querier.extractRecord());
         }
+        querier.resetRetryCount();
 
         if (!hadNext) {
           // If we finished processing the results from the current query, we can reset and send
           // the querier to the tail of the queue
-          resetAndRequeueHead(querier);
+          resetAndRequeueHead(querier, false);
         }
 
         if (results.isEmpty()) {
@@ -398,34 +441,58 @@ public class JdbcSourceTask extends SourceTask {
           consecutiveEmptyResults.put(querier, 0);
         }
 
-        log.debug("Returning {} records for {}", results.size(), querier.toString());
+        log.debug("Returning {} records for {}", results.size(), querier);
         return results;
+      } catch (SQLNonTransientException sqle) {
+        log.error("Non-transient SQL exception while running query for table: {}",
+            querier, sqle);
+        resetAndRequeueHead(querier, true);
+        // This task has failed, so close any resources (may be reopened if needed) before throwing
+        closeResources();
+        throw new ConnectException(sqle);
       } catch (SQLException sqle) {
-        log.error("Failed to run query for table {}: {}", querier.toString(), sqle);
-        resetAndRequeueHead(querier);
+        log.error(
+                "SQL exception while running query for table: {}, {}."
+                        + " Attempting retry {} of {} attempts.",
+                querier,
+                sqle,
+                querier.getAttemptedRetryCount() + 1,
+                maxRetriesPerQuerier
+        );
+        resetAndRequeueHead(querier, true);
+        if (maxRetriesPerQuerier > 0
+                && querier.getAttemptedRetryCount() >= maxRetriesPerQuerier) {
+          closeResources();
+          throw new ConnectException("Failed to Query table after retries", sqle);
+        }
+        querier.incrementRetryCount();
         return null;
       } catch (Throwable t) {
-        resetAndRequeueHead(querier);
+        log.error("Failed to run query for table: {}", querier, t);
+        resetAndRequeueHead(querier, true);
         // This task has failed, so close any resources (may be reopened if needed) before throwing
         closeResources();
         throw t;
       }
     }
 
-    // Only in case of shutdown
-    final TableQuerier querier = tableQueue.peek();
-    if (querier != null) {
-      resetAndRequeueHead(querier);
-    }
-    closeResources();
+    shutdown();
     return null;
   }
 
-  private void resetAndRequeueHead(TableQuerier expectedHead) {
+  private void shutdown() {
+    final TableQuerier querier = tableQueue.peek();
+    if (querier != null) {
+      resetAndRequeueHead(querier, true);
+    }
+    closeResources();
+  }
+
+  private void resetAndRequeueHead(TableQuerier expectedHead, boolean resetOffset) {
     log.debug("Resetting querier {}", expectedHead.toString());
     TableQuerier removedQuerier = tableQueue.poll();
     assert removedQuerier == expectedHead;
-    expectedHead.reset(time.milliseconds());
+    expectedHead.reset(time.milliseconds(), resetOffset);
     tableQueue.add(expectedHead);
   }
 

@@ -15,14 +15,18 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.TimeZone;
+import java.util.concurrent.ThreadLocalRandom;
 
+import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
@@ -39,6 +43,10 @@ import io.confluent.connect.jdbc.util.TableId;
 import org.mockito.Mockito;
 
 import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatabaseDialect> {
 
@@ -452,5 +460,32 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
         "jdbc:sqlserver://;password=****;servername=server_name;keyStoreSecret=****;"
         + "gsscredential=****;integratedSecurity=true;authenticationScheme=JavaKerberos"
     );
+  }
+
+  @Test
+  public void shouldBindStringAccordingToColumnDef() throws SQLException {
+    int index = ThreadLocalRandom.current().nextInt();
+    String value = "random text";
+    Schema schema = Schema.STRING_SCHEMA;
+    PreparedStatement stmtVarchar = mock(PreparedStatement.class);
+    ColumnDefinition colDefVarchar = mock(ColumnDefinition.class);
+    when(colDefVarchar.type()).thenReturn(Types.VARCHAR);
+
+    PreparedStatement stmtNchar = mock(PreparedStatement.class);
+    ColumnDefinition colDefNchar = mock(ColumnDefinition.class);
+    when(colDefNchar.type()).thenReturn(Types.NCHAR);
+
+    PreparedStatement stmtNvarchar = mock(PreparedStatement.class);
+    ColumnDefinition colDefNvarchar = mock(ColumnDefinition.class);
+    when(colDefNvarchar.type()).thenReturn(Types.NVARCHAR);
+
+    dialect.bindField(stmtVarchar, index, schema, value, colDefVarchar);
+    verify(stmtVarchar, times(1)).setString(index, value);
+
+    dialect.bindField(stmtNchar, index, schema, value, colDefNchar);
+    verify(stmtNchar, times(1)).setNString(index, value);
+
+    dialect.bindField(stmtNvarchar, index, schema, value, colDefNvarchar);
+    verify(stmtNvarchar, times(1)).setNString(index, value);
   }
 }

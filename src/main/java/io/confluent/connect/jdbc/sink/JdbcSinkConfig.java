@@ -262,6 +262,13 @@ public class JdbcSinkConfig extends AbstractConfig {
 
   private static final EnumRecommender TABLE_TYPES_RECOMMENDER =
       EnumRecommender.in(TableType.values());
+  public static final String MSSQL_USE_MERGE_HOLDLOCK = "mssql.use.merge.holdlock";
+  private static final String MSSQL_USE_MERGE_HOLDLOCK_DEFAULT = "true";
+  private static final String MSSQL_USE_MERGE_HOLDLOCK_DOC =
+      "Whether to use HOLDLOCK when performing a MERGE INTO upsert statement "
+      + "NOTE: MS SQL Server only ";
+  private static final String MSSQL_USE_MERGE_HOLDLOCK_DISPLAY =
+      "MS SQL Server - Use HOLDLOCK in MERGE";
 
   public static final ConfigDef CONFIG_DEF = new ConfigDef()
         // Connection
@@ -470,6 +477,17 @@ public class JdbcSinkConfig extends AbstractConfig {
             QUOTE_SQL_IDENTIFIERS_DISPLAY,
             QUOTE_METHOD_RECOMMENDER
         )
+        .define(
+            MSSQL_USE_MERGE_HOLDLOCK,
+            ConfigDef.Type.BOOLEAN,
+            MSSQL_USE_MERGE_HOLDLOCK_DEFAULT,
+            ConfigDef.Importance.LOW,
+            MSSQL_USE_MERGE_HOLDLOCK_DOC,
+            DDL_GROUP,
+            4,
+            ConfigDef.Width.MEDIUM,
+            MSSQL_USE_MERGE_HOLDLOCK_DISPLAY
+        )
         // Retries
         .define(
             MAX_RETRIES,
@@ -522,6 +540,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final String dialectName;
   public final TimeZone timeZone;
   public final EnumSet<TableType> tableTypes;
+  public final boolean useHoldlockInMerge;
 
   public final boolean trimSensitiveLogsEnabled;
 
@@ -547,6 +566,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
     String dbTimeZone = getString(DB_TIMEZONE_CONFIG);
     timeZone = TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
+    useHoldlockInMerge = getBoolean(MSSQL_USE_MERGE_HOLDLOCK);
     trimSensitiveLogsEnabled = getBoolean(TRIM_SENSITIVE_LOG_ENABLED);
     if (deleteEnabled && pkMode != PrimaryKeyMode.RECORD_KEY) {
       throw new ConfigException(

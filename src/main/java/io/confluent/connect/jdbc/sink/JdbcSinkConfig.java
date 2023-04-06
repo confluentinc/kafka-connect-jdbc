@@ -267,7 +267,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String MSSQL_USE_MERGE_HOLDLOCK_DEFAULT = "true";
   private static final String MSSQL_USE_MERGE_HOLDLOCK_DOC =
       "Whether to use HOLDLOCK when performing a MERGE INTO upsert statement. "
-      + "Note that it is only applicable to SQL Server";
+      + "Note that it is only applicable to SQL Server.";
   private static final String MSSQL_USE_MERGE_HOLDLOCK_DISPLAY =
       "SQL Server - Use HOLDLOCK in MERGE";
 

@@ -93,7 +93,7 @@ public class JdbcSourceTask extends SourceTask {
     try {
       config = new JdbcSourceTaskConfig(properties);
     } catch (ConfigException e) {
-      throw new ConnectException("Couldn't start JdbcSourceTask due to configuration error", e);
+      throw new ConfigException("Couldn't start JdbcSourceTask due to configuration error", e);
     }
 
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
@@ -210,7 +210,7 @@ public class JdbcSourceTask extends SourceTask {
           tablePartitionsToCheck = Collections.singletonList(partition);
           break;
         default:
-          throw new ConnectException("Unexpected query mode: " + queryMode);
+          throw new ConfigException("Unexpected query mode: " + queryMode);
       }
 
       // The partition map varies by offset protocol. Since we don't know which protocol each

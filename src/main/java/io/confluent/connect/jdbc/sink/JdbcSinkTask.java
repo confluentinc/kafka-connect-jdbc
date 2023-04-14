@@ -50,9 +50,7 @@ public class JdbcSinkTask extends SinkTask {
   public void start(final Map<String, String> props) {
     log.info("Starting JDBC Sink task");
     config = new JdbcSinkConfig(props);
-    log.info("Initializing JDBC writer");
     initWriter();
-    log.info("JDBC writer initialized");
     remainingRetries = config.maxRetries;
     shouldTrimSensitiveLogs = config.trimSensitiveLogsEnabled;
     try {
@@ -64,6 +62,7 @@ public class JdbcSinkTask extends SinkTask {
   }
 
   void initWriter() {
+    log.info("Initializing JDBC writer");
     if (config.dialectName != null && !config.dialectName.trim().isEmpty()) {
       dialect = DatabaseDialects.create(config.dialectName, config);
     } else {
@@ -72,6 +71,7 @@ public class JdbcSinkTask extends SinkTask {
     final DbStructure dbStructure = new DbStructure(dialect);
     log.info("Initializing writer using SQL dialect: {}", dialect.getClass().getSimpleName());
     writer = new JdbcDbWriter(config, dialect, dbStructure);
+    log.info("JDBC writer initialized");
   }
 
   @Override
@@ -147,8 +147,8 @@ public class JdbcSinkTask extends SinkTask {
         reporter.report(record, tace);
         writer.closeQuietly();
       } catch (SQLException sqle) {
-        log.debug(sqle.toString());
         SQLException sqlAllMessagesException = getAllMessagesException(sqle);
+        log.debug(sqlAllMessagesException.toString());
         reporter.report(record, sqlAllMessagesException);
         writer.closeQuietly();
       }

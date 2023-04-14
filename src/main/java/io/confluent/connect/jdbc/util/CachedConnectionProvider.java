@@ -58,7 +58,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
         newConnection();
       }
     } catch (SQLException sqle) {
-      log.debug("Could not establish connection with database.");
+      log.debug("Could not establish connection with database.", sqle);
       throw new ConnectException(sqle);
     }
     log.debug("Database connection established.");
@@ -96,7 +96,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
             // this is ok because just woke up early
           }
         } else {
-          throw new ConnectException("Could not connect to database.", sqle);
+          throw sqle;
         }
       }
     }

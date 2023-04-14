@@ -91,6 +91,7 @@ public class JdbcSourceConnector extends SourceConnector {
     cachedConnectionProvider = connectionProvider(maxConnectionAttempts, connectionRetryBackoff);
 
     // Initial connection attempt
+    log.info("Initial connection attempt with the database.");
     cachedConnectionProvider.getConnection();
 
     long tablePollMs = config.getLong(JdbcSourceConnectorConfig.TABLE_POLL_INTERVAL_MS_CONFIG);

@@ -875,7 +875,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     task.start(props);
   }
 
-  @Test (expected = ConnectException.class)
+  @Test (expected = ConfigException.class)
   public void testTaskFailsIfBothQueryAndTablesConfigProvided() {
     initializeTask();
     Map<String, String> props = new HashMap<>();

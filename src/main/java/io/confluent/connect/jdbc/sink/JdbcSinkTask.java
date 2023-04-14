@@ -50,7 +50,9 @@ public class JdbcSinkTask extends SinkTask {
   public void start(final Map<String, String> props) {
     log.info("Starting JDBC Sink task");
     config = new JdbcSinkConfig(props);
+    log.info("Initializing JDBC writer");
     initWriter();
+    log.info("JDBC writer initialized");
     remainingRetries = config.maxRetries;
     shouldTrimSensitiveLogs = config.trimSensitiveLogsEnabled;
     try {
@@ -90,6 +92,7 @@ public class JdbcSinkTask extends SinkTask {
       if (reporter != null) {
         unrollAndRetry(records);
       } else {
+        log.error(tace.toString());
         throw tace;
       }
     } catch (SQLException sqle) {
@@ -111,6 +114,7 @@ public class JdbcSinkTask extends SinkTask {
         initWriter();
         remainingRetries--;
         context.timeout(config.retryBackoffMs);
+        log.debug(sqlAllMessagesException.toString());
         throw new RetriableException(sqlAllMessagesException);
       } else {
         if (reporter != null) {
@@ -139,9 +143,11 @@ public class JdbcSinkTask extends SinkTask {
       try {
         writer.write(Collections.singletonList(record));
       } catch (TableAlterOrCreateException tace) {
+        log.debug(tace.toString());
         reporter.report(record, tace);
         writer.closeQuietly();
       } catch (SQLException sqle) {
+        log.debug(sqle.toString());
         SQLException sqlAllMessagesException = getAllMessagesException(sqle);
         reporter.report(record, sqlAllMessagesException);
         writer.closeQuietly();

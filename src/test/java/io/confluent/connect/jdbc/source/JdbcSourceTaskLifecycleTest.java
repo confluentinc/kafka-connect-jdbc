@@ -16,6 +16,7 @@
 package io.confluent.connect.jdbc.source;
 
 import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.easymock.EasyMock;
 import org.junit.Test;
@@ -68,7 +69,7 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
     task.start(props);
   }
 
-  @Test(expected = ConnectException.class)
+  @Test(expected = ConfigException.class)
   public void testMissingTables() {
     Map<String, String> props = singleTableConfig();
     props.remove(JdbcSourceTaskConfig.TABLES_CONFIG);

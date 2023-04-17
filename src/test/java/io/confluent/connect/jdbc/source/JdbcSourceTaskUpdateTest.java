@@ -513,12 +513,12 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     try {
       startTask("modified", "id", null, 0L, invalidTimeZoneID);
       fail("A ConfigException should have been thrown");
-    } catch (ConnectException e) {
-      assertTrue(e.getCause() instanceof ConfigException);
-      ConfigException configException = (ConfigException) e.getCause();
-      assertThat(configException.getMessage(),
+    } catch (ConfigException e) {
+      assertThat(e.getMessage(),
           equalTo(
-              "Invalid value Europe/Invalid for configuration db.timezone: Invalid time zone identifier"));
+              "Invalid value org.apache.kafka.common.config.ConfigException: Invalid value Europe/Invalid "
+                      + "for configuration db.timezone: Invalid time zone identifier for configuration "
+                      + "Couldn't start JdbcSourceTask due to configuration error"));
     }
   }
 
@@ -875,7 +875,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     task.start(props);
   }
 
-  @Test (expected = ConnectException.class)
+  @Test (expected = ConfigException.class)
   public void testTaskFailsIfBothQueryAndTablesConfigProvided() {
     initializeTask();
     Map<String, String> props = new HashMap<>();

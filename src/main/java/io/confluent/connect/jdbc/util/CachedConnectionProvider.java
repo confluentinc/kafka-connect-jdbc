@@ -48,6 +48,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
 
   @Override
   public synchronized Connection getConnection() {
+    log.debug("Trying to establish connection with the database.");
     try {
       if (connection == null) {
         newConnection();
@@ -57,8 +58,10 @@ public class CachedConnectionProvider implements ConnectionProvider {
         newConnection();
       }
     } catch (SQLException sqle) {
+      log.debug("Could not establish connection with database.", sqle);
       throw new ConnectException(sqle);
     }
+    log.debug("Database connection established.");
     return connection;
   }
 
@@ -77,7 +80,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
     while (isRunning) {
       try {
         ++count;
-        log.info("Attempting to open connection #{} to {}", count, provider);
+        log.debug("Attempting to open connection #{} to {}", count, provider);
         connection = provider.getConnection();
         onConnect(connection);
         return;
@@ -108,7 +111,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
   public synchronized void close() {
     if (connection != null) {
       try {
-        log.info("Closing connection #{} to {}", count, provider);
+        log.debug("Closing connection #{} to {}", count, provider);
         connection.close();
       } catch (SQLException sqle) {
         log.warn("Ignoring error closing connection", sqle);

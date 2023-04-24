@@ -85,6 +85,8 @@
         </pluginRepository>
     </pluginRepositories>
 
+    <!-- Adding BOM instead of directly using ojdbc8-production dependency to get rid of .pom file in final package  -->
+    <!-- Add all the dependencies mentioned in this BOM during a version upgrade   -->
     <dependencyManagement>
         <dependencies>
             <dependency>
@@ -122,6 +124,7 @@
             <version>${postgresql.version}</version>
             <scope>runtime</scope>
         </dependency>
+        <!-- Oracle related drivers. Version is explicitly mentioned, so they get picked up by Fossa correctly -->
         <dependency>
             <groupId>com.oracle.database.jdbc</groupId>
             <artifactId>ojdbc8</artifactId>

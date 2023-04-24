@@ -110,7 +110,8 @@
             <version>${postgresql.version}</version>
             <scope>runtime</scope>
         </dependency>
-        <!-- All packages added by ojdbc8-production. Do not use ojdbc8-production directly to avoid .pom file in final package -->
+        <!-- Add all packages imported by ojdbc8-production explicitly to pom when bumping up driver version -->
+	<!-- Do not use ojdbc8-production directly to avoid .pom file in final package -->
         <!-- See https://www.oracle.com/database/technologies/maven-central-guide.html -->
         <dependency>
             <groupId>com.oracle.database.jdbc</groupId>

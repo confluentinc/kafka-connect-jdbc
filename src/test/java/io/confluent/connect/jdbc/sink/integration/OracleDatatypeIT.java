@@ -88,6 +88,36 @@ public class OracleDatatypeIT extends BaseConnectorIT {
     }
 
     @Test
+    public void testUnderflowForFloatAndDoubleTypesInsert() throws Exception {
+        try (Statement s = connection.createStatement()) {
+            s.execute("CREATE TABLE " + tableName + "("
+                    + "\"float32\" NUMBER, "
+                    + "\"float64\" NUMBER, "
+                    + "KEY NUMBER NOT NULL, PRIMARY KEY (KEY)"
+                    + ")");
+        }
+
+        props.put(JdbcSinkConfig.INSERT_MODE, "insert");
+
+        final Schema schema = SchemaBuilder.struct()
+                .field("float32", Schema.FLOAT32_SCHEMA)
+                .field("float64", Schema.FLOAT64_SCHEMA)
+                .field("KEY", Schema.INT32_SCHEMA)
+                .build();
+
+        final Struct value = new Struct(schema)
+                .put("float32", Float.MIN_VALUE)
+                .put("float64", Double.MIN_VALUE)
+                .put("KEY", 1);;
+
+        assertProduced(schema, value, (rs) -> {
+            assertEquals(Float.MIN_VALUE, Float.MIN_VALUE, 0.0);
+            assertEquals(Double.MIN_VALUE, Double.MIN_VALUE, 0.0);
+            return null;
+        });
+    }
+
+    @Test
     public void testPrimitiveAndLogicalTypesUpsert() throws Exception {
         createPrimitiveAndLogicalTypesTable();
 

@@ -431,18 +431,60 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
              .of(nonKeyColumns);
     }
     builder.append(" when not matched then insert (");
+
+    // potential primary key columns
+    Iterable<ColumnId> pkColumns = Collections.emptyList();
+
+    if (((JdbcSinkConfig) this.config).insertPrimaryKeys) {
+      pkColumns = keyColumns;
+    }
+
     builder.appendList()
            .delimitedBy(", ")
            .transformedBy(ExpressionBuilder.columnNames())
-           .of(nonKeyColumns, keyColumns);
+           .of(nonKeyColumns, pkColumns);
     builder.append(") values (");
+
     builder.appendList()
            .delimitedBy(",")
            .transformedBy(ExpressionBuilder.columnNamesWithPrefix("incoming."))
-           .of(nonKeyColumns, keyColumns);
+           .of(nonKeyColumns, pkColumns);
     builder.append(");");
+
+
     return builder.toString();
   }
+
+
+  @Override
+  public String buildInsertStatement(
+          TableId table,
+          Collection<ColumnId> keyColumns,
+          Collection<ColumnId> nonKeyColumns
+  ) {
+    ExpressionBuilder builder = expressionBuilder();
+    builder.append("INSERT INTO ");
+    builder.append(table);
+    builder.append("(");
+
+    // potential primary key columns
+    Collection<ColumnId> pkColumns = Collections.emptyList();
+
+    if (((JdbcSinkConfig) this.config).insertPrimaryKeys) {
+      pkColumns = keyColumns;
+    }
+
+    builder.appendList()
+            .delimitedBy(",")
+            .transformedBy(ExpressionBuilder.columnNames())
+            .of(pkColumns, nonKeyColumns);
+    builder.append(") VALUES(");
+    builder.appendMultiple(",", "?", pkColumns.size() + nonKeyColumns.size());
+
+    builder.append(")");
+    return builder.toString();
+  }
+
 
   /**
    * If Sql Server is 2016 or newer, and time stamp mode configured against a datetime column

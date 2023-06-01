@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.TimeZone;
 import java.util.concurrent.ThreadLocalRandom;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import org.apache.kafka.common.config.AbstractConfig;
@@ -42,7 +43,7 @@ import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 import org.mockito.Mockito;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -400,6 +401,61 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
             columns(book, "ISBN", "year", "pages")
         )
     );
+  }
+
+  @Test
+  public void upsertSkipsPrimaryKeyInsertsIfConfiguredSo() {
+    JdbcSinkConfig sinkConfig = sinkConfigWithUrl("jdbc:jtds:sqlsserver://something","mssql.insert.primary.keys","false");
+    assertFalse(sinkConfig.insertPrimaryKeys);
+    dialect = createDialect(sinkConfig);
+    TableId customer = tableId("Customer");
+    assertEquals(
+            "merge into [Customer] with (HOLDLOCK) AS target using (select ? AS [id], ? AS [name], ? " +
+                    "AS [salary], ? AS [address]) AS incoming on (target.[id]=incoming.[id]) when matched then update set " +
+                    "[name]=incoming.[name],[salary]=incoming.[salary],[address]=incoming" +
+                    ".[address] when not matched then insert " +
+                    "([name], [salary], [address])"+
+                    " values (incoming.[name],incoming.[salary],incoming.[address]);",
+            dialect.buildUpsertQueryStatement(
+                    customer,
+                    columns(customer, "id"),
+                    columns(customer, "name", "salary", "address")
+            )
+    );
+
+  }
+  @Test
+  public void insertSkipsPrimaryKeyIfConfiguredSo() {
+    JdbcSinkConfig sinkConfig = sinkConfigWithUrl("jdbc:jtds:sqlsserver://something","mssql.insert.primary.keys","false");
+    assertFalse(sinkConfig.insertPrimaryKeys);
+    dialect = createDialect(sinkConfig);
+    TableId customer = tableId("Customer");
+    assertEquals(
+            "INSERT INTO [Customer]([name],[salary],[address]) VALUES(?,?,?)",
+            dialect.buildInsertStatement(
+                    customer,
+                    columns(customer, "id"),
+                    columns(customer, "name", "salary", "address")
+            )
+    );
+
+  }
+
+  @Test
+  public void insertAddsPrimaryKeysIfConfiguredSo() {
+    JdbcSinkConfig sinkConfig = sinkConfigWithUrl("jdbc:jtds:sqlsserver://something");
+    assertTrue(sinkConfig.insertPrimaryKeys);
+    dialect = createDialect(sinkConfig);
+    TableId customer = tableId("Customer");
+    assertEquals(
+            "INSERT INTO [Customer]([id],[name],[salary],[address]) VALUES(?,?,?,?)",
+            dialect.buildInsertStatement(
+                    customer,
+                    columns(customer, "id"),
+                    columns(customer, "name", "salary", "address")
+            )
+    );
+
   }
 
   @Test(expected=ConnectException.class)

@@ -69,6 +69,7 @@ public class JdbcSourceTask extends SourceTask {
   //Visible for Testing
   CachedConnectionProvider cachedConnectionProvider;
   PriorityQueue<TableQuerier> tableQueue = new PriorityQueue<>();
+  private Map<TableQuerier, Integer> tableQuerierSleepTimes = new HashMap<>();
   private final AtomicBoolean running = new AtomicBoolean(false);
   private final AtomicLong taskThreadId = new AtomicLong(0);
 
@@ -394,13 +395,23 @@ public class JdbcSourceTask extends SourceTask {
     while (running.get()) {
       final TableQuerier querier = tableQueue.peek();
 
-      if (!querier.querying()) {
+      int pollSleepMs;
+	if (!querier.querying()) {
         // If not in the middle of an update, wait for next update time
         final long nextUpdate = querier.getLastUpdate()
             + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
         final long now = time.milliseconds();
         final long sleepMs = Math.min(nextUpdate - now, 100);
 
+        if (tableQuerierSleepMs(querier) > 0) {
+        	pollSleepMs = tableQuerierSleepMs(querier);
+            log.debug("TableQuerier is requested to sleep {} ms before sending next query {}",
+          		  pollSleepMs, querier.toString());
+            time.sleep(pollSleepMs);
+            tableQuerierSleepTimes.remove(querier);
+            continue; // Re-check stop flag before continuing
+          }
+        
         if (sleepMs > 0) {
           log.trace("Waiting {} ms to poll {} next", nextUpdate - now, querier.toString());
           time.sleep(sleepMs);
@@ -424,6 +435,10 @@ public class JdbcSourceTask extends SourceTask {
           // If we finished processing the results from the current query, we can reset and send
           // the querier to the tail of the queue
           resetAndRequeueHead(querier, false);
+          pollSleepMs = config.getInt(JdbcSourceTaskConfig.POLL_SLEEP_MS_CONFIG);
+          tableQuerierSleepTimes.put(querier, pollSleepMs);
+          log.debug("Processing current query to be finished. Registering sleep of {} ms before sending next query {}",
+          		  pollSleepMs, querier.toString());
         }
 
         if (results.isEmpty()) {
@@ -553,4 +568,13 @@ public class JdbcSourceTask extends SourceTask {
                                  + " NULL", e);
     }
   }
+  
+  public int tableQuerierSleepMs(TableQuerier querier) {
+	  if(tableQuerierSleepTimes.containsKey(querier)) {
+		  return tableQuerierSleepTimes.get(querier);
+	  } else {
+		  return 0;
+	  }
+  }
+
 }

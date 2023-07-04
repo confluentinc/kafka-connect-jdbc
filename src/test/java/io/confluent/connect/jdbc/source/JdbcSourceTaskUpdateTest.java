@@ -47,6 +47,7 @@ import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.modules.junit4.PowerMockRunner;
 
 import io.confluent.connect.jdbc.util.DateTimeUtils;
+import scala.Unit;
 
 // Tests of polling that return data updates, i.e. verifies the different behaviors for getting
 // incremental data updates from the database
@@ -94,6 +95,41 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     records = task.poll();
     assertEquals(Collections.singletonMap(2, 1), countIntValues(records, "id"));
     assertRecordsTopic(records, TOPIC_PREFIX + SINGLE_TABLE_NAME);
+  }
+  
+  @Test
+  public void testBulkPeriodicLoadWithPollSleep() throws Exception {
+    
+    db.createTable(SINGLE_TABLE_NAME, "id", "INT NOT NULL");
+    db.insert(SINGLE_TABLE_NAME, "id", 1);
+    db.insert(SINGLE_TABLE_NAME, "id", 2);
+
+    // Bulk periodic load is currently the default
+    Map<String, String> config = singleTableConfig();
+    // pause 1 second after batch was completed
+    long sleepMs = 1000;
+    // must be much smaller for this test 
+    long intervalMs = 10;
+    config.put(JdbcSourceConnectorConfig.POLL_SLEEP_MS_CONFIG, Long.toString(sleepMs));
+    config.put(JdbcSourceConnectorConfig.POLL_INTERVAL_MS_CONFIG, Long.toString(intervalMs));
+    
+    Map<Integer, Integer> twoRecords = new HashMap<>();
+    twoRecords.put(1, 1);
+    twoRecords.put(2, 1);
+
+    long start= System.currentTimeMillis();
+
+    task.start(config);
+    List<SourceRecord> records = task.poll();
+    long stopWatchTime = System.currentTimeMillis() - start;    
+	assertTrue("task slept " + stopWatchTime +" ms", stopWatchTime < sleepMs);
+    assertEquals(twoRecords, countIntValues(records, "id"));
+    assertRecordsTopic(records, TOPIC_PREFIX + SINGLE_TABLE_NAME);
+    // polling again should cause the task to sleep for sleepMs
+    records = task.poll();
+    stopWatchTime = System.currentTimeMillis() - start;
+    assertTrue("task slept " + stopWatchTime +" ms", stopWatchTime >= sleepMs);
+
   }
 
   @Test(expected = ConnectException.class)

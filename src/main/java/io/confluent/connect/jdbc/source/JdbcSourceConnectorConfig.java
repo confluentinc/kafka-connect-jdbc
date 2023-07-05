@@ -110,12 +110,13 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public static final String POLL_SLEEP_MS_CONFIG = "poll.sleep.ms";
   private static final String POLL_SLEEP_MS_DOC =
-		  "Time to sleep after the whole table result set has been consumed. The batch result set is "
-		  + "read internally without sending an next SQL query, whereas " + BATCH_MAX_ROWS_CONFIG + ""
-		  + "are consumed during each poll interval (" + POLL_INTERVAL_MS_CONFIG +")"
-		  + "This setting can be used to limit the frequency at which the SQL server is being queried"
-		  + "without limiting the processing speed of already obtained result sets.\n\n"
-		  + "This is especially useful with mode=bulk.";
+      "Time to sleep after the whole table result set has been consumed. The batch result"
+      + "set is read internally without sending an next SQL query, whereas " 
+      + BATCH_MAX_ROWS_CONFIG
+      + "are consumed during each poll interval (" + POLL_INTERVAL_MS_CONFIG + ")"
+      + "This setting can be used to limit the frequency at which the SQL server is being"
+      + "queried without limiting the processing speed of already obtained result sets.\n\n"
+      + "This is especially useful with mode=bulk.";
   public static final int POLL_SLEEP_MS_DEFAULT = 0;
   private static final String POLL_SLEEP_MS_DISPLAY = "Sleep between table queries (ms)";
 

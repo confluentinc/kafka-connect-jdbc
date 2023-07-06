@@ -111,11 +111,11 @@ public class JdbcSourceTask extends SourceTask {
 
       // Tables call has completed, but we didn't get any table assigned to this task
       throw new ConfigException("Task is being killed because"
-          + " it was not assigned a table nor a query to execute."
-          + " If run in table mode please make sure that the tables"
-          + " exist on the database. If the table does exist on"
-          + " the database, we recommend using the fully qualified"
-          + " table name.");
+              + " it was not assigned a table nor a query to execute."
+              + " If run in table mode please make sure that the tables"
+              + " exist on the database. If the table does exist on"
+              + " the database, we recommend using the fully qualified"
+              + " table name.");
     }
 
     if ((!tables.isEmpty() && !query.isEmpty())) {

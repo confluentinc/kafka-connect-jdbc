@@ -105,7 +105,7 @@ public class JdbcSourceTask extends SourceTask {
       // Start task but do nothing.
       if (!tablesFetched) {
         taskThreadId.set(Thread.currentThread().getId());
-        log.info("Started JDBC source task. No work will be done, waiting to fetch tables.");
+        log.info("Started JDBC source task. Waiting for DB tables to be fetched.");
         return;
       }
 
@@ -400,7 +400,7 @@ public class JdbcSourceTask extends SourceTask {
     log.trace("Polling for new data");
 
     // If the call to get tables has not completed we will not do anything.
-    // This is only valid in in table mode.
+    // This is only valid in table mode.
     Boolean tablesFetched = config.getBoolean(JdbcSourceTaskConfig.TABLES_FETCHED);
     String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
     if (query.isEmpty() && !tablesFetched) {

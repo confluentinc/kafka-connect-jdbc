@@ -158,6 +158,7 @@ public class JdbcSourceConnector extends SourceConnector {
     if (!query.isEmpty()) {
       Map<String, String> taskProps = new HashMap<>(configProperties);
       taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
+      taskProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
       taskConfigs = Collections.singletonList(taskProps);
       log.trace("Producing task configs with custom query");
       return taskConfigs;
@@ -168,6 +169,13 @@ public class JdbcSourceConnector extends SourceConnector {
         Map<String, String> taskProps = new HashMap<>(configProperties);
         taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
         if (currentTables == null) {
+          /*
+          currentTables is only null when the connector is starting up/restarting. In this case we
+          start the connector with 1 task with no tables assigned. This task does no do anything
+          until the call to fetch all tables is completed. TABLES_FETCH config is used to tell the
+          task to skip all processing. For more ref:
+          https://github.com/confluentinc/kafka-connect-jdbc/pull/1348
+           */
           taskProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "false");
           log.warn("The connector has not been able to read the "
               + "list of tables from the database yet.");

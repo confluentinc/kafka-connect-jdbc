@@ -33,7 +33,7 @@ public class JdbcSourceTaskConfig extends JdbcSourceConnectorConfig {
 
   static ConfigDef config = baseConfigDef()
       .define(TABLES_CONFIG, Type.LIST, Importance.HIGH, TABLES_DOC)
-      .defineInternal(TABLES_FETCHED, Type.BOOLEAN, true, Importance.HIGH);
+      .defineInternal(TABLES_FETCHED, Type.BOOLEAN, false, Importance.HIGH);
 
   public JdbcSourceTaskConfig(Map<String, String> props) {
     super(config, props);

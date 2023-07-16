@@ -887,6 +887,17 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   }
 
   @Test
+  public void testTaskCreatedWhileWaitingToFetchTables() throws InterruptedException {
+    initializeTask();
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
+    props.put(JdbcSourceTaskConfig.TABLES_FETCHED, "false");
+    task.start(props);
+    List<SourceRecord> records = task.poll();
+    assertNull(records);
+  }
+
+  @Test
   public void testCustomQueryMultipleRecordsWithDBPartition() throws Exception {
     expectInitializeNoOffsets(Arrays.asList(JOIN_QUERY_PARTITION));
 

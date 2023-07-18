@@ -158,22 +158,31 @@ public class JdbcSourceConnector extends SourceConnector {
     if (!query.isEmpty()) {
       Map<String, String> taskProps = new HashMap<>(configProperties);
       taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
+      taskProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
       taskConfigs = Collections.singletonList(taskProps);
       log.trace("Producing task configs with custom query");
       return taskConfigs;
     } else {
       List<TableId> currentTables = tableMonitorThread.tables();
-      if (currentTables == null) {
-        taskConfigs = Collections.emptyList();
-        log.info(
-            "No tasks will be run because the connector has not been able to read "
-                + "the list of tables from the database yet"
-        );
-      } else if (currentTables.isEmpty()) {
+      if (currentTables == null || currentTables.isEmpty()) {
         taskConfigs = new ArrayList<>(1);
-        log.warn("No tables were found so there's no work to be done.");
         Map<String, String> taskProps = new HashMap<>(configProperties);
-        taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, "[]");
+        taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
+        if (currentTables == null) {
+          /*
+          currentTables is only null when the connector is starting up/restarting. In this case we
+          start the connector with 1 task with no tables assigned. This task does no do anything
+          until the call to fetch all tables is completed. TABLES_FETCH config is used to tell the
+          task to skip all processing. For more ref:
+          https://github.com/confluentinc/kafka-connect-jdbc/pull/1348
+           */
+          taskProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "false");
+          log.warn("The connector has not been able to read the "
+              + "list of tables from the database yet.");
+        } else {
+          taskProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
+          log.warn("No tables were found so there's no work to be done.");
+        }
         taskConfigs.add(taskProps);
       } else {
         int numGroups = Math.min(currentTables.size(), maxTasks);
@@ -185,6 +194,7 @@ public class JdbcSourceConnector extends SourceConnector {
           ExpressionBuilder builder = dialect.expressionBuilder();
           builder.appendList().delimitedBy(",").of(taskTables);
           taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, builder.toString());
+          taskProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
           taskConfigs.add(taskProps);
         }
         log.trace(

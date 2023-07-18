@@ -866,11 +866,12 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     PowerMock.verifyAll();
   }
 
-  @Test (expected = ConnectException.class)
+  @Test (expected = ConfigException.class)
   public void testTaskFailsIfNoQueryOrTablesConfigProvided() {
     initializeTask();
     Map<String, String> props = new HashMap<>();
-    props.put(JdbcSourceTaskConfig.TABLES_CONFIG, "[]");
+    props.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
+    props.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
     props.put(JdbcSourceConnectorConfig.QUERY_CONFIG, "");
     task.start(props);
   }
@@ -880,8 +881,20 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     initializeTask();
     Map<String, String> props = new HashMap<>();
     props.put(JdbcSourceTaskConfig.TABLES_CONFIG, "[dbo.table]");
+    props.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
     props.put(JdbcSourceConnectorConfig.QUERY_CONFIG, "Select * from some table");
     task.start(props);
+  }
+
+  @Test
+  public void testTaskCreatedWhileWaitingToFetchTables() throws InterruptedException {
+    initializeTask();
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
+    props.put(JdbcSourceTaskConfig.TABLES_FETCHED, "false");
+    task.start(props);
+    List<SourceRecord> records = task.poll();
+    assertNull(records);
   }
 
   @Test
@@ -984,6 +997,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     if (query != null) {
       taskConfig.put(JdbcSourceTaskConfig.QUERY_CONFIG, query);
       taskConfig.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
+      taskConfig.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
     }
     if (timestampColumn != null) {
       taskConfig.put(JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG, timestampColumn);

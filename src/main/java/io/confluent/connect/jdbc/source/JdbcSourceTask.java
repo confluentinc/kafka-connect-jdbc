@@ -97,9 +97,19 @@ public class JdbcSourceTask extends SourceTask {
     }
 
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
+    Boolean tablesFetched = config.getBoolean(JdbcSourceTaskConfig.TABLES_FETCHED);
     String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
 
     if ((tables.isEmpty() && query.isEmpty())) {
+      // We are still waiting for the tables call to complete.
+      // Start task but do nothing.
+      if (!tablesFetched) {
+        taskThreadId.set(Thread.currentThread().getId());
+        log.info("Started JDBC source task. Waiting for DB tables to be fetched.");
+        return;
+      }
+
+      // Tables call has completed, but we didn't get any table assigned to this task
       throw new ConfigException("Task is being killed because"
               + " it was not assigned a table nor a query to execute."
               + " If run in table mode please make sure that the tables"
@@ -388,6 +398,18 @@ public class JdbcSourceTask extends SourceTask {
   @Override
   public List<SourceRecord> poll() throws InterruptedException {
     log.trace("Polling for new data");
+
+    // If the call to get tables has not completed we will not do anything.
+    // This is only valid in table mode.
+    Boolean tablesFetched = config.getBoolean(JdbcSourceTaskConfig.TABLES_FETCHED);
+    String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
+    if (query.isEmpty() && !tablesFetched) {
+      final long sleepMs = config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
+      log.trace("Waiting for tables to be fetched from the database. No records will be polled. "
+          + "Waiting {} ms to poll", sleepMs);
+      time.sleep(sleepMs);
+      return null;
+    }
 
     Map<TableQuerier, Integer> consecutiveEmptyResults = tableQueue.stream().collect(
         Collectors.toMap(Function.identity(), (q) -> 0));

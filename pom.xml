@@ -84,7 +84,17 @@
             <url>https://packages.confluent.io/maven/</url>
         </pluginRepository>
     </pluginRepositories>
-
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>io.zonky.test.postgres</groupId>
+                <artifactId>embedded-postgres-binaries-bom</artifactId>
+                <version>11.13.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
     <dependencies>
         <dependency>
             <groupId>org.apache.kafka</groupId>
@@ -236,7 +246,7 @@
         <dependency>
             <groupId>io.zonky.test</groupId>
             <artifactId>embedded-postgres</artifactId>
-            <version>1.2.6</version>
+            <version>1.3.1</version>
             <scope>test</scope>
         </dependency>
         <dependency>

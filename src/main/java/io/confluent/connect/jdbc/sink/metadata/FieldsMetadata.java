@@ -37,7 +37,8 @@ public class FieldsMetadata {
   public final Set<String> nonKeyFieldNames;
   public final Map<String, SinkRecordField> allFields;
 
-  private FieldsMetadata(
+  // visible for testing
+  public FieldsMetadata(
       Set<String> keyFieldNames,
       Set<String> nonKeyFieldNames,
       Map<String, SinkRecordField> allFields

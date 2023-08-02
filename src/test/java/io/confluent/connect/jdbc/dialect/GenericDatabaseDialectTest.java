@@ -16,6 +16,7 @@
 package io.confluent.connect.jdbc.dialect;
 
 import org.apache.kafka.common.config.AbstractConfig;
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -23,13 +24,16 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.easymock.EasyMock;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.testcontainers.shaded.com.google.common.collect.ImmutableList;
 
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Types;
 import java.util.Arrays;
 import java.util.Collection;
@@ -56,11 +60,15 @@ import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.TableType;
 
+import static org.easymock.EasyMock.expect;
+import static org.easymock.EasyMock.replay;
+import static org.easymock.EasyMock.verify;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseDialect> {
@@ -296,6 +304,60 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
   }
 
   @Test
+  public void testApplyDdlStatementsCommits() throws Exception {
+    Connection conn = EasyMock.createMock(Connection.class);
+    Statement statement = EasyMock.createNiceMock(Statement.class);
+    expect(conn.createStatement()).andReturn(statement);
+    conn.commit();
+    expect(statement.executeUpdate("SQL things here")).andReturn(0);
+
+    replay(conn, statement);
+    dialect.applyDdlStatements(conn, ImmutableList.of("SQL things here"));
+    verify(conn, statement);
+  }
+
+  @Test
+  public void testApplyDdlStatementsRollbackOnCommitFail() throws Exception {
+    Connection conn = EasyMock.createMock(Connection.class);
+    Statement statement = EasyMock.createNiceMock(Statement.class);
+    expect(conn.createStatement()).andReturn(statement);
+    conn.commit();
+    EasyMock.expectLastCall().andThrow(new SQLException("Ooops!"));
+    conn.rollback();
+
+    expect(statement.executeUpdate("SQL things here")).andReturn(0);
+
+    replay(conn, statement);
+    Throwable thrown = assertThrows(SQLException.class, () -> {
+      dialect.applyDdlStatements(conn, ImmutableList.of("SQL things here"));
+    });
+    verify(conn, statement);
+    assertEquals("Ooops!", thrown.getMessage());
+  }
+
+  @Test
+  public void testApplyDdlStatementsCommitAndRollbackBothFail() throws Exception {
+    Connection conn = EasyMock.createMock(Connection.class);
+    Statement statement = EasyMock.createNiceMock(Statement.class);
+    expect(conn.createStatement()).andReturn(statement);
+    conn.commit();
+    EasyMock.expectLastCall().andThrow(new SQLException("Ooops!"));
+    conn.rollback();
+    EasyMock.expectLastCall().andThrow(new SQLException("Double Ooops!"));
+
+    expect(statement.executeUpdate("SQL things here")).andReturn(0);
+
+    replay(conn, statement);
+    Throwable thrown = assertThrows(SQLException.class, () -> {
+      dialect.applyDdlStatements(conn, ImmutableList.of("SQL things here"));
+    });
+    verify(conn, statement);
+    assertEquals("Ooops!", thrown.getMessage());
+    assertEquals(1, thrown.getSuppressed().length);
+    assertEquals("Double Ooops!", thrown.getSuppressed()[0].getMessage());
+  }
+
+  @Test
   public void testDescribeTableOnEmptyDb() throws SQLException {
     TableId someTable = new TableId(null, "APP", "some_table");
     TableDefinition defn = dialect.describeTable(db.getConnection(), someTable);
@@ -463,6 +525,44 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
     verifyWriteColumnSpec("foo DUMMY NOT NULL", new SinkRecordField(Schema.INT32_SCHEMA, "foo", false));
     verifyWriteColumnSpec("foo DUMMY NOT NULL", new SinkRecordField(Schema.OPTIONAL_INT32_SCHEMA, "foo", true));
     verifyWriteColumnSpec("foo DUMMY NULL", new SinkRecordField(Schema.OPTIONAL_INT32_SCHEMA, "foo", false));
+  }
+
+  @Test
+  public void setTransactionIsolationModes() throws SQLException {
+    GenericDatabaseDialect dialect = dummyDialect();
+    Connection conn = db.getConnection();
+
+    // READ_UNCOMMITTED
+    dialect.setConnectionIsolationMode(conn,
+            JdbcSourceConnectorConfig.TransactionIsolationMode.READ_UNCOMMITTED
+    );
+    assertEquals(conn.getTransactionIsolation(), Connection.TRANSACTION_READ_UNCOMMITTED);
+
+    // READ_COMMITTED
+    dialect.setConnectionIsolationMode(conn,
+            JdbcSourceConnectorConfig.TransactionIsolationMode.READ_COMMITTED
+    );
+    assertEquals(conn.getTransactionIsolation(), Connection.TRANSACTION_READ_COMMITTED);
+
+    // REPEATABLE READ
+    dialect.setConnectionIsolationMode(conn,
+            JdbcSourceConnectorConfig.TransactionIsolationMode.REPEATABLE_READ
+    );
+    assertEquals(conn.getTransactionIsolation(), Connection.TRANSACTION_REPEATABLE_READ);
+
+    // SERIALIZABLE
+    dialect.setConnectionIsolationMode(conn,
+            JdbcSourceConnectorConfig.TransactionIsolationMode.SERIALIZABLE
+    );
+    assertEquals(conn.getTransactionIsolation(), Connection.TRANSACTION_SERIALIZABLE);
+
+    // this transaction isolation mode is not supported. No error is expected.
+    // Just a warning. Old isolation mode is maintained.
+    dialect.setConnectionIsolationMode(conn,
+            JdbcSourceConnectorConfig.TransactionIsolationMode.SQL_SERVER_SNAPSHOT
+    );
+    // confirm transaction isolation mode does not change.
+    assertEquals(conn.getTransactionIsolation(), Connection.TRANSACTION_SERIALIZABLE);
   }
 
   @Test

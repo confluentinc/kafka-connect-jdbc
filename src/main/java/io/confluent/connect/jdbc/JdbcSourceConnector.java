@@ -15,8 +15,10 @@
 
 package io.confluent.connect.jdbc;
 
+import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.connector.Task;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceConnector;
@@ -89,9 +91,12 @@ public class JdbcSourceConnector extends SourceConnector {
     cachedConnectionProvider = connectionProvider(maxConnectionAttempts, connectionRetryBackoff);
 
     // Initial connection attempt
+    log.info("Initial connection attempt with the database.");
     cachedConnectionProvider.getConnection();
 
     long tablePollMs = config.getLong(JdbcSourceConnectorConfig.TABLE_POLL_INTERVAL_MS_CONFIG);
+    long tableStartupLimitMs =
+        config.getLong(JdbcSourceConnectorConfig.TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_CONFIG);
     List<String> whitelist = config.getList(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG);
     Set<String> whitelistSet = whitelist.isEmpty() ? null : new HashSet<>(whitelist);
     List<String> blacklist = config.getList(JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG);
@@ -117,11 +122,15 @@ public class JdbcSourceConnector extends SourceConnector {
         dialect,
         cachedConnectionProvider,
         context,
+        tableStartupLimitMs,
         tablePollMs,
         whitelistSet,
-        blacklistSet
+        blacklistSet,
+        Time.SYSTEM
     );
-    tableMonitorThread.start();
+    if (query.isEmpty()) {
+      tableMonitorThread.start();
+    }
   }
 
   protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
@@ -134,20 +143,47 @@ public class JdbcSourceConnector extends SourceConnector {
   }
 
   @Override
+  public Config validate(Map<String, String> connectorConfigs) {
+    Config config = super.validate(connectorConfigs);
+    JdbcSourceConnectorConfig jdbcSourceConnectorConfig
+            = new JdbcSourceConnectorConfig(connectorConfigs);
+    jdbcSourceConnectorConfig.validateMultiConfigs(config);
+    return config;
+  }
+
+  @Override
   public List<Map<String, String>> taskConfigs(int maxTasks) {
     String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
     List<Map<String, String>> taskConfigs;
     if (!query.isEmpty()) {
       Map<String, String> taskProps = new HashMap<>(configProperties);
       taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
+      taskProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
       taskConfigs = Collections.singletonList(taskProps);
       log.trace("Producing task configs with custom query");
       return taskConfigs;
     } else {
       List<TableId> currentTables = tableMonitorThread.tables();
-      if (currentTables.isEmpty()) {
-        taskConfigs = Collections.emptyList();
-        log.warn("No tasks will be run because no tables were found");
+      if (currentTables == null || currentTables.isEmpty()) {
+        taskConfigs = new ArrayList<>(1);
+        Map<String, String> taskProps = new HashMap<>(configProperties);
+        taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
+        if (currentTables == null) {
+          /*
+          currentTables is only null when the connector is starting up/restarting. In this case we
+          start the connector with 1 task with no tables assigned. This task does no do anything
+          until the call to fetch all tables is completed. TABLES_FETCH config is used to tell the
+          task to skip all processing. For more ref:
+          https://github.com/confluentinc/kafka-connect-jdbc/pull/1348
+           */
+          taskProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "false");
+          log.warn("The connector has not been able to read the "
+              + "list of tables from the database yet.");
+        } else {
+          taskProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
+          log.warn("No tables were found so there's no work to be done.");
+        }
+        taskConfigs.add(taskProps);
       } else {
         int numGroups = Math.min(currentTables.size(), maxTasks);
         List<List<TableId>> tablesGrouped =
@@ -158,6 +194,7 @@ public class JdbcSourceConnector extends SourceConnector {
           ExpressionBuilder builder = dialect.expressionBuilder();
           builder.appendList().delimitedBy(",").of(taskTables);
           taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, builder.toString());
+          taskProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
           taskConfigs.add(taskProps);
         }
         log.trace(
@@ -179,7 +216,7 @@ public class JdbcSourceConnector extends SourceConnector {
       // Ignore, shouldn't be interrupted
     } finally {
       try {
-        cachedConnectionProvider.close();
+        cachedConnectionProvider.close(true);
       } finally {
         try {
           if (dialect != null) {

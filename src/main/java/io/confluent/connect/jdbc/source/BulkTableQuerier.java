@@ -70,7 +70,7 @@ public class BulkTableQuerier extends TableQuerier {
     String queryStr = builder.toString();
 
     recordQuery(queryStr);
-    log.debug("{} prepared SQL query: {}", this, queryStr);
+    log.trace("{} prepared SQL query: {}", this, queryStr);
     stmt = dialect.createPreparedStatement(db, queryStr);
   }
 

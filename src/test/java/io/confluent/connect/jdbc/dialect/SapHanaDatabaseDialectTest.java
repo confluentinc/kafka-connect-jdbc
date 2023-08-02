@@ -104,6 +104,13 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
     String sql = dialect.buildCreateTableStatement(tableId, sinkRecordFields);
     assertEquals(expected, sql);
   }
+  
+   @Test
+  public void shouldReturnCurrentTimestampDatabaseQuery() {
+     String expected = "SELECT CURRENT_TIMESTAMP FROM DUMMY";
+     String sql = dialect.currentTimestampDatabaseQuery();
+     assertEquals(expected, sql);
+  }
 
   @Test
   public void shouldBuildAlterTableStatement() {

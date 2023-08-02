@@ -32,6 +32,7 @@ import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIsolationMode;
 import io.confluent.connect.jdbc.source.TimestampIncrementingCriteria;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
@@ -202,6 +203,20 @@ public interface DatabaseDialect extends ConnectionProvider {
    */
   boolean tableExists(Connection connection, TableId tableId) throws SQLException;
 
+
+  /**
+   * Set the isolation mode for the connection.
+   * Isolation modes can differ by database so this provides an interface for
+   * the mode to be overridden.
+   *
+   * @param connection the database connection; may not be null
+   * @param transactionIsolationMode the transaction isolation config
+   */
+  void setConnectionIsolationMode(
+          Connection connection,
+          TransactionIsolationMode transactionIsolationMode
+  );
+
   /**
    * Create the definition for the columns described by the database metadata using the current
    * schema and catalog patterns defined in the configuration.
@@ -311,14 +326,70 @@ public interface DatabaseDialect extends ConnectionProvider {
   /**
    * Build the INSERT prepared statement expression for the given table and its columns.
    *
+   * <p>This method is only called by the default implementation of
+   * {@link #buildInsertStatement(TableId, Collection, Collection, TableDefinition)}, since
+   * many dialects implement this variant of the method. However, overriding
+   * {@link #buildInsertStatement(TableId, Collection, Collection, TableDefinition)} is suggested.
+   *
    * @param table         the identifier of the table; may not be null
    * @param keyColumns    the identifiers of the columns in the primary/unique key; may not be null
    *                      but may be empty
    * @param nonKeyColumns the identifiers of the other columns in the table; may not be null but may
    *                      be empty
    * @return the INSERT statement; may not be null
+   * @deprecated use {@link #buildInsertStatement(TableId, Collection, Collection, TableDefinition)}
    */
+  @Deprecated
   String buildInsertStatement(
+      TableId table,
+      Collection<ColumnId> keyColumns,
+      Collection<ColumnId> nonKeyColumns
+  );
+
+  /**
+   * Build the INSERT prepared statement expression for the given table and its columns.
+   *
+   * <p>By default this method calls
+   * {@link #buildInsertStatement(TableId, Collection, Collection)} to maintain backward
+   * compatibility with older versions. Subclasses that override this method do not need to
+   * override {@link #buildInsertStatement(TableId, Collection, Collection)}.
+   *
+   * @param table         the identifier of the table; may not be null
+   * @param keyColumns    the identifiers of the columns in the primary/unique key; may not be null
+   *                      but may be empty
+   * @param nonKeyColumns the identifiers of the other columns in the table; may not be null but may
+   *                      be empty
+   * @param definition    the table definition; may be null if unknown
+   * @return the INSERT statement; may not be null
+   */
+  default String buildInsertStatement(
+      TableId table,
+      Collection<ColumnId> keyColumns,
+      Collection<ColumnId> nonKeyColumns,
+      TableDefinition definition
+  ) {
+    return buildInsertStatement(table, keyColumns, nonKeyColumns);
+  }
+
+  /**
+   * Build the UPDATE prepared statement expression for the given table and its columns. Variables
+   * for each key column should also appear in the WHERE clause of the statement.
+   *
+   * <p>This method is only called by the default implementation of
+   * {@link #buildUpdateStatement(TableId, Collection, Collection, TableDefinition)}, since
+   * many dialects implement this variant of the method. However, overriding
+   * {@link #buildUpdateStatement(TableId, Collection, Collection, TableDefinition)} is suggested.
+   *
+   * @param table         the identifier of the table; may not be null
+   * @param keyColumns    the identifiers of the columns in the primary/unique key; may not be null
+   *                      but may be empty
+   * @param nonKeyColumns the identifiers of the other columns in the table; may not be null but may
+   *                      be empty
+   * @return the UPDATE statement; may not be null
+   * @deprecated use {@link #buildUpdateStatement(TableId, Collection, Collection, TableDefinition)}
+   */
+  @Deprecated
+  String buildUpdateStatement(
       TableId table,
       Collection<ColumnId> keyColumns,
       Collection<ColumnId> nonKeyColumns
@@ -328,14 +399,50 @@ public interface DatabaseDialect extends ConnectionProvider {
    * Build the UPDATE prepared statement expression for the given table and its columns. Variables
    * for each key column should also appear in the WHERE clause of the statement.
    *
+   * <p>By default this method calls
+   * {@link #buildUpdateStatement(TableId, Collection, Collection)} to maintain backward
+   * compatibility with older versions. Subclasses that override this method do not need to
+   * override {@link #buildUpdateStatement(TableId, Collection, Collection)}.
+   *
    * @param table         the identifier of the table; may not be null
    * @param keyColumns    the identifiers of the columns in the primary/unique key; may not be null
    *                      but may be empty
    * @param nonKeyColumns the identifiers of the other columns in the table; may not be null but may
    *                      be empty
+   * @param definition    the table definition; may be null if unknown
    * @return the UPDATE statement; may not be null
    */
-  String buildUpdateStatement(
+  default String buildUpdateStatement(
+      TableId table,
+      Collection<ColumnId> keyColumns,
+      Collection<ColumnId> nonKeyColumns,
+      TableDefinition definition
+  ) {
+    return buildUpdateStatement(table, keyColumns, nonKeyColumns);
+  }
+
+  /**
+   * Build the UPSERT or MERGE prepared statement expression to either insert a new record into the
+   * given table or update an existing record in that table Variables for each key column should
+   * also appear in the WHERE clause of the statement.
+   *
+   * <p>This method is only called by the default implementation of
+   * {@link #buildUpsertQueryStatement(TableId, Collection, Collection, TableDefinition)}, since
+   * many dialects implement this variant of the method. However, overriding
+   * {@link #buildUpsertQueryStatement(TableId, Collection, Collection, TableDefinition)}
+   * is suggested.
+   *
+   * @param table         the identifier of the table; may not be null
+   * @param keyColumns    the identifiers of the columns in the primary/unique key; may not be null
+   *                      but may be empty
+   * @param nonKeyColumns the identifiers of the other columns in the table; may not be null but may
+   *                      be empty
+   * @return the upsert/merge statement; may not be null
+   * @throws UnsupportedOperationException if the dialect does not support upserts
+   * @deprecated use {@link #buildUpsertQueryStatement(TableId, Collection, Collection)}
+   */
+  @Deprecated
+  String buildUpsertQueryStatement(
       TableId table,
       Collection<ColumnId> keyColumns,
       Collection<ColumnId> nonKeyColumns
@@ -346,19 +453,28 @@ public interface DatabaseDialect extends ConnectionProvider {
    * given table or update an existing record in that table Variables for each key column should
    * also appear in the WHERE clause of the statement.
    *
+   * <p>By default this method calls
+   * {@link #buildUpsertQueryStatement(TableId, Collection, Collection)} to maintain backward
+   * compatibility with older versions. Subclasses that override this method do not need to
+   * override {@link #buildUpsertQueryStatement(TableId, Collection, Collection)}.
+   *
    * @param table         the identifier of the table; may not be null
    * @param keyColumns    the identifiers of the columns in the primary/unique key; may not be null
    *                      but may be empty
    * @param nonKeyColumns the identifiers of the other columns in the table; may not be null but may
    *                      be empty
+   * @param definition    the table definition; may be null if unknown
    * @return the upsert/merge statement; may not be null
    * @throws UnsupportedOperationException if the dialect does not support upserts
    */
-  String buildUpsertQueryStatement(
+  default String buildUpsertQueryStatement(
       TableId table,
       Collection<ColumnId> keyColumns,
-      Collection<ColumnId> nonKeyColumns
-  );
+      Collection<ColumnId> nonKeyColumns,
+      TableDefinition definition
+  ) {
+    return buildUpsertQueryStatement(table, keyColumns, nonKeyColumns);
+  }
 
   /**
    * Build the DELETE prepared statement expression for the given table and its columns. Variables
@@ -406,7 +522,6 @@ public interface DatabaseDialect extends ConnectionProvider {
 
   /**
    * Create a component that can bind record values into the supplied prepared statement.
-   *
    * @param statement      the prepared statement
    * @param pkMode         the primary key mode; may not be null
    * @param schemaPair     the key and value schemas; may not be null
@@ -415,6 +530,7 @@ public interface DatabaseDialect extends ConnectionProvider {
    * @return the statement binder; may not be null
    * @see #bindField(PreparedStatement, int, Schema, Object)
    */
+  @Deprecated
   StatementBinder statementBinder(
       PreparedStatement statement,
       JdbcSinkConfig.PrimaryKeyMode pkMode,
@@ -424,9 +540,50 @@ public interface DatabaseDialect extends ConnectionProvider {
   );
 
   /**
+   * Create a component that can bind record values into the supplied prepared statement. By
+   * default, the behavior is the same as the other overloaded method with the extra parameter
+   * tableDefinition. This overloading method is introduced to deprecate the other overloaded
+   * method eventually.
+   *
+   * @param statement      the prepared statement
+   * @param pkMode         the primary key mode; may not be null
+   * @param schemaPair     the key and value schemas; may not be null
+   * @param fieldsMetadata the field metadata; may not be null
+   * @param tableDefinition the table definition; may be null
+   * @param insertMode     the insert mode; may not be null
+   * @return the statement binder; may not be null
+   * @see #bindField(PreparedStatement, int, Schema, Object)
+   */
+  default StatementBinder statementBinder(
+      PreparedStatement statement,
+      JdbcSinkConfig.PrimaryKeyMode pkMode,
+      SchemaPair schemaPair,
+      FieldsMetadata fieldsMetadata,
+      TableDefinition tableDefinition,
+      JdbcSinkConfig.InsertMode insertMode
+  ) {
+    return statementBinder(statement, pkMode, schemaPair, fieldsMetadata, insertMode);
+  }
+
+  /**
+   * Validate if dialect specific column types are compatible with connector.
+   * Sometimes JDBC treats some column types in a SQL database the same
+   * (eg, MSSQL Server's DATETIME and DATETIME2 are considered {@link java.sql.Time}).
+   * This function is used to handle these specifc column types.
+   *
+   * @param rsMetadata          the result set metadata; may not be null
+   * @param columns             columns to check; may not be null
+   * @throws ConnectException   if column type not compatible with connector
+   *                            or if there is an error accessing the result set metadata
+   */
+  void validateSpecificColumnTypes(
+          ResultSetMetaData rsMetadata,
+          List<ColumnId> columns
+  ) throws ConnectException;
+
+  /**
    * Method that binds a value with the given schema at the specified variable within a prepared
    * statement.
-   *
    * @param statement the prepared statement; may not be null
    * @param index     the 1-based index of the variable within the prepared statement
    * @param schema    the schema for the value; may be null only if the value is null
@@ -434,12 +591,37 @@ public interface DatabaseDialect extends ConnectionProvider {
    * @throws SQLException if there is a problem binding the value into the statement
    * @see #statementBinder
    */
+  @Deprecated
   void bindField(
       PreparedStatement statement,
       int index,
       Schema schema,
       Object value
   ) throws SQLException;
+
+
+  /** Method that binds a value with the given schema at the specified variable within a prepared
+   * statement. By default, the behavior is the same as the other overloaded method with the extra
+   * parameter colDef. This overloading method is introduced to deprecate the other overloaded
+   * method eventually.
+   *
+   * @param statement the prepared statement; may not be null
+   * @param index     the 1-based index of the variable within the prepared statement
+   * @param schema    the schema for the value; may be null only if the value is null
+   * @param value     the value to be bound to the variable; may be null
+   * @param colDef    the Definition of the column to be bound; may be null
+   * @throws SQLException if there is a problem binding the value into the statement
+   * @see #statementBinder
+   */
+  default void bindField(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
+      Object value,
+      ColumnDefinition colDef
+  ) throws SQLException {
+    bindField(statement, index, schema, value);
+  }
 
   /**
    * A function to bind the values from a sink record into a prepared statement.

@@ -15,7 +15,6 @@
 
 package io.confluent.connect.jdbc.source;
 
-import java.util.TimeZone;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
@@ -26,14 +25,17 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.TimeZone;
 import java.util.List;
 import java.util.Map;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TimestampGranularity;
 import io.confluent.connect.jdbc.source.SchemaMapping.FieldSetter;
 import io.confluent.connect.jdbc.source.TimestampIncrementingCriteria.CriteriaValues;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
@@ -44,18 +46,18 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder;
 /**
  * <p>
  *   TimestampIncrementingTableQuerier performs incremental loading of data using two mechanisms: a
- *   timestamp column provides monotonically incrementing values that can be used to detect new or
- *   modified rows and a strictly incrementing (e.g. auto increment) column allows detecting new
+ *   timestamp column provides monotonically-incrementing values that can be used to detect new or
+ *   modified rows and a strictly-incrementing (e.g. auto increment) column allows detecting new
  *   rows or combined with the timestamp provide a unique identifier for each update to the row.
  * </p>
  * <p>
  *   At least one of the two columns must be specified (or left as "" for the incrementing column
  *   to indicate use of an auto-increment column). If both columns are provided, they are both
  *   used to ensure only new or updated rows are reported and to totally order updates so
- *   recovery can occur no matter when offsets were committed. If only the incrementing fields is
- *   provided, new rows will be detected but not updates. If only the timestamp field is
+ *   recovery can occur no matter when offsets were committed. If only an incrementing field is
+ *   provided, new rows will be detected but not updates. If only timestamp fields are
  *   provided, both new and updated rows will be detected, but stream offsets will not be unique
- *   so failures may cause duplicates or losses.
+ *   so failures may cause duplicates.
  * </p>
  */
 public class TimestampIncrementingTableQuerier extends TableQuerier implements CriteriaValues {
@@ -63,14 +65,16 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
       TimestampIncrementingTableQuerier.class
   );
 
-  private final List<String> timestampColumnNames;
+  protected final List<String> timestampColumnNames;
+  protected TimestampIncrementingOffset committedOffset;
+  protected TimestampIncrementingOffset offset;
+  protected TimestampIncrementingCriteria criteria;
+  protected final Map<String, String> partition;
+  protected final String topic;
+  protected final TimestampGranularity timestampGranularity;
   private final List<ColumnId> timestampColumns;
   private String incrementingColumnName;
-  private long timestampDelay;
-  private TimestampIncrementingOffset offset;
-  private TimestampIncrementingCriteria criteria;
-  private final Map<String, String> partition;
-  private final String topic;
+  private final long timestampDelay;
   private final TimeZone timeZone;
 
   public TimestampIncrementingTableQuerier(DatabaseDialect dialect, QueryMode mode, String name,
@@ -78,13 +82,14 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
                                            List<String> timestampColumnNames,
                                            String incrementingColumnName,
                                            Map<String, Object> offsetMap, Long timestampDelay,
-                                           TimeZone timeZone, String suffix) {
+                                           TimeZone timeZone, String suffix,
+                                           TimestampGranularity timestampGranularity) {
     super(dialect, mode, name, topicPrefix, suffix);
     this.incrementingColumnName = incrementingColumnName;
     this.timestampColumnNames = timestampColumnNames != null
-                                ? timestampColumnNames : Collections.<String>emptyList();
+        ? timestampColumnNames : Collections.emptyList();
     this.timestampDelay = timestampDelay;
-    this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
+    this.committedOffset = this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
 
     this.timestampColumns = new ArrayList<>();
     for (String timestampColumn : this.timestampColumnNames) {
@@ -96,7 +101,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     switch (mode) {
       case TABLE:
         String tableName = tableId.tableName();
-        topic = topicPrefix + tableName;// backward compatible
+        topic = topicPrefix + tableName; // backward compatible
         partition = OffsetProtocols.sourcePartitionForProtocolV1(tableId);
         break;
       case QUERY:
@@ -109,7 +114,13 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     }
 
     this.timeZone = timeZone;
+    this.timestampGranularity = timestampGranularity;
   }
+
+  /**
+   * JDBC TypeName constant for SQL Server's DATETIME columns.
+   */
+  private static String DATETIME = "datetime";
 
   @Override
   protected void createPreparedStatement(Connection db) throws SQLException {
@@ -141,8 +152,29 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     
     String queryString = builder.toString();
     recordQuery(queryString);
-    log.debug("{} prepared SQL query: {}", this, queryString);
+    log.trace("{} prepared SQL query: {}", this, queryString);
     stmt = dialect.createPreparedStatement(db, queryString);
+  }
+
+  @Override
+  public void maybeStartQuery(Connection db) throws SQLException, ConnectException {
+    if (resultSet == null) {
+      this.db = db;
+      stmt = getOrCreatePreparedStatement(db);
+      resultSet = executeQuery();
+      String schemaName = tableId != null ? tableId.tableName() : null; // backwards compatible
+      ResultSetMetaData metadata = resultSet.getMetaData();
+      dialect.validateSpecificColumnTypes(metadata, timestampColumns);
+      schemaMapping = SchemaMapping.create(schemaName, metadata, dialect);
+    } else {
+      log.trace("Current ResultSet {} isn't null. Continuing to seek.", resultSet.hashCode());
+    }
+
+    // This is called everytime during poll() before extracting records,
+    // to ensure that the previous run succeeded, allowing us to move the committedOffset forward.
+    // This action is a no-op for the first poll()
+    this.committedOffset = this.offset;
+    log.trace("Set the committed offset: {}", committedOffset.getTimestampOffset());
   }
 
   private void findDefaultAutoIncrementingColumn(Connection db) throws SQLException {
@@ -195,17 +227,27 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
         throw new DataException(e);
       }
     }
-    offset = criteria.extractValues(schemaMapping.schema(), record, offset);
+    offset = criteria.extractValues(schemaMapping.schema(), record, offset, timestampGranularity);
     return new SourceRecord(partition, offset.toMap(), topic, record.schema(), record);
   }
 
   @Override
-  public Timestamp beginTimetampValue() {
+  public void reset(long now, boolean resetOffset) {
+    // the task is being reset, any uncommitted offset needs to be reset as well
+    // use the previous committedOffset to set the running offset
+    if (resetOffset) {
+      this.offset = this.committedOffset;
+    }
+    super.reset(now, resetOffset);
+  }
+
+  @Override
+  public Timestamp beginTimestampValue() {
     return offset.getTimestampOffset();
   }
 
   @Override
-  public Timestamp endTimetampValue()  throws SQLException {
+  public Timestamp endTimestampValue()  throws SQLException {
     final long currentDbTime = dialect.currentTimeOnDB(
         stmt.getConnection(),
         DateTimeUtils.getTimeZoneCalendar(timeZone)

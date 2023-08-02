@@ -27,6 +27,7 @@ import org.powermock.api.easymock.annotation.Mock;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.TimeZone;
 
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.NumericMapping;
 
@@ -93,6 +94,7 @@ public class JdbcSourceTaskTestBase {
     Map<String, String> props = new HashMap<>();
     props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, db.getUrl());
     props.put(JdbcSourceTaskConfig.TABLES_CONFIG, SINGLE_TABLE_NAME);
+    props.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
     props.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
     props.put(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG, TOPIC_PREFIX);
     if (completeMapping) {
@@ -103,10 +105,19 @@ public class JdbcSourceTaskTestBase {
     return props;
   }
 
+  protected Map<String, String> singleTableWithTimezoneConfig(
+      boolean completeMapping,
+      TimeZone tz) {
+    Map<String, String> props = singleTableConfig(completeMapping);
+    props.put(JdbcSourceTaskConfig.DB_TIMEZONE_CONFIG, tz.getID());
+    return props;
+  }
+
   protected Map<String, String> twoTableConfig() {
     Map<String, String> props = new HashMap<>();
     props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, db.getUrl());
     props.put(JdbcSourceTaskConfig.TABLES_CONFIG, SINGLE_TABLE_NAME + "," + SECOND_TABLE_NAME);
+    props.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
     props.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
     props.put(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG, TOPIC_PREFIX);
     return props;

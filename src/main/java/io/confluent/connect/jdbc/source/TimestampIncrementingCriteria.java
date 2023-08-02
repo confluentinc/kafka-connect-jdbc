@@ -15,7 +15,11 @@
 
 package io.confluent.connect.jdbc.source;
 
+import java.util.ArrayList;
+import java.util.Map;
 import java.util.TimeZone;
+
+import io.confluent.connect.jdbc.util.LruCache;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
@@ -50,7 +54,7 @@ public class TimestampIncrementingCriteria {
      * @return the beginning timestamp; may be null
      * @throws SQLException if there is a problem accessing the value
      */
-    Timestamp beginTimetampValue() throws SQLException;
+    Timestamp beginTimestampValue() throws SQLException;
 
     /**
      * Get the end of the time period.
@@ -58,7 +62,7 @@ public class TimestampIncrementingCriteria {
      * @return the ending timestamp; never null
      * @throws SQLException if there is a problem accessing the value
      */
-    Timestamp endTimetampValue() throws SQLException;
+    Timestamp endTimestampValue() throws SQLException;
 
     /**
      * Get the last incremented value seen.
@@ -75,6 +79,7 @@ public class TimestampIncrementingCriteria {
   protected final List<ColumnId> timestampColumns;
   protected final ColumnId incrementingColumn;
   protected final TimeZone timeZone;
+  private final LruCache<Schema, List<String>> caseAdjustedTimestampColumns;
 
 
   public TimestampIncrementingCriteria(
@@ -86,6 +91,8 @@ public class TimestampIncrementingCriteria {
         timestampColumns != null ? timestampColumns : Collections.<ColumnId>emptyList();
     this.incrementingColumn = incrementingColumn;
     this.timeZone = timeZone;
+    this.caseAdjustedTimestampColumns =
+        timestampColumns != null ? new LruCache<>(16) : null;
   }
 
   protected boolean hasTimestampColumns() {
@@ -136,8 +143,8 @@ public class TimestampIncrementingCriteria {
       PreparedStatement stmt,
       CriteriaValues values
   ) throws SQLException {
-    Timestamp beginTime = values.beginTimetampValue();
-    Timestamp endTime = values.endTimetampValue();
+    Timestamp beginTime = values.beginTimestampValue();
+    Timestamp endTime = values.endTimestampValue();
     Long incOffset = values.lastIncrementedValue();
     stmt.setTimestamp(1, endTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
     stmt.setTimestamp(2, beginTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
@@ -163,8 +170,8 @@ public class TimestampIncrementingCriteria {
       PreparedStatement stmt,
       CriteriaValues values
   ) throws SQLException {
-    Timestamp beginTime = values.beginTimetampValue();
-    Timestamp endTime = values.endTimetampValue();
+    Timestamp beginTime = values.beginTimestampValue();
+    Timestamp endTime = values.endTimestampValue();
     stmt.setTimestamp(1, beginTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
     stmt.setTimestamp(2, endTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
     log.debug("Executing prepared statement with timestamp value = {} end time = {}",
@@ -178,16 +185,19 @@ public class TimestampIncrementingCriteria {
    *
    * @param schema the record's schema; never null
    * @param record the record's struct; never null
+   * @param previousOffset a previous timestamp offset if the table has timestamp columns
+   * @param timestampGranularity defines the configured granularity of the timestamp field
    * @return the timestamp for this row; may not be null
    */
   public TimestampIncrementingOffset extractValues(
       Schema schema,
       Struct record,
-      TimestampIncrementingOffset previousOffset
+      TimestampIncrementingOffset previousOffset,
+      JdbcSourceConnectorConfig.TimestampGranularity timestampGranularity
   ) {
     Timestamp extractedTimestamp = null;
     if (hasTimestampColumns()) {
-      extractedTimestamp = extractOffsetTimestamp(schema, record);
+      extractedTimestamp = extractOffsetTimestamp(schema, record, timestampGranularity);
       assert previousOffset == null || (previousOffset.getTimestampOffset() != null
                                         && previousOffset.getTimestampOffset().compareTo(
           extractedTimestamp) <= 0
@@ -210,14 +220,17 @@ public class TimestampIncrementingCriteria {
    *
    * @param schema the record's schema; never null
    * @param record the record's struct; never null
+   * @param timestampGranularity defines the configured granularity of the timestamp field
    * @return the timestamp for this row; may not be null
    */
   protected Timestamp extractOffsetTimestamp(
       Schema schema,
-      Struct record
+      Struct record,
+      JdbcSourceConnectorConfig.TimestampGranularity timestampGranularity
   ) {
-    for (ColumnId timestampColumn : timestampColumns) {
-      Timestamp ts = (Timestamp) record.get(timestampColumn.name());
+    caseAdjustedTimestampColumns.computeIfAbsent(schema, this::findCaseSensitiveTimestampColumns);
+    for (String timestampColumn : caseAdjustedTimestampColumns.get(schema)) {
+      Timestamp ts = timestampGranularity.toTimestamp.apply(record.get(timestampColumn), timeZone);
       if (ts != null) {
         return ts;
       }
@@ -240,7 +253,7 @@ public class TimestampIncrementingCriteria {
     final Field field = schema.field(incrementingColumn.name());
     if (field == null) {
       throw new DataException("Incrementing column " + incrementingColumn.name() + " not found in "
-              + schema.fields().stream().map(f -> f.name()).collect(Collectors.joining(",")));
+              + schema.fields().stream().map(Field::name).collect(Collectors.joining(",")));
     }
 
     final Schema incrementingColumnSchema = field.schema();
@@ -295,7 +308,7 @@ public class TimestampIncrementingCriteria {
     // get only the row with id = 23:
     //  timestamp 1234, id 22 <- last
     //  timestamp 1234, id 23
-    // The second check only uses the timestamp >= last timestamp. This covers everything new,
+    // The second check only uses the timestamp > last timestamp. This covers everything new,
     // even if it is an update of the existing row. If we previously had:
     //  timestamp 1234, id 22 <- last
     // and then these rows were written:
@@ -336,6 +349,58 @@ public class TimestampIncrementingCriteria {
     builder.append(" < ? ORDER BY ");
     coalesceTimestampColumns(builder);
     builder.append(" ASC");
+  }
+
+  private List<String> findCaseSensitiveTimestampColumns(Schema schema) {
+    Map<String, List<String>> caseInsensitiveColumns = schema.fields().stream()
+        .map(Field::name)
+        .collect(Collectors.groupingBy(String::toLowerCase));
+
+    List<String> result = new ArrayList<>();
+    for (ColumnId timestampColumn : timestampColumns) {
+      String columnName = timestampColumn.name();
+      if (schema.field(columnName) != null) {
+        log.trace(
+            "Timestamp column name {} case-sensitively matches column read from database",
+            columnName
+        );
+        result.add(columnName);
+      } else {
+        log.debug(
+            "Timestamp column name {} not found in columns read from database; "
+                + "falling back to a case-insensitive search",
+            columnName
+        );
+        List<String> caseInsensitiveMatches = caseInsensitiveColumns.get(columnName.toLowerCase());
+        if (caseInsensitiveMatches == null || caseInsensitiveMatches.isEmpty()) {
+          throw new DataException("Timestamp column " + columnName + " not found in "
+              + schema.fields().stream().map(Field::name).collect(Collectors.joining(",")));
+        } else if (caseInsensitiveMatches.size() > 1) {
+          throw new DataException("Timestamp column " + columnName
+              + " not found in columns read from database: "
+              + schema.fields().stream().map(Field::name).collect(Collectors.joining(",")) + ". "
+              + "Could not fall back to case-insensitively selecting a column "
+              + "because there were multiple columns whose names "
+              + "case-insensitively matched the specified name: "
+              + String.join(",", caseInsensitiveMatches) + ". "
+              + "To force the connector to choose between these columns, "
+              + "specify a value for the timestamp column configuration property "
+              + "that matches the desired column case-sensitively."
+          );
+        } else {
+          String caseAdjustedColumnName = caseInsensitiveMatches.get(0);
+          log.debug(
+              "Falling back on column {} for user-specified timestamp column {} "
+                  + "(this is the only column that case-insensitively matches)",
+              caseAdjustedColumnName,
+              columnName
+          );
+          result.add(caseAdjustedColumnName);
+        }
+      }
+    }
+
+    return result;
   }
 
 }

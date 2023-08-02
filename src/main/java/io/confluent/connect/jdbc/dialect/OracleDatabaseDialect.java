@@ -15,9 +15,24 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig.PrimaryKeyMode;
+import io.confluent.connect.jdbc.sink.PreparedStatementBinder;
+import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
+import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.TableDefinition;
+import java.io.ByteArrayInputStream;
+import java.io.StringReader;
+import java.nio.ByteBuffer;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Types;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 
@@ -32,6 +47,9 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.TableId;
+import org.apache.kafka.connect.errors.ConnectException;
+
+import oracle.jdbc.OraclePreparedStatement;
 
 /**
  * A {@link DatabaseDialect} for Oracle.
@@ -72,6 +90,137 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
   }
 
   @Override
+  public StatementBinder statementBinder(
+      PreparedStatement statement,
+      PrimaryKeyMode pkMode,
+      SchemaPair schemaPair,
+      FieldsMetadata fieldsMetadata,
+      TableDefinition tableDefinition,
+      InsertMode insertMode
+  ) {
+    return new PreparedStatementBinder(
+        this,
+        statement,
+        pkMode,
+        schemaPair,
+        fieldsMetadata,
+        tableDefinition,
+        insertMode
+    );
+  }
+
+  @Override
+  public void bindField(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
+      Object value,
+      ColumnDefinition colDef
+  ) throws SQLException {
+    if (value == null) {
+      statement.setObject(index, null);
+    } else {
+      boolean bound = maybeBindLogical(statement, index, schema, value);
+      if (!bound) {
+        bound = maybeBindPrimitive(statement, index, schema, value, colDef);
+      }
+      if (!bound) {
+        throw new ConnectException("Unsupported source data type: " + schema.type());
+      }
+    }
+  }
+
+  protected boolean maybeBindPrimitive(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
+      Object value,
+      ColumnDefinition colDef
+  ) throws SQLException {
+    if (colDef == null) {
+      return super.maybeBindPrimitive(statement, index, schema, value);
+    }
+
+    switch (schema.type()) {
+      case STRING:
+        return maybeBindStringPrimitive(statement, index, schema, value, colDef);
+      case BYTES:
+        if (colDef.type() != Types.BLOB) {
+          break;
+        }
+
+        if (value instanceof ByteBuffer) {
+          statement.setBlob(index, new ByteArrayInputStream(((ByteBuffer) value).array()));
+        } else if (value instanceof byte[]) {
+          statement.setBlob(index, new ByteArrayInputStream((byte[]) value));
+        } else {
+          return super.maybeBindPrimitive(statement, index, schema, value);
+        }
+        return true;
+      case FLOAT32:
+        // Some float values can't be bounded to the JDBC driver with PreparedStatement.setFloat().
+        // Ref: https://github.com/jOOQ/jOOQ/issues/7548
+        ((OraclePreparedStatement) statement).setBinaryFloat(index, (Float)value);
+        return true;
+      case FLOAT64:
+        // Some double values can't be bounded to the JDBC driver with
+        // PreparedStatement.setDouble().
+        // Ref: https://github.com/jOOQ/jOOQ/issues/7548
+        ((OraclePreparedStatement) statement).setBinaryDouble(index, (Double)value);
+        return true;
+      default:
+        // Keep compiler happy.
+    }
+
+    return super.maybeBindPrimitive(statement, index, schema, value);
+  }
+
+  private boolean maybeBindStringPrimitive(
+          PreparedStatement statement,
+          int index,
+          Schema schema,
+          Object value,
+          ColumnDefinition colDef
+  ) throws SQLException {
+    switch (colDef.type()) {
+      case Types.CLOB:
+        final int upsertValueLimit = 4000;
+        boolean valueBinded = false;
+        long valueLength = ((String) value).length();
+        if (this.config instanceof JdbcSinkConfig) {
+          String insertMode = this.config.getString(JdbcSinkConfig.INSERT_MODE);
+          if (insertMode != null && !insertMode.isEmpty()) {
+            // UPSERT mode uses MERGE statement in the query. The oracle driver requires values
+            // of length more than 4000 to be LOB binded in this case.
+            if (InsertMode.valueOf(insertMode.toUpperCase()) == InsertMode.UPSERT) {
+              if (valueLength < upsertValueLimit) {
+                statement.setCharacterStream(index, new StringReader((String) value),
+                        valueLength);
+              } else {
+                statement.setCharacterStream(index, new StringReader((String) value));
+              }
+              valueBinded = true;
+            }
+          }
+        }
+        if (!valueBinded) {
+          statement.setCharacterStream(index, new StringReader((String) value), valueLength);
+        }
+        return true;
+      case Types.NCLOB:
+        statement.setNCharacterStream(index, new StringReader((String) value));
+        return true;
+      case Types.NVARCHAR:
+      case Types.NCHAR:
+        statement.setNString(index, (String) value);
+        return true;
+      default:
+        return super.maybeBindPrimitive(statement, index, schema, value);
+    }
+  }
+
+  @SuppressWarnings("checkstyle:CyclomaticComplexity")
+  @Override
   protected String getSqlType(SinkRecordField field) {
     if (field.schemaName() != null) {
       switch (field.schemaName()) {
@@ -103,7 +252,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "NUMBER(1,0)";
       case STRING:
-        return "CLOB";
+        return "VARCHAR2(4000)";
       case BYTES:
         return "BLOB";
       default:

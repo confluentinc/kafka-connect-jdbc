@@ -15,28 +15,58 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import java.sql.PreparedStatement;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.sql.Types;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.TimeZone;
+import java.util.concurrent.ThreadLocalRandom;
 
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.ColumnId;
+import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.junit.Test;
 
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
+import org.mockito.Mockito;
 
 import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatabaseDialect> {
 
+  public class MockSqlServerDatabaseDialect extends SqlServerDatabaseDialect {
+    public MockSqlServerDatabaseDialect(AbstractConfig config) {
+      super(config);
+    }
+    @Override
+    public boolean versionWithBreakingDatetimeChange() {
+      return true;
+    }
+  }
+
   @Override
   protected SqlServerDatabaseDialect createDialect() {
-    return new SqlServerDatabaseDialect(sourceConfigWithUrl("jdbc:jtds:sqlsserver://something"));
+    return new MockSqlServerDatabaseDialect(sourceConfigWithUrl("jdbc:jtds:sqlsserver://something"));
+  }
+
+  protected SqlServerDatabaseDialect createDialect(AbstractConfig config) {
+    return new MockSqlServerDatabaseDialect(config);
   }
 
   @Test
@@ -197,6 +227,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
 
   @Test
   public void shouldBuildUpsertStatement() {
+    dialect = createDialect(sinkConfigWithUrl("jdbc:jtds:sqlsserver://something"));
     assertEquals(
         "merge into [myTable] with (HOLDLOCK) AS target using (select ? AS [id1], ?" +
         " AS [id2], ? AS [columnA], ? AS [columnB], ? AS [columnC], ? AS [columnD])" +
@@ -211,7 +242,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
     );
 
     quoteIdentfiiers = QuoteMethod.NEVER;
-    dialect = createDialect();
+    dialect = createDialect(sinkConfigWithUrl("jdbc:jtds:sqlsserver://something"));
     assertEquals(
         "merge into myTable with (HOLDLOCK) AS target using (select ? AS id1, ?" +
         " AS id2, ? AS columnA, ? AS columnB, ? AS columnC, ? AS columnD)" +
@@ -223,6 +254,38 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
         "incoming.columnB,incoming.columnC,incoming.columnD,incoming.id1," +
         "incoming.id2);",
         dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
+    );
+  }
+
+  @Test
+  public void shouldBuildUpsertStatementRespectingHoldlockOption() {
+    dialect = createDialect(sinkConfigWithUrl("jdbc:jtds:sqlsserver://something"));
+    assertEquals(
+            "merge into [myTable] with (HOLDLOCK) AS target using (select ? AS [id1], ?" +
+                    " AS [id2], ? AS [columnA], ? AS [columnB], ? AS [columnC], ? AS [columnD])" +
+                    " AS incoming on (target.[id1]=incoming.[id1] and target.[id2]=incoming" +
+                    ".[id2]) when matched then update set [columnA]=incoming.[columnA]," +
+                    "[columnB]=incoming.[columnB],[columnC]=incoming.[columnC]," +
+                    "[columnD]=incoming.[columnD] when not matched then insert ([columnA], " +
+                    "[columnB], [columnC], [columnD], [id1], [id2]) values (incoming.[columnA]," +
+                    "incoming.[columnB],incoming.[columnC],incoming.[columnD],incoming.[id1]," +
+                    "incoming.[id2]);",
+            dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
+    );
+
+    useHoldlockInMerge = false;
+    dialect = createDialect(sinkConfigWithUrl("jdbc:jtds:sqlsserver://something"));
+    assertEquals(
+            "merge into [myTable] AS target using (select ? AS [id1], ?" +
+                    " AS [id2], ? AS [columnA], ? AS [columnB], ? AS [columnC], ? AS [columnD])" +
+                    " AS incoming on (target.[id1]=incoming.[id1] and target.[id2]=incoming" +
+                    ".[id2]) when matched then update set [columnA]=incoming.[columnA]," +
+                    "[columnB]=incoming.[columnB],[columnC]=incoming.[columnC]," +
+                    "[columnD]=incoming.[columnD] when not matched then insert ([columnA], " +
+                    "[columnB], [columnC], [columnD], [id1], [id2]) values (incoming.[columnA]," +
+                    "incoming.[columnB],incoming.[columnC],incoming.[columnD],incoming.[id1]," +
+                    "incoming.[id2]);",
+            dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
     );
   }
 
@@ -269,6 +332,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
 
   @Test
   public void upsert1() {
+    dialect = createDialect(sinkConfigWithUrl("jdbc:jtds:sqlsserver://something"));
     TableId customer = tableId("Customer");
     assertEquals(
         "merge into [Customer] with (HOLDLOCK) AS target using (select ? AS [id], ? AS [name], ? " +
@@ -285,7 +349,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
     );
 
     quoteIdentfiiers = QuoteMethod.NEVER;
-    dialect = createDialect();
+    dialect = createDialect(sinkConfigWithUrl("jdbc:jtds:sqlsserver://something"));
     assertEquals(
         "merge into Customer with (HOLDLOCK) AS target using (select ? AS id, ? AS name, ? " +
         "AS salary, ? AS address) AS incoming on (target.id=incoming.id) when matched then update set " +
@@ -303,6 +367,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
 
   @Test
   public void upsert2() {
+    dialect = createDialect(sinkConfigWithUrl("jdbc:jtds:sqlsserver://something"));
     TableId book = new TableId(null, null, "Book");
     assertEquals(
         "merge into [Book] with (HOLDLOCK) AS target using (select ? AS [author], ? AS [title], ?" +
@@ -320,7 +385,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
     );
 
     quoteIdentfiiers = QuoteMethod.NEVER;
-    dialect = createDialect();
+    dialect = createDialect(sinkConfigWithUrl("jdbc:jtds:sqlsserver://something"));
     assertEquals(
         "merge into Book with (HOLDLOCK) AS target using (select ? AS author, ? AS title, ?" +
         " AS ISBN, ? AS year, ? AS pages)" +
@@ -336,6 +401,40 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
         )
     );
   }
+
+  @Test(expected=ConnectException.class)
+  public void shouldFailDatetimeColumnAsTimeStampColumn() throws SQLException, ConnectException {
+    String timeStampColumnName = "start_time";
+    List<ColumnId> timestampColumns = new ArrayList<>();
+    timestampColumns.add(new ColumnId(tableId, timeStampColumnName));
+    ResultSetMetaData spyRsMetadata = Mockito.spy(ResultSetMetaData.class);
+    Mockito.doReturn(1).when(spyRsMetadata).getColumnCount();
+
+    Mockito.doReturn(timeStampColumnName).when(spyRsMetadata).getColumnName(1);
+    Mockito.doReturn("datetime").when(spyRsMetadata).getColumnTypeName(1);
+
+    dialect.validateSpecificColumnTypes(spyRsMetadata, timestampColumns);
+  }
+
+  @Test
+  public void shouldNotFailDatetimeColumnAsRegularColumn() throws SQLException, ConnectException {
+    String timeStampColumnName = "start_time";
+    String regularColumnName = "datetime_as_regular";
+
+    List<ColumnId> timestampColumns = new ArrayList<>();
+    timestampColumns.add(new ColumnId(tableId, timeStampColumnName));
+    ResultSetMetaData spyRsMetadata = Mockito.spy(ResultSetMetaData.class);
+    Mockito.doReturn(2).when(spyRsMetadata).getColumnCount();
+
+    Mockito.doReturn(regularColumnName).when(spyRsMetadata).getColumnName(1);
+    Mockito.doReturn("datetime").when(spyRsMetadata).getColumnTypeName(1);
+
+    Mockito.doReturn(timeStampColumnName).when(spyRsMetadata).getColumnName(2);
+    Mockito.doReturn("datetime2").when(spyRsMetadata).getColumnTypeName(2);
+
+    dialect.validateSpecificColumnTypes(spyRsMetadata, timestampColumns);
+  }
+
 
   @Test
   public void shouldSanitizeUrlWithoutCredentialsInProperties() {
@@ -361,5 +460,32 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
         "jdbc:sqlserver://;password=****;servername=server_name;keyStoreSecret=****;"
         + "gsscredential=****;integratedSecurity=true;authenticationScheme=JavaKerberos"
     );
+  }
+
+  @Test
+  public void shouldBindStringAccordingToColumnDef() throws SQLException {
+    int index = ThreadLocalRandom.current().nextInt();
+    String value = "random text";
+    Schema schema = Schema.STRING_SCHEMA;
+    PreparedStatement stmtVarchar = mock(PreparedStatement.class);
+    ColumnDefinition colDefVarchar = mock(ColumnDefinition.class);
+    when(colDefVarchar.type()).thenReturn(Types.VARCHAR);
+
+    PreparedStatement stmtNchar = mock(PreparedStatement.class);
+    ColumnDefinition colDefNchar = mock(ColumnDefinition.class);
+    when(colDefNchar.type()).thenReturn(Types.NCHAR);
+
+    PreparedStatement stmtNvarchar = mock(PreparedStatement.class);
+    ColumnDefinition colDefNvarchar = mock(ColumnDefinition.class);
+    when(colDefNvarchar.type()).thenReturn(Types.NVARCHAR);
+
+    dialect.bindField(stmtVarchar, index, schema, value, colDefVarchar);
+    verify(stmtVarchar, times(1)).setString(index, value);
+
+    dialect.bindField(stmtNchar, index, schema, value, colDefNchar);
+    verify(stmtNchar, times(1)).setNString(index, value);
+
+    dialect.bindField(stmtNvarchar, index, schema, value, colDefNvarchar);
+    verify(stmtNvarchar, times(1)).setNString(index, value);
   }
 }

@@ -60,6 +60,11 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
   public SapHanaDatabaseDialect(AbstractConfig config) {
     super(config, new IdentifierRules(".", "\"", "\""));
   }
+  
+  @Override
+  protected String currentTimestampDatabaseQuery() {
+    return "SELECT CURRENT_TIMESTAMP FROM DUMMY";
+  }
 
   @Override
   protected String checkConnectionQuery() {

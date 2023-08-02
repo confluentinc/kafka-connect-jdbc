@@ -15,6 +15,8 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import static org.easymock.EasyMock.anyObject;
+import static org.easymock.EasyMock.expect;
 import static org.easymock.EasyMock.expectLastCall;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -23,15 +25,20 @@ import static org.junit.Assert.fail;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.sql.BatchUpdateException;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.TimeZone;
+import java.util.concurrent.CompletableFuture;
 
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -39,6 +46,7 @@ import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.RetriableException;
+import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.easymock.EasyMockSupport;
@@ -50,6 +58,8 @@ import io.confluent.connect.jdbc.util.DateTimeUtils;
 
 public class JdbcSinkTaskTest extends EasyMockSupport {
   private final SqliteHelper sqliteHelper = new SqliteHelper(getClass().getSimpleName());
+  private final JdbcDbWriter mockWriter = createMock(JdbcDbWriter.class);
+  private final SinkTaskContext ctx = createMock(SinkTaskContext.class);
 
   private static final Schema SCHEMA = SchemaBuilder.struct().name("com.example.Person")
       .field("firstName", Schema.STRING_SCHEMA)
@@ -63,6 +73,15 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
       .field("double", Schema.OPTIONAL_FLOAT64_SCHEMA)
       .field("modified", Timestamp.SCHEMA)
       .build();
+  private static final SinkRecord RECORD = new SinkRecord(
+      "stub",
+      0,
+      null,
+      null,
+      null,
+      null,
+      0
+  );
 
   @Before
   public void setUp() throws IOException, SQLException {
@@ -212,9 +231,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     final int maxRetries = 2;
     final int retryBackoffMs = 1000;
 
-    Set<SinkRecord> records = Collections.singleton(new SinkRecord("stub", 0, null, null, null, null, 0));
-    final JdbcDbWriter mockWriter = createMock(JdbcDbWriter.class);
-    SinkTaskContext ctx = createMock(SinkTaskContext.class);
+    List<SinkRecord> records = createRecordsList(1);
 
     mockWriter.write(records);
     SQLException chainedException = new SQLException("cause 1");
@@ -235,14 +252,11 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
       }
     };
     task.initialize(ctx);
-
-    Map<String, String> props = new HashMap<>();
-    props.put(JdbcSinkConfig.CONNECTION_URL, "stub");
-    props.put(JdbcSinkConfig.MAX_RETRIES, String.valueOf(maxRetries));
-    props.put(JdbcSinkConfig.RETRY_BACKOFF_MS, String.valueOf(retryBackoffMs));
-    task.start(props);
-
+    expect(ctx.errantRecordReporter()).andReturn(null);
     replayAll();
+
+    Map<String, String> props = setupBasicProps(maxRetries, retryBackoffMs);
+    task.start(props);
 
     try {
       task.put(records);
@@ -291,4 +305,225 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     verifyAll();
   }
 
+  @Test
+  public void errorReporting() throws SQLException {
+    List<SinkRecord> records = createRecordsList(1);
+
+    mockWriter.write(records);
+    SQLException exception = new SQLException("cause 1");
+    expectLastCall().andThrow(exception);
+    mockWriter.closeQuietly();
+    expectLastCall();
+    mockWriter.write(anyObject());
+    expectLastCall().andThrow(exception);
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(ctx);
+    ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
+    expect(ctx.errantRecordReporter()).andReturn(reporter);
+    expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null));
+    mockWriter.closeQuietly();
+    expectLastCall();
+    replayAll();
+
+    Map<String, String> props = setupBasicProps(0, 0);
+    task.start(props);
+    task.put(records);
+    verifyAll();
+  }
+
+  @Test
+  public void errorReportingTableAlterOrCreateException() throws SQLException {
+    List<SinkRecord> records = createRecordsList(1);
+
+    mockWriter.write(records);
+    TableAlterOrCreateException exception = new TableAlterOrCreateException("cause 1");
+    expectLastCall().andThrow(exception);
+    mockWriter.closeQuietly();
+    expectLastCall();
+    mockWriter.write(anyObject());
+    expectLastCall().andThrow(exception);
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(ctx);
+    ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
+    expect(ctx.errantRecordReporter()).andReturn(reporter);
+    expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null));
+    mockWriter.closeQuietly();
+    expectLastCall();
+    replayAll();
+
+    Map<String, String> props = setupBasicProps(0, 0);
+    task.start(props);
+    task.put(records);
+    verifyAll();
+  }
+
+  @Test
+  public void batchErrorReporting() throws SQLException {
+    final int batchSize = 3;
+
+    List<SinkRecord> records = createRecordsList(batchSize);
+
+    mockWriter.write(records);
+    SQLException exception = new SQLException("cause 1");
+    expectLastCall().andThrow(exception);
+    mockWriter.closeQuietly();
+    expectLastCall();
+    mockWriter.write(anyObject());
+    expectLastCall().andThrow(exception).times(batchSize);
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(ctx);
+    ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
+    expect(ctx.errantRecordReporter()).andReturn(reporter);
+    expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null)).times(batchSize);
+    for (int i = 0; i < batchSize; i++) {
+      mockWriter.closeQuietly();
+      expectLastCall();
+    }
+    replayAll();
+
+    Map<String, String> props = setupBasicProps(0, 0);
+    task.start(props);
+    task.put(records);
+    verifyAll();
+  }
+
+  @Test
+  public void oneInBatchErrorReporting() throws SQLException {
+    final int batchSize = 3;
+
+    List<SinkRecord> records = createRecordsList(batchSize);
+
+    mockWriter.write(records);
+    SQLException exception = new SQLException("cause 1");
+    expectLastCall().andThrow(exception);
+    mockWriter.closeQuietly();
+    expectLastCall();
+    mockWriter.write(anyObject());
+    expectLastCall().times(2);
+    expectLastCall().andThrow(exception);
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(ctx);
+    ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
+    expect(ctx.errantRecordReporter()).andReturn(reporter);
+    expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null));
+    mockWriter.closeQuietly();
+    expectLastCall();
+    replayAll();
+
+    Map<String, String> props = setupBasicProps(0, 0);
+    task.start(props);
+    task.put(records);
+    verifyAll();
+  }
+
+  @Test
+  public void oneInMiddleBatchErrorReporting() throws SQLException {
+    final int batchSize = 3;
+
+    List<SinkRecord> records = createRecordsList(batchSize);
+
+    mockWriter.write(records);
+    SQLException exception = new SQLException("cause 1");
+    expectLastCall().andThrow(exception);
+    mockWriter.closeQuietly();
+    expectLastCall();
+    mockWriter.write(anyObject());
+    expectLastCall();
+    mockWriter.write(anyObject());
+    expectLastCall().andThrow(exception);
+    mockWriter.write(anyObject());
+    expectLastCall();
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(ctx);
+    ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
+    expect(ctx.errantRecordReporter()).andReturn(reporter);
+    expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null));
+    mockWriter.closeQuietly();
+    expectLastCall();
+    replayAll();
+
+    Map<String, String> props = setupBasicProps(0, 0);
+    task.start(props);
+    task.put(records);
+    verifyAll();
+  }
+  @Test
+  public void testGetAllMessagesExceptionWithoutTrim() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+    JdbcSinkTask task = new JdbcSinkTask();
+    SQLException exception = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\") " +
+            "VALUES ('1','2','3',NULL) was aborted: ERROR: null value in column \"c4\" violates not-null constraint\n" +
+            "  Detail: Failing row contains (1, 2, 3, null).  Call getNextException to see other errors in the batch.",
+            new int[0]);
+    String exceptedExceptionMessage = "Exception chain:" + System.lineSeparator() + exception + System.lineSeparator();
+    Method privateMethod = JdbcSinkTask.class.getDeclaredMethod("getAllMessagesException", SQLException.class);
+    task.shouldTrimSensitiveLogs = false;
+    privateMethod.setAccessible(true);
+
+    SQLException result = (SQLException) privateMethod.invoke(task, exception);
+    assertEquals(exceptedExceptionMessage, result.getMessage());
+
+    privateMethod.setAccessible(false);
+  }
+
+  @Test
+  public void testGetAllMessagesExceptionTrimmed() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+    JdbcSinkTask task = new JdbcSinkTask();
+    SQLException exception = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\") " +
+            "VALUES ('1','2','3',NULL) was aborted: ERROR: null value in column \"c4\" violates not-null constraint\n" +
+            "  Detail: Failing row contains (1, 2, 3, null).  Call getNextException to see other errors in the batch.",
+            new int[0]);
+    Method privateMethod = JdbcSinkTask.class.getDeclaredMethod("getAllMessagesException", SQLException.class);
+    privateMethod.setAccessible(true);
+    task.shouldTrimSensitiveLogs = true;
+
+    SQLException result = (SQLException) privateMethod.invoke(task, exception);
+    assertTrue(!result.getLocalizedMessage().contains("VALUES"));
+
+    privateMethod.setAccessible(false);
+  }
+  private List<SinkRecord> createRecordsList(int batchSize) {
+    List<SinkRecord> records = new ArrayList<>();
+    for (int i = 0; i < batchSize; i++) {
+      records.add(RECORD);
+    }
+    return records;
+  }
+
+  private Map<String, String> setupBasicProps(int maxRetries, long retryBackoffMs) {
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSinkConfig.CONNECTION_URL, "stub");
+    props.put(JdbcSinkConfig.MAX_RETRIES, String.valueOf(maxRetries));
+    props.put(JdbcSinkConfig.RETRY_BACKOFF_MS, String.valueOf(retryBackoffMs));
+    return props;
+  }
 }

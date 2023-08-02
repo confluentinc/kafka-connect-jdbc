@@ -22,8 +22,6 @@ import org.slf4j.LoggerFactory;
 import java.sql.Connection;
 import java.sql.SQLException;
 
-import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
-
 public class CachedConnectionProvider implements ConnectionProvider {
 
   private static final Logger log = LoggerFactory.getLogger(CachedConnectionProvider.class);
@@ -36,14 +34,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
 
   private int count = 0;
   private Connection connection;
-
-  public CachedConnectionProvider(
-      ConnectionProvider provider
-  ) {
-    this(provider, JdbcSourceConnectorConfig.CONNECTION_ATTEMPTS_DEFAULT,
-         JdbcSourceConnectorConfig.CONNECTION_BACKOFF_DEFAULT
-    );
-  }
+  private volatile boolean isRunning = true;
 
   public CachedConnectionProvider(
       ConnectionProvider provider,
@@ -57,6 +48,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
 
   @Override
   public synchronized Connection getConnection() {
+    log.debug("Trying to establish connection with the database.");
     try {
       if (connection == null) {
         newConnection();
@@ -66,16 +58,15 @@ public class CachedConnectionProvider implements ConnectionProvider {
         newConnection();
       }
     } catch (SQLException sqle) {
+      log.debug("Could not establish connection with database.", sqle);
       throw new ConnectException(sqle);
     }
+    log.debug("Database connection established.");
     return connection;
   }
 
   @Override
-  public boolean isConnectionValid(
-      Connection connection,
-      int timeout
-  ) throws SQLException {
+  public boolean isConnectionValid(Connection connection, int timeout) {
     try {
       return provider.isConnectionValid(connection, timeout);
     } catch (SQLException sqle) {
@@ -86,16 +77,16 @@ public class CachedConnectionProvider implements ConnectionProvider {
 
   private void newConnection() throws SQLException {
     int attempts = 0;
-    while (attempts < maxConnectionAttempts) {
+    while (isRunning) {
       try {
         ++count;
-        log.info("Attempting to open connection #{} to {}", count, provider);
+        log.debug("Attempting to open connection #{} to {}", count, provider);
         connection = provider.getConnection();
         onConnect(connection);
         return;
       } catch (SQLException sqle) {
         attempts++;
-        if (attempts < maxConnectionAttempts) {
+        if (isRunning && attempts < maxConnectionAttempts) {
           log.info("Unable to connect to database on attempt {}/{}. Will retry in {} ms.", attempts,
                    maxConnectionAttempts, connectionRetryBackoff, sqle
           );
@@ -111,11 +102,16 @@ public class CachedConnectionProvider implements ConnectionProvider {
     }
   }
 
+  public void close(boolean stopping) {
+    isRunning = !stopping;
+    close();
+  }
+
   @Override
   public synchronized void close() {
     if (connection != null) {
       try {
-        log.info("Closing connection #{} to {}", count, provider);
+        log.debug("Closing connection #{} to {}", count, provider);
         connection.close();
       } catch (SQLException sqle) {
         log.warn("Ignoring error closing connection", sqle);

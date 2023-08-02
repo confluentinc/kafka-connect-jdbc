@@ -26,7 +26,7 @@
     <groupId>io.confluent</groupId>
     <artifactId>kafka-connect-jdbc</artifactId>
     <packaging>jar</packaging>
-    <version>10.6.4-SNAPSHOT</version>
+    <version>10.7.2-SNAPSHOT</version>
     <name>kafka-connect-jdbc</name>
     <organization>
         <name>Confluent, Inc.</name>
@@ -49,14 +49,14 @@
         <connection>scm:git:git://github.com/confluentinc/kafka-connect-jdbc.git</connection>
         <developerConnection>scm:git:git@github.com:confluentinc/kafka-connect-jdbc.git</developerConnection>
         <url>https://github.com/confluentinc/kafka-connect-jdbc</url>
-        <tag>HEAD</tag>
+        <tag>10.7.x</tag>
     </scm>
 
     <properties>
         <derby.version>10.14.2.0</derby.version>
         <commons-io.version>2.4</commons-io.version>
         <kafka.connect.maven.plugin.version>0.11.1</kafka.connect.maven.plugin.version>
-        <sqlite-jdbc.version>3.25.2</sqlite-jdbc.version>
+        <sqlite-jdbc.version>3.41.2.2</sqlite-jdbc.version>
         <oracle.jdbc.driver.version>19.7.0.0</oracle.jdbc.driver.version>
         <mssqlserver.jdbc.driver.version>8.4.1.jre8</mssqlserver.jdbc.driver.version>
         <postgresql.version>42.4.3</postgresql.version>
@@ -110,15 +110,66 @@
             <version>${postgresql.version}</version>
             <scope>runtime</scope>
         </dependency>
+        <!-- Add all packages imported by ojdbc8-production explicitly to pom when bumping up driver version -->
+	<!-- Do not use ojdbc8-production directly to avoid .pom file in final package -->
+        <!-- See https://www.oracle.com/database/technologies/maven-central-guide.html -->
         <dependency>
-            <!--
-            Include all of the production JARs without observability fixes.
-            See https://www.oracle.com/database/technologies/maven-central-guide.html
-            -->
             <groupId>com.oracle.database.jdbc</groupId>
-            <artifactId>ojdbc8-production</artifactId>
+            <artifactId>ojdbc8</artifactId>
             <version>${oracle.jdbc.driver.version}</version>
-            <type>pom</type>
+        </dependency>
+        <dependency>
+            <groupId>com.oracle.database.jdbc</groupId>
+            <artifactId>ucp</artifactId>
+            <version>${oracle.jdbc.driver.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.oracle.database.security</groupId>
+            <artifactId>oraclepki</artifactId>
+            <version>${oracle.jdbc.driver.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.oracle.database.security</groupId>
+            <artifactId>osdt_cert</artifactId>
+            <version>${oracle.jdbc.driver.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.oracle.database.security</groupId>
+            <artifactId>osdt_core</artifactId>
+            <version>${oracle.jdbc.driver.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.oracle.database.ha</groupId>
+            <artifactId>simplefan</artifactId>
+            <version>${oracle.jdbc.driver.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.oracle.database.ha</groupId>
+            <artifactId>ons</artifactId>
+            <version>${oracle.jdbc.driver.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.oracle.database.nls</groupId>
+            <artifactId>orai18n</artifactId>
+            <version>${oracle.jdbc.driver.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.oracle.database.xml</groupId>
+            <artifactId>xdb</artifactId>
+            <version>${oracle.jdbc.driver.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.oracle.database.xml</groupId>
+            <artifactId>xmlparserv2</artifactId>
+            <version>${oracle.jdbc.driver.version}</version>
             <scope>runtime</scope>
         </dependency>
         <dependency>

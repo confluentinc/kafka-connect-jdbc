@@ -33,7 +33,6 @@ import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 
@@ -49,6 +48,8 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.TableId;
 import org.apache.kafka.connect.errors.ConnectException;
+
+import oracle.jdbc.OraclePreparedStatement;
 
 /**
  * A {@link DatabaseDialect} for Oracle.
@@ -140,19 +141,61 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       return super.maybeBindPrimitive(statement, index, schema, value);
     }
 
-    if (schema.type() == Type.STRING) {
-      if (colDef.type() == Types.CLOB) {
+    switch (schema.type()) {
+      case STRING:
+        return maybeBindStringPrimitive(statement, index, schema, value, colDef);
+      case BYTES:
+        if (colDef.type() != Types.BLOB) {
+          break;
+        }
+
+        if (value instanceof ByteBuffer) {
+          statement.setBlob(index, new ByteArrayInputStream(((ByteBuffer) value).array()));
+        } else if (value instanceof byte[]) {
+          statement.setBlob(index, new ByteArrayInputStream((byte[]) value));
+        } else {
+          return super.maybeBindPrimitive(statement, index, schema, value);
+        }
+        return true;
+      case FLOAT32:
+        // Some float values can't be bounded to the JDBC driver with PreparedStatement.setFloat().
+        // Ref: https://github.com/jOOQ/jOOQ/issues/7548
+        ((OraclePreparedStatement) statement).setBinaryFloat(index, (Float)value);
+        return true;
+      case FLOAT64:
+        // Some double values can't be bounded to the JDBC driver with
+        // PreparedStatement.setDouble().
+        // Ref: https://github.com/jOOQ/jOOQ/issues/7548
+        ((OraclePreparedStatement) statement).setBinaryDouble(index, (Double)value);
+        return true;
+      default:
+        // Keep compiler happy.
+    }
+
+    return super.maybeBindPrimitive(statement, index, schema, value);
+  }
+
+  private boolean maybeBindStringPrimitive(
+          PreparedStatement statement,
+          int index,
+          Schema schema,
+          Object value,
+          ColumnDefinition colDef
+  ) throws SQLException {
+    switch (colDef.type()) {
+      case Types.CLOB:
         final int upsertValueLimit = 4000;
         boolean valueBinded = false;
         long valueLength = ((String) value).length();
         if (this.config instanceof JdbcSinkConfig) {
           String insertMode = this.config.getString(JdbcSinkConfig.INSERT_MODE);
           if (insertMode != null && !insertMode.isEmpty()) {
-            // UPSERT mode uses MERGE statement in the query. The oracle driver requires values of
-            // length more than 4000 to be LOB binded in this case.
+            // UPSERT mode uses MERGE statement in the query. The oracle driver requires values
+            // of length more than 4000 to be LOB binded in this case.
             if (InsertMode.valueOf(insertMode.toUpperCase()) == InsertMode.UPSERT) {
               if (valueLength < upsertValueLimit) {
-                statement.setCharacterStream(index, new StringReader((String) value), valueLength);
+                statement.setCharacterStream(index, new StringReader((String) value),
+                        valueLength);
               } else {
                 statement.setCharacterStream(index, new StringReader((String) value));
               }
@@ -164,28 +207,16 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
           statement.setCharacterStream(index, new StringReader((String) value), valueLength);
         }
         return true;
-      } else if (colDef.type() == Types.NCLOB) {
+      case Types.NCLOB:
         statement.setNCharacterStream(index, new StringReader((String) value));
         return true;
-      } else if (colDef.type() == Types.NVARCHAR || colDef.type() == Types.NCHAR) {
+      case Types.NVARCHAR:
+      case Types.NCHAR:
         statement.setNString(index, (String) value);
         return true;
-      } else {
+      default:
         return super.maybeBindPrimitive(statement, index, schema, value);
-      }
     }
-
-    if (schema.type() == Type.BYTES && colDef.type() == Types.BLOB) {
-      if (value instanceof ByteBuffer) {
-        statement.setBlob(index, new ByteArrayInputStream(((ByteBuffer) value).array()));
-      } else if (value instanceof byte[]) {
-        statement.setBlob(index, new ByteArrayInputStream((byte[]) value));
-      } else {
-        return super.maybeBindPrimitive(statement, index, schema, value);
-      }
-      return true;
-    }
-    return super.maybeBindPrimitive(statement, index, schema, value);
   }
 
   @SuppressWarnings("checkstyle:CyclomaticComplexity")

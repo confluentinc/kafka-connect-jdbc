@@ -513,12 +513,12 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     try {
       startTask("modified", "id", null, 0L, invalidTimeZoneID);
       fail("A ConfigException should have been thrown");
-    } catch (ConnectException e) {
-      assertTrue(e.getCause() instanceof ConfigException);
-      ConfigException configException = (ConfigException) e.getCause();
-      assertThat(configException.getMessage(),
+    } catch (ConfigException e) {
+      assertThat(e.getMessage(),
           equalTo(
-              "Invalid value Europe/Invalid for configuration db.timezone: Invalid time zone identifier"));
+              "Invalid value org.apache.kafka.common.config.ConfigException: Invalid value Europe/Invalid "
+                      + "for configuration db.timezone: Invalid time zone identifier for configuration "
+                      + "Couldn't start JdbcSourceTask due to configuration error"));
     }
   }
 
@@ -900,22 +900,35 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     PowerMock.verifyAll();
   }
 
-  @Test (expected = ConnectException.class)
+  @Test (expected = ConfigException.class)
   public void testTaskFailsIfNoQueryOrTablesConfigProvided() {
     initializeTask();
     Map<String, String> props = new HashMap<>();
-    props.put(JdbcSourceTaskConfig.TABLES_CONFIG, "[]");
+    props.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
+    props.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
     props.put(JdbcSourceConnectorConfig.QUERY_CONFIG, "");
     task.start(props);
   }
 
-  @Test (expected = ConnectException.class)
+  @Test (expected = ConfigException.class)
   public void testTaskFailsIfBothQueryAndTablesConfigProvided() {
     initializeTask();
     Map<String, String> props = new HashMap<>();
     props.put(JdbcSourceTaskConfig.TABLES_CONFIG, "[dbo.table]");
+    props.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
     props.put(JdbcSourceConnectorConfig.QUERY_CONFIG, "Select * from some table");
     task.start(props);
+  }
+
+  @Test
+  public void testTaskCreatedWhileWaitingToFetchTables() throws InterruptedException {
+    initializeTask();
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
+    props.put(JdbcSourceTaskConfig.TABLES_FETCHED, "false");
+    task.start(props);
+    List<SourceRecord> records = task.poll();
+    assertNull(records);
   }
 
   @Test
@@ -1018,6 +1031,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     if (query != null) {
       taskConfig.put(JdbcSourceTaskConfig.QUERY_CONFIG, query);
       taskConfig.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
+      taskConfig.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
     }
     if (queryParameters != null) {
       taskConfig.put(JdbcSourceTaskConfig.QUERY_PARAMETERS_CONFIG, queryParameters);

@@ -47,6 +47,7 @@ public abstract class BaseOOMIntegrationTest {
   @Test
   public void testStreamingReads() throws InterruptedException {
     props.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
+    props.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
     props.put(JdbcSourceConnectorConfig.QUERY_CONFIG, buildLargeQuery());
     startTask();
     assertTrue(task.poll().size() > 0);

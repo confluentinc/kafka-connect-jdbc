@@ -104,6 +104,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     } else {
       log.trace("Current ResultSet {} isn't null. Continuing to seek.", resultSet.hashCode());
     }
+    log.trace("Prepared statement created.");
   }
 
   protected abstract ResultSet executeQuery() throws SQLException;

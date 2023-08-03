@@ -23,6 +23,7 @@ import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
+import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 import org.apache.kafka.common.config.AbstractConfig;
@@ -157,6 +158,13 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           result.catalogName(),
           result.schemaName(),
           newTableName
+      );
+    }
+    if (quoteSqlIdentifiers == QuoteMethod.NEVER) {
+      result = new TableId(
+          result.catalogName(),
+          result.schemaName(),
+          result.tableName().toLowerCase()
       );
     }
     return result;

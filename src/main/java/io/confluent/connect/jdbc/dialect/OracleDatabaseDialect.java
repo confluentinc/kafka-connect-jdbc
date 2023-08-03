@@ -22,6 +22,7 @@ import io.confluent.connect.jdbc.sink.PreparedStatementBinder;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import java.io.ByteArrayInputStream;
 import java.io.StringReader;
@@ -363,5 +364,18 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     return super.sanitizedUrl(url)
                 .replaceAll("(:thin:[^/]*)/([^@]*)@", "$1/****@")
                 .replaceAll("(:oci[^:]*:[^/]*)/([^@]*)@", "$1/****@");
+  }
+
+  @Override
+  public TableId parseTableIdentifier(String fqn) {
+    TableId tableId = super.parseTableIdentifier(fqn);
+    if (quoteSqlIdentifiers == QuoteMethod.NEVER) {
+      tableId = new TableId(
+          tableId.catalogName(),
+          tableId.schemaName(),
+          tableId.tableName().toUpperCase()
+      );
+    }
+    return tableId;
   }
 }

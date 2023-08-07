@@ -48,10 +48,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.MAX_RETRIES;
+import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.QUOTE_SQL_IDENTIFIERS_CONFIG;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.ERRORS_TOLERANCE_CONFIG;
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_NAME_CONFIG;
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_REPLICATION_FACTOR_CONFIG;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -335,6 +337,45 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
           assertTrue(rs.next());
           assertEquals(secondStruct.getString("firstname"), rs.getString("firstname"));
           assertEquals(secondStruct.getString("lastname"), rs.getString("lastname"));
+        }
+      }
+    }
+  }
+
+  @Test
+  public void testQuoteIdentifierNeverConfig() throws Exception {
+    String mixedCaseTopicName = "TestTopic";
+
+    connect.kafka().createTopic(mixedCaseTopicName, 1);
+
+    props.put(JdbcSinkConfig.AUTO_CREATE, "true");
+    props.put(JdbcSinkConfig.QUOTE_SQL_IDENTIFIERS_CONFIG, "NEVER");
+    props.put("topics", mixedCaseTopicName);
+    connect.configureConnector("jdbc-sink-connector", props);
+
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+
+    final Schema schema = SchemaBuilder.struct().name("com.example.Person")
+        .field("firstname", Schema.STRING_SCHEMA)
+        .field("lastname", Schema.STRING_SCHEMA)
+        .build();
+    final Struct struct = new Struct(schema)
+        .put("firstname", "Christina")
+        .put("lastname", "Brams");
+
+    String kafkaValue = new String(jsonConverter.fromConnectData(mixedCaseTopicName, schema, struct));
+    connect.kafka().produce(mixedCaseTopicName, null, kafkaValue);
+
+    waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(mixedCaseTopicName), 1, 1,
+        TimeUnit.MINUTES.toMillis(2));
+
+    String autoCreatedTableName = mixedCaseTopicName.toLowerCase();
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
+      try (Statement s = c.createStatement()) {
+        try (ResultSet rs = s.executeQuery(String.format("SELECT * FROM \"%s\"", autoCreatedTableName))) {
+          assertTrue(rs.next());
+          assertEquals(struct.getString("firstname"), rs.getString("firstname"));
+          assertEquals(struct.getString("lastname"), rs.getString("lastname"));
         }
       }
     }

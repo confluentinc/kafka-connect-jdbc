@@ -279,6 +279,42 @@ public class OracleDatatypeIT extends BaseConnectorIT {
         }
     }
 
+    @Test
+    public void testQuoteIdentifierAlwaysConfig() throws Exception {
+        String mixedCaseTopicName = "TestTopic";
+
+        connect.kafka().createTopic(mixedCaseTopicName, 1);
+
+        props.put(JdbcSinkConfig.AUTO_CREATE, "true");
+        props.put(JdbcSinkConfig.QUOTE_SQL_IDENTIFIERS_CONFIG, "ALWAYS");
+        props.put("topics", mixedCaseTopicName);
+        connect.configureConnector("jdbc-sink-connector", props);
+
+        waitForConnectorToStart("jdbc-sink-connector", 1);
+
+        final Schema schema = SchemaBuilder.struct().name("com.example.Person")
+            .field("firstname", Schema.STRING_SCHEMA)
+            .field("lastname", Schema.STRING_SCHEMA)
+            .build();
+        final Struct struct = new Struct(schema)
+            .put("firstname", "Christina")
+            .put("lastname", "Brams");
+
+        String kafkaValue = new String(jsonConverter.fromConnectData(mixedCaseTopicName, schema, struct));
+        connect.kafka().produce(mixedCaseTopicName, null, kafkaValue);
+
+        waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(mixedCaseTopicName), 1, 1,
+            TimeUnit.MINUTES.toMillis(2));
+
+        try (Statement s = connection.createStatement()) {
+            ResultSet rs = s.executeQuery(
+                String.format("SELECT * FROM \"%s\" ORDER BY KEY DESC FETCH FIRST 1 ROWS ONLY", mixedCaseTopicName));
+            assertTrue(rs.next());
+            assertEquals(struct.getString("firstname"), rs.getString("firstname"));
+            assertEquals(struct.getString("lastname"), rs.getString("lastname"));
+        }
+    }
+
     private void createShortAndLongStringTable() throws SQLException {
         try (Statement s = connection.createStatement()) {
             s.execute("CREATE TABLE " + tableName + "("

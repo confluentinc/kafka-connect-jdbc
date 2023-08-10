@@ -258,10 +258,12 @@ public class OracleDatatypeIT extends BaseConnectorIT {
         final Schema schema = SchemaBuilder.struct().name("com.example.Person")
             .field("firstname", Schema.STRING_SCHEMA)
             .field("lastname", Schema.STRING_SCHEMA)
+            .field("KEY", Schema.INT32_SCHEMA)
             .build();
         final Struct struct = new Struct(schema)
             .put("firstname", "Christina")
-            .put("lastname", "Brams");
+            .put("lastname", "Brams")
+            .put("KEY", 1);
 
         String kafkaValue = new String(jsonConverter.fromConnectData(mixedCaseTopicName, schema, struct));
         connect.kafka().produce(mixedCaseTopicName, null, kafkaValue);
@@ -295,10 +297,12 @@ public class OracleDatatypeIT extends BaseConnectorIT {
         final Schema schema = SchemaBuilder.struct().name("com.example.Person")
             .field("firstname", Schema.STRING_SCHEMA)
             .field("lastname", Schema.STRING_SCHEMA)
+            .field("KEY", Schema.INT32_SCHEMA)
             .build();
         final Struct struct = new Struct(schema)
             .put("firstname", "Christina")
-            .put("lastname", "Brams");
+            .put("lastname", "Brams")
+            .put("KEY", 1);
 
         String kafkaValue = new String(jsonConverter.fromConnectData(mixedCaseTopicName, schema, struct));
         connect.kafka().produce(mixedCaseTopicName, null, kafkaValue);

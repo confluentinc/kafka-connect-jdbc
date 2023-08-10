@@ -149,7 +149,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   protected final Set<String> tableTypes;
   protected final String jdbcUrl;
   protected final DatabaseDialectProvider.JdbcUrlInfo jdbcUrlInfo;
-  private final QuoteMethod quoteSqlIdentifiers;
+  protected final QuoteMethod quoteSqlIdentifiers;
   private final IdentifierRules defaultIdentifierRules;
   private final AtomicReference<IdentifierRules> identifierRules = new AtomicReference<>();
   private final Queue<Connection> connections = new ConcurrentLinkedQueue<>();

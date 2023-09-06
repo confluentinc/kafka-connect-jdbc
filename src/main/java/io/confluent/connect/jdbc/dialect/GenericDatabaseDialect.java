@@ -16,6 +16,8 @@
 package io.confluent.connect.jdbc.dialect;
 
 import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.TimeZone;
 
 import org.apache.kafka.common.config.AbstractConfig;
@@ -113,6 +115,15 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   private static final int MAX_INTEGER_TYPE_PRECISION = 18;
 
   private static final String PRECISION_FIELD = "connect.decimal.precision";
+
+
+  /**
+   * The ISO date-time format includes the date, time (including fractional parts),
+   * and offset from UTC, such as '2011-12-03T10:15:30.030431+01:00'.
+   */
+  public static final DateTimeFormatter ZONED_DATE_TIME_FORMATTER =
+          DateTimeFormatter.ISO_OFFSET_DATE_TIME;
+
 
   /**
    * The provider for {@link GenericDatabaseDialect}.
@@ -1751,6 +1762,10 @@ public class GenericDatabaseDialect implements DatabaseDialect {
               DateTimeUtils.getTimeZoneCalendar(timeZone)
           );
           return true;
+        case "io.debezium.time.ZonedTimestamp":
+          ZonedDateTime zonedDateTime = (ZonedDateTime) value;
+          statement.setObject(index, zonedDateTime.toOffsetDateTime());
+          return true;
         default:
           return false;
       }
@@ -1905,6 +1920,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           builder.appendStringQuoted(
               DateTimeUtils.formatTimestamp((java.util.Date) value, timeZone)
           );
+          return;
+        case "io.debezium.time.ZonedTimestamp":
+          builder.appendStringQuoted(ZonedDateTime.parse((String)value, ZONED_DATE_TIME_FORMATTER));
           return;
         default:
           // fall through to regular types

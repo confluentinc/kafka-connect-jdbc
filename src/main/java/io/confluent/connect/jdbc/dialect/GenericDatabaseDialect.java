@@ -102,6 +102,10 @@ import io.confluent.connect.jdbc.util.TableType;
  * DBMS. For example, override the {@link #createColumnConverter(ColumnMapping)} method to customize
  * how a column value is converted to a field value for use in a {@link Struct}. To also change the
  * field's type or schema, also override the {@link #addFieldToSchema} method.
+ * 此类被设计为根据需要进行扩展，以自定义特定
+ * *DBMS。例如，重写{@link#createColumnConverter（ColumnMapping）}方法以自定义
+ * *如何将列值转换为在｛@link Struct｝中使用的字段值。还要更改
+ * *字段的类型或架构，也覆盖{@link#addFieldToSchema}方法。
  */
 public class GenericDatabaseDialect implements DatabaseDialect {
 
@@ -1560,6 +1564,51 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     builder.append(")");
     return builder.toString();
   }
+
+  /**
+   * ---------------------------------------------------------------test-----------------------------------------------------
+   * @param table
+   * @param pkName
+   * @param keyColumns
+   * @param nonKeyColumns
+   * @return
+   */
+  @Override
+  public String buildInsertStatement(
+          TableId table,
+          String pkName,
+          Collection<ColumnId> keyColumns,
+          Collection<ColumnId> nonKeyColumns
+  ) {
+    ExpressionBuilder builder = expressionBuilder();
+    builder.append("INSERT INTO ");
+    builder.append(table);
+    builder.append("(");
+    builder.append(pkName + ",");
+    builder.appendList()
+            .delimitedBy(",")
+            .transformedBy(ExpressionBuilder.columnNames())
+            .of(keyColumns, nonKeyColumns);
+    builder.append(") VALUES(");
+    builder.appendMultiple(",", "?", 1 + keyColumns.size() + nonKeyColumns.size());
+    builder.append(")");
+    return builder.toString();
+  }
+
+  @Override
+  public String buildDesertStatement(
+          TableId table,
+          String pkName
+  ) {
+    ExpressionBuilder builder = new ExpressionBuilder();
+    builder.append("DELETE FROM ");
+    builder.append(table,QuoteMethod.NEVER);
+    builder.append(" WHERE ");
+    builder.append(pkName);
+    builder.append(" = ?");
+    return builder.toString();
+  }
+
 
   @Override
   @SuppressWarnings("deprecation")

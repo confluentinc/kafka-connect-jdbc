@@ -56,6 +56,7 @@ public class JdbcSinkConnector extends SinkConnector {
     return configs;
   }
 
+
   @Override
   public void start(Map<String, String> props) {
     configProps = props;
@@ -72,7 +73,10 @@ public class JdbcSinkConnector extends SinkConnector {
 
   @Override
   public Config validate(Map<String, String> connectorConfigs) {
-    /** get configuration parsed and validated individually */
+    /** get configuration parsed and validated individually *
+     * 分别解析和验证配置
+     */
+
     Config config = super.validate(connectorConfigs);
 
     return validateDeleteEnabledPkMode(config);

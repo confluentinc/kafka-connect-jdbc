@@ -371,6 +371,18 @@ public interface DatabaseDialect extends ConnectionProvider {
     return buildInsertStatement(table, keyColumns, nonKeyColumns);
   }
 
+  String buildInsertStatement(
+          TableId table,
+          String pkName,
+          Collection<ColumnId> keyColumns,
+          Collection<ColumnId> nonKeyColumns
+  );
+
+  String buildDesertStatement(
+          TableId table,
+          String pkName
+  );
+
   /**
    * Build the UPDATE prepared statement expression for the given table and its columns. Variables
    * for each key column should also appear in the WHERE clause of the statement.

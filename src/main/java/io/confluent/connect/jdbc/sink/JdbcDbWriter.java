@@ -20,9 +20,7 @@ import org.apache.kafka.connect.sink.SinkRecord;
 
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
@@ -59,27 +57,39 @@ public class JdbcDbWriter {
     };
   }
 
+  final Map<TableId, BufferedRecords> bufferByTable = new HashMap<>();
   void write(final Collection<SinkRecord> records)
       throws SQLException, TableAlterOrCreateException {
     final Connection connection = cachedConnectionProvider.getConnection();
     try {
-      final Map<TableId, BufferedRecords> bufferByTable = new HashMap<>();
+
       for (SinkRecord record : records) {
         final TableId tableId = destinationTable(record.topic());
         BufferedRecords buffer = bufferByTable.get(tableId);
         if (buffer == null) {
-          buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
+          buffer = config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPLOAD ? new GPBufferedRecords(config, tableId, dbDialect, dbStructure, connection) : new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
+          buffer.setLastFlushTime(System.currentTimeMillis());
           bufferByTable.put(tableId, buffer);
         }
         buffer.add(record);
       }
+      // to remove enteries
+     List<TableId> toRemoveEntries = new ArrayList<>();
+
       for (Map.Entry<TableId, BufferedRecords> entry : bufferByTable.entrySet()) {
         TableId tableId = entry.getKey();
         BufferedRecords buffer = entry.getValue();
+        if(System.currentTimeMillis() - buffer.getLastFlushTime() < config.maxBatchWaitTime) {
+          continue;
+        }
+        toRemoveEntries.add(tableId);
         log.debug("Flushing records in JDBC Writer for table ID: {}", tableId);
         buffer.flush();
         buffer.close();
       }
+        for(TableId tableId : toRemoveEntries) {
+            bufferByTable.remove(tableId);
+        }
       connection.commit();
     } catch (SQLException | TableAlterOrCreateException e) {
       try {
@@ -106,5 +116,32 @@ public class JdbcDbWriter {
       ));
     }
     return dbDialect.parseTableIdentifier(tableName);
+  }
+
+  public void commitPendingRecords() {
+    if (bufferByTable == null || bufferByTable.isEmpty()) {
+      return;
+    }
+    List<TableId> toRemoveEntries = new ArrayList<>();
+
+    for (Map.Entry<TableId, BufferedRecords> entry : bufferByTable.entrySet()) {
+      TableId tableId = entry.getKey();
+      BufferedRecords buffer = entry.getValue();
+      if(System.currentTimeMillis() - buffer.getLastFlushTime() < config.maxBatchWaitTime) {
+        continue;
+      }
+      toRemoveEntries.add(tableId);
+      log.debug("Flushing records in JDBC Writer for table ID: {}", tableId);
+      try {
+        buffer.flush();
+        buffer.close();
+      } catch (SQLException e) {
+        log.error("Error while flushing records in JDBC Writer for table ID: {}", tableId);
+      }
+
+    }
+    for(TableId tableId : toRemoveEntries) {
+      bufferByTable.remove(tableId);
+    }
   }
 }

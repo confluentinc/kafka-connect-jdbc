@@ -77,6 +77,8 @@ public class JdbcSinkTask extends SinkTask {
   @Override
   public void put(Collection<SinkRecord> records) {
     if (records.isEmpty()) {
+      // maybe check for pending gp records?
+      writer.commitPendingRecords();
       return;
     }
     final SinkRecord first = records.iterator().next();

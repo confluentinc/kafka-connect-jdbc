@@ -1,0 +1,4 @@
+ mvn install dependency:copy-dependencies -DskipTests
+
+
+mvn clean install -DskipTests

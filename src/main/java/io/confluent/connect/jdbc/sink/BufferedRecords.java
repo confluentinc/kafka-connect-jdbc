@@ -15,6 +15,8 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import io.confluent.connect.jdbc.gpload.GPloadConfigObj;
+import io.confluent.connect.jdbc.gpload.YAMLConfig;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
@@ -43,24 +45,26 @@ import static java.util.Objects.isNull;
 import static java.util.Objects.nonNull;
 
 public class BufferedRecords {
-  private static final Logger log = LoggerFactory.getLogger(BufferedRecords.class);
+  protected static final Logger log = LoggerFactory.getLogger(BufferedRecords.class);
 
-  private final TableId tableId;
-  private final JdbcSinkConfig config;
-  private final DatabaseDialect dbDialect;
-  private final DbStructure dbStructure;
-  private final Connection connection;
+  protected final TableId tableId;
+  protected final JdbcSinkConfig config;
+  protected final DatabaseDialect dbDialect;
+  protected final DbStructure dbStructure;
+  protected final Connection connection;
 
-  private List<SinkRecord> records = new ArrayList<>();
-  private Schema keySchema;
-  private Schema valueSchema;
-  private RecordValidator recordValidator;
-  private FieldsMetadata fieldsMetadata;
+  protected List<SinkRecord> records = new ArrayList<>();
+  protected Schema keySchema;
+  protected Schema valueSchema;
+  protected RecordValidator recordValidator;
+  protected FieldsMetadata fieldsMetadata;
   private PreparedStatement updatePreparedStatement;
-  private PreparedStatement deletePreparedStatement;
+  protected PreparedStatement deletePreparedStatement;
   private StatementBinder updateStatementBinder;
-  private StatementBinder deleteStatementBinder;
-  private boolean deletesInBatch = false;
+  protected StatementBinder deleteStatementBinder;
+  protected boolean deletesInBatch = false;
+
+  private long lastFlushTime = 0;
 
   public BufferedRecords(
       JdbcSinkConfig config,
@@ -170,7 +174,7 @@ public class BufferedRecords {
     return flushed;
   }
 
-  public List<SinkRecord> flush() throws SQLException {
+  public List<SinkRecord> flush() throws SQLException { // work to be done here - bach insert
     if (records.isEmpty()) {
       log.debug("Records is empty");
       return new ArrayList<>();
@@ -192,17 +196,59 @@ public class BufferedRecords {
     return flushedRecords;
   }
 
-  private void executeUpdates() throws SQLException {
-    int[] batchStatus = updatePreparedStatement.executeBatch();
-    for (int updateCount : batchStatus) {
-      if (updateCount == Statement.EXECUTE_FAILED) {
-        throw new BatchUpdateException(
-                "Execution failed for part of the batch update", batchStatus);
+  protected void executeUpdates() throws SQLException {
+
+    if(config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPLOAD) {
+      executeUpdatesUsingGpLoad();
+    } else {
+
+      int[] batchStatus = updatePreparedStatement.executeBatch();
+      for (int updateCount : batchStatus) {
+        if (updateCount == Statement.EXECUTE_FAILED) {
+          throw new BatchUpdateException(
+                  "Execution failed for part of the batch update", batchStatus);
+        }
       }
     }
   }
 
-  private void executeDeletes() throws SQLException {
+  protected void executeUpdatesUsingGpLoad() {
+    // TODO add check while configuring that dialct should be Postgress as it also handle
+
+    try {
+//    PgPreparedStatement preparedStatement = (PgPreparedStatement) updatePreparedStatement;
+      GPloadConfigObj gPloadConfig = new GPloadConfigObj();
+      gPloadConfig.setUrl(config.connectionUrl);
+      gPloadConfig.setTable(tableId.tableName());
+
+
+
+
+
+      //CSVWriterUtil.writeDataToCSV();
+
+
+      String dataFile = "";
+
+
+      gPloadConfig.setFormat("csv");
+      gPloadConfig.setInput(dataFile);
+
+
+
+      YAMLConfig yamlConfig = new YAMLConfig(gPloadConfig);
+      yamlConfig.create();
+
+
+
+
+    }catch (Exception e){
+      e.printStackTrace();
+    }
+
+  }
+
+  protected void executeDeletes() throws SQLException {
     if (nonNull(deletePreparedStatement)) {
       int[] batchStatus = deletePreparedStatement.executeBatch();
       for (int updateCount : batchStatus) {
@@ -230,9 +276,9 @@ public class BufferedRecords {
     }
   }
 
-  private String getInsertSql() throws SQLException {
+  protected String getInsertSql() throws SQLException {
     switch (config.insertMode) {
-      case INSERT:
+      case INSERT:case MERGE:
         return dbDialect.buildInsertStatement(
             tableId,
             asColumns(fieldsMetadata.keyFieldNames),
@@ -273,7 +319,7 @@ public class BufferedRecords {
     }
   }
 
-  private String getDeleteSql() {
+  protected String getDeleteSql() {
     String sql = null;
     if (config.deleteEnabled) {
       switch (config.pkMode) {
@@ -302,9 +348,17 @@ public class BufferedRecords {
     return sql;
   }
 
-  private Collection<ColumnId> asColumns(Collection<String> names) {
+  protected Collection<ColumnId> asColumns(Collection<String> names) {
     return names.stream()
         .map(name -> new ColumnId(tableId, name))
         .collect(Collectors.toList());
+  }
+
+  public long getLastFlushTime() {
+    return lastFlushTime;
+  }
+
+  public void setLastFlushTime(long lastFlushTime) {
+    this.lastFlushTime = lastFlushTime;
   }
 }

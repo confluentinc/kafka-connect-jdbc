@@ -75,7 +75,12 @@ public class JdbcSinkConnector extends SinkConnector {
     /** get configuration parsed and validated individually */
     Config config = super.validate(connectorConfigs);
 
-    return validateDeleteEnabledPkMode(config);
+    return validateDeleteEnabledPkMode(validateBulkMode(config));
+  }
+
+  private Config validateBulkMode(Config config) {
+    // TODO - bulk mode is supported for greenplum/postgres only
+    return config;
   }
 
   private Config validateDeleteEnabledPkMode(Config config) {

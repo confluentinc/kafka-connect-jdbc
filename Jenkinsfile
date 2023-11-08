@@ -5,4 +5,5 @@ common {
   upstreamProjects = 'confluentinc/common'
   pintMerge = true
   downStreamValidate = false
+  mvnSkipDeploy = true
 }

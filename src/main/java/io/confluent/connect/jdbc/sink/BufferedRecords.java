@@ -15,8 +15,6 @@
 
 package io.confluent.connect.jdbc.sink;
 
-import io.confluent.connect.jdbc.gpload.GPloadConfigObj;
-import io.confluent.connect.jdbc.gpload.YAMLConfig;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
@@ -198,10 +196,6 @@ public class BufferedRecords {
 
   protected void executeUpdates() throws SQLException {
 
-    if(config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPLOAD) {
-      executeUpdatesUsingGpLoad();
-    } else {
-
       int[] batchStatus = updatePreparedStatement.executeBatch();
       for (int updateCount : batchStatus) {
         if (updateCount == Statement.EXECUTE_FAILED) {
@@ -209,44 +203,8 @@ public class BufferedRecords {
                   "Execution failed for part of the batch update", batchStatus);
         }
       }
-    }
   }
 
-  protected void executeUpdatesUsingGpLoad() {
-    // TODO add check while configuring that dialct should be Postgress as it also handle
-
-    try {
-//    PgPreparedStatement preparedStatement = (PgPreparedStatement) updatePreparedStatement;
-      GPloadConfigObj gPloadConfig = new GPloadConfigObj();
-      gPloadConfig.setUrl(config.connectionUrl);
-      gPloadConfig.setTable(tableId.tableName());
-
-
-
-
-
-      //CSVWriterUtil.writeDataToCSV();
-
-
-      String dataFile = "";
-
-
-      gPloadConfig.setFormat("csv");
-      gPloadConfig.setInput(dataFile);
-
-
-
-      YAMLConfig yamlConfig = new YAMLConfig(gPloadConfig);
-      yamlConfig.create();
-
-
-
-
-    }catch (Exception e){
-      e.printStackTrace();
-    }
-
-  }
 
   protected void executeDeletes() throws SQLException {
     if (nonNull(deletePreparedStatement)) {

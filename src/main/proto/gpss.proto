@@ -1,0 +1,209 @@
+syntax = "proto3";
+import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+package api;
+
+option java_multiple_files = true;
+
+// Connect service Request message
+message ConnectRequest {
+  string Host = 1;      // Host address of Greenplum master; must be accessible from gpss server system
+  int32 Port = 2;       // Greenplum master port
+  string Username = 3;  // User or role name that gpss uses to access Greenplum 
+  string Password = 4;  // User password
+  string DB = 5;        // Database name
+  bool UseSSL = 6;      // Use SSL or not; ignored, use the gpss config file to config SSL
+}
+
+// Connect service Response message
+message Session {
+  string ID = 1;  // Id of client connection to gpss
+}
+
+// Operation mode
+enum Operation {
+  Insert = 0;  // Insert all data into table; behavior of duplicate key or data depends upon the constraints of the target table.
+  Merge = 1;   // Insert and Update
+  Update = 2;  // Update the value of "UpdateColumns" if "MatchColumns" match
+  Read = 3;    // Not supported
+}
+
+// Required parameters of the Insert operation
+message InsertOption {
+  repeated string InsertColumns = 1;    // Names of the target table columns the insert operation should update; used in 'INSERT INTO', useful for partial loading
+  bool TruncateTable = 2;               // Truncate table before loading?
+  int64 ErrorLimitCount = 4;            // Error limit count; used by external table
+  int32 ErrorLimitPercentage = 5;       // Error limit percentage; used by external table
+}
+
+// Required parameters of the Update operation
+message UpdateOption {
+  repeated string MatchColumns = 1;     // Names of the target table columns to compare when determining to update or not
+  repeated string UpdateColumns = 2;    // Names of the target table columns to update if MatchColumns match
+  string Condition = 3;                 // Optional additional match condition; SQL syntax and used after the 'WHERE' clause
+  int64 ErrorLimitCount = 4;            // Error limit count; used by external table
+  int32 ErrorLimitPercentage = 5;       // Error limit percentage; used by external table
+}
+
+// Required parameters of the Merge operation
+// Merge operation creates a session-level temp table in StagingSchema
+message MergeOption {
+  repeated string InsertColumns = 1;
+  repeated string MatchColumns = 2;
+  repeated string UpdateColumns = 3;
+  string Condition = 4;
+  int64 ErrorLimitCount = 5;
+  int32 ErrorLimitPercentage = 6;
+}
+
+// Open service Request message
+message OpenRequest {
+  Session Session = 1;      // Session ID returned by Connect
+  string SchemaName = 2;    // Name of the Greenplum Database schema
+  string TableName = 3;     // Name of the Greenplum Database table
+  string PreSQL = 4;        // SQL to execute before gpss loads the data
+  string PostSQL = 5;       // SQL to execute after gpss loads the data
+  int32 Timeout = 6;        // Time to wait before aborting the operation (seconds); not supported
+  string Encoding = 7;      // Encoding of text data; not supported
+  string StagingSchema = 8; // Schema in which gpss creates external and temp tables; default is to create these tables in the same schema as the target table
+
+  oneof Option {            // Identify the type of write operation to perform
+    InsertOption InsertOption = 100;
+    UpdateOption UpdateOption = 101;
+    MergeOption MergeOption = 102;
+  }
+}
+
+message DBValue {
+  oneof DBType {
+    int32 Int32Value = 1;
+    int64 Int64Value = 2;
+    float Float32Value = 5;
+    double Float64Value = 6;
+    string StringValue = 7;  // Includes types whose values are presented as string but are not a real string type in Greenplum; for example: macaddr, time with time zone, box, etc.
+    bytes BytesValue = 8;
+    google.protobuf.Timestamp TimeStampValue = 10;  // Time without timezone
+    google.protobuf.NullValue NullValue = 11;
+  }
+}
+
+message Row {
+  repeated DBValue Columns = 1;
+}
+
+message RowData {    
+  bytes Data = 1;     // A single protobuf-encoded Row
+}
+
+// Write service Request message
+message WriteRequest {
+  Session Session = 1;
+  repeated RowData Rows = 2;     // The data to load into the target table
+}
+
+// Close service Response message
+message TransferStats {          // Status of the data load operation
+  int64 SuccessCount = 1;        // Number of rows successfully loaded
+  int64 ErrorCount = 2;          // Number of error lines if Errorlimit is not reached
+  repeated string ErrorRows = 3; // Number of rows with incorrectly-formatted data; not supported
+}
+
+// Close service Request message
+message CloseRequest {
+  Session session = 1;
+}
+
+// ListSchema service request message
+message ListSchemaRequest {
+  Session Session = 1;
+}
+
+message Schema {
+  string Name = 1;
+  string Owner = 2;
+}
+
+// ListSchema service response message
+message Schemas {
+  repeated Schema Schemas = 1;
+}
+
+// ListTable service request message
+message ListTableRequest {
+  Session Session = 1;
+  string Schema = 2;    // 'public' is the default if no Schema is provided
+}
+
+// DescribeTable service request message
+message DescribeTableRequest {
+  Session Session = 1;
+  string SchemaName = 2;
+  string TableName = 3;
+}
+
+enum RelationType {
+  Table = 0;
+  View = 1;
+  Index = 2;
+  Sequence = 3;
+  Special = 4;
+  Other = 255;
+}
+
+message TableInfo {
+  string Name = 1;
+  RelationType Type = 2;
+}
+
+// ListTable service response message
+message Tables {
+  repeated TableInfo Tables = 1;
+}
+
+// DescribeTable service response message
+message Columns {
+  repeated ColumnInfo Columns = 1;
+}
+
+message ColumnInfo {
+  string Name = 1;            // Column name
+  string DatabaseType = 2;    // Greenplum data type
+
+  bool HasLength = 3;         // Contains length information?
+  int64 Length = 4;           // Length if HasLength is true
+
+  bool HasPrecisionScale = 5; // Contains precision or scale information?
+  int64 Precision = 6;
+  int64 Scale = 7;
+
+  bool HasNullable = 8;       // Contains Nullable constraint?
+  bool Nullable = 9;
+}
+
+service Gpss {
+  // Establish a connection to Greenplum Database; returns a Session object
+  rpc Connect(ConnectRequest) returns (Session) {}
+
+  // Disconnect, freeing all resources allocated for a session
+  rpc Disconnect(Session) returns (google.protobuf.Empty) {}
+
+  // Prepare and open a table for write
+  rpc Open(OpenRequest) returns(google.protobuf.Empty) {}
+
+  // Write data to table
+  rpc Write(WriteRequest) returns(google.protobuf.Empty) {}
+
+  // Close a write operation
+  rpc Close(CloseRequest) returns(TransferStats) {}
+
+  // List all available schemas in a database
+  rpc ListSchema(ListSchemaRequest) returns (Schemas) {}
+
+  // List all tables and views in a schema
+  rpc ListTable(ListTableRequest) returns (Tables) {}
+
+  // Decribe table metadata(column name and column type)
+  rpc DescribeTable(DescribeTableRequest) returns (Columns) {}
+}

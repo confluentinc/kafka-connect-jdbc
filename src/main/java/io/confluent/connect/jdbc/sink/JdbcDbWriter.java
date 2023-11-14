@@ -74,22 +74,7 @@ public class JdbcDbWriter {
         buffer.add(record);
       }
       // to remove enteries
-     List<TableId> toRemoveEntries = new ArrayList<>();
-
-      for (Map.Entry<TableId, BufferedRecords> entry : bufferByTable.entrySet()) {
-        TableId tableId = entry.getKey();
-        BufferedRecords buffer = entry.getValue();
-        if(System.currentTimeMillis() - buffer.getLastFlushTime() < config.maxBatchWaitTime) {
-          continue;
-        }
-        toRemoveEntries.add(tableId);
-        log.debug("Flushing records in JDBC Writer for table ID: {}", tableId);
-        buffer.flush();
-        buffer.close();
-      }
-        for(TableId tableId : toRemoveEntries) {
-            bufferByTable.remove(tableId);
-        }
+      commitPendingRecords();
       connection.commit();
     } catch (SQLException | TableAlterOrCreateException e) {
       try {

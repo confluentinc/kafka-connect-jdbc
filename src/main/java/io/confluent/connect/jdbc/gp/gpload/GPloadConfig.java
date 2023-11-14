@@ -1,6 +1,5 @@
-package io.confluent.connect.jdbc.gpload;
+package io.confluent.connect.jdbc.gp.gpload;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 

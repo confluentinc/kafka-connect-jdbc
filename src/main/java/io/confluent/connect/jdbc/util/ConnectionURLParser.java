@@ -12,7 +12,7 @@ public class ConnectionURLParser {
 
     private String host;
     private int port;
-    private String path;
+    private String database;
     private Map<String, String> queryParams;
     private String username;
     private String password;
@@ -26,9 +26,9 @@ public class ConnectionURLParser {
             this.port = uri.getPort();
 
             String query = uri.getQuery();
-            this.path = uri.getPath();
-            if(this.path != null && this.path.startsWith("/")) {
-                this.path = this.path.substring(1);
+            this.database = uri.getPath();
+            if(this.database != null && this.database.startsWith("/")) {
+                this.database = this.database.substring(1);
             }
 
             // Parse query parameters into a map
@@ -65,9 +65,6 @@ public class ConnectionURLParser {
         return port;
     }
 
-    public String getPath() {
-        return path;
-    }
 
     public Map<String, String> getQueryParams() {
         return queryParams;
@@ -85,6 +82,9 @@ public class ConnectionURLParser {
         return schema;
     }
 
+    public String getDatabase() {
+        return database;
+    }
 
     public void setSchema(String schema) {
         this.schema = schema;

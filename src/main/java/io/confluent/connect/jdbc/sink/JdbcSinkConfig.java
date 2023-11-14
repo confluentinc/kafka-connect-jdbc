@@ -46,6 +46,25 @@ import org.apache.kafka.common.config.types.Password;
 public class JdbcSinkConfig extends AbstractConfig {
 
 
+    public static final String GPSS_HOST = "gpss.host";
+    private static final String GPSS_HOST_DEFAULT = "localhost";
+    private static final String GPSS_HOST_DOC = "The gpss host for gpss mode.";
+
+    public static final String GPSS_USE_STICKY_SESSION = "gpss.use.sticky.session";
+    private static final boolean GPSS_USE_STICKY_SESSION_DEFAULT = false;
+    private static final String GPSS_USE_STICKY_SESSION_DOC = "Whether to use sticky session for gpss mode.";
+
+    public static final String GPSS_PORT = "gpss.port";
+    private static final String GPSS_PORT_DEFAULT = "5000";
+    private static final String GPSS_PORT_DOC = "The gpss port for gpss mode.";
+
+
+    public static final String DB_SCHEMA = "db.schema";
+    private static final String DB_SCHEMA_DEFAULT = null;
+    private static final String DB_SCHEMA_DOC = "The schema to use for the connector's tables.";
+    public static final String GP_CLIENT_HOST_CONFIG = "gp.client.host";
+    public static final String GP_CLIENT_HOST_DEFAULT = null;
+    public static final String GP_CLIENT_HOST_DOC = "The gpfdist host for gpfdist and gpload modes. Gpfdist server will fallback to current machine's ip or hostname if not specified.";
     public static final String KEEP_GP_FILES_CONFIG = "keep.gp.files";
     private static final boolean KEEP_GP_FILES_DEFAULT = false; // Set your default value
     private static final String KEEP_GP_FILES_DOC = "Whether to keep Greenplum files for debugging.";
@@ -63,6 +82,11 @@ public class JdbcSinkConfig extends AbstractConfig {
     public static final String GP_ERRORS_LIMIT = "gp.error.limit";
     private static final int GP_ERROR_LIMIT_DEFAULT = 999999999;
 
+    public static final String GP_ERRORS_PERCENTAGE_LIMIT = "gp.error.percentage.limit";
+    private static final int GP_ERRORS_PERCENTAGE_LIMIT_DEFAULT = 100;
+    private static final String GP_ERRORS_PERCENTAGE_LIMIT_DOC = "The maximum percentage of errors allowed in a batch before the batch is considered failed.";
+
+
     public static final String CSV_HEADER = "csv.header";
     private static final boolean CSV_HEADER_DEFAULT = true;
 
@@ -72,7 +96,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     public static final String CSV_ENCODING = "csv.encoding";
     private static final String CSV_ENCODING_DEFAULT = "UTF-8";
 
-    public static final String GP_LOG_ERRORS = "csv.log.errors";
+    public static final String GP_LOG_ERRORS = "gp.log.errors";
     private static final boolean GP_LOG_ERRORS_DEFAULT = true;
 
 
@@ -91,8 +115,9 @@ public class JdbcSinkConfig extends AbstractConfig {
     public enum BatchInsertMode {
         NONE,
         GPLOAD,
-        GPKAFKA, // https://github.com/yanivbhemo/greenplum-gpss
-        DSH
+        GPSS
+//        GPKAFKA, // https://github.com/yanivbhemo/greenplum-gpss
+//        DSH
 
     }
 
@@ -210,10 +235,10 @@ public class JdbcSinkConfig extends AbstractConfig {
             "The batch insertion mode to use. Supported modes are:\n"
                     + "``default``\n"
                     + "    Use standard SQL ``INSERT`` statements.\n"
-                    + "``gp_load``\n"
-                    + "    Use gpload utility to load data by creating a yml file at runtime (For greenplum only) \n"
-                    + "``gp_kafka``\n"
-                    + "    Use greenplum streaming server (For greenplum only) https://docs.vmware.com/en/VMware-Greenplum-Streaming-Server/1.10/greenplum-streaming-server/kafka-loading.html";
+                    + "``gpload``\n"
+                    + "    Use gpload utility to load data by creating a yml file at runtime (For greenplum only). Make sure that the gpload is in your path \n"
+                    + "``GPSS``\n"
+                    + "    Use greenplum streaming server (For greenplum only) https://docs.vmware.com/en/VMware-Greenplum-Streaming-Server/1.10/greenplum-streaming-server/ref-gpss.html";
     private static final String BATCH_INSERT_MODE_DISPLAY = "Batch Insert Mode";
     public static final String INSERT_MODE = "insert.mode";
     private static final String INSERT_MODE_DEFAULT = "insert";
@@ -665,12 +690,68 @@ public class JdbcSinkConfig extends AbstractConfig {
                     ConfigDef.Importance.MEDIUM,
                     GREENPLUM_HOME_DOC
             ).define(
+                    GP_CLIENT_HOST_CONFIG,
+                    ConfigDef.Type.STRING,
+                    GP_CLIENT_HOST_DEFAULT,
+                    ConfigDef.Importance.MEDIUM,
+                    GP_CLIENT_HOST_DOC
+            ).define(
                     KEEP_GP_FILES_CONFIG,
                     ConfigDef.Type.BOOLEAN,
                     KEEP_GP_FILES_DEFAULT,
                     ConfigDef.Importance.MEDIUM,
                     KEEP_GP_FILES_DOC
+            ).define(
+                    DB_SCHEMA,
+                    ConfigDef.Type.STRING,
+                    DB_SCHEMA_DEFAULT,
+                    ConfigDef.Importance.MEDIUM,
+                    DB_SCHEMA_DOC
+            ).define(
+                    GPSS_HOST,
+                    ConfigDef.Type.STRING,
+                    GPSS_HOST_DEFAULT,
+                    ConfigDef.Importance.MEDIUM,
+                    GPSS_HOST_DOC
+            ).define(
+                    GPSS_PORT,
+                    ConfigDef.Type.STRING,
+                    GPSS_PORT_DEFAULT,
+                    ConfigDef.Importance.MEDIUM,
+                    GPSS_PORT_DOC
+            ).define(
+                    GP_ERRORS_PERCENTAGE_LIMIT,
+                    ConfigDef.Type.STRING,
+                    GP_ERRORS_PERCENTAGE_LIMIT_DEFAULT,
+                    ConfigDef.Importance.MEDIUM,
+                    GP_ERRORS_PERCENTAGE_LIMIT_DOC
+
+            ).define(
+                    GPSS_USE_STICKY_SESSION,
+                    ConfigDef.Type.BOOLEAN,
+                    GPSS_USE_STICKY_SESSION_DEFAULT,
+                    ConfigDef.Importance.MEDIUM,
+                    GPSS_USE_STICKY_SESSION_DOC
+
             );
+
+//
+
+
+    public static void printConfigDefTable(ConfigDef configDef) {
+
+        System.out.format("%-30s %-20s %-30s %-15s %-50s%n", "Name", "Type", "Default", "Importance", "Documentation");
+        System.out.println("------------------------------------------------------------------------------------------------------------------");
+
+        for (ConfigDef.ConfigKey configKey : configDef.configKeys().values()) {
+            System.out.format("%-30s %-20s %-30s %-15s %-50s%n",
+                    configKey.name,
+                    configKey.type,
+                    configKey.defaultValue,
+                    configKey.importance,
+                    configKey.documentation);
+        }
+    }
 
     public final String connectorName;
     public final String connectionUrl;
@@ -710,6 +791,13 @@ public class JdbcSinkConfig extends AbstractConfig {
 
     public final boolean keepGpFiles;
 
+    public final String gpClientHost;
+
+    public final String dbSchema;
+    public final String gpssHost;
+    public final String gpssPort;
+    public final Integer gpErrorsPercentageLimit;
+    public final boolean gpssUseStickySession;
 
     public JdbcSinkConfig(Map<?, ?> props) {
         super(CONFIG_DEF, props);
@@ -751,6 +839,17 @@ public class JdbcSinkConfig extends AbstractConfig {
         gpLogErrors = getBoolean(GP_LOG_ERRORS);
         greenplumHome = getString(GREENPLUM_HOME_CONFIG);
         keepGpFiles = getBoolean(KEEP_GP_FILES_CONFIG);
+        gpClientHost = getString(GP_CLIENT_HOST_CONFIG);
+        dbSchema = getString(DB_SCHEMA);
+
+        gpssHost = getString(GPSS_HOST);
+        gpssPort = getString(GPSS_PORT);
+
+        gpErrorsPercentageLimit = getInt(GP_ERRORS_PERCENTAGE_LIMIT);
+        gpssUseStickySession = getBoolean(GPSS_USE_STICKY_SESSION);
+
+
+        printConfigDefTable(CONFIG_DEF);
 
     }
 

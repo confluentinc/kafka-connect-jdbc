@@ -19,6 +19,14 @@ public class ConnectionURLParser {
 
     public ConnectionURLParser(String jdbcUrl) {
         try {
+            if(jdbcUrl == null) {
+                throw new IllegalArgumentException("jdbcUrl cannot be null");
+            }
+
+          if(jdbcUrl.startsWith("jdbc:")) {
+              jdbcUrl = jdbcUrl.substring(5);
+          }
+
             URI uri = new URI(jdbcUrl);
 
             this.scheme = uri.getScheme();

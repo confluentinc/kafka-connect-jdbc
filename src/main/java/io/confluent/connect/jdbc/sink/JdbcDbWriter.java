@@ -67,7 +67,9 @@ public class JdbcDbWriter {
         final TableId tableId = destinationTable(record.topic());
         BufferedRecords buffer = bufferByTable.get(tableId);
         if (buffer == null) {
-          buffer = config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPLOAD ? new GPBufferedRecords(config, tableId, dbDialect, dbStructure, connection) : new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
+          buffer = config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPLOAD
+                  || config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPSS
+                  ? new GPBufferedRecords(config, tableId, dbDialect, dbStructure, connection) : new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
           buffer.setLastFlushTime(System.currentTimeMillis());
           bufferByTable.put(tableId, buffer);
         }

@@ -62,9 +62,9 @@ public class JdbcSinkConfig extends AbstractConfig {
     public static final String DB_SCHEMA = "db.schema";
     private static final String DB_SCHEMA_DEFAULT = null;
     private static final String DB_SCHEMA_DOC = "The schema to use for the connector's tables.";
-    public static final String GP_CLIENT_HOST_CONFIG = "gp.client.host";
-    public static final String GP_CLIENT_HOST_DEFAULT = null;
-    public static final String GP_CLIENT_HOST_DOC = "The gpfdist host for gpfdist and gpload modes. Gpfdist server will fallback to current machine's ip or hostname if not specified.";
+    public static final String GPFDIST_HOST = "gpfdist.host";
+    public static final String GPFDIST_HOST_DEFAULT = null;
+    public static final String GPFDIST_HOST_DOC = "The gpfdist host for gpfdist and gpload modes. Gpfdist server will fallback to current machine's ip or hostname if not specified.";
     public static final String KEEP_GP_FILES_CONFIG = "keep.gp.files";
     private static final boolean KEEP_GP_FILES_DEFAULT = false; // Set your default value
     private static final String KEEP_GP_FILES_DOC = "Whether to keep Greenplum files for debugging.";
@@ -690,11 +690,11 @@ public class JdbcSinkConfig extends AbstractConfig {
                     ConfigDef.Importance.MEDIUM,
                     GREENPLUM_HOME_DOC
             ).define(
-                    GP_CLIENT_HOST_CONFIG,
+                    GPFDIST_HOST,
                     ConfigDef.Type.STRING,
-                    GP_CLIENT_HOST_DEFAULT,
+                    GPFDIST_HOST_DEFAULT,
                     ConfigDef.Importance.MEDIUM,
-                    GP_CLIENT_HOST_DOC
+                    GPFDIST_HOST_DOC
             ).define(
                     KEEP_GP_FILES_CONFIG,
                     ConfigDef.Type.BOOLEAN,
@@ -721,7 +721,7 @@ public class JdbcSinkConfig extends AbstractConfig {
                     GPSS_PORT_DOC
             ).define(
                     GP_ERRORS_PERCENTAGE_LIMIT,
-                    ConfigDef.Type.STRING,
+                    ConfigDef.Type.INT,
                     GP_ERRORS_PERCENTAGE_LIMIT_DEFAULT,
                     ConfigDef.Importance.MEDIUM,
                     GP_ERRORS_PERCENTAGE_LIMIT_DOC
@@ -791,7 +791,7 @@ public class JdbcSinkConfig extends AbstractConfig {
 
     public final boolean keepGpFiles;
 
-    public final String gpClientHost;
+    public final String gpfdistClientHost;
 
     public final String dbSchema;
     public final String gpssHost;
@@ -839,7 +839,8 @@ public class JdbcSinkConfig extends AbstractConfig {
         gpLogErrors = getBoolean(GP_LOG_ERRORS);
         greenplumHome = getString(GREENPLUM_HOME_CONFIG);
         keepGpFiles = getBoolean(KEEP_GP_FILES_CONFIG);
-        gpClientHost = getString(GP_CLIENT_HOST_CONFIG);
+
+        gpfdistClientHost = getString(GPFDIST_HOST);
         dbSchema = getString(DB_SCHEMA);
 
         gpssHost = getString(GPSS_HOST);

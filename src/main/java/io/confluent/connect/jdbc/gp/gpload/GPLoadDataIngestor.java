@@ -67,8 +67,8 @@ public class GPLoadDataIngestor extends GPDataIngestor {
 
             String localIpOrHost = "localhost";
 
-            if (config.gpClientHost != null) {
-                localIpOrHost = config.gpClientHost;
+            if (config.gpfdistClientHost != null) {
+                localIpOrHost = config.gpfdistClientHost;
             } else {
                 localIpOrHost = CommonUtils.getLocalIpOrHost();
 

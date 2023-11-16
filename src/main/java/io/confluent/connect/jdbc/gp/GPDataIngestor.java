@@ -8,7 +8,7 @@ import java.util.List;
 
 public abstract class GPDataIngestor implements IGPDataIngestor{
     protected final JdbcSinkConfig config;
-    protected final TableDefinition tableDefinition;
+    protected TableDefinition tableDefinition;
     protected final FieldsMetadata fieldsMetadata;
     protected final String tableName;
 
@@ -17,6 +17,12 @@ public abstract class GPDataIngestor implements IGPDataIngestor{
         this.tableDefinition = tableDefinition;
         this.fieldsMetadata = fieldsMetadata;
         this.tableName = tableDefinition.id().tableName();
+    }
+
+    public GPDataIngestor(JdbcSinkConfig config, String tableName, FieldsMetadata fieldsMetadata) {
+        this.config = config;
+        this.fieldsMetadata = fieldsMetadata;
+        this.tableName = tableName;
     }
 
 }

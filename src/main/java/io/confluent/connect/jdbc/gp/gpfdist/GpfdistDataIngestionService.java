@@ -1,8 +1,9 @@
-package io.confluent.connect.jdbc.gp.gpss;
+package io.confluent.connect.jdbc.gp.gpfdist;
 
 import api.*;
 import com.google.protobuf.ByteString;
-import io.confluent.connect.jdbc.gp.GPDataIngestor;
+import io.confluent.connect.jdbc.gp.GpDataIngestionService;
+import io.confluent.connect.jdbc.gp.gpfdist.framweork.GpfdistServer;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.util.ConnectionURLParser;
@@ -19,61 +20,33 @@ import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
-public class GPSSDataIngestor extends GPDataIngestor {
+public class GpfdistDataIngestionService extends GpDataIngestionService {
 
-    public static void main(String[] args) {
-        Map<String, String> configMap = new HashMap<>();
-
-        // Add properties to the HashMap
-        configMap.put("key.converter.schema.registry.url", "http://localhost:8081");
-        configMap.put("key.converter.schema.registry.subject.name.strategy", "io.confluent.kafka.serializers.subject.TopicNameStrategy");
-        configMap.put("value.converter.schema.registry.url", "http://localhost:8081");
-        configMap.put("value.converter.schema.registry.subject.name.strategy", "io.confluent.kafka.serializers.subject.TopicNameStrategy");
-        configMap.put("transforms.route.regex", "([^.]+)\\.([^.]+)\\.([^.]+)");
-        configMap.put("transforms.route.replacement", "$3");
-        configMap.put("transforms.route.type", "org.apache.kafka.connect.transforms.RegexRouter");
-        configMap.put("transforms.unwrap.type", "io.debezium.transforms.ExtractNewRecordState");
-        configMap.put("transforms.unwrap.drop.tombstones", "false");
-        configMap.put("connector.class", "io.confluent.connect.jdbc.JdbcSinkConnector");
-        configMap.put("tasks.max", "1");
-        configMap.put("key.converter", "io.confluent.connect.avro.AvroConverter");
-        configMap.put("value.converter", "io.confluent.connect.avro.AvroConverter");
-        configMap.put("transforms", "unwrap,route");
-        configMap.put("errors.tolerance", "all");
-        configMap.put("topics.regex", "informix.informix.(.*)");
-        configMap.put("errors.deadletterqueue.topic.name", "informix-gpdb-sink-errors");
-        configMap.put("errors.deadletterqueue.topic.replication.factor", "1");
-        configMap.put("errors.deadletterqueue.context.headers.enable", "true");
-        configMap.put("connection.url", "jdbc:postgresql://192.168.56.6:5432/cards?user=gpadmin&password=T3mp/ma321&schema=public");
-        configMap.put("insert.mode", "merge");
-        configMap.put("batch.size", "3");
-        configMap.put("max.batch.wait.time", "60000");
-        configMap.put("pk.mode", "record_key");
-        configMap.put("pk.fields", "id");
-        configMap.put("auto.create", "true");
-        configMap.put("auto.evolve", "true");
-        configMap.put("delete.enabled", "true");
-        configMap.put("keep.gp.files", "true");
-        configMap.put("batch.insert.mode", "gpss");
-        configMap.put("gpss.host", "192.168.56.6");
-        configMap.put("gpss.port", "5000");
-        configMap.put("db.schema", "public");
-
-        //JdbcSinkConfig jdbcSinkConfig = new JdbcSinkConfig(configMap);
-        new GPSSDataIngestor(null, "employee", null).checkEnv();
-    }
-
-
-    private static final Logger log = LoggerFactory.getLogger(GPSSDataIngestor.class);
+    private static final Logger log = LoggerFactory.getLogger(GpfdistDataIngestionService.class);
     ManagedChannel channel = null;
     Session mSession = null;
     GpssGrpc.GpssBlockingStub bStub = null;
-    public GPSSDataIngestor(JdbcSinkConfig config, TableDefinition tabDef, FieldsMetadata fieldsMetadata) {
+    public GpfdistDataIngestionService(JdbcSinkConfig config, TableDefinition tabDef, FieldsMetadata fieldsMetadata) {
         super(config, tabDef, fieldsMetadata);
     }
 
-    public GPSSDataIngestor(JdbcSinkConfig config, String tableName, FieldsMetadata fieldsMetadata) {
+    public GpfdistDataIngestionService(JdbcSinkConfig config, String tableName, FieldsMetadata fieldsMetadata) {
         super(config, tableName, fieldsMetadata);
+    }
+
+    private void setupGpfDistServer(){
+//        this.processor = processor;
+//        this.port = port;
+//        this.flushCount = flushCount;
+//        this.flushTime = flushTime;
+//        this.batchTimeout = batchTimeout;
+//        this.batchCount = batchCount;
+
+
+        if(!GpfdistServer.getInstance().initialized()){
+            GpfdistServer.getInstance().initialize(null, config.portRange.isEmpty() ? 3627 : config.portRange.get(0), config.batchSize, (int)(config.maxBatchWaitTime <= 0? 1 : config.maxBatchWaitTime)/ 60, 999999, config.batchSize);
+        }
+
     }
 
     @Override
@@ -207,6 +180,7 @@ public class GPSSDataIngestor extends GPDataIngestor {
     }
 
     private void openTableForWrite(String tableName) {
+        final List fields = Arrays.asList(fieldsMetadata.allFields.keySet().toArray());
         Integer errLimit = config.gpErrorsLimit;
         Integer errPct = config.gpErrorsPercentageLimit;
         // create an insert option builder
@@ -214,6 +188,7 @@ public class GPSSDataIngestor extends GPDataIngestor {
                 .setErrorLimitCount(errLimit)
                 .setErrorLimitPercentage(errPct)
                 .setTruncateTable(false)
+                .addAllInsertColumns(fields)
 //                .addInsertColumns("comments")
 //                .addInsertColumns("atime")
                 .build();
@@ -238,7 +213,7 @@ public class GPSSDataIngestor extends GPDataIngestor {
 
             records.forEach(record -> {
                 final Struct valueStruct = (Struct) record.value();
-                api.Row.Builder builder = api.Row.newBuilder();
+                Row.Builder builder = Row.newBuilder();
                 for (int i = 0; i < fields.size(); i++) {
                     Object value = valueStruct.get(fields.get(i).toString());
                     org.apache.kafka.connect.data.Schema schemaType = valueStruct.schema().field(fields.get(i).toString()).schema();
@@ -256,7 +231,7 @@ public class GPSSDataIngestor extends GPDataIngestor {
 
                     builder.addColumns(valueBuilder.build());
 
-                    builder.addColumns(api.DBValue.newBuilder().setStringValue(UUID.randomUUID().toString()).build());
+                    builder.addColumns(DBValue.newBuilder().setStringValue(UUID.randomUUID().toString()).build());
                 }
                 RowData.Builder rowbuilder = RowData.newBuilder().setData(builder.build().toByteString());
                 rows.add(rowbuilder.build());

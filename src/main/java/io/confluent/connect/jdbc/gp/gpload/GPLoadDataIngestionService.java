@@ -5,7 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategy;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import de.siegmar.fastcsv.writer.CsvWriter;
-import io.confluent.connect.jdbc.gp.GPDataIngestor;
+import io.confluent.connect.jdbc.gp.GpDataIngestionService;
+import io.confluent.connect.jdbc.gp.gpload.config.GPloadConfig;
 import io.confluent.connect.jdbc.sink.GPBinder;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
@@ -21,10 +22,10 @@ import java.io.File;
 import java.io.FileWriter;
 import java.util.*;
 
-public class GPLoadDataIngestor extends GPDataIngestor {
+public class GPLoadDataIngestionService extends GpDataIngestionService {
     private static final Logger log = LoggerFactory.getLogger(GPBinder.class);
     private final String tempDir;
-    public GPLoadDataIngestor(JdbcSinkConfig config, TableDefinition tableDefinition, FieldsMetadata fieldsMetadata) {
+    public GPLoadDataIngestionService(JdbcSinkConfig config, TableDefinition tableDefinition, FieldsMetadata fieldsMetadata) {
         super(config, tableDefinition, fieldsMetadata);
         tempDir = System.getProperty("java.io.tmpdir") + "/gpload/";
         new File(tempDir).mkdirs();

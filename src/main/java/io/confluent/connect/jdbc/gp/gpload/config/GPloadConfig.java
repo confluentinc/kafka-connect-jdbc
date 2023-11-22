@@ -1,4 +1,4 @@
-package io.confluent.connect.jdbc.gp.gpload;
+package io.confluent.connect.jdbc.gp.gpload.config;
 
 import java.util.List;
 import java.util.Map;

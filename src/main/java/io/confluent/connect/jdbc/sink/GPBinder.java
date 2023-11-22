@@ -2,9 +2,9 @@ package io.confluent.connect.jdbc.sink;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialect.StatementBinder;
-import io.confluent.connect.jdbc.gp.GPDataIngestor;
-import io.confluent.connect.jdbc.gp.gpload.GPLoadDataIngestor;
-import io.confluent.connect.jdbc.gp.gpss.GPSSDataIngestor;
+import io.confluent.connect.jdbc.gp.GpDataIngestionService;
+import io.confluent.connect.jdbc.gp.gpload.GPLoadDataIngestionService;
+import io.confluent.connect.jdbc.gp.gpss.GPSSDataIngestionService;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.util.TableDefinition;
@@ -32,7 +32,7 @@ public class GPBinder implements StatementBinder {
 
     private List<SinkRecord> records;
 
-    private GPDataIngestor gpDataIngestor;
+    private GpDataIngestionService gpDataIngestor;
 
     private static final Logger log = LoggerFactory.getLogger(GPBinder.class);
 
@@ -76,11 +76,11 @@ public class GPBinder implements StatementBinder {
 
         if (config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPLOAD) {
             log.info("Using GPLOAD to insert records");
-            gpDataIngestor = new GPLoadDataIngestor(config, tabDef, this.fieldsMetadata );
+            gpDataIngestor = new GPLoadDataIngestionService(config, tabDef, this.fieldsMetadata );
 
         } else if (config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPSS) {
             log.info("Using GPSS to insert records");
-              gpDataIngestor = new GPSSDataIngestor(config, tabDef, this.fieldsMetadata );
+              gpDataIngestor = new GPSSDataIngestionService(config, tabDef, this.fieldsMetadata );
         }
     }
 

@@ -4,7 +4,7 @@ import org.apache.kafka.connect.sink.SinkRecord;
 
 import java.util.List;
 
-public interface IGPDataIngestor {
+public interface IGPDataIngestionService {
     void ingest(List<SinkRecord> records);
 
 }

@@ -111,6 +111,10 @@ public class JdbcSinkConfig extends AbstractConfig {
     private static final String PORT_RANGE_DOC = "The range of ports to use for gpfdist.";
     private static final String PORT_RANGE_DISPLAY = "Port Range";
 
+    public int getGpfdistPort() {
+        return portRange.size() > 0 ? portRange.get(0) : 0;
+    }
+
 
     public enum BatchInsertMode {
         NONE,

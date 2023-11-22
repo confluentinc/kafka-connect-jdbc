@@ -18,6 +18,7 @@ package io.confluent.connect.jdbc.gp.gpfdist.framweork.support;
 
 import org.springframework.beans.factory.FactoryBean;
 import org.springframework.beans.factory.InitializingBean;
+import org.springframework.util.StringUtils;
 
 
 import java.util.Arrays;

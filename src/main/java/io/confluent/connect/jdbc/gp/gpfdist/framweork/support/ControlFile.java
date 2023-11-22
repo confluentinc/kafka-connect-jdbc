@@ -16,10 +16,35 @@
 
 package io.confluent.connect.jdbc.gp.gpfdist.framweork.support;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.util.ConnectionURLParser;
+
 import java.util.ArrayList;
 import java.util.List;
 
 public class ControlFile {
+
+
+	ControlFile() {
+	}
+	ControlFile(JdbcSinkConfig config, String tableName, List<String> matchColumns, List<String> updateColumns, String updateCondition, String sqlBefore, String sqlAfter) {
+		this.setGploadOutputMode(config.insertMode);
+		this.setGploadOutputTable(tableName);
+		this.setGploadOutputMatchColumns(matchColumns);
+		this.setGploadOutputUpdateColumns(updateColumns);
+		this.setGploadOutputUpdateCondition(updateCondition);
+		this.setGploadInputDelimiter(config.csvDelimiter == null || config.csvDelimiter.isEmpty() ? ',' : config.csvDelimiter.charAt(0));
+		this.addGploadSqlBefore(sqlBefore);
+		this.addGploadSqlAfter(sqlAfter);
+
+		ConnectionURLParser urlParser = new ConnectionURLParser(config.connectionUrl);
+		this.setDatabase(urlParser.getDatabase());
+		this.setUser(urlParser.getUsername());
+		this.setPassword(urlParser.getPassword());
+		this.setHost(urlParser.getHost());
+		this.setPort(urlParser.getPort());
+
+	}
 
 	private Character gploadInputDelimiter;
 
@@ -31,7 +56,7 @@ public class ControlFile {
 
 	private String gploadOutputUpdateCondition;
 
-	private OutputMode gploadOutputMode;
+	private JdbcSinkConfig.InsertMode gploadOutputMode;
 
 	private String database;
 
@@ -87,11 +112,11 @@ public class ControlFile {
 		this.gploadOutputUpdateCondition = gploadOutputUpdateCondition;
 	}
 
-	public OutputMode getGploadOutputMode() {
+	public JdbcSinkConfig.InsertMode  getGploadOutputMode() {
 		return gploadOutputMode;
 	}
 
-	public void setGploadOutputMode(OutputMode gploadOutputMode) {
+	public void setGploadOutputMode(JdbcSinkConfig.InsertMode  gploadOutputMode) {
 		this.gploadOutputMode = gploadOutputMode;
 	}
 
@@ -151,8 +176,5 @@ public class ControlFile {
 		this.gploadSqlAfter.add(gploadSqlAfter);
 	}
 
-	public enum OutputMode {
-		INSERT, UPDATE, MERGE
-	}
 
 }

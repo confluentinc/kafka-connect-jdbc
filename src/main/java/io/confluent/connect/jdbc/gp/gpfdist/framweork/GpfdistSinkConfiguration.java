@@ -65,13 +65,6 @@ public class GpfdistSinkConfiguration {
 	}
 
 
-	public ControlFileFactoryBean greenplumControlFile() {
-		ControlFileFactoryBean factoryBean = new ControlFileFactoryBean();
-		factoryBean.setControlFileResource(properties.getControlFile());
-		return factoryBean;
-	}
-
-
 	public GreenplumDataSourceFactoryBean dataSource(ControlFile controlFile) {
 		GreenplumDataSourceFactoryBean factoryBean = new GreenplumDataSourceFactoryBean();
 		factoryBean.setControlFile(controlFile);

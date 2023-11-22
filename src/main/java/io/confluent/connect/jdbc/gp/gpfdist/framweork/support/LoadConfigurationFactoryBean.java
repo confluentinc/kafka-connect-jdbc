@@ -22,6 +22,9 @@ import org.springframework.util.StringUtils;
 import java.util.Arrays;
 import java.util.List;
 
+import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode.INSERT;
+import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode.UPDATE;
+
 /**
  * {@link FactoryBean} creating instances of a {@link LoadConfiguration}.
  *
@@ -53,10 +56,10 @@ public class LoadConfigurationFactoryBean implements FactoryBean<LoadConfigurati
 	public void afterPropertiesSet() throws Exception {
 		if (controlFile != null) {
 			if (controlFile.getGploadOutputMode() != null) {
-				if (controlFile.getGploadOutputMode() == ControlFile.OutputMode.INSERT) {
+				if (controlFile.getGploadOutputMode() == INSERT) {
 					mode = Mode.INSERT;
 				}
-				else if (controlFile.getGploadOutputMode() == ControlFile.OutputMode.UPDATE) {
+				else if (controlFile.getGploadOutputMode() == UPDATE) {
 					mode = Mode.UPDATE;
 				}
 			}

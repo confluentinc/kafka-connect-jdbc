@@ -15,17 +15,17 @@ package io.confluent.connect.jdbc.gp.gpfdist.framweork;///*
  */
 
 
-import io.confluent.connect.jdbc.gp.gpfdist.GpfdistMessageHandler;
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.gp.gpfdist.framweork.support.*;
-import org.springframework.data.hadoop.util.net.DefaultHostInfoDiscovery;
-import org.springframework.data.hadoop.util.net.HostInfoDiscovery;
-import org.springframework.scheduling.TaskScheduler;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.util.ConnectionURLParser;
+import org.apache.commons.dbcp.BasicDataSource;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.util.StringUtils;
 
 import javax.sql.DataSource;
-import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * Configuration for all beans needed for gpfdist sink.
@@ -34,92 +34,143 @@ import java.util.Arrays;
  */
 public class GpfdistSinkConfiguration {
 
-	private GpfdistSinkProperties properties;
 
 
-	private HostInfoDiscoveryProperties discoveryProperties;
+	private JdbcSinkConfig config;
+	private String table;
+	private String columns;
+
+	private String columnsWithDataType;
+	private List<String> matchColumns;
+	private List<String> updateColumns;
+	private String updateCondition;
+	private List<String> sqlBefore;
+	private List<String> sqlAfter;
 
 
-	public HostInfoDiscovery hostInfoDiscovery() {
-		DefaultHostInfoDiscovery discovery = new DefaultHostInfoDiscovery();
-		if (StringUtils.hasText(discoveryProperties.getMatchIpv4())) {
-			discovery.setMatchIpv4(discoveryProperties.getMatchIpv4());
+	public GpfdistSinkConfiguration(JdbcSinkConfig config, String table, String columns, String columnsWithDataType, List<String> matchColumns, List<String> updateColumns, String updateCondition, List<String> sqlBefore, List<String> sqlAfter){
+		this.config = config;
+		this.table = table;
+		this.columns = columns;
+		this.columnsWithDataType = columnsWithDataType;
+		this.matchColumns = matchColumns;
+		this.updateColumns = updateColumns;
+		this.updateCondition = updateCondition;
+		this.sqlBefore = sqlBefore;
+		this.sqlAfter = sqlAfter;
+	}
+
+
+	public BasicDataSource dataSource() {
+		BasicDataSource ds = new BasicDataSource();
+		ds.setDriverClassName("org.postgresql.Driver");
+		ConnectionURLParser parser = new ConnectionURLParser(config.connectionUrl);
+
+		if (StringUtils.hasText(parser.getUsername())) {
+			ds.setUsername(parser.getUsername());
 		}
-		if (StringUtils.hasText(discoveryProperties.getMatchInterface())) {
-			discovery.setMatchInterface(discoveryProperties.getMatchInterface());
+		if (StringUtils.hasText(parser.getPassword())) {
+			ds.setPassword(parser.getPassword());
 		}
-		if (discoveryProperties.getPreferInterface() != null) {
-			discovery.setPreferInterface(discoveryProperties.getPreferInterface());
+		ds.setUrl(config.connectionUrl);
+		return ds;
+
+	}
+
+	private void setSegmentReject(String reject, ReadableTable table) {
+		if (!StringUtils.hasText(reject)) {
+			return;
 		}
-		discovery.setLoopback(discoveryProperties.isLoopback());
-		discovery.setPointToPoint(discoveryProperties.isPointToPoint());
-		return discovery;
+		Integer parsedLimit = null;
+		try {
+			parsedLimit = Integer.parseInt(reject);
+			table.setSegmentRejectType(SegmentRejectType.ROWS);
+		} catch (NumberFormatException e) {
+		}
+		if (parsedLimit == null && reject.contains("%")) {
+			try {
+				parsedLimit = Integer.parseInt(reject.replace("%", "").trim());
+				table.setSegmentRejectType(SegmentRejectType.PERCENT);
+			} catch (NumberFormatException e) {
+			}
+		}
+		table.setSegmentRejectLimit(parsedLimit);
+	}
+	public ReadableTable greenplumReadableTable() {
+
+		ReadableTable w = new ReadableTable();
+		w.setLocations(Arrays.asList(NetworkUtils.getGPFDistUri(config.getGpfdistHost(), config.getGpfdistPort())));
+		w.setColumns(columns);
+		w.setColumnsWithDataType(columnsWithDataType);
+		//w.setLike(like);
+		w.setLogErrors(config.gpLogErrors);
+
+		setSegmentReject(config.segmentRejectLimit, w);
+		if (config.segmentRejectLimit != null) {
+			try {
+				int value = Integer.valueOf(config.segmentRejectLimit);
+				if (value > 0) {
+					w.setSegmentRejectLimit(value);
+				}
+
+			}catch (NumberFormatException e) {
+				e.printStackTrace();
+
+			}
+
+		}
+		w.setSegmentRejectType(config.segmentRejectType);
+
+		//TODO - add type config
+		Format format = Format.CSV;
+		Character delimiter = config.getDelimiter();
+
+
+		if (format == Format.TEXT) {
+			Character delim = delimiter != null ? delimiter : Character.valueOf('\t');
+			w.setTextFormat(delim, config.nullString, '\\');
+		}
+		else if (format == Format.CSV) {
+			Character delim = delimiter != null ? delimiter : Character.valueOf(',');
+			w.setCsvFormat('"', delim, config.nullString, new String[]{}, '\"');
+		}
+
+		return w;
+
 	}
 
 
-	public TaskScheduler sqlTaskScheduler() {
-		ThreadPoolTaskScheduler taskScheduler = new ThreadPoolTaskScheduler();
-		taskScheduler.setWaitForTasksToCompleteOnShutdown(true);
-		taskScheduler.setAwaitTerminationSeconds(properties.getBatchTimeout());
-		return taskScheduler;
+	public LoadConfiguration greenplumLoadConfiguration() {
+        		ReadableTable externalTable = greenplumReadableTable();
+		LoadConfiguration loadConfiguration = new LoadConfiguration(table, columns, columnsWithDataType, externalTable, this.config.insertMode, matchColumns,
+				updateColumns, updateCondition);
+		loadConfiguration.setSqlBefore(sqlBefore);
+		loadConfiguration.setSqlAfter(sqlAfter);
+		return loadConfiguration;
+
 	}
 
 
-	public GreenplumDataSourceFactoryBean dataSource(ControlFile controlFile) {
-		GreenplumDataSourceFactoryBean factoryBean = new GreenplumDataSourceFactoryBean();
-		factoryBean.setControlFile(controlFile);
-		factoryBean.setDbHost(properties.getDbHost());
-		factoryBean.setDbName(properties.getDbName());
-		factoryBean.setDbUser(properties.getDbUser());
-		factoryBean.setDbPassword(properties.getDbPassword());
-		factoryBean.setDbPort(properties.getDbPort());
-		return factoryBean;
+	public GreenplumLoad greenplumLoad(DatabaseDialect dialect) {
+		LoadConfiguration loadConfiguration = greenplumLoadConfiguration();
+//		DataSource dataSource = dataSource();
+//		JdbcTemplate jdbcTemplate = new JdbcTemplate(dataSource);
+		return new DefaultGreenplumLoad(loadConfiguration, new DefaultLoadService(dialect));
 	}
 
 
-	public ReadableTableFactoryBean greenplumReadableTable(ControlFile controlFile, HostInfoDiscovery hostInfoDiscovery) {
-		ReadableTableFactoryBean factoryBean = new ReadableTableFactoryBean();
-		factoryBean.setControlFile(controlFile);
-		factoryBean.setDelimiter(properties.getColumnDelimiter());
-		factoryBean.setLogErrors(properties.isLogErrors());
-		factoryBean.setSegmentReject(properties.getSegmentRejectLimit());
-		factoryBean.setSegmentRejectType(properties.getSegmentRejectType());
-		factoryBean.setNullString(properties.getNullString());
-		HostInfoDiscovery.HostInfo hostInfo = hostInfoDiscovery.getHostInfo();
-		factoryBean.setLocations(Arrays.asList(NetworkUtils.getGPFDistUri(hostInfo.getAddress(), properties.getGpfdistPort())));
-		return factoryBean;
-	}
-
-
-	public LoadConfigurationFactoryBean greenplumLoadConfiguration(ReadableTable externalTable, ControlFile controlFile) {
-		LoadConfigurationFactoryBean factoryBean = new LoadConfigurationFactoryBean();
-		factoryBean.setExternalTable(externalTable);
-		factoryBean.setControlFile(controlFile);
-		factoryBean.setMode(StringUtils.hasText(properties.getMode()) ? Mode.valueOf(properties.getMode().toUpperCase()) : Mode.INSERT);
-		factoryBean.setUpdateColumns(StringUtils.commaDelimitedListToStringArray(properties.getUpdateColumns()));
-		factoryBean.setMatchColumns(StringUtils.commaDelimitedListToStringArray(properties.getMatchColumns()));
-		factoryBean.setTable(properties.getTable());
-		factoryBean.setSqlBefore(StringUtils.hasText(properties.getSqlBefore()) ? Arrays.asList(properties.getSqlBefore()) : new ArrayList<String>());
-		factoryBean.setSqlAfter(StringUtils.hasText(properties.getSqlAfter()) ? Arrays.asList(properties.getSqlAfter()) : new ArrayList<String>());
-		return factoryBean;
-	}
-
-
-	public LoadFactoryBean greenplumLoad(LoadConfiguration loadConfiguration, DataSource dataSource) {
-		LoadFactoryBean factoryBean = new LoadFactoryBean();
-		factoryBean.setLoadConfiguration(loadConfiguration);
-		factoryBean.setDataSource(dataSource);
-		return factoryBean;
-	}
-
-
-	public GpfdistMessageHandler gpfdist(GreenplumLoad greenplumLoad, TaskScheduler sqlTaskScheduler, HostInfoDiscovery hostInfoDiscovery) {
-		GpfdistMessageHandler handler = new GpfdistMessageHandler(properties.getGpfdistPort(), properties.getFlushCount(),
-				properties.getFlushTime(), properties.getBatchTimeout(), properties.getBatchCount(), properties.getBatchPeriod(),
-				properties.getDelimiter(), hostInfoDiscovery);
-		handler.setRateInterval(properties.getRateInterval());
-		handler.setGreenplumLoad(greenplumLoad);
-		handler.setSqlTaskScheduler(sqlTaskScheduler);
-		return handler;
-	}
+//	public GpfdistMessageHandler gpfdist() {
+//		GreenplumLoad greenplumLoad = greenplumLoad();
+////		TaskScheduler sqlTaskScheduler = new ThreadPoolTaskScheduler();
+////		((ThreadPoolTaskScheduler) sqlTaskScheduler).setPoolSize(1);
+////		((ThreadPoolTaskScheduler) sqlTaskScheduler).setThreadNamePrefix("sqlTaskScheduler");
+////		((ThreadPoolTaskScheduler) sqlTaskScheduler).initialize();
+//		GpfdistMessageHandler handler = new GpfdistMessageHandler(config.getGpfdistPort(), config.gpfFlushCount,
+//				config.gpfFlushTime, config.gpfBatchTimeout, config.gpfBatchCount, config.gpfBatchPeriod,
+//				config.getDelimiter().toString(), config.getGpfdistHost());
+//		//handler.setRateInterval(config.);
+////		handler.setGreenplumLoad(greenplumLoad);
+////		handler.setSqlTaskScheduler(sqlTaskScheduler);
+//		return handler;
+//	}
 }

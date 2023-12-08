@@ -296,7 +296,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   @Override
-  protected String getSqlType(SinkRecordField field) {
+  public String getSqlType(SinkRecordField field) {
     if (field.schemaName() != null) {
       switch (field.schemaName()) {
         case Decimal.LOGICAL_NAME:

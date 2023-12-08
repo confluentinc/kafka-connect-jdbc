@@ -16,7 +16,11 @@
 
 package io.confluent.connect.jdbc.gp.gpfdist.framweork.support;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class LoadConfiguration {
 
@@ -24,9 +28,11 @@ public class LoadConfiguration {
 
 	private String columns;
 
+	private String columnsWithDataTypes;
+
 	private ReadableTable externalTable;
 
-	private Mode mode;
+	private JdbcSinkConfig.InsertMode mode;
 
 	private List<String> matchColumns;
 
@@ -42,7 +48,7 @@ public class LoadConfiguration {
 		super();
 	}
 
-	public LoadConfiguration(String table, String columns, ReadableTable externalTable, Mode mode,
+	public LoadConfiguration(String table, String columns, String columnsWithDataTypes, ReadableTable externalTable, JdbcSinkConfig.InsertMode mode,
 			List<String> matchColumns, List<String> updateColumns, String updateCondition) {
 		this.table = table;
 		this.columns = columns;
@@ -51,6 +57,7 @@ public class LoadConfiguration {
 		this.matchColumns = matchColumns;
 		this.updateColumns = updateColumns;
 		this.updateCondition = updateCondition;
+		this.columnsWithDataTypes = columnsWithDataTypes;
 	}
 
 	public String getTable() {
@@ -77,11 +84,11 @@ public class LoadConfiguration {
 		this.externalTable = externalTable;
 	}
 
-	public Mode getMode() {
+	public JdbcSinkConfig.InsertMode getMode() {
 		return mode;
 	}
 
-	public void setMode(Mode mode) {
+	public void setMode(JdbcSinkConfig.InsertMode mode) {
 		this.mode = mode;
 	}
 
@@ -125,4 +132,11 @@ public class LoadConfiguration {
 		this.sqlAfter = sqlAfter;
 	}
 
+	public String getColumnsWithDataTypes() {
+		return columnsWithDataTypes;
+	}
+
+	public void setColumnsWithDataTypes(String columnsWithDataTypes) {
+		this.columnsWithDataTypes = columnsWithDataTypes;
+	}
 }

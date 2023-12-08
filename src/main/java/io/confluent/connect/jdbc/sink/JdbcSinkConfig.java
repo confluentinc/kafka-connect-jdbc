@@ -27,17 +27,10 @@ import java.util.Set;
 import java.util.TimeZone;
 import java.util.stream.Collectors;
 
+import io.confluent.connect.jdbc.gp.gpfdist.framweork.support.SegmentRejectType;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 
-import io.confluent.connect.jdbc.util.ConfigUtils;
-import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
-import io.confluent.connect.jdbc.util.DeleteEnabledRecommender;
-import io.confluent.connect.jdbc.util.EnumRecommender;
-import io.confluent.connect.jdbc.util.PrimaryKeyModeRecommender;
-import io.confluent.connect.jdbc.util.QuoteMethod;
-import io.confluent.connect.jdbc.util.StringUtils;
-import io.confluent.connect.jdbc.util.TableType;
-import io.confluent.connect.jdbc.util.TimeZoneValidator;
+import io.confluent.connect.jdbc.util.*;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
@@ -47,6 +40,10 @@ public class JdbcSinkConfig extends AbstractConfig {
 
 
     public static final String GPSS_HOST = "gpss.host";
+
+    public static final String GP_MAX_LINE_LENGTH = "gp.max.line.length";
+    private static final int GP_MAX_LINE_LENGTH_DEFAULT = 65535;
+    private static final String GP_MAX_LINE_LENGTH_DOC = "The maximum length of a line for gpfdist.";
     private static final String GPSS_HOST_DEFAULT = "localhost";
     private static final String GPSS_HOST_DOC = "The gpss host for gpss mode.";
 
@@ -76,8 +73,8 @@ public class JdbcSinkConfig extends AbstractConfig {
 
 
     // max time to wait for batch
-    public static final String CSV_DELIMITER = "csv.delimiter";
-    private static final String CSV_DELIMITER_DEFAULT = ",";
+    public static final String DATA_DELIMITER = "data.delimiter";
+    private static final String DATA_DELIMITER_DEFAULT = ",";
 
     public static final String GP_ERRORS_LIMIT = "gp.error.limit";
     private static final int GP_ERROR_LIMIT_DEFAULT = 999999999;
@@ -115,11 +112,21 @@ public class JdbcSinkConfig extends AbstractConfig {
         return portRange.size() > 0 ? portRange.get(0) : 0;
     }
 
+    public String getGpfdistHost() {
+        return gpfdistHost != null ? gpfdistHost : CommonUtils.getLocalIpOrHost();
+    }
+
+    public Character getDelimiter() {
+        return delimiter == null || delimiter.isEmpty() ? ',' : delimiter.charAt(0);
+    }
+
 
     public enum BatchInsertMode {
         NONE,
         GPLOAD,
-        GPSS
+        GPSS,
+
+        GPFDIST,
 //        GPKAFKA, // https://github.com/yanivbhemo/greenplum-gpss
 //        DSH
 
@@ -242,7 +249,8 @@ public class JdbcSinkConfig extends AbstractConfig {
                     + "``gpload``\n"
                     + "    Use gpload utility to load data by creating a yml file at runtime (For greenplum only). Make sure that the gpload is in your path \n"
                     + "``GPSS``\n"
-                    + "    Use greenplum streaming server (For greenplum only) https://docs.vmware.com/en/VMware-Greenplum-Streaming-Server/1.10/greenplum-streaming-server/ref-gpss.html";
+                    + "    Use greenplum streaming server (For greenplum only) https://docs.vmware.com/en/VMware-Greenplum-Streaming-Server/1.10/greenplum-streaming-server/ref-gpss.html\n" +
+                    "``GPFDIST`` Use gpfdist in memory server\n";
     private static final String BATCH_INSERT_MODE_DISPLAY = "Batch Insert Mode";
     public static final String INSERT_MODE = "insert.mode";
     private static final String INSERT_MODE_DEFAULT = "insert";
@@ -647,11 +655,11 @@ public class JdbcSinkConfig extends AbstractConfig {
                     TRIM_SENSITIVE_LOG_ENABLED_DEFAULT,
                     ConfigDef.Importance.LOW
             ).define(
-                    CSV_DELIMITER,
+                    DATA_DELIMITER,
                     ConfigDef.Type.STRING,
-                    CSV_DELIMITER_DEFAULT, // Default delimiter
+                    DATA_DELIMITER_DEFAULT, // Default delimiter
                     ConfigDef.Importance.MEDIUM,
-                    "CSV delimiter character."
+                    "Data line delimiter character."
             )
             .define(
                     GP_ERRORS_LIMIT,
@@ -737,6 +745,12 @@ public class JdbcSinkConfig extends AbstractConfig {
                     ConfigDef.Importance.MEDIUM,
                     GPSS_USE_STICKY_SESSION_DOC
 
+            ).define(
+                    GP_MAX_LINE_LENGTH,
+                    ConfigDef.Type.LONG,
+                    GP_MAX_LINE_LENGTH_DEFAULT,
+                    ConfigDef.Importance.MEDIUM,
+                    GP_MAX_LINE_LENGTH_DOC
             );
 
 //
@@ -784,7 +798,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     public final boolean trimSensitiveLogsEnabled;
     public final List<Integer> portRange;
 
-    public final String csvDelimiter;
+    public final String delimiter;
     public final int gpErrorsLimit;
     public final boolean csvHeader;
     public final String csvQuote;
@@ -795,13 +809,70 @@ public class JdbcSinkConfig extends AbstractConfig {
 
     public final boolean keepGpFiles;
 
-    public final String gpfdistClientHost;
+    public final String gpfdistHost;
 
     public final String dbSchema;
     public final String gpssHost;
     public final String gpssPort;
     public final Integer gpErrorsPercentageLimit;
     public final boolean gpssUseStickySession;
+
+    //gpfdist
+
+    /**
+     * Flush item count (int, default: 100)
+     */
+    public final int gpfFlushCount = 100;
+
+    /**
+     * Flush item time (int, default: 2)
+     */
+    public final int gpfFlushTime = 2;
+
+    /**
+     * Timeout in seconds for segment inactivity. (Integer, default: 4)
+     */
+    public final int gpfBatchTimeout = 4;
+
+    /**
+     * Number of windowed batch each segment takest (int, default: 100)
+     */
+    public final int gpfBatchCount = 100;
+
+    /**
+     * Time in seconds for each load operation to sleep in between operations (int, default: 10)
+     */
+    public final int gpfBatchPeriod = 10;
+
+    /**
+     * Data record column delimiter. *(Character, default: no default)
+     */
+    public Character columnDelimiter;
+
+    /**
+     * Enable transfer rate interval (int, default: 0)
+     */
+    public final int rateInterval = 0;
+
+    /**
+     * Error reject limit. (String, default: ``)
+     */
+    public String segmentRejectLimit;
+
+    /**
+     * Error reject type, either `rows` or `percent`. (String, default: `rows`)
+     */
+    public final SegmentRejectType segmentRejectType = SegmentRejectType.ROWS;
+
+    /**
+     * Null string definition. (String, default: ``)
+     */
+    public String nullString;
+
+    public long gpMaxLineLength = 65535;
+
+
+
 
     public JdbcSinkConfig(Map<?, ?> props) {
         super(CONFIG_DEF, props);
@@ -835,7 +906,7 @@ public class JdbcSinkConfig extends AbstractConfig {
         }
         tableTypes = TableType.parse(getList(TABLE_TYPES_CONFIG));
         portRange = getList(PORT_RANGE).stream().map(Integer::parseInt).collect(Collectors.toList());
-        csvDelimiter = getString(CSV_DELIMITER);
+        delimiter = getString(DATA_DELIMITER);
         gpErrorsLimit = getInt(GP_ERRORS_LIMIT);
         csvHeader = getBoolean(CSV_HEADER);
         csvQuote = getString(CSV_QUOTE);
@@ -844,7 +915,7 @@ public class JdbcSinkConfig extends AbstractConfig {
         greenplumHome = getString(GREENPLUM_HOME_CONFIG);
         keepGpFiles = getBoolean(KEEP_GP_FILES_CONFIG);
 
-        gpfdistClientHost = getString(GPFDIST_HOST);
+        gpfdistHost = getString(GPFDIST_HOST);
         dbSchema = getString(DB_SCHEMA);
 
         gpssHost = getString(GPSS_HOST);
@@ -852,7 +923,7 @@ public class JdbcSinkConfig extends AbstractConfig {
 
         gpErrorsPercentageLimit = getInt(GP_ERRORS_PERCENTAGE_LIMIT);
         gpssUseStickySession = getBoolean(GPSS_USE_STICKY_SESSION);
-
+        gpMaxLineLength = getLong(GP_MAX_LINE_LENGTH);
 
         printConfigDefTable(CONFIG_DEF);
 

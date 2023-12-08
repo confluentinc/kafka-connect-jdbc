@@ -56,6 +56,9 @@ public abstract class AbstractExternalTable {
 
 	private String columns;
 
+	private String columnsWithDataType;
+
+
 	public List<String> getLocations() {
 		return locations;
 	}
@@ -155,5 +158,13 @@ public abstract class AbstractExternalTable {
 
 	public void setColumns(String columns) {
 		this.columns = columns;
+	}
+
+	public String getColumnsWithDataType() {
+		return columnsWithDataType;
+	}
+
+	public void setColumnsWithDataType(String columnsWithDataType) {
+		this.columnsWithDataType = columnsWithDataType;
 	}
 }

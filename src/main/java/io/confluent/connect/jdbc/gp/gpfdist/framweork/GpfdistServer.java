@@ -41,27 +41,6 @@ import java.util.concurrent.TimeUnit;
  * @author Janne Valkealahti
  */
 public class GpfdistServer {
-	// make singelton
-//	private static GpfdistServer instance = null;
-//	boolean isInitialized = false;
-//	public static GpfdistServer getInstance() {
-//	if (instance == null) {
-//		instance = new GpfdistServer();
-//	}
-//	return instance;
-//}
-//	public GpfdistServer() {
-//    }
-//
-//	public void initialize(Processor<Buffer, Buffer> processor, int port, int flushCount, int flushTime,
-//						 int batchTimeout, int batchCount) {
-//		this.processor = processor;
-//		this.port = port;
-//		this.flushCount = flushCount;
-//		this.flushTime = flushTime;
-//		this.batchTimeout = batchTimeout;
-//		this.batchCount = batchCount;
-//	}
 
 	private static final Logger log = LoggerFactory.getLogger(GpfdistServer.class);
 
@@ -130,7 +109,7 @@ public class GpfdistServer {
 
 	private HttpServer<Buffer, Buffer> createProtocolListener()
 			throws Exception {
-
+       log.info("Creating gpfdist protocol server on port=" + port);
 		final Stream<Buffer> stream = Streams
 		.wrap(processor)
 		.window(flushCount, flushTime, TimeUnit.SECONDS)
@@ -165,6 +144,9 @@ public class GpfdistServer {
 
 			@Override
 			public Publisher<Void> apply(HttpChannel<Buffer, Buffer> request) {
+
+				log.info("Received request " + request.log());
+
 				request.responseHeaders().removeTransferEncodingChunked();
 				request.addResponseHeader("Content-type", "text/plain");
 				request.addResponseHeader("Expires", "0");

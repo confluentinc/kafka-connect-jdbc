@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategy;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import de.siegmar.fastcsv.writer.CsvWriter;
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.gp.GpDataIngestionService;
 import io.confluent.connect.jdbc.gp.gpload.config.GPloadConfig;
 import io.confluent.connect.jdbc.sink.GPBinder;
@@ -25,8 +26,8 @@ import java.util.*;
 public class GPLoadDataIngestionService extends GpDataIngestionService {
     private static final Logger log = LoggerFactory.getLogger(GPBinder.class);
     private final String tempDir;
-    public GPLoadDataIngestionService(JdbcSinkConfig config, TableDefinition tableDefinition, FieldsMetadata fieldsMetadata) {
-        super(config, tableDefinition, fieldsMetadata);
+    public GPLoadDataIngestionService(JdbcSinkConfig config, DatabaseDialect dialect, TableDefinition tableDefinition, FieldsMetadata fieldsMetadata) {
+       super(config,dialect, tableDefinition, fieldsMetadata);
         tempDir = System.getProperty("java.io.tmpdir") + "/gpload/";
         new File(tempDir).mkdirs();
     }
@@ -34,6 +35,10 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
     @Override
     public void ingest(List<SinkRecord> records) {
         try {
+
+            List<String> keyColumns = new ArrayList<>(fieldsMetadata.keyFieldNames);
+            List<String> nonKeyColumns = new ArrayList<>(fieldsMetadata.nonKeyFieldNames);
+            List<String> allColumns = new ArrayList<>(fieldsMetadata.allFields.keySet());
 
             String suffix = ".csv";
             File csvFile = File.createTempFile(tableName, suffix, new File(tempDir));
@@ -48,28 +53,31 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
                     final Struct valueStruct = (Struct) record.value();
                     for (int i = 0; i < fields.size(); i++) {
                         String value = String.valueOf(valueStruct.get(fields.get(i).toString()));
+                        //TODO make configurable
+                        if(value == null || value.equals("null")){
+                            value = "";
+                        }
                         data.add(i, value);
                     }
                     csv.writeRow(data);
                 });
-
+                log.info("Rows count", records.size());
             } catch (Exception e) {
-                log.error("Error writing to file {}", absolutePath);
+                log.error("Error while writing to file {}", absolutePath);
                 log.error("Error", e);
                 e.printStackTrace();
             }
-
             ConnectionURLParser parser = new ConnectionURLParser(config.connectionUrl);
 
             if (parser.getSchema() == null) {
-                log.info("Schema not found in jdbc url (schema=schemaName), using default schema public");
+                log.warn("Schema not found in jdbc url (schema=schemaName), using default schema: public");
                 parser.setSchema("public");
             }
 
             String localIpOrHost = "localhost";
 
-            if (config.gpfdistClientHost != null) {
-                localIpOrHost = config.gpfdistClientHost;
+            if (config.gpfdistHost != null) {
+                localIpOrHost = config.gpfdistHost;
             } else {
                 localIpOrHost = CommonUtils.getLocalIpOrHost();
 
@@ -92,24 +100,29 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
                 fieldsMap.put(field.toString(), field.toString());
             });
 
+
+
             GPloadConfig.Input input = new GPloadConfig.Input.Builder()
                     .format("csv")
-//                    .columns(Arrays.asList(fieldsMap))
-                    .delimiter(config.csvDelimiter)
+                    .columns(createColumnNameDataTypeMapList())
+                    .delimiter(config.delimiter)
                     .errorLimit(config.gpErrorsLimit)
                     .header(true)
                     .quote(config.csvQuote)
                     .encoding(config.csvEncoding)
                     .source(source)
                     .logErrors(config.gpLogErrors)
+                    .maxLineLength(config.gpMaxLineLength)
                     .build();
+
+
 
             GPloadConfig.Output output = new GPloadConfig.Output.Builder()
                     .table(parser.getSchema() + "." + tableName)
                     .mode(config.insertMode.toString().toLowerCase())
                     .mapping(fieldsMap)
-                    .updateColumns(new ArrayList<>(fieldsMetadata.nonKeyFieldNames))
-                    .matchColumns(new ArrayList<>(fieldsMetadata.keyFieldNames)).build();
+                    .updateColumns(nonKeyColumns)
+                    .matchColumns(keyColumns).build();
 
             GPloadConfig.External external = new GPloadConfig.External.Builder()
                     .schema(parser.getSchema()).build();
@@ -136,7 +149,6 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
                     return propertyName.toUpperCase();
                 }
             }
-
             File yamlFile = File.createTempFile(tableName, ".yml", new File(tempDir));
             ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
             mapper.setPropertyNamingStrategy(new UpperCaseStrategy());
@@ -151,13 +163,14 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
             if (config.greenplumHome != null) {
                 gploadBinary = config.greenplumHome + "/bin/gpload";
             }
+            log.info("GPLOAD: {}", gploadBinary);
 
             String gploadCommand = gploadBinary + " -l " + logFile.getAbsolutePath() + " -f " + yamlFile.getAbsolutePath();
 
             log.info("Running GPload command {}", gploadCommand);
 
             ArrayList<String> cmdOutput = CommonUtils.executeCommand(gploadCommand);
-
+            log.info("GPload output: {}", cmdOutput);
 
             String errors = checkGPloadOutputForErrors(cmdOutput);
             if (errors.length() > 0) {
@@ -183,6 +196,8 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
         }
     }
 
+
+
     public static String checkGPloadOutputForErrors(ArrayList<String> output) {
         String errMsg = "";
 
@@ -197,4 +212,6 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
         }
         return errMsg;
     }
+
+
 }

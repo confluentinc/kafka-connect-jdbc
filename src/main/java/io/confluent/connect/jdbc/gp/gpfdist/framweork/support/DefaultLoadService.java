@@ -16,29 +16,35 @@
 
 package io.confluent.connect.jdbc.gp.gpfdist.framweork.support;
 
-import org.springframework.jdbc.core.JdbcTemplate;
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.gp.gpfdist.GpfdistDataIngestionService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.util.Assert;
 
 import java.util.UUID;
 
 public class DefaultLoadService implements LoadService {
 
-	private final JdbcTemplate jdbcTemplate;
+	private static final Logger log = LoggerFactory.getLogger(DefaultLoadService.class);
 
-	public DefaultLoadService(JdbcTemplate jdbcTemplate) {
+
+	private final DatabaseDialect jdbcTemplate;
+
+	public DefaultLoadService(DatabaseDialect jdbcTemplate) {
 		this.jdbcTemplate = jdbcTemplate;
 		Assert.notNull(jdbcTemplate, "JdbcTemplate must be set");
 	}
 
 	@Override
-	public void load(LoadConfiguration loadConfiguration) {
+	public void load(LoadConfiguration loadConfiguration) throws Exception {
 		load(loadConfiguration, null);
 	}
 
 	@Override
-	public void load(LoadConfiguration loadConfiguration, RuntimeContext context) {
+	public void load(LoadConfiguration loadConfiguration, RuntimeContext context) throws Exception {
 		String prefix = UUID.randomUUID().toString().replaceAll("-", "_");
-
+		log.debug("Using prefix {}", prefix);
 		// setup jdbc operations
 		JdbcCommands operations = new JdbcCommands(jdbcTemplate);
 
@@ -46,6 +52,9 @@ public class DefaultLoadService implements LoadService {
 				context != null ? context.getLocations() : null);
 		String sqlDropTable = SqlUtils.dropExternalReadableTable(loadConfiguration, prefix);
 		String sqlInsert = SqlUtils.load(loadConfiguration, prefix);
+		log.debug("sqlCreateTable={}", sqlCreateTable);
+		log.debug("sqlDropTable={}", sqlDropTable);
+		log.debug("sqlInsert={}", sqlInsert);
 
 		operations.setPrepareSql(sqlCreateTable);
 		operations.setCleanSql(sqlDropTable);
@@ -55,6 +64,7 @@ public class DefaultLoadService implements LoadService {
 		operations.setAfterSqls(loadConfiguration.getSqlAfter());
 
 		if (!operations.execute() && operations.getLastException() != null) {
+			log.error("Error in load", operations.getLastException());
 			throw operations.getLastException();
 		}
 	}

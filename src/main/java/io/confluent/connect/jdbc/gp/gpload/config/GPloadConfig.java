@@ -203,7 +203,7 @@ public class GPloadConfig {
         private List<Map<String, String>> COLUMNS;
         private String TRANSFORM;
         private String TRANSFORM_CONFIG;
-        private int MAX_LINE_LENGTH;
+        private long MAX_LINE_LENGTH;
         private String FORMAT;
         private String DELIMITER;
         private String ESCAPE;
@@ -247,7 +247,13 @@ public class GPloadConfig {
                 return this;
             }
 
-            public Builder maxLineLength(int maxLineLength) {
+            /**
+             * -m max_length
+             * Sets the maximum allowed data row length in bytes. Default is 32768. Should be used when user data includes very wide rows (or when line too long error message occurs). Should not be used otherwise as it increases resource allocation. Valid range is 32K to 256MB. (The upper limit is 1MB on Windows systems.)
+             * @param maxLineLength
+             * @return
+             */
+            public Builder maxLineLength(long maxLineLength) {
                 input.MAX_LINE_LENGTH = maxLineLength;
                 return this;
             }
@@ -347,7 +353,7 @@ public class GPloadConfig {
             this.TRANSFORM_CONFIG = TRANSFORM_CONFIG;
         }
 
-        public int getMAX_LINE_LENGTH() {
+        public long getMAX_LINE_LENGTH() {
             return MAX_LINE_LENGTH;
         }
 

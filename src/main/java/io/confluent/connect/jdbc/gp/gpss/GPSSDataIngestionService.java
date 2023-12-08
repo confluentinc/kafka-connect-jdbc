@@ -2,6 +2,8 @@ package io.confluent.connect.jdbc.gp.gpss;
 
 import api.*;
 import com.google.protobuf.ByteString;
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.dialect.GenericDatabaseDialect;
 import io.confluent.connect.jdbc.gp.GpDataIngestionService;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
@@ -25,12 +27,12 @@ public class GPSSDataIngestionService extends GpDataIngestionService {
     ManagedChannel channel = null;
     Session mSession = null;
     GpssGrpc.GpssBlockingStub bStub = null;
-    public GPSSDataIngestionService(JdbcSinkConfig config, TableDefinition tabDef, FieldsMetadata fieldsMetadata) {
-        super(config, tabDef, fieldsMetadata);
+    public GPSSDataIngestionService(JdbcSinkConfig config, DatabaseDialect dialect, TableDefinition tabDef, FieldsMetadata fieldsMetadata) {
+      super(config, dialect, tabDef, fieldsMetadata);
     }
 
-    public GPSSDataIngestionService(JdbcSinkConfig config, String tableName, FieldsMetadata fieldsMetadata) {
-        super(config, tableName, fieldsMetadata);
+    public GPSSDataIngestionService(JdbcSinkConfig config, DatabaseDialect dialect,String tableName, FieldsMetadata fieldsMetadata) {
+        super(config, dialect, tableName, fieldsMetadata);
     }
 
     @Override

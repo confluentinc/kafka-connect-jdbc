@@ -16,6 +16,7 @@
 
 package io.confluent.connect.jdbc.gp.gpfdist.framweork.support;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
@@ -46,8 +47,8 @@ public abstract class SqlUtils {
 			buf.append("LIKE ");
 			buf.append(config.getTable());
 		}
-		else if (StringUtils.hasText(externalTable.getColumns())) {
-			buf.append(externalTable.getColumns());
+		else if (StringUtils.hasText(externalTable.getColumnsWithDataType())) {
+			buf.append(externalTable.getColumnsWithDataType());
 		}
 		else {
 			buf.append("LIKE ");
@@ -102,7 +103,7 @@ public abstract class SqlUtils {
 			buf.append("'");
 		}
 
-		if (externalTable.getForceQuote() != null) {
+		if (externalTable.getForceQuote() != null && externalTable.getForceQuote().length > 0) {
 			buf.append(" FORCE QUOTE ");
 			buf.append(StringUtils.arrayToCommaDelimitedString(externalTable.getForceQuote()));
 		}
@@ -155,10 +156,10 @@ public abstract class SqlUtils {
 	 * @return the load DDL
 	 */
 	public static String load(LoadConfiguration config, String prefix) {
-		if (config.getMode() == Mode.INSERT) {
+		if (config.getMode() == JdbcSinkConfig.InsertMode.INSERT) {
 			return loadInsert(config, prefix);
 		}
-		else if (config.getMode() == Mode.UPDATE) {
+		else if (config.getMode() == JdbcSinkConfig.InsertMode.UPDATE) {
 			return loadUpdate(config, prefix);
 		}
 		throw new IllegalArgumentException("Unsupported mode " + config.getMode());
@@ -240,16 +241,17 @@ public abstract class SqlUtils {
 	}
 
 	private static String unicodeEscaped(char ch) {
-		if (ch < 0x10) {
-			return "\\u000" + Integer.toHexString(ch);
-		}
-		else if (ch < 0x100) {
-			return "\\u00" + Integer.toHexString(ch);
-		}
-		else if (ch < 0x1000) {
-			return "\\u0" + Integer.toHexString(ch);
-		}
-		return "\\u" + Integer.toHexString(ch);
+		return String.valueOf(ch);
+//		if (ch < 0x10) {
+//			return "\\u000" + Integer.toHexString(ch);
+//		}
+//		else if (ch < 0x100) {
+//			return "\\u00" + Integer.toHexString(ch);
+//		}
+//		else if (ch < 0x1000) {
+//			return "\\u0" + Integer.toHexString(ch);
+//		}
+//		return "\\u" + Integer.toHexString(ch);
 	}
 
 }

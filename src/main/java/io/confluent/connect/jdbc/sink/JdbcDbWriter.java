@@ -69,6 +69,7 @@ public class JdbcDbWriter {
         if (buffer == null) {
           buffer = config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPLOAD
                   || config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPSS
+                  || config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPFDIST
                   ? new GPBufferedRecords(config, tableId, dbDialect, dbStructure, connection) : new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
           buffer.setLastFlushTime(System.currentTimeMillis());
           bufferByTable.put(tableId, buffer);
@@ -118,7 +119,7 @@ public class JdbcDbWriter {
         continue;
       }
       toRemoveEntries.add(tableId);
-      log.debug("Flushing records in JDBC Writer for table ID: {}", tableId);
+      log.info("Flushing records in JDBC Writer for table ID: {}", tableId);
       try {
         buffer.flush();
         buffer.close();

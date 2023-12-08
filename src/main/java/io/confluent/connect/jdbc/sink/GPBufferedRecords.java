@@ -36,7 +36,6 @@ public class GPBufferedRecords extends BufferedRecords{
     super(config, tableId, dbDialect, dbStructure, connection);
   }
 
-
   @Override
   public List<SinkRecord> add(SinkRecord record) throws SQLException, TableAlterOrCreateException {
     recordValidator.validate(record);
@@ -134,10 +133,10 @@ public class GPBufferedRecords extends BufferedRecords{
 
   public List<SinkRecord> flush() throws SQLException { // work to be done here - bach insert
     if (records.isEmpty()) {
-      log.debug("Records is empty");
+      log.info("Records is empty");
       return new ArrayList<>();
     }
-    log.debug("Flushing {} buffered records", records.size());
+    log.info("Flushing {} buffered records", records.size());
     for (SinkRecord record : records) {
       if (isNull(record.value()) && nonNull(deleteStatementBinder)) {
         deleteStatementBinder.bindRecord(record);

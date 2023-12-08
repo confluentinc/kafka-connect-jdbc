@@ -3,6 +3,7 @@ package io.confluent.connect.jdbc.sink;
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialect.StatementBinder;
 import io.confluent.connect.jdbc.gp.GpDataIngestionService;
+import io.confluent.connect.jdbc.gp.gpfdist.GpfdistDataIngestionService;
 import io.confluent.connect.jdbc.gp.gpload.GPLoadDataIngestionService;
 import io.confluent.connect.jdbc.gp.gpss.GPSSDataIngestionService;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
@@ -28,7 +29,6 @@ public class GPBinder implements StatementBinder {
     private final TableDefinition tabDef;
     private final JdbcSinkConfig config;
 
-    private List<Map<String, Object>> dataRows;
 
     private List<SinkRecord> records;
 
@@ -70,17 +70,22 @@ public class GPBinder implements StatementBinder {
         this.fieldsMetadata = fieldsMetadata;
         this.insertMode = insertMode;
         this.tabDef = tabDef;
-        this.dataRows = new ArrayList<>();
         this.records = new ArrayList<>();
         this.config = config;
 
         if (config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPLOAD) {
             log.info("Using GPLOAD to insert records");
-            gpDataIngestor = new GPLoadDataIngestionService(config, tabDef, this.fieldsMetadata );
+            gpDataIngestor = new GPLoadDataIngestionService(config, dialect, tabDef, this.fieldsMetadata );
 
         } else if (config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPSS) {
             log.info("Using GPSS to insert records");
-              gpDataIngestor = new GPSSDataIngestionService(config, tabDef, this.fieldsMetadata );
+              gpDataIngestor = new GPSSDataIngestionService(config, dialect, tabDef, this.fieldsMetadata );
+        } else if (config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPFDIST) {
+            log.info("Using GPFDIST to insert records");
+            gpDataIngestor =  new GpfdistDataIngestionService(config, dialect, tabDef, this.fieldsMetadata);
+        } else {
+            throw new IllegalArgumentException("Invalid batch insert mode " + config.batchInsertMode);
+
         }
     }
 

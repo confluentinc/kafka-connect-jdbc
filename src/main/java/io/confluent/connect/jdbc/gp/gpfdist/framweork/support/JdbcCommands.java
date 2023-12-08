@@ -16,11 +16,14 @@
 
 package io.confluent.connect.jdbc.gp.gpfdist.framweork.support;
 
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.util.StringUtils;
+
+import org.springframework.jdbc.support.SQLErrorCodesFactory;
 
 import java.util.List;
 
@@ -38,7 +41,7 @@ public class JdbcCommands {
 
 	private static final Log log = LogFactory.getLog(JdbcCommands.class);
 
-	private JdbcTemplate jdbcTemplate;
+	private DatabaseDialect jdbcTemplate;
 
 	private List<String> beforeSqls;
 
@@ -50,13 +53,13 @@ public class JdbcCommands {
 
 	private String cleanSql;
 
-	private DataAccessException lastException;
+	private Exception lastException;
 
-	public JdbcCommands(JdbcTemplate jdbcTemplate) {
+	public JdbcCommands(DatabaseDialect jdbcTemplate) {
 		this.jdbcTemplate = jdbcTemplate;
 	}
 
-	public void setJdbcTemplate(JdbcTemplate jdbcTemplate) {
+	public void setJdbcTemplate(DatabaseDialect jdbcTemplate) {
 		this.jdbcTemplate = jdbcTemplate;
 	}
 
@@ -107,7 +110,7 @@ public class JdbcCommands {
 		return succeed;
 	}
 
-	public DataAccessException getLastException() {
+	public Exception getLastException() {
 		return lastException;
 	}
 
@@ -116,9 +119,9 @@ public class JdbcCommands {
 			if (log.isDebugEnabled()) {
 				log.debug("Executing prepare: " + prepareSql);
 			}
-			jdbcTemplate.execute(prepareSql);
+			jdbcTemplate.getConnection().createStatement().execute(prepareSql);
 		}
-		catch (DataAccessException e) {
+		catch (Exception e) {
 			log.error("Error during prepare sql", e);
 			lastException = e;
 			return false;
@@ -131,9 +134,9 @@ public class JdbcCommands {
 			if (log.isDebugEnabled()) {
 				log.debug("Executing run: " + runSql);
 			}
-			jdbcTemplate.execute(runSql);
+			jdbcTemplate.getConnection().createStatement().execute(runSql);
 		}
-		catch (DataAccessException e) {
+		catch (Exception e) {
 			log.error("Error during run sql", e);
 			lastException = e;
 			return false;
@@ -146,9 +149,10 @@ public class JdbcCommands {
 			if (log.isDebugEnabled()) {
 				log.debug("Executing clean: " + cleanSql);
 			}
-			jdbcTemplate.execute(cleanSql);
+
+			jdbcTemplate.getConnection().createStatement().execute(cleanSql);
 		}
-		catch (DataAccessException e) {
+		catch (Exception e) {
 			log.error("Error during clean sql", e);
 			lastException = e;
 			return false;
@@ -166,9 +170,9 @@ public class JdbcCommands {
 					log.debug("Executing before: " + sql);
 				}
 				try {
-					jdbcTemplate.execute(sql);
+					jdbcTemplate.getConnection().createStatement().execute(sql);
 				}
-				catch (DataAccessException e) {
+				catch (Exception e) {
 					lastException = e;
 					return false;
 				}
@@ -187,9 +191,9 @@ public class JdbcCommands {
 					log.debug("Executing after: " + sql);
 				}
 				try {
-					jdbcTemplate.execute(sql);
+					jdbcTemplate.getConnection().createStatement().execute(sql);
 				}
-				catch (DataAccessException e) {
+				catch (Exception e) {
 					lastException = e;
 					return false;
 				}

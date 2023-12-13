@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import io.confluent.connect.jdbc.gp.gpfdist.framweork.GpfdistSimpleServer;
 import io.confluent.connect.jdbc.util.LogUtil;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
@@ -45,6 +46,7 @@ public class JdbcSinkTask extends SinkTask {
   int remainingRetries;
 
   boolean shouldTrimSensitiveLogs;
+  GpfdistSimpleServer httpServer;
 
   @Override
   public void start(final Map<String, String> props) {
@@ -71,6 +73,18 @@ public class JdbcSinkTask extends SinkTask {
     final DbStructure dbStructure = new DbStructure(dialect);
     log.info("Initializing writer using SQL dialect: {}", dialect.getClass().getSimpleName());
     writer = new JdbcDbWriter(config, dialect, dbStructure);
+
+//
+    if(config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPFDIST){
+      httpServer = GpfdistSimpleServer.getInstance();
+        httpServer.init(config.getGpfdistPort(), false);
+      try {
+        httpServer.start();
+      } catch (Exception e) {
+       log.error("Error starting gpfdist server", e);
+      }
+    }
+
     log.info("JDBC writer initialized");
   }
 

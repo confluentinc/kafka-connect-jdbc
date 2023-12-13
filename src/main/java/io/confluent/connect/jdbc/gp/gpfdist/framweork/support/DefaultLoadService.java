@@ -17,7 +17,6 @@
 package io.confluent.connect.jdbc.gp.gpfdist.framweork.support;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
-import io.confluent.connect.jdbc.gp.gpfdist.GpfdistDataIngestionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.util.Assert;
@@ -43,15 +42,20 @@ public class DefaultLoadService implements LoadService {
 
 	@Override
 	public void load(LoadConfiguration loadConfiguration, RuntimeContext context) throws Exception {
-		String prefix = UUID.randomUUID().toString().replaceAll("-", "_");
-		log.debug("Using prefix {}", prefix);
+
+		if(loadConfiguration.getExternalTable() != null && loadConfiguration.getExternalTable().getName() == null) {
+			String prefix = UUID.randomUUID().toString().replaceAll("-", "_");
+			log.debug("Using prefix {}", prefix);
+			loadConfiguration.setTable(loadConfiguration.getTable()+"_ext_"+loadConfiguration.getExternalTable().getName());
+		}
+
 		// setup jdbc operations
 		JdbcCommands operations = new JdbcCommands(jdbcTemplate);
 
-		String sqlCreateTable = SqlUtils.createExternalReadableTable(loadConfiguration, prefix,
+		String sqlCreateTable = SqlUtils.createExternalReadableTable(loadConfiguration,
 				context != null ? context.getLocations() : null);
-		String sqlDropTable = SqlUtils.dropExternalReadableTable(loadConfiguration, prefix);
-		String sqlInsert = SqlUtils.load(loadConfiguration, prefix);
+		String sqlDropTable = SqlUtils.dropExternalReadableTable(loadConfiguration);
+		String sqlInsert = SqlUtils.load(loadConfiguration);
 		log.debug("sqlCreateTable={}", sqlCreateTable);
 		log.debug("sqlDropTable={}", sqlDropTable);
 		log.debug("sqlInsert={}", sqlInsert);

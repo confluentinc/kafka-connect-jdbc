@@ -109,7 +109,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     private static final String PORT_RANGE_DISPLAY = "Port Range";
 
     public int getGpfdistPort() {
-        return portRange.size() > 0 ? portRange.get(0) : 0;
+        return portRange.size() > 0 ? portRange.get(0) : 5120;
     }
 
     public String getGpfdistHost() {
@@ -857,7 +857,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     /**
      * Error reject limit. (String, default: ``)
      */
-    public String segmentRejectLimit;
+    public String segmentRejectLimit = null;//"999999"; // TODO - move to config
 
     /**
      * Error reject type, either `rows` or `percent`. (String, default: `rows`)
@@ -867,7 +867,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     /**
      * Null string definition. (String, default: ``)
      */
-    public String nullString;
+    public String nullString = "NULL";
 
     public long gpMaxLineLength = 65535;
 

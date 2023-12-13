@@ -126,6 +126,7 @@ public class JdbcCommands {
 			lastException = e;
 			return false;
 		}
+
 		return true;
 	}
 

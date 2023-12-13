@@ -107,15 +107,19 @@ public class GPBinder implements StatementBinder {
         }
     }
 
-    public void flush() {
+    public  void  flush() {
         log.info("Flushing {} records", records.size());
         if (records.isEmpty()) {
             log.info("No records to flush");
             return;
         }
 
-        gpDataIngestor.ingest(records);
+//        if(gpDataIngestor.ingest(records)){  // TODO convert ingest to return boolean
+//            records.clear();
+//        };
 
+        gpDataIngestor.ingest(records);
+        records.clear();
     }
 
 }

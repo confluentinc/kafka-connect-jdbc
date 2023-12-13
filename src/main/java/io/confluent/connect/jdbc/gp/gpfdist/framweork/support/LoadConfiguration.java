@@ -24,6 +24,9 @@ import java.util.Map;
 
 public class LoadConfiguration {
 
+	public boolean gpfUseColumnsInInsert = true; //TODO - this is a hack to get around the fact that the columns are in different order in the external table
+	public boolean gpfUseColumnsInSelect = true; //TODO - this is a hack to get around the fact that the columns are in different order in the external table
+
 	private String table;
 
 	private String columns;

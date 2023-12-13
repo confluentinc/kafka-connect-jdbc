@@ -65,4 +65,5 @@ public class ReadableTable extends AbstractExternalTable {
 	public void setSegmentRejectType(SegmentRejectType segmentRejectType) {
 		this.segmentRejectType = segmentRejectType;
 	}
+
 }

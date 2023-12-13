@@ -150,7 +150,7 @@ public class GpfdistServer {
 				request.responseHeaders().removeTransferEncodingChunked();
 				request.addResponseHeader("Content-type", "text/plain");
 				request.addResponseHeader("Expires", "0");
-				request.addResponseHeader("X-GPFDIST-VERSION", "1.0.0"); // TODo add correct version
+				request.addResponseHeader("X-GPFDIST-VERSION", "1.0.0");
 				request.addResponseHeader("X-GP-PROTO", "1");
 				request.addResponseHeader("Cache-Control", "no-cache");
 				request.addResponseHeader("Connection", "close");

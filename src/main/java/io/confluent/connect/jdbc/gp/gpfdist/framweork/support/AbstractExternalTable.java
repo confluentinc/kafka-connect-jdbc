@@ -28,6 +28,8 @@ import java.util.List;
  */
 public abstract class AbstractExternalTable {
 
+
+	private String name;
 	// LOCATION
 	private List<String> locations;
 
@@ -166,5 +168,13 @@ public abstract class AbstractExternalTable {
 
 	public void setColumnsWithDataType(String columnsWithDataType) {
 		this.columnsWithDataType = columnsWithDataType;
+	}
+
+	public String getName() {
+		return name;
+	}
+
+	public void setName(String name) {
+		this.name = name;
 	}
 }

@@ -29,16 +29,17 @@ import java.util.List;
  */
 public abstract class SqlUtils {
 
-	public static String createExternalReadableTable(LoadConfiguration config, String prefix,
+	//{"format=csv","delimiter=,","null=","escape="","quote="","header=true","location_uris=","execute_on=ALL_SEGMENTS","reject_limit=999999999","reject_limit_type=rows","log_errors=enable","encoding=UTF8","is_writable=false"}
+	//{"format=csv","delimiter=,","null=","escape="","quote="","location_uris=              ","execute_on=ALL_SEGMENTS","log_errors=disable","encoding=UTF8","is_writable=false"}
+	public static String createExternalReadableTable(LoadConfiguration config,
 			List<String> overrideLocations) {
 
 		// TODO: this function needs a cleanup
 		StringBuilder buf = new StringBuilder();
 
 		// unique table name
-		String name = config.getTable() + "_ext_" + prefix;
 		buf.append("CREATE READABLE EXTERNAL TABLE ");
-		buf.append(name);
+		buf.append(config.getExternalTable().getName());
 		buf.append(" ( ");
 
 		// column types or like
@@ -103,6 +104,9 @@ public abstract class SqlUtils {
 			buf.append("'");
 		}
 
+		// ERROR ENABLED
+
+
 		if (externalTable.getForceQuote() != null && externalTable.getForceQuote().length > 0) {
 			buf.append(" FORCE QUOTE ");
 			buf.append(StringUtils.arrayToCommaDelimitedString(externalTable.getForceQuote()));
@@ -132,17 +136,15 @@ public abstract class SqlUtils {
 	/**
 	 *
 	 * @param config the load configuration
-	 * @param prefix the prefix
 	 * @return the drop DDL
 	 */
-	public static String dropExternalReadableTable(LoadConfiguration config, String prefix) {
+	public static String dropExternalReadableTable(LoadConfiguration config) {
 		StringBuilder b = new StringBuilder();
 
 		// unique table name
-		String name = config.getTable() + "_ext_" + prefix;
 
 		b.append("DROP EXTERNAL TABLE ");
-		b.append(name);
+		b.append(config.getExternalTable().getName());
 
 		return b.toString();
 
@@ -152,42 +154,45 @@ public abstract class SqlUtils {
 	 * Builds sql clause to load data into a database.
 	 *
 	 * @param config Load configuration.
-	 * @param prefix Prefix for temporary resources.
 	 * @return the load DDL
 	 */
-	public static String load(LoadConfiguration config, String prefix) {
+	public static String load(LoadConfiguration config) {
 		if (config.getMode() == JdbcSinkConfig.InsertMode.INSERT) {
-			return loadInsert(config, prefix);
+			return loadInsert(config);
 		}
 		else if (config.getMode() == JdbcSinkConfig.InsertMode.UPDATE) {
-			return loadUpdate(config, prefix);
+			return loadUpdate(config);
 		}
 		throw new IllegalArgumentException("Unsupported mode " + config.getMode());
 	}
 
-	private static String loadInsert(LoadConfiguration config, String prefix) {
+	private static String loadInsert(LoadConfiguration config) {
 		StringBuilder b = new StringBuilder();
 
-		String name = config.getTable() + "_ext_" + prefix;
 
 		b.append("INSERT INTO ");
 		b.append(config.getTable());
+		if(config.gpfUseColumnsInInsert && StringUtils.hasText(config.getColumns())){
+			b.append(" (");
+			b.append(config.getColumns());
+			b.append(") ");
+		}
+
 		b.append(" SELECT ");
-		if (StringUtils.hasText(config.getColumns())) {
+		if (config.gpfUseColumnsInSelect && StringUtils.hasText(config.getColumns())) {
 			b.append(config.getColumns());
 		}
 		else {
 			b.append("*");
 		}
 		b.append(" FROM ");
-		b.append(name);
+		b.append(config.getExternalTable().getName());
 
 		return b.toString();
 	}
 
-	private static String loadUpdate(LoadConfiguration config, String prefix) {
+	private static String loadUpdate(LoadConfiguration config) {
 		StringBuilder b = new StringBuilder();
-		String name = config.getTable() + "_ext_" + prefix;
 		b.append("UPDATE ");
 		b.append(config.getTable());
 		b.append(" into_table set ");
@@ -200,7 +205,7 @@ public abstract class SqlUtils {
 		}
 
 		b.append(" FROM ");
-		b.append(name);
+		b.append(config.getExternalTable().getName());
 		b.append(" from_table where ");
 
 		for (int i = 0; i < config.getMatchColumns().size(); i++) {

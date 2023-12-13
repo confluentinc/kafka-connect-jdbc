@@ -37,24 +37,34 @@ import java.util.List;
  */
 public class GpfdistSimpleServer {
 
+
+    // make sigelton
+    private static GpfdistSimpleServer instance = null;
+    public static GpfdistSimpleServer getInstance() {
+        if(instance == null) {
+            instance = new GpfdistSimpleServer();
+        }
+        return instance;
+    }
+
+private GpfdistSimpleServer() {
+        // do nothing
+    }
+
+    public void init(int port, boolean autoStop) {
+     this.port = port;
+        this.autoStop = autoStop;
+
+    }
+
+
+
     private static final Logger log = LoggerFactory.getLogger(GpfdistServer.class);
-    private final boolean autoStop;
+    private  boolean autoStop;
 
     private List<List<String>> records;
     private int port;
     private HttpServer server;
-    private int localPort = -1;
-
-    /**
-     * Instantiates a new gpfdist server.
-     *
-     * @param port the port
-     */
-    public GpfdistSimpleServer(List<List<String>> records, int port, boolean autoStop) {
-        this.port = port;
-        this.records = records;
-        this.autoStop = autoStop;
-    }
 
 
     public void setRecords(List<List<String>> records) {
@@ -85,8 +95,8 @@ public class GpfdistSimpleServer {
      */
     public synchronized void stop() throws Exception {
         if (server != null) {
-            int delay = 0;
-            server.stop(delay);
+            int delay = 4000;
+           server.stop(delay);
         }
         server = null;
     }
@@ -97,7 +107,7 @@ public class GpfdistSimpleServer {
      * @return the local port
      */
     public int getLocalPort() {
-        return localPort;
+        return port;
     }
 
     private HttpServer startServer() throws IOException {
@@ -108,10 +118,6 @@ public class GpfdistSimpleServer {
         log.info("Server is running on port "+getLocalPort());
         return server;
     }
-
-
-
-
 
 
      class DataHandler implements HttpHandler {

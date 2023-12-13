@@ -3,6 +3,7 @@ package io.confluent.connect.jdbc.gp.gpfdist;
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.gp.GpDataIngestionService;
 import io.confluent.connect.jdbc.gp.gpfdist.framweork.GpfdistServer;
+import io.confluent.connect.jdbc.gp.gpfdist.framweork.GpfdistSimpleServer;
 import io.confluent.connect.jdbc.gp.gpfdist.framweork.GpfdistSinkConfiguration;
 import io.confluent.connect.jdbc.gp.gpfdist.framweork.support.GreenplumLoad;
 import io.confluent.connect.jdbc.gp.gpfdist.framweork.support.NetworkUtils;
@@ -19,18 +20,24 @@ import reactor.Environment;
 import reactor.core.processor.RingBufferProcessor;
 import reactor.fn.Consumer;
 import reactor.io.buffer.Buffer;
-
 import java.util.*;
-
 import static java.util.Collections.emptyList;
 
 public class GpfdistDataIngestionService extends GpDataIngestionService {
-    private GreenplumLoad greenplumLoad;
+
+//    public static void main(String[] args) {
+//        VertXHttpServer vertXHttpServer = VertXHttpServer.getInstance();
+////        vertXHttpServer.init(new JdbcSinkConfig(new HashMap<String, String>() {{
+////            put("gpfdist.port", "8080");
+////            put("gpfdist.host", "localhost");
+////        }}));
+//    }
+
     private static final Logger log = LoggerFactory.getLogger(GpfdistDataIngestionService.class);
     private Processor<Buffer, Buffer> dataBuffer;
 
-    private GpfdistServer gpfdistServer;
-
+//    private GpfdistSimpleServer gpfdistServer;
+//    SparkHttpServer httpServer;
     public GpfdistDataIngestionService(JdbcSinkConfig config, DatabaseDialect dialect, TableDefinition tabDef, FieldsMetadata fieldsMetadata) {
         super(config,dialect , tabDef, fieldsMetadata);
         setupServer();
@@ -43,14 +50,19 @@ public class GpfdistDataIngestionService extends GpDataIngestionService {
 
     private void setupServer(){
         try {
-            Environment.initializeIfEmpty().assignErrorJournal(new Consumer<Throwable>() {
-                @Override
-                public void accept(Throwable throwable) {
-                    log.error("Error in reactor", throwable);
-                }
-            });
-            log.info("Creating gpfdist protocol listener on port=" + config.getGpfdistPort());
-            dataBuffer = RingBufferProcessor.create(false);
+
+//            httpServer = SparkHttpServer.getInstance();
+//            if(!httpServer.isInitialized()){
+//                httpServer.init(config);
+//            }
+//            Environment.initializeIfEmpty().assignErrorJournal(new Consumer<Throwable>() {
+//                @Override
+//                public void accept(Throwable throwable) {
+//                    log.error("Error in reactor", throwable);
+//                }
+//            });
+//            log.info("Creating gpfdist protocol listener on port=" + config.getGpfdistPort());
+          //  dataBuffer = RingBufferProcessor.create(false);
 //            gpfdistServer = new GpfdistServer(dataBuffer, config.getGpfdistPort(), config.gpfFlushCount, config.gpfFlushCount, config.gpfBatchTimeout, config.gpfBatchCount);
 //            gpfdistServer.start();
 //            log.info("gpfdist protocol listener running on port=" + gpfdistServer.getLocalPort());
@@ -78,7 +90,7 @@ public class GpfdistDataIngestionService extends GpDataIngestionService {
                         String value = String.valueOf(valueStruct.get(fields.get(i).toString()));
                       //  data.add(i, value);
                         if(value == null || value.equals("null") ){
-                            value = "";
+                            value = "NULL";
                         }
                         data.add(value);
                        // writeData(value, config.delimiter);
@@ -101,28 +113,43 @@ public class GpfdistDataIngestionService extends GpDataIngestionService {
 
 
         // convert it as following col1 datatype, col2 datatype, col3 datatype...
-        String columnsWithDataType = createColumnNameDataTypeString(config.delimiter);
+        String columnsWithDataType = createColumnNameDataTypeString(",");
 
         String columns = String.join(",",fieldsMetadata.allFields.keySet().toArray(new String[]{}) );
 
 
+        String externalTableName = "ext_"+tableName + "_"+UUID.randomUUID().toString().replace("-","_");
+
+        log.info("Ingesting records into external table " + externalTableName);
 
         GpfdistSinkConfiguration gpfdistSinkConfiguration =
-                    new GpfdistSinkConfiguration(config, tableName, columns, columnsWithDataType, Arrays.asList(fieldsMetadata.nonKeyFieldNames.toArray(new String[]{})) , Arrays.asList(fieldsMetadata.keyFieldNames.toArray(new String[]{})),"", emptyList(),emptyList());
+                    new GpfdistSinkConfiguration(config, externalTableName, tableName, columns, columnsWithDataType, Arrays.asList(fieldsMetadata.nonKeyFieldNames.toArray(new String[]{})) , Arrays.asList(fieldsMetadata.keyFieldNames.toArray(new String[]{})),"", emptyList(),emptyList());
 
 
         // fill databuffer
-        for (List<String> record : recordsList){
-            String data = String.join(",", record);
-            writeData(data, "\n");
-        }
+//        for (List<String> record : recordsList){
+//            for (int j = 0; j < record.size(); j++) {
+//                String data = record.get(j);
+//                if( j ==record.size()-1){
+//                    writeData(data, "\n");
+//                  continue;
+//                }
+//                writeData(data, config.delimiter);
+//
+//            }
+//            break;
+//
+//        }
 
-        gpfdistServer = new GpfdistServer(dataBuffer, config.getGpfdistPort(), config.gpfFlushCount, config.gpfFlushCount, config.gpfBatchTimeout, config.gpfBatchCount);
-        gpfdistServer.start();
+//        httpServer.addData("/data",recordsList.get(0));
 
+//if(gpfdistServer == null) {
+    GpfdistSimpleServer.getInstance().setRecords(recordsList);
+
+//}
          GreenplumLoad gpload = gpfdistSinkConfiguration.greenplumLoad(dialect);
          gpload.load(getServerContext());
-         gpload.load();
+//            gpload.load();
 
 
 
@@ -136,7 +163,7 @@ public class GpfdistDataIngestionService extends GpDataIngestionService {
     public RuntimeContext getServerContext()
     {
         final RuntimeContext context = new RuntimeContext(
-                NetworkUtils.getGPFDistUri(config.getGpfdistHost(), gpfdistServer.getLocalPort()));
+                NetworkUtils.getGPFDistUri(config.getGpfdistHost(), config.getGpfdistPort()));
         return context;
 
     }
@@ -144,6 +171,7 @@ public class GpfdistDataIngestionService extends GpDataIngestionService {
         try {
             if (delimiter != null) {
                 dataBuffer.onNext(Buffer.wrap(data + delimiter));
+                log.info("Writing data " + data + delimiter);
             } else {
                 dataBuffer.onNext(Buffer.wrap(data));
             }
@@ -151,14 +179,14 @@ public class GpfdistDataIngestionService extends GpDataIngestionService {
             e.printStackTrace();
         }
     }
-    protected void stopServer() {
-
-        try {
-            dataBuffer.onComplete();
-            gpfdistServer.stop();
-        } catch (Exception e) {
-            log.warn("Error shutting down protocol listener", e);
-        }
-    }
+//    protected void stopServer() {
+//
+//        try {
+//            dataBuffer.onComplete();
+//            gpfdistServer.stop();
+//        } catch (Exception e) {
+//            log.warn("Error shutting down protocol listener", e);
+//        }
+//    }
 
 }

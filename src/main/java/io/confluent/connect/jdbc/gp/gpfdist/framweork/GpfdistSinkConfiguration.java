@@ -2,19 +2,14 @@ package io.confluent.connect.jdbc.gp.gpfdist.framweork;///*
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.gp.gpfdist.framweork.support.*;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
-import io.confluent.connect.jdbc.util.ConnectionURLParser;
-import org.apache.commons.dbcp.BasicDataSource;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.util.StringUtils;
 
-import javax.sql.DataSource;
 import java.util.Arrays;
 import java.util.List;
 
 /**
  * Configuration for all beans needed for gpfdist sink.
  *
- * @author Janne Valkealahti
+
  */
 public class GpfdistSinkConfiguration {
 

@@ -1,4 +1,4 @@
-package io.confluent.connect.jdbc.gp.gpfdist;
+package io.confluent.connect.jdbc.gp.gpfdist.server;
 
 
 
@@ -13,17 +13,8 @@ package io.confluent.connect.jdbc.gp.gpfdist;
         import java.util.Map;
         import java.util.concurrent.ConcurrentHashMap;
 
-public class SparkHttpServer {
+public class SparkHttpServer implements IGpfdistServer{
 
-
-    public static void main(String[] args) {
-        SparkHttpServer server = SparkHttpServer.getInstance();
-        server.init(new JdbcSinkConfig(new HashMap<String, String>() {{
-            put("gpfdist.port", "8080");
-            put("gpfdist.host", "localhost");
-        }}));
-        server.start();
-    }
     private static final SparkHttpServer INSTANCE = new SparkHttpServer();
 
     private final Map<String, List<String>> pathDataMap;
@@ -51,8 +42,19 @@ public class SparkHttpServer {
         Spark.awaitInitialization();
     }
 
-    public void addData(String path, List<String> newData) {
-        pathDataMap.computeIfAbsent(path, k -> new ArrayList<>()).addAll(newData);
+    @Override
+    public void stop() {
+        Spark.stop();
+    }
+
+    @Override
+    public void addData(String path, List<List<String>> data) {
+        //pathDataMap.computeIfAbsent(path, k -> new ArrayList<>()).;
+    }
+
+    @Override
+    public void addData(String path, String data) {
+
     }
 
     public String getStatus(Request request, Response response) {

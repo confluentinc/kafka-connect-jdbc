@@ -1,23 +1,8 @@
-/*
- * Copyright 2016 the original author or authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 
 package io.confluent.connect.jdbc.gp.gpfdist.framweork.support;
 
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
-import org.springframework.util.StringUtils;
+
 
 import java.util.List;
 
@@ -25,7 +10,7 @@ import java.util.List;
  * Utilities creating various types of sql clauses
  * needed with gpfdist.
  *
- * @author Janne Valkealahti
+
  */
 public abstract class SqlUtils {
 
@@ -221,6 +206,61 @@ public abstract class SqlUtils {
 
 		return b.toString();
 	}
+
+
+//	def do_method_merge(self):
+//			"""insert data not already in the table, update remaining items"""
+//
+//			self.table_supports_update()
+//			self.create_staging_table()
+//			self.create_external_table()
+//			self.do_insert(self.staging_table_name)
+//	self.rowsInserted = 0 # MPP-13024. No rows inserted yet (only to temp table).
+//			self.do_update(self.staging_table_name, 0)
+//
+//			# delete the updated rows in staging table for merge
+//        # so we can directly insert new rows left in staging table
+//        # and avoid left outer join when insert new rows which is poor in performance
+//
+//	match = self.map_stuff('gpload:output:match_columns'
+//			, lambda x,y:'staging_table.%s=into_table.%s' % (x, y)
+//			, 0)
+//	sql = 'DELETE FROM %s staging_table '% self.staging_table_name
+//	sql += 'USING %s into_table WHERE '% self.get_qualified_tablename()
+//	sql += ' %s' % ' AND '.join(match)
+//
+//        self.log(self.LOG, sql)
+//			if not self.options.D:
+//			try:
+//	with self.conn.cursor() as cur:
+//			cur.execute(sql)
+//	except Exception as e:
+//			self.log(self.ERROR, '{} encountered while running {}'.format(e, sql))
+//
+//			# insert new rows to the target table
+//
+//			match = self.map_stuff('gpload:output:match_columns',lambda x,y:'into_table.%s=from_table.%s'%(x,y),0)
+//	matchColumns = self.getconfig('gpload:output:match_columns',list)
+//
+//	cols = [a for a in self.into_columns if a[2] != None]
+//	sql = 'INSERT INTO %s ' % self.get_qualified_tablename()
+//	sql += '(%s) ' % ','.join([a[0] for a in cols])
+//	sql += '(SELECT %s ' % ','.join(['from_table.%s' % a[0] for a in cols])
+//	sql += 'FROM (SELECT *, row_number() OVER (PARTITION BY %s) AS gpload_row_number ' % ','.join(matchColumns)
+//	sql += 'FROM %s) AS from_table ' % self.staging_table_name
+//	sql += 'WHERE gpload_row_number=1)'
+//			self.log(self.LOG, sql)
+//			if not self.options.D:
+//			try:
+//	with self.conn.cursor() as cur:
+//			cur.execute(sql)
+//	self.rowsInserted = cur.rowcount
+//	except Exception as e:
+//			self.log(self.ERROR, '{} encountered while running {}'.format(e, sql))
+//
+//
+
+
 
 	/**
 	 * Converts string array to greenplum friendly string. From new

@@ -90,6 +90,7 @@ public class JdbcSinkTask extends SinkTask {
 
   @Override
   public void put(Collection<SinkRecord> records) {
+    log.info("Received {} records", records.size());
     if (records.isEmpty()) {
       // maybe check for pending gp records?
       writer.commitPendingRecords();

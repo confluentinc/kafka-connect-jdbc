@@ -60,6 +60,7 @@ public class JdbcDbWriter {
   final Map<TableId, BufferedRecords> bufferByTable = new HashMap<>();
   void write(final Collection<SinkRecord> records)
       throws SQLException, TableAlterOrCreateException {
+    log.info("Flushing records in JDBC Writer "+records.size());
     final Connection connection = cachedConnectionProvider.getConnection();
     try {
 

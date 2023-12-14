@@ -28,7 +28,7 @@
 // * FactoryBean for easy creation and configuration of {@link GreenplumLoad}
 // * instances.
 // *
-// * @author Janne Valkealahti
+//
 // *
 // */
 //public class LoadFactoryBean implements FactoryBean<GreenplumLoad>, InitializingBean, DisposableBean {

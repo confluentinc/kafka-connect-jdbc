@@ -2,7 +2,6 @@ package io.confluent.connect.jdbc.gp.gpfdist;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.gp.GpDataIngestionService;
-import io.confluent.connect.jdbc.gp.gpfdist.framweork.GpfdistServer;
 import io.confluent.connect.jdbc.gp.gpfdist.framweork.GpfdistSimpleServer;
 import io.confluent.connect.jdbc.gp.gpfdist.framweork.GpfdistSinkConfiguration;
 import io.confluent.connect.jdbc.gp.gpfdist.framweork.support.GreenplumLoad;
@@ -13,28 +12,16 @@ import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.sink.SinkRecord;
-import org.reactivestreams.Processor;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.Environment;
-import reactor.core.processor.RingBufferProcessor;
-import reactor.fn.Consumer;
-import reactor.io.buffer.Buffer;
+
 import java.util.*;
 import static java.util.Collections.emptyList;
 
 public class GpfdistDataIngestionService extends GpDataIngestionService {
 
-//    public static void main(String[] args) {
-//        VertXHttpServer vertXHttpServer = VertXHttpServer.getInstance();
-////        vertXHttpServer.init(new JdbcSinkConfig(new HashMap<String, String>() {{
-////            put("gpfdist.port", "8080");
-////            put("gpfdist.host", "localhost");
-////        }}));
-//    }
-
     private static final Logger log = LoggerFactory.getLogger(GpfdistDataIngestionService.class);
-    private Processor<Buffer, Buffer> dataBuffer;
 
 //    private GpfdistSimpleServer gpfdistServer;
 //    SparkHttpServer httpServer;
@@ -167,18 +154,18 @@ public class GpfdistDataIngestionService extends GpDataIngestionService {
         return context;
 
     }
-    private void writeData(String data, String delimiter) {
-        try {
-            if (delimiter != null) {
-                dataBuffer.onNext(Buffer.wrap(data + delimiter));
-                log.info("Writing data " + data + delimiter);
-            } else {
-                dataBuffer.onNext(Buffer.wrap(data));
-            }
-        }catch (Exception e){
-            e.printStackTrace();
-        }
-    }
+//    private void writeData(String data, String delimiter) {
+//        try {
+//            if (delimiter != null) {
+//                dataBuffer.onNext(Buffer.wrap(data + delimiter));
+//                log.info("Writing data " + data + delimiter);
+//            } else {
+//                dataBuffer.onNext(Buffer.wrap(data));
+//            }
+//        }catch (Exception e){
+//            e.printStackTrace();
+//        }
+//    }
 //    protected void stopServer() {
 //
 //        try {

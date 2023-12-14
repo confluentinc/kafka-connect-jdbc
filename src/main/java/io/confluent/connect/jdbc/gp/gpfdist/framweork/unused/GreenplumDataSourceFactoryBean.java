@@ -26,7 +26,7 @@
 // * Factory bean for configuring a {@link DataSource}. Needed to use
 // * both command-line props and a control file.
 // *
-// * @author Janne Valkealahti
+//
 // */
 //public class GreenplumDataSourceFactoryBean extends AbstractFactoryBean<BasicDataSource> {
 //

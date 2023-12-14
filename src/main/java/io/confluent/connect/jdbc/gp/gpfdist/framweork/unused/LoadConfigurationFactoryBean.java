@@ -29,7 +29,7 @@
 ///**
 // * {@link FactoryBean} creating instances of a {@link LoadConfiguration}.
 // *
-// * @author Janne Valkealahti
+//
 // */
 //public class LoadConfigurationFactoryBean implements FactoryBean<LoadConfiguration>, InitializingBean {
 //

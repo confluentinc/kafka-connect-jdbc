@@ -66,6 +66,12 @@
         <licenses.version>${project.version}</licenses.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.package.home>target/${project.artifactId}-${project.version}-package</project.package.home>
+        <instruction.coverage.threshold>0.78</instruction.coverage.threshold>
+        <branch.coverage.threshold>0.91</branch.coverage.threshold>
+        <method.coverage.threshold>0.76</method.coverage.threshold>
+        <class.coverage.threshold>0.91</class.coverage.threshold>
+        <complexity.coverage.threshold>0.65</complexity.coverage.threshold>
+        <line.coverage.threshold>0.80</line.coverage.threshold>
     </properties>
 
     <repositories>

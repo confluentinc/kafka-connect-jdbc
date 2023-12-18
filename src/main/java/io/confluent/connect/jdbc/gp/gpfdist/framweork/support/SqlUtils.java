@@ -4,7 +4,9 @@ package io.confluent.connect.jdbc.gp.gpfdist.framweork.support;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Utilities creating various types of sql clauses
@@ -16,6 +18,48 @@ public abstract class SqlUtils {
 
 	//{"format=csv","delimiter=,","null=","escape="","quote="","header=true","location_uris=","execute_on=ALL_SEGMENTS","reject_limit=999999999","reject_limit_type=rows","log_errors=enable","encoding=UTF8","is_writable=false"}
 	//{"format=csv","delimiter=,","null=","escape="","quote="","location_uris=              ","execute_on=ALL_SEGMENTS","log_errors=disable","encoding=UTF8","is_writable=false"}
+
+
+	public static String createQueryToCheckTableExists(String tableName) {
+
+		// SELECT EXISTS (SELECT 1 FROM pg_tables WHERE tablename = 'your_external_table')
+		StringBuilder buf = new StringBuilder();
+		buf.append("SELECT EXISTS (SELECT 1 FROM pg_tables WHERE tablename = '");
+		buf.append(tableName);
+		buf.append("')");
+		return buf.toString();
+
+	}
+
+
+	public static String createStagingTable(LoadConfiguration config) {
+		// TODO: this function needs a cleanup
+		StringBuilder buf = new StringBuilder();
+
+		// unique table name
+		buf.append("CREATE TABLE IF NOT EXISTS ");
+		buf.append(config.getExternalTable().getName().replaceAll("ext_", "stg_"));
+		buf.append(" ( ");
+
+		// column types or like
+		ReadableTable externalTable = config.getExternalTable();
+		if (externalTable.getLike()) {
+			buf.append("LIKE ");
+			buf.append(config.getTable());
+		}
+		else if (StringUtils.hasText(externalTable.getColumnsWithDataType())) {
+			buf.append(externalTable.getColumnsWithDataType());
+		}
+		else {
+			buf.append("LIKE ");
+			buf.append(config.getTable());
+		}
+		buf.append(" ); ");
+
+		return buf.toString();
+	}
+
+
 	public static String createExternalReadableTable(LoadConfiguration config,
 			List<String> overrideLocations) {
 
@@ -29,7 +73,7 @@ public abstract class SqlUtils {
 
 		// column types or like
 		ReadableTable externalTable = config.getExternalTable();
-		if (externalTable.getLike() != null) {
+		if (externalTable.getLike()) {
 			buf.append("LIKE ");
 			buf.append(config.getTable());
 		}
@@ -148,6 +192,10 @@ public abstract class SqlUtils {
 		else if (config.getMode() == JdbcSinkConfig.InsertMode.UPDATE) {
 			return loadUpdate(config);
 		}
+//		else if (config.getMode() == JdbcSinkConfig.InsertMode.MERGE) {
+//			return loadMerge(config);
+//		}
+
 		throw new IllegalArgumentException("Unsupported mode " + config.getMode());
 	}
 
@@ -176,6 +224,141 @@ public abstract class SqlUtils {
 		return b.toString();
 	}
 
+
+	public static String loadToStaging(LoadConfiguration config) {
+		StringBuilder b = new StringBuilder();
+
+		b.append("INSERT INTO ");
+		b.append(config.getStagingTableName());
+		if(config.gpfUseColumnsInInsert && StringUtils.hasText(config.getColumns())){
+			b.append(" (");
+			b.append(config.getColumns());
+			b.append(") ");
+		}
+
+		b.append(" SELECT ");
+		if (config.gpfUseColumnsInSelect && StringUtils.hasText(config.getColumns())) {
+			b.append(config.getColumns());
+		}
+		else {
+			b.append("*");
+		}
+		b.append(" FROM ");
+		b.append(config.getExternalTable().getName());
+
+		return b.toString();
+	}
+
+	// check or create staging table
+//	private static String checkOrCreateStagingTable(LoadConfiguration config) {
+//		//
+//	}
+
+	// update data from staging table
+//	private static String updateFromStagingTable(LoadConfiguration config) {
+//		//
+//	}
+//
+//	// insert new records from staging table
+//	private static String insertFromStagingTable(LoadConfiguration config) {
+//		//
+//	}
+//
+//	// check if a table already exists
+//	private static String checkTableExists(LoadConfiguration config) {
+//		//
+//	}
+//
+
+	public static String insertFromStaging(LoadConfiguration config) {
+		StringBuilder b = new StringBuilder();
+
+			// TODO - following to java
+//		String sql = "INSERT INTO " + this.getQualifiedTablename();
+//		sql += "(" + cols.stream().map(a -> a.getFirstElement()).collect(Collectors.joining(", ")) + ") ";
+//		sql += "(SELECT " + cols.stream().map(a -> "from_table." + a.getFirstElement()).collect(Collectors.joining(", ")) + " ";
+//		sql += "FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY " + String.join(", ", matchColumns) + ") AS gpload_row_number ";
+//		sql += "FROM " + this.stagingTableName + ") AS from_table ";
+//		sql += "LEFT OUTER JOIN " + this.getQualifiedTablename() + " into_table ";
+//		sql += "ON " + String.join(" AND ", match);
+//		String[] where = this.mapStuff("gpload:output:match_columns", /* Lambda equivalent in Java */, 0);
+//		sql += "WHERE " + String.join(" AND ", where);
+//		sql += " AND gpload_row_number=1)";
+
+
+//		String stagingTableName = "stg_" + config.getExternalTable().getName();
+//		creatStagingTableIfRe
+
+
+		b.append("INSERT INTO ");
+		b.append(config.getTable());
+		if(config.gpfUseColumnsInInsert && StringUtils.hasText(config.getColumns())){
+			b.append(" (");
+			b.append(config.getColumns());
+			b.append(") ");
+		}
+		b.append(" (SELECT ");
+		if (config.gpfUseColumnsInSelect && StringUtils.hasText(config.getColumns())) {
+			// add from_table. prefix to columns
+//			String fromColumns = Arrays.stream(config.getColumns().split(",")).map(a -> "from_table." + a).collect(Collectors.joining(", ")).join(", ");
+//			b.append(fromColumns);
+
+			String[] columns = config.getColumns().split(",");
+			for (int i = 0; i < columns.length; i++) {
+				b.append("from_table." + columns[i]);
+				if (i + 1 < columns.length) {
+					b.append(", ");
+				}
+			}
+
+
+		}
+		else {
+			b.append("*");
+		}
+		b.append(" FROM ");
+		b.append("(SELECT *, ROW_NUMBER() OVER (PARTITION BY ");
+		b.append(String.join(", ", config.getMatchColumns()));
+		b.append(") AS gpload_row_number FROM ");
+		b.append(config.getStagingTableName());
+		b.append(") AS from_table ");
+		b.append(" WHERE ");
+		b.append("gpload_row_number=1)");
+
+		return b.toString();
+	}
+
+	public static String updateFromStaging(LoadConfiguration config){
+		StringBuilder b = new StringBuilder();
+		b.append("UPDATE ");
+		b.append(config.getTable());
+		b.append(" into_table set ");
+
+		for (int i = 0; i < config.getUpdateColumns().size(); i++) {
+			b.append(config.getUpdateColumns().get(i) + "=from_table." + config.getUpdateColumns().get(i));
+			if (i + 1 < config.getUpdateColumns().size()) {
+				b.append(", ");
+			}
+		}
+
+		b.append(" FROM ");
+		b.append(config.getStagingTableName());
+		b.append(" from_table where ");
+
+		for (int i = 0; i < config.getMatchColumns().size(); i++) {
+			b.append("into_table." + config.getMatchColumns().get(i) + "=from_table." + config.getMatchColumns().get(i));
+			if (i + 1 < config.getMatchColumns().size()) {
+				b.append(" and ");
+			}
+		}
+
+		if (StringUtils.hasText(config.getUpdateCondition())) {
+			b.append(" and " + config.getUpdateCondition());
+		}
+
+		return b.toString();
+	}
+
 	private static String loadUpdate(LoadConfiguration config) {
 		StringBuilder b = new StringBuilder();
 		b.append("UPDATE ");
@@ -190,7 +373,7 @@ public abstract class SqlUtils {
 		}
 
 		b.append(" FROM ");
-		b.append(config.getExternalTable().getName());
+		b.append(config.getStagingTableName());
 		b.append(" from_table where ");
 
 		for (int i = 0; i < config.getMatchColumns().size(); i++) {
@@ -299,4 +482,10 @@ public abstract class SqlUtils {
 //		return "\\u" + Integer.toHexString(ch);
 	}
 
+	public static String truncateStagingTable(LoadConfiguration loadConfiguration) {
+		StringBuilder b = new StringBuilder();
+		b.append("TRUNCATE TABLE ");
+		b.append(loadConfiguration.getStagingTableName());
+		return b.toString();
+	}
 }

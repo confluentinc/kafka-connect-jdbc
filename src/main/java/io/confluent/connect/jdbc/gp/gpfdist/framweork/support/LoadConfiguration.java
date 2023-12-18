@@ -11,6 +11,7 @@ public class LoadConfiguration {
 
 	public boolean gpfUseColumnsInInsert = true; //TODO - this is a hack to get around the fact that the columns are in different order in the external table
 	public boolean gpfUseColumnsInSelect = true; //TODO - this is a hack to get around the fact that the columns are in different order in the external table
+	private boolean reuseTables = false; // TODO - move this to the config
 
 	private String table;
 
@@ -31,6 +32,8 @@ public class LoadConfiguration {
 	private List<String> sqlBefore;
 
 	private List<String> sqlAfter;
+	private String stagingTableName;
+
 
 	public LoadConfiguration() {
 		super();
@@ -124,7 +127,23 @@ public class LoadConfiguration {
 		return columnsWithDataTypes;
 	}
 
+	public void setReuseTables(boolean reuseTables) {
+		this.reuseTables = reuseTables;
+	}
+
 	public void setColumnsWithDataTypes(String columnsWithDataTypes) {
 		this.columnsWithDataTypes = columnsWithDataTypes;
+	}
+
+	public boolean shouldReuseTables() {
+		return reuseTables;
+	}
+
+	public void setStagingTableName(String stagingTableName) {
+		this.stagingTableName = stagingTableName;
+	}
+
+	public String getStagingTableName() {
+		return stagingTableName;
 	}
 }

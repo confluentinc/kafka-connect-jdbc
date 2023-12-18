@@ -623,7 +623,12 @@ public interface DatabaseDialect extends ConnectionProvider {
     bindField(statement, index, schema, value);
   }
 
-  /**
+  boolean execute(String sql);
+
+  ResultSet executeQuery(String sql);
+  boolean execute(String query, Connection connection);
+
+    /**
    * A function to bind the values from a sink record into a prepared statement.
    */
   @FunctionalInterface

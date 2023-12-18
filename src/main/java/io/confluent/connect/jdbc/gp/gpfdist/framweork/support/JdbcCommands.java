@@ -26,11 +26,11 @@ public class JdbcCommands {
 
 	private List<String> afterSqls;
 
-	private String prepareSql;
+	private List<String> prepareSql;
 
-	private String runSql;
+	private List<String> runSql;
 
-	private String cleanSql;
+	private List<String> cleanSql;
 
 	private Exception lastException;
 
@@ -42,15 +42,15 @@ public class JdbcCommands {
 		this.jdbcTemplate = jdbcTemplate;
 	}
 
-	public void setPrepareSql(String sql) {
+	public void setPrepareSql( List<String> sql) {
 		this.prepareSql = sql;
 	}
 
-	public void setRunSql(String sql) {
+	public void setRunSql( List<String> sql) {
 		this.runSql = sql;
 	}
 
-	public void setCleanSql(String sql) {
+	public void setCleanSql( List<String> sql) {
 		this.cleanSql = sql;
 	}
 
@@ -93,52 +93,73 @@ public class JdbcCommands {
 		return lastException;
 	}
 
-	private boolean prepare() {
-		try {
-			if (log.isDebugEnabled()) {
-				log.debug("Executing prepare: " + prepareSql);
-			}
-			jdbcTemplate.getConnection().createStatement().execute(prepareSql);
-		}
-		catch (Exception e) {
-			log.error("Error during prepare sql", e);
-			lastException = e;
-			return false;
-		}
 
+	private boolean prepare() {
+		if (beforeSqls != null) {
+			for (String sql : prepareSql) {
+				if (!StringUtils.hasText(sql)) {
+					continue;
+				}
+				if (log.isDebugEnabled()) {
+					log.debug("Executing prepare: " + sql);
+				}
+				try {
+					jdbcTemplate.execute(sql);
+				}
+				catch (Exception e) {
+					lastException = e;
+					return false;
+				}
+			}
+		}
 		return true;
 	}
+
+
 
 	private boolean run() {
-		try {
-			if (log.isDebugEnabled()) {
-				log.debug("Executing run: " + runSql);
+		if (beforeSqls != null) {
+			for (String sql : runSql) {
+				if (!StringUtils.hasText(sql)) {
+					continue;
+				}
+				if (log.isDebugEnabled()) {
+					log.debug("Executing run: " + sql);
+				}
+				try {
+					jdbcTemplate.execute(sql);
+				}
+				catch (Exception e) {
+					lastException = e;
+					return false;
+				}
 			}
-			jdbcTemplate.getConnection().createStatement().execute(runSql);
-		}
-		catch (Exception e) {
-			log.error("Error during run sql", e);
-			lastException = e;
-			return false;
 		}
 		return true;
 	}
+
 
 	private boolean clean() {
-		try {
-			if (log.isDebugEnabled()) {
-				log.debug("Executing clean: " + cleanSql);
+		if (beforeSqls != null) {
+			for (String sql : cleanSql) {
+				if (!StringUtils.hasText(sql)) {
+					continue;
+				}
+				if (log.isDebugEnabled()) {
+					log.debug("Executing clean: " + sql);
+				}
+				try {
+					jdbcTemplate.execute(sql);
+				}
+				catch (Exception e) {
+					lastException = e;
+					return false;
+				}
 			}
-
-			jdbcTemplate.getConnection().createStatement().execute(cleanSql);
-		}
-		catch (Exception e) {
-			log.error("Error during clean sql", e);
-			lastException = e;
-			return false;
 		}
 		return true;
 	}
+
 
 	private boolean before() {
 		if (beforeSqls != null) {
@@ -150,7 +171,7 @@ public class JdbcCommands {
 					log.debug("Executing before: " + sql);
 				}
 				try {
-					jdbcTemplate.getConnection().createStatement().execute(sql);
+					jdbcTemplate.execute(sql);
 				}
 				catch (Exception e) {
 					lastException = e;
@@ -171,7 +192,7 @@ public class JdbcCommands {
 					log.debug("Executing after: " + sql);
 				}
 				try {
-					jdbcTemplate.getConnection().createStatement().execute(sql);
+					jdbcTemplate.execute(sql);
 				}
 				catch (Exception e) {
 					lastException = e;

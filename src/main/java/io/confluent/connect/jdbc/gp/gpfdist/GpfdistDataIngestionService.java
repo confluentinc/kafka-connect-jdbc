@@ -110,7 +110,7 @@ public class GpfdistDataIngestionService extends GpDataIngestionService {
         log.info("Ingesting records into external table " + externalTableName);
 
         GpfdistSinkConfiguration gpfdistSinkConfiguration =
-                    new GpfdistSinkConfiguration(config, externalTableName, tableName, columns, columnsWithDataType, Arrays.asList(fieldsMetadata.nonKeyFieldNames.toArray(new String[]{})) , Arrays.asList(fieldsMetadata.keyFieldNames.toArray(new String[]{})),"", emptyList(),emptyList());
+                    new GpfdistSinkConfiguration(config, externalTableName, tableName, columns, columnsWithDataType, Arrays.asList(fieldsMetadata.keyFieldNames.toArray(new String[]{})), Arrays.asList(fieldsMetadata.nonKeyFieldNames.toArray(new String[]{})) ,"", emptyList(),emptyList());
 
 
         // fill databuffer
@@ -142,7 +142,6 @@ public class GpfdistDataIngestionService extends GpDataIngestionService {
 
         } catch (Exception e) {
             log.error("Error running GPload", e);
-            e.printStackTrace();
         }
     }
 

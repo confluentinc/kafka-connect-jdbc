@@ -170,6 +170,7 @@ public class GPSSDataIngestionService extends GpDataIngestionService {
         Integer errLimit = config.gpErrorsLimit;
         Integer errPct = config.gpErrorsPercentageLimit;
         // create an insert option builder
+
         InsertOption iOpt = InsertOption.newBuilder()
                 .setErrorLimitCount(errLimit)
                 .setErrorLimitPercentage(errPct)

@@ -1659,6 +1659,38 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     }
   }
 
+  @Override
+  public boolean execute(String query) {
+    try (Connection connection = getConnection()) {
+        return execute(query, connection);
+    } catch (SQLException e) {
+      throw new ConnectException("Unable to execute query", e);
+    }
+
+  }
+
+  @Override
+  public boolean execute(String query, Connection connection) {
+    try (Statement statement = connection.createStatement()) {
+      return statement.execute(query);
+    } catch (SQLException e) {
+      throw new ConnectException("Unable to execute query", e);
+    }
+  }
+
+  @Override
+  public ResultSet executeQuery(String query) {
+    try (Connection connection = getConnection()) {
+      try (Statement statement = connection.createStatement()) {
+        return statement.executeQuery(query);
+      } catch (SQLException e) {
+        throw new ConnectException("Unable to execute query", e);
+      }
+    } catch (SQLException e) {
+      throw new ConnectException("Unable to execute query", e);
+    }
+  }
+
   /**
    * Dialects not supporting `setObject(index, null)` can override this method
    * to provide a specific sqlType, as per the JDBC documentation

@@ -82,7 +82,9 @@ public class GpfdistSinkConfiguration {
 		readableTable.setColumns(columns);
 		readableTable.setColumnsWithDataType(columnsWithDataType);
 		readableTable.setName(externalTableName);
-		//readableTable.setLike(like);
+
+		// TODO- set like only if destination table have same name and number of columns as source table
+		//readableTable.setLike(true);
 		readableTable.setLogErrors(config.gpLogErrors);
 
 		setSegmentReject(config.segmentRejectLimit, readableTable);

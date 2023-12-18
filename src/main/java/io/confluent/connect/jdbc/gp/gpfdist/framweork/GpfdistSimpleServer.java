@@ -102,7 +102,7 @@ private GpfdistSimpleServer() {
 
      class DataHandler implements HttpHandler {
         @Override
-        public void handle(HttpExchange exchange) throws IOException { // TODO handle duplicate requests
+        public void handle(HttpExchange exchange) throws IOException { // TODO handle duplicate requests - gpfdist sends multiple request
             log.info("Handling request from gpfdist: "+exchange.getRequestMethod());
 
             List<List<String>> batch = GpfdistSimpleServer.this.getBatch(); // Implement logic to get a batch of data

@@ -39,7 +39,7 @@ public abstract class AbstractExternalTable {
 	// [ ENCODING 'encoding' ]
 	private String encoding;
 
-	private String like;
+	private boolean like;
 
 	private String columns;
 
@@ -131,11 +131,11 @@ public abstract class AbstractExternalTable {
 		this.encoding = encoding;
 	}
 
-	public String getLike() {
+	public boolean getLike() {
 		return like;
 	}
 
-	public void setLike(String like) {
+	public void setLike(boolean like) {
 		this.like = like;
 	}
 

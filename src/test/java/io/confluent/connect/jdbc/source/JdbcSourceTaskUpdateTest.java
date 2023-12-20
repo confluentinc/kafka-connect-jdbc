@@ -117,17 +117,17 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     twoRecords.put(1, 1);
     twoRecords.put(2, 1);
 
-    long start= System.currentTimeMillis();
+    long start= time.milliseconds();
 
     task.start(config);
     List<SourceRecord> records = task.poll();
-    long stopWatchTime = System.currentTimeMillis() - start;    
+    long stopWatchTime = time.milliseconds() - start;    
 	assertTrue("task slept " + stopWatchTime +" ms", stopWatchTime < sleepMs);
     assertEquals(twoRecords, countIntValues(records, "id"));
     assertRecordsTopic(records, TOPIC_PREFIX + SINGLE_TABLE_NAME);
     // polling again should cause the task to sleep for sleepMs
     records = task.poll();
-    stopWatchTime = System.currentTimeMillis() - start;
+    stopWatchTime = time.milliseconds() - start;
     assertTrue("task slept " + stopWatchTime +" ms", stopWatchTime >= sleepMs);
 
   }

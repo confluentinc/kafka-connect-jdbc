@@ -407,7 +407,7 @@ public class JdbcSourceTask extends SourceTask {
           pollSleepMs = tableQuerierSleepMs(querier);
           log.debug("TableQuerier is requested to sleep {} ms before sending next query {}",
               pollSleepMs, querier.toString());
-          Thread.sleep(pollSleepMs);
+          time.sleep(pollSleepMs);
           tableQuerierSleepTimes.remove(querier);
           continue; // Re-check stop flag before continuing
         }

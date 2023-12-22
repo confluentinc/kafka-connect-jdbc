@@ -93,6 +93,10 @@ public class ConnectionURLParser {
     public String getDatabase() {
         return database;
     }
+    public String getQualifiedDatabase() {
+        return schema!=null?schema+"."+database:database;
+    }
+
 
     public void setSchema(String schema) {
         this.schema = schema;

@@ -34,56 +34,27 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
 
     @Override
     public void ingest(List<SinkRecord> records) {
+        super.ingest(records);
         try {
-
-            List<String> keyColumns = new ArrayList<>(fieldsMetadata.keyFieldNames);
-            List<String> nonKeyColumns = new ArrayList<>(fieldsMetadata.nonKeyFieldNames);
-            List<String> allColumns = new ArrayList<>(fieldsMetadata.allFields.keySet());
 
             String suffix = ".csv";
             File csvFile = File.createTempFile(tableName, suffix, new File(tempDir));
             FileWriter writer = new FileWriter(csvFile);
             String absolutePath = csvFile.toString();
             log.info("Writing to file {}", absolutePath);
-            final List fields = Arrays.asList(fieldsMetadata.allFields.keySet().toArray()); // optimization
             try (CsvWriter csv = CsvWriter.builder().build(writer)) {
-                csv.writeRow(fields);
-                records.forEach(record -> {
-                    List data = new ArrayList(fields.size());
-                    final Struct valueStruct = (Struct) record.value();
-                    for (int i = 0; i < fields.size(); i++) {
-                        String value = String.valueOf(valueStruct.get(fields.get(i).toString()));
-                        //TODO make configurable
-                        if(value == null || value.equals("null")){
-                            value = "";
-                        }
-                        data.add(i, value);
-                    }
-                    csv.writeRow(data);
+                csv.writeRow(allColumns);
+                data.forEach(record -> {
+                    csv.writeRow(record);
                 });
                 log.info("Rows count", records.size());
             } catch (Exception e) {
-                log.error("Error while writing to file {}", absolutePath);
-                log.error("Error", e);
-                e.printStackTrace();
-            }
-            ConnectionURLParser parser = new ConnectionURLParser(config.connectionUrl);
-
-            if (parser.getSchema() == null) {
-                log.warn("Schema not found in jdbc url (schema=schemaName), using default schema: public");
-                parser.setSchema("public");
+                log.error("Error while writing to file {}", absolutePath, e);
             }
 
-            String localIpOrHost = "localhost";
 
-            if (config.gpfdistHost != null) {
-                localIpOrHost = config.gpfdistHost;
-            } else {
-                localIpOrHost = CommonUtils.getLocalIpOrHost();
-
-            }
-
-            log.info("Local ip or host to run gpfdist {}", localIpOrHost);
+            String localIpOrHost = getGpfDistHost();
+            log.info("gpfdist running on {}", localIpOrHost);
 
             GPloadConfig.Source.Builder sourceBuilder = new GPloadConfig.Source.Builder()
                     .localHostname(Arrays.asList(localIpOrHost))
@@ -94,13 +65,6 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
                 sourceBuilder.port(config.portRange.get(0));
             }
             GPloadConfig.Source source = sourceBuilder.build();
-//            // convert fields to Map - column name and data type
-            Map<String, String> fieldsMap = new HashMap<>();
-            fields.forEach(field -> {
-                fieldsMap.put(field.toString(), field.toString());
-            });
-
-
 
             GPloadConfig.Input input = new GPloadConfig.Input.Builder()
                     .format("csv")
@@ -118,14 +82,14 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
 
 
             GPloadConfig.Output output = new GPloadConfig.Output.Builder()
-                    .table(parser.getSchema() + "." + tableName)
+                    .table(dbConnection.getSchema() + "." + tableName)
                     .mode(config.insertMode.toString().toLowerCase())
-                    .mapping(fieldsMap)
+                    //.mapping(fieldsMap) one to one mapping of source and destination fields
                     .updateColumns(nonKeyColumns)
                     .matchColumns(keyColumns).build();
 
             GPloadConfig.External external = new GPloadConfig.External.Builder()
-                    .schema(parser.getSchema()).build();
+                    .schema(dbConnection.getSchema()).build();
 
             GPloadConfig.Preload preload = new GPloadConfig.Preload.Builder().fastMatch(true).reuseTables(true).build();
 
@@ -136,11 +100,11 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
                     .external(Arrays.asList(external))
                     .preload(Arrays.asList(preload)).build();
             GPloadConfig gPloadConfig = new GPloadConfig.Builder().gpload(gpload)
-                    .user(parser.getUsername())
-                    .password(parser.getPassword())
-                    .host(parser.getHost())
-                    .port(parser.getPort())
-                    .database(parser.getDatabase()).version("1.0.0.1").build();
+                    .user(dbConnection.getUsername())
+                    .password(dbConnection.getPassword())
+                    .host(dbConnection.getHost())
+                    .port(dbConnection.getPort())
+                    .database(dbConnection.getDatabase()).version("1.0.0.1").build();
             class UpperCaseStrategy extends PropertyNamingStrategy.PropertyNamingStrategyBase {
 
                 @Override
@@ -153,24 +117,21 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
             ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
             mapper.setPropertyNamingStrategy(new UpperCaseStrategy());
             mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
-
             mapper.writeValue(yamlFile, gPloadConfig);
 
-
             File logFile = File.createTempFile(tableName, ".log", new File(tempDir));
-
             String gploadBinary = "gpload";
             if (config.greenplumHome != null) {
                 gploadBinary = config.greenplumHome + "/bin/gpload";
             }
-            log.info("GPLOAD: {}", gploadBinary);
+            log.info("gpload: {}", gploadBinary);
 
             String gploadCommand = gploadBinary + " -l " + logFile.getAbsolutePath() + " -f " + yamlFile.getAbsolutePath();
 
-            log.info("Running GPload command {}", gploadCommand);
+            log.info("Running gpload command {}", gploadCommand);
 
             ArrayList<String> cmdOutput = CommonUtils.executeCommand(gploadCommand);
-            log.info("GPload output: {}", cmdOutput);
+            log.info("gpload output: {}", cmdOutput);
 
             String errors = checkGPloadOutputForErrors(cmdOutput);
             if (errors.length() > 0) {
@@ -191,7 +152,7 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
 
             }
         } catch (Exception e) {
-            log.error("Error running GPload", e);
+            log.error("Error running gpload", e);
             e.printStackTrace();
         }
     }

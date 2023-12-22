@@ -3,18 +3,19 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
-package api;
+package io.confluent.connect.jdbc.gp.gpss.api;
 
 option java_multiple_files = true;
 
 // Connect service Request message
 message ConnectRequest {
-  string Host = 1;      // Host address of Greenplum master; must be accessible from gpss server system
-  int32 Port = 2;       // Greenplum master port
-  string Username = 3;  // User or role name that gpss uses to access Greenplum 
+  string Host = 1;      // Host address of Greenplum coordinator; must be accessible from gpss server system
+  int32 Port = 2;       // Greenplum coordinator port
+  string Username = 3;  // User or role name that gpss uses to access Greenplum
   string Password = 4;  // User password
   string DB = 5;        // Database name
   bool UseSSL = 6;      // Use SSL or not; ignored, use the gpss config file to config SSL
+  int32 SessionTimeout = 7;      // Release the session after idle for specified number of seconds
 }
 
 // Connect service Response message
@@ -69,6 +70,14 @@ message OpenRequest {
   string Encoding = 7;      // Encoding of text data; not supported
   string StagingSchema = 8; // Schema in which gpss creates external and temp tables; default is to create these tables in the same schema as the target table
 
+  FormatAvro avro = 9;
+  FormatBinary binary = 10;
+  FormatCSV csv = 11;
+  FormatDelimited delimited = 12;
+  FormatJSON json = 13;
+  FormatCustom custom = 14;
+  string proto = 15;
+
   oneof Option {            // Identify the type of write operation to perform
     InsertOption InsertOption = 100;
     UpdateOption UpdateOption = 101;
@@ -86,6 +95,7 @@ message DBValue {
     bytes BytesValue = 8;
     google.protobuf.Timestamp TimeStampValue = 10;  // Time without timezone
     google.protobuf.NullValue NullValue = 11;
+    string OtherValue = 12;
   }
 }
 
@@ -93,7 +103,7 @@ message Row {
   repeated DBValue Columns = 1;
 }
 
-message RowData {    
+message RowData {
   bytes Data = 1;     // A single protobuf-encoded Row
 }
 
@@ -113,6 +123,8 @@ message TransferStats {          // Status of the data load operation
 // Close service Request message
 message CloseRequest {
   Session session = 1;
+  int32 MaxErrorRows = 2;        // -1: returns all, 0: nothing, >0: max rows
+  bool Abort = 3;
 }
 
 // ListSchema service request message
@@ -206,4 +218,77 @@ service Gpss {
 
   // Decribe table metadata(column name and column type)
   rpc DescribeTable(DescribeTableRequest) returns (Columns) {}
+}
+
+// The format of the source data.
+// If there is an intermediate column inside Format,
+// then the source data will be transformed to the intermediate column.
+// If there is no source_column_name in Format,
+// then the column name will be the Target table column name,
+// and the source column data type will be matched with Target column type.
+message SourceDataFormat {
+  oneof unit {
+    FormatAvro avro = 1;
+    FormatBinary binary = 2;
+    FormatCSV csv = 3;
+    FormatDelimited delimited = 4;
+    FormatJSON json = 5;
+    FormatCustom custom = 6;
+    string protobuf = 7;
+  }
+}
+
+message FormatAvro {
+  string source_column_name = 1; // The source column name
+  string schema_url = 2; // If specified, gpss requests the avro schema from url
+  bool   bytes_to_base64 = 3; // When true and schema_url is specified, gpss converts bytes field in avro message to base64-encoded string
+  bool   ignore_deserialize_error = 4; // When true, gpss ignores avro deserialize errors, and puts data into log error
+  string schema_path_on_gpdb = 5; // Used for standalone avro schema; if exists, gpss retrieves the avro schema from the path on every node in the greenplum cluster
+  string schema_ca_on_gpdb = 6; // The path to the specified CA certificate file for gpss verifying the peer; the CA file must exist at that path on every greenplum segment
+  string schema_cert_on_gpdb = 7; // The path to the specified client certificate file for gpss connecting to HTTPS schema registry; required if the registry's client authentication is enabled
+  string schema_key_on_gpdb = 8; // The path to the specified private key file for gpss connecting to HTTPS schema registry; required if the registry's client authentication is enabled
+  string schema_min_tls_version = 9; // The minimum transport layer security (TLS) version that gpss requests on the registry connection; the default value is 1.0, and gpss supports minimum TLS versions of 1.0, 1.1, 1.2, and 1.3
+}
+
+message FormatBinary {
+  string source_column_name = 1; // The source column name
+}
+
+message FormatCSV {
+  repeated IntermediateColumn columns = 1; // Source column, move to format.Column c1:bin, c2:json ...
+  string delimiter = 2;
+  string quote = 3;
+  string null = 4;
+  string escape = 5;
+  string force_not_null = 6;
+  string newline = 7;
+  bool fill_missing_fields = 8;
+  bool header = 9;
+}
+
+message FormatDelimited {
+  repeated IntermediateColumn columns = 1; // The source column names
+  string delimiter = 2;
+}
+
+message FormatJSON {
+  IntermediateColumn column = 1; // The source column name
+}
+
+message FormatCustom {
+  repeated IntermediateColumn columns = 1;
+  string name = 2;
+  repeated string options = 3;
+}
+
+// IntermediateColumn is an intermediate result after parsing SourceDataFormat,
+// IntermediateColumn looks like a virtual table column. It
+// will be used to filter or convert types.
+// The Source Data is parsed to a table column style data.
+//   source column: name and type, the type must be valid.
+//   ex: convert a string "123" to 123 integer.
+// Caution: the FormatJSON is not a decomposed format, json is treated as an integral type.
+message IntermediateColumn {
+  string name = 1;
+  string type = 2; // Greenplum Database basic data types are supported
 }

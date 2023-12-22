@@ -77,10 +77,10 @@ public class JdbcSinkConfig extends AbstractConfig {
     private static final String DATA_DELIMITER_DEFAULT = ",";
 
     public static final String GP_ERRORS_LIMIT = "gp.error.limit";
-    private static final int GP_ERROR_LIMIT_DEFAULT = 999999999;
+    private static final int GP_ERROR_LIMIT_DEFAULT = 0;
 
     public static final String GP_ERRORS_PERCENTAGE_LIMIT = "gp.error.percentage.limit";
-    private static final int GP_ERRORS_PERCENTAGE_LIMIT_DEFAULT = 100;
+    private static final int GP_ERRORS_PERCENTAGE_LIMIT_DEFAULT = 0;
     private static final String GP_ERRORS_PERCENTAGE_LIMIT_DOC = "The maximum percentage of errors allowed in a batch before the batch is considered failed.";
 
 
@@ -107,6 +107,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     private static final List<String> PORT_RANGE_DEFAULT = Arrays.asList("8000", "9000"); // can be passed one value to specify a single port
     private static final String PORT_RANGE_DOC = "The range of ports to use for gpfdist.";
     private static final String PORT_RANGE_DISPLAY = "Port Range";
+    public String dataLineSeparator = "\n";
 
     public int getGpfdistPort() {
         return portRange.size() > 0 ? portRange.get(0) : 5120;
@@ -820,41 +821,6 @@ public class JdbcSinkConfig extends AbstractConfig {
     //gpfdist
 
     /**
-     * Flush item count (int, default: 100)
-     */
-    public final int gpfFlushCount = 100;
-
-    /**
-     * Flush item time (int, default: 2)
-     */
-    public final int gpfFlushTime = 2;
-
-    /**
-     * Timeout in seconds for segment inactivity. (Integer, default: 4)
-     */
-    public final int gpfBatchTimeout = 4;
-
-    /**
-     * Number of windowed batch each segment takest (int, default: 100)
-     */
-    public final int gpfBatchCount = 100;
-
-    /**
-     * Time in seconds for each load operation to sleep in between operations (int, default: 10)
-     */
-    public final int gpfBatchPeriod = 10;
-
-    /**
-     * Data record column delimiter. *(Character, default: no default)
-     */
-    public Character columnDelimiter;
-
-    /**
-     * Enable transfer rate interval (int, default: 0)
-     */
-    public final int rateInterval = 0;
-
-    /**
      * Error reject limit. (String, default: ``)
      */
     public String segmentRejectLimit = null;//"999999"; // TODO - move to config
@@ -865,9 +831,9 @@ public class JdbcSinkConfig extends AbstractConfig {
     public final SegmentRejectType segmentRejectType = SegmentRejectType.ROWS;
 
     /**
-     * Null string definition. (String, default: ``)
+     * Null string definition. (String, default: `NULL`)
      */
-    public String nullString = "NULL";
+    public String nullString = "NULL"; // Don't change this, it's a placeholder for the null string
 
     public long gpMaxLineLength = 65535;
 

@@ -4,4 +4,6 @@ common {
   nodeLabel = 'docker-debian-jdk8'
   upstreamProjects = 'confluentinc/common'
   pintMerge = true
+  sonarqubeScannerEnable = true
+  sonarqubeQualityCheck = true
 }

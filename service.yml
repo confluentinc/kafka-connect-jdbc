@@ -12,3 +12,4 @@ semaphore:
   extra_deploy_args: "-Dcloud -Pjenkins"
   extra_build_args: "-Dcloud -Pjenkins"
   run_pint_merge: true
+  generate_connect_changelogs: true

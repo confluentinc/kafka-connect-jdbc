@@ -64,7 +64,9 @@ public class PauseResumeIT {
     props.put(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG, "topic_");
 
     connect = new EmbeddedConnectCluster.Builder()
-        .name("jdbc-connect-cluster")
+        .name("connect-cluster")
+        .numWorkers(1)
+        .brokerProps(new Properties())
         .build();
 
     // start the clusters

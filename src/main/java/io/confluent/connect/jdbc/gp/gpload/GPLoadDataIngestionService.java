@@ -52,7 +52,6 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
                 log.error("Error while writing to file {}", absolutePath, e);
             }
 
-
             String localIpOrHost = getGpfDistHost();
             log.info("gpfdist running on {}", localIpOrHost);
 
@@ -75,11 +74,10 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
                     .quote(config.csvQuote)
                     .encoding(config.csvEncoding)
                     .source(source)
+                    .nullAs(config.nullString)
                     .logErrors(config.gpLogErrors)
                     .maxLineLength(config.gpMaxLineLength)
                     .build();
-
-
 
             GPloadConfig.Output output = new GPloadConfig.Output.Builder()
                     .table(dbConnection.getSchema() + "." + tableName)
@@ -124,10 +122,8 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
             if (config.greenplumHome != null) {
                 gploadBinary = config.greenplumHome + "/bin/gpload";
             }
-            log.info("gpload: {}", gploadBinary);
 
             String gploadCommand = gploadBinary + " -l " + logFile.getAbsolutePath() + " -f " + yamlFile.getAbsolutePath();
-
             log.info("Running gpload command {}", gploadCommand);
 
             ArrayList<String> cmdOutput = CommonUtils.executeCommand(gploadCommand);
@@ -138,7 +134,7 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
                 log.error("Errors in GPLoad:{}", errors);
                 log.error("Yaml: {}", yamlFile.getAbsolutePath());
                 log.error("Command: {}", gploadCommand);
-                log.error("Skipping file delete for further analysis");
+                log.error("Keeping files for further analysis");
             } else {
                 log.info("GPload finished successfully");
                 if (!config.keepGpFiles) {
@@ -149,15 +145,12 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
                 } else {
                     log.info("Keeping GP files");
                 }
-
             }
         } catch (Exception e) {
             log.error("Error running gpload", e);
             e.printStackTrace();
         }
     }
-
-
 
     public static String checkGPloadOutputForErrors(ArrayList<String> output) {
         String errMsg = "";
@@ -173,6 +166,5 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
         }
         return errMsg;
     }
-
 
 }

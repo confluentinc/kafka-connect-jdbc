@@ -39,6 +39,21 @@ import org.apache.kafka.common.config.types.Password;
 public class JdbcSinkConfig extends AbstractConfig {
 
 
+   public enum UpdateMode {
+        DEFAULT,
+        FIRST_ROW_ONLY,
+        LAST_ROW_ONLY,
+    }
+    public static final String UPDATE_MODE = "update.mode";
+
+    public static final String UPDATE_MODE_DEFAULT = UpdateMode.DEFAULT.name();
+
+    public static final String UPDATE_MODE_DOC = "The update mode to use for updates:" +
+            "`DEFAULT`: Do nothing, use default behavior." +
+            "`FIRST_ROW_ONLY`: Choose first row only from a batch of updates." +
+            "`LAST_ROW_ONLY`: Choose last row only from a batch of updates.";
+
+  public static final String UPDATE_MODE_DISPLAY = "Update Mode";
     public static final String GPSS_HOST = "gpss.host";
 
     public static final String GP_MAX_LINE_LENGTH = "gp.max.line.length";
@@ -87,6 +102,9 @@ public class JdbcSinkConfig extends AbstractConfig {
     public static final String CSV_HEADER = "csv.header";
     private static final boolean CSV_HEADER_DEFAULT = true;
 
+    public static final String NULL_STRING = "null.string";
+    private static final String NULL_STRING_DEFAULT = null;
+    public static final String NULL_STRING_DOC = "The string to use for null values in the CSV file/gpss stream.";
     public static final String CSV_QUOTE = "csv.quote";
     private static final String CSV_QUOTE_DEFAULT = "\"";
 
@@ -752,6 +770,23 @@ public class JdbcSinkConfig extends AbstractConfig {
                     GP_MAX_LINE_LENGTH_DEFAULT,
                     ConfigDef.Importance.MEDIUM,
                     GP_MAX_LINE_LENGTH_DOC
+            ).define(
+                    UPDATE_MODE,
+                    ConfigDef.Type.STRING,
+                    UPDATE_MODE_DEFAULT,
+                    EnumValidator.in(UpdateMode.values()),
+                    ConfigDef.Importance.MEDIUM,
+                    UPDATE_MODE_DOC,
+                    WRITES_GROUP,
+                    1,
+                    ConfigDef.Width.MEDIUM,
+                    UPDATE_MODE_DISPLAY
+            ).define(
+                    NULL_STRING,
+                    ConfigDef.Type.STRING,
+                    NULL_STRING_DEFAULT,
+                    ConfigDef.Importance.MEDIUM,
+                    NULL_STRING_DOC
             );
 
 //
@@ -833,9 +868,11 @@ public class JdbcSinkConfig extends AbstractConfig {
     /**
      * Null string definition. (String, default: `NULL`)
      */
-    public String nullString = "NULL"; // Don't change this, it's a placeholder for the null string
+    public final String nullString;
 
     public long gpMaxLineLength = 65535;
+
+    public final UpdateMode updateMode;
 
 
 
@@ -890,6 +927,10 @@ public class JdbcSinkConfig extends AbstractConfig {
         gpErrorsPercentageLimit = getInt(GP_ERRORS_PERCENTAGE_LIMIT);
         gpssUseStickySession = getBoolean(GPSS_USE_STICKY_SESSION);
         gpMaxLineLength = getLong(GP_MAX_LINE_LENGTH);
+
+        updateMode = UpdateMode.valueOf(getString(UPDATE_MODE).toUpperCase());
+
+        nullString = getString(NULL_STRING);
 
         printConfigDefTable(CONFIG_DEF);
 

@@ -49,7 +49,7 @@ public class GpfdistDataIngestionService extends GpDataIngestionService {
             gpload.load(getServerContext());
 
         } catch (Exception e) {
-            log.error("Error running gpload", e);
+            log.error("Error running gpfdist", e);
         }
     }
 

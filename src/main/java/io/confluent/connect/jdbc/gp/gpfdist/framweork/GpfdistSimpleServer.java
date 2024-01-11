@@ -6,6 +6,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,9 +18,12 @@ import java.util.Map;
 
 public class GpfdistSimpleServer {
 
+    private static final Logger log = LoggerFactory.getLogger(GpfdistSimpleServer.class);
 
     // make sigelton
     private static GpfdistSimpleServer instance = null;
+    private JdbcSinkConfig config;
+
     public static GpfdistSimpleServer getInstance() {
         if(instance == null) {
             instance = new GpfdistSimpleServer();
@@ -30,22 +34,10 @@ public class GpfdistSimpleServer {
 private GpfdistSimpleServer() {
         // do nothing
     }
-
-    public void init(int port, boolean autoStop) {
-     this.port = port;
-        this.autoStop = autoStop;
-
-    }
-
-
-
-    private static final Logger log = LoggerFactory.getLogger(GpfdistSimpleServer.class);
     private  boolean autoStop;
-
     private List<List<String>> records;
     private int port;
     private HttpServer server;
-
 
     public void setRecords(List<List<String>> records) {
         this.records = records;
@@ -99,19 +91,23 @@ private GpfdistSimpleServer() {
         return server;
     }
 
+    public void init(JdbcSinkConfig config) {
+        this.config = config;
+        this.port = config.getGpfdistPort();
+        // this.autoStop = config.getGpfdistAutoStop();
+    }
 
-     class DataHandler implements HttpHandler {
+
+    class DataHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException { // TODO handle duplicate requests - gpfdist sends multiple request
             log.info("Handling request from gpfdist: "+exchange.getRequestMethod());
 
             List<List<String>> batch = GpfdistSimpleServer.this.getBatch(); // Implement logic to get a batch of data
             String responseBody = convertDataToString(batch);
-            log.info("Sending data to gpfdist: "+responseBody);
-
+            log.debug("Sending data from gpfdist: "+responseBody);
 
            Headers headers = exchange.getResponseHeaders();
-
             // Set response headers
             headers.set("Content-Type", "text/plain");
             headers.set("Expires", "0");
@@ -136,19 +132,15 @@ private GpfdistSimpleServer() {
     }
 
     private List<List<String>> getBatch() {
-        // Implement logic to get a batch of data
         return records;
     }
 
-    private static String convertDataToString(List<List<String>> data) {
-        // Implement logic to convert List<List<String>> to String
-        // TODO use delimeters from config file instead
+    private String convertDataToString(List<List<String>> data) {
         StringBuilder sb = new StringBuilder();
         for (List<String> line : data) {
-            sb.append(String.join(",", line)).append("\n");
+            sb.append(String.join(config.getDelimiter().toString(), line)).append(config.dataLineSeparator);
         }
         return sb.toString();
     }
-
 
 }

@@ -77,7 +77,7 @@ public class JdbcSinkTask extends SinkTask {
 //
     if(config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPFDIST){
       httpServer = GpfdistSimpleServer.getInstance();
-        httpServer.init(config.getGpfdistPort(), false);
+        httpServer.init(config);
       try {
         httpServer.start();
       } catch (Exception e) {

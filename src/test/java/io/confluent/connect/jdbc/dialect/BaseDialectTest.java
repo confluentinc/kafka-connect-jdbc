@@ -319,8 +319,8 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
             false,
             false,
             false,
-            false
-        ),
+            false,
+            null),
         1,
         new Field(
             "b",

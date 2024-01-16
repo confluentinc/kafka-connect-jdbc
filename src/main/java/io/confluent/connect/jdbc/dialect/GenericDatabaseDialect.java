@@ -15,9 +15,34 @@
 
 package io.confluent.connect.jdbc.dialect;
 
-import java.time.ZoneOffset;
-import java.util.TimeZone;
-
+import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.FixedScoreProvider;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig.PrimaryKeyMode;
+import io.confluent.connect.jdbc.sink.PreparedStatementBinder;
+import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
+import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import io.confluent.connect.jdbc.source.ColumnMapping;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.NumericMapping;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TimestampGranularity;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIsolationMode;
+import io.confluent.connect.jdbc.source.JdbcSourceTaskConfig;
+import io.confluent.connect.jdbc.source.TimestampIncrementingCriteria;
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.ColumnDefinition.Mutability;
+import io.confluent.connect.jdbc.util.ColumnDefinition.Nullability;
+import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.DateTimeUtils;
+import io.confluent.connect.jdbc.util.ExpressionBuilder;
+import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
+import io.confluent.connect.jdbc.util.IdentifierRules;
+import io.confluent.connect.jdbc.util.JdbcDriverInfo;
+import io.confluent.connect.jdbc.util.QuoteMethod;
+import io.confluent.connect.jdbc.util.TableDefinition;
+import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.util.TableType;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
@@ -48,6 +73,7 @@ import java.sql.SQLXML;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.sql.Types;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -62,38 +88,11 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Queue;
 import java.util.Set;
+import java.util.TimeZone;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
-
-import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.FixedScoreProvider;
-import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
-import io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode;
-import io.confluent.connect.jdbc.sink.JdbcSinkConfig.PrimaryKeyMode;
-import io.confluent.connect.jdbc.sink.PreparedStatementBinder;
-import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
-import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
-import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
-import io.confluent.connect.jdbc.source.ColumnMapping;
-import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
-import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.NumericMapping;
-import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TimestampGranularity;
-import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIsolationMode;
-import io.confluent.connect.jdbc.source.JdbcSourceTaskConfig;
-import io.confluent.connect.jdbc.source.TimestampIncrementingCriteria;
-import io.confluent.connect.jdbc.util.ColumnDefinition;
-import io.confluent.connect.jdbc.util.ColumnDefinition.Mutability;
-import io.confluent.connect.jdbc.util.ColumnDefinition.Nullability;
-import io.confluent.connect.jdbc.util.ColumnId;
-import io.confluent.connect.jdbc.util.DateTimeUtils;
-import io.confluent.connect.jdbc.util.ExpressionBuilder;
-import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
-import io.confluent.connect.jdbc.util.IdentifierRules;
-import io.confluent.connect.jdbc.util.JdbcDriverInfo;
-import io.confluent.connect.jdbc.util.QuoteMethod;
-import io.confluent.connect.jdbc.util.TableDefinition;
-import io.confluent.connect.jdbc.util.TableId;
-import io.confluent.connect.jdbc.util.TableType;
 
 /**
  * A {@link DatabaseDialect} implementation that provides functionality based upon JDBC and SQL.
@@ -113,6 +112,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   private static final int MAX_INTEGER_TYPE_PRECISION = 18;
 
   private static final String PRECISION_FIELD = "connect.decimal.precision";
+
+  public static final Map<ColumnId, Object> DEFAULT_VALUE_CACHE = new ConcurrentHashMap<>();
 
   /**
    * The provider for {@link GenericDatabaseDialect}.
@@ -703,6 +704,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
             nullability = Nullability.UNKNOWN;
             break;
         }
+        Object defaultValue = extractDefaultValue(columnId, connection.getMetaData());
         Boolean autoIncremented = null;
         if (rsColumnCount >= 23) {
           // Not all drivers include all columns ...
@@ -739,7 +741,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
             caseSensitive,
             searchable,
             currency,
-            isPrimaryKey
+            isPrimaryKey,
+            defaultValue
         );
         results.put(columnId, defn);
       }
@@ -748,27 +751,47 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   @Override
-  public Map<ColumnId, ColumnDefinition> describeColumns(ResultSetMetaData rsMetadata) throws
+  public Map<ColumnId, ColumnDefinition> describeColumns(ResultSetMetaData rsMetadata,
+                                                         DatabaseMetaData dbMeta) throws
       SQLException {
     Map<ColumnId, ColumnDefinition> result = new LinkedHashMap<>();
     for (int i = 1; i <= rsMetadata.getColumnCount(); ++i) {
-      ColumnDefinition defn = describeColumn(rsMetadata, i);
+      ColumnDefinition defn = describeColumn(rsMetadata, dbMeta, i);
       result.put(defn.id(), defn);
     }
     return result;
+  }
+
+  private Object extractDefaultValue(ColumnId columnId, DatabaseMetaData dbMeta) {
+    return DEFAULT_VALUE_CACHE.computeIfAbsent(columnId, key -> {
+      try {
+        TableId tableId = columnId.tableId();
+        ResultSet rs = dbMeta.getColumns(tableId.catalogName(),
+                tableId.schemaName(), tableId.tableName(), columnId.name());
+        Object defaultValue = rs.next() ? rs.getObject("COLUMN_DEF") : null;
+        if (defaultValue == null) {
+          return null;
+        }
+        return parseDefaultValue(defaultValue, rs);
+      } catch (Exception e) {
+        return null;
+      }
+    });
   }
 
   /**
    * Create a definition for the specified column in the result set.
    *
    * @param rsMetadata the result set metadata; may not be null
+   * @param dbMeta     the database metadata; may not be null
    * @param column     the column number, starting at 1 for the first column
    * @return the column definition; never null
    * @throws SQLException if there is an error accessing the result set metadata
    */
   protected ColumnDefinition describeColumn(
-      ResultSetMetaData rsMetadata,
-      int column
+          ResultSetMetaData rsMetadata,
+          DatabaseMetaData dbMeta,
+          int column
   ) throws SQLException {
     String catalog = rsMetadata.getCatalogName(column);
     String schema = rsMetadata.getSchemaName(column);
@@ -777,6 +800,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     String name = rsMetadata.getColumnName(column);
     String alias = rsMetadata.getColumnLabel(column);
     ColumnId id = new ColumnId(tableId, name, alias);
+    Object defaultValue = extractDefaultValue(id, dbMeta);
     Nullability nullability;
     switch (rsMetadata.isNullable(column)) {
       case ResultSetMetaData.columnNullable:
@@ -790,6 +814,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         nullability = Nullability.UNKNOWN;
         break;
     }
+
     Mutability mutability = Mutability.MAYBE_WRITABLE;
     if (rsMetadata.isReadOnly(column)) {
       mutability = Mutability.READ_ONLY;
@@ -813,8 +838,12 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         rsMetadata.isCaseSensitive(column),
         rsMetadata.isSearchable(column),
         rsMetadata.isCurrency(column),
-        false
-    );
+        false,
+        defaultValue);
+  }
+
+  public Object parseDefaultValue(Object defaultValue, ResultSet rs) {
+    return null;
   }
 
   protected Set<ColumnId> primaryKeyColumns(
@@ -852,7 +881,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       stmt.setString(1, quotedName);
       try (ResultSet rs = stmt.executeQuery()) {
         ResultSetMetaData rsmd = rs.getMetaData();
-        return describeColumns(rsmd);
+        return describeColumns(rsmd, db.getMetaData());
       }
     }
   }
@@ -961,7 +990,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       Boolean caseSensitive,
       Boolean searchable,
       Boolean currency,
-      Boolean isPrimaryKey
+      Boolean isPrimaryKey,
+      Object defaultValue
   ) {
     return new ColumnDefinition(
         id,
@@ -978,8 +1008,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         caseSensitive != null ? caseSensitive.booleanValue() : false,
         searchable != null ? searchable.booleanValue() : false,
         currency != null ? currency.booleanValue() : false,
-        isPrimaryKey != null ? isPrimaryKey.booleanValue() : false
-    );
+        isPrimaryKey != null ? isPrimaryKey.booleanValue() : false,
+        defaultValue);
   }
 
   @Override
@@ -1032,6 +1062,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   ) {
     int precision = columnDefn.precision();
     int scale = columnDefn.scale();
+    Object defaultValue = columnDefn.defaultValue();
+    SchemaBuilder schemaBuilder;
     switch (sqlType) {
       case Types.NULL: {
         glog.debug("JDBC type 'NULL' not currently supported for column '{}'", fieldName);
@@ -1039,21 +1071,21 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       }
 
       case Types.BOOLEAN: {
-        builder.field(fieldName, optional ? Schema.OPTIONAL_BOOLEAN_SCHEMA : Schema.BOOLEAN_SCHEMA);
+        schemaBuilder = SchemaBuilder.bool();
         break;
       }
 
       // ints <= 8 bits
       case Types.BIT: {
-        builder.field(fieldName, optional ? Schema.OPTIONAL_INT8_SCHEMA : Schema.INT8_SCHEMA);
+        schemaBuilder = SchemaBuilder.int8();
         break;
       }
 
       case Types.TINYINT: {
         if (columnDefn.isSignedNumber()) {
-          builder.field(fieldName, optional ? Schema.OPTIONAL_INT8_SCHEMA : Schema.INT8_SCHEMA);
+          schemaBuilder = SchemaBuilder.int8();
         } else {
-          builder.field(fieldName, optional ? Schema.OPTIONAL_INT16_SCHEMA : Schema.INT16_SCHEMA);
+          schemaBuilder = SchemaBuilder.int16();
         }
         break;
       }
@@ -1061,9 +1093,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       // 16 bit ints
       case Types.SMALLINT: {
         if (columnDefn.isSignedNumber()) {
-          builder.field(fieldName, optional ? Schema.OPTIONAL_INT16_SCHEMA : Schema.INT16_SCHEMA);
+          schemaBuilder = SchemaBuilder.int16();
         } else {
-          builder.field(fieldName, optional ? Schema.OPTIONAL_INT32_SCHEMA : Schema.INT32_SCHEMA);
+          schemaBuilder = SchemaBuilder.int32();
         }
         break;
       }
@@ -1071,22 +1103,22 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       // 32 bit ints
       case Types.INTEGER: {
         if (columnDefn.isSignedNumber()) {
-          builder.field(fieldName, optional ? Schema.OPTIONAL_INT32_SCHEMA : Schema.INT32_SCHEMA);
+          schemaBuilder = SchemaBuilder.int32();
         } else {
-          builder.field(fieldName, optional ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA);
+          schemaBuilder = SchemaBuilder.int64();
         }
         break;
       }
 
       // 64 bit ints
       case Types.BIGINT: {
-        builder.field(fieldName, optional ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA);
+        schemaBuilder = SchemaBuilder.int64();
         break;
       }
 
       // REAL is a single precision floating point value, i.e. a Java float
       case Types.REAL: {
-        builder.field(fieldName, optional ? Schema.OPTIONAL_FLOAT32_SCHEMA : Schema.FLOAT32_SCHEMA);
+        schemaBuilder = SchemaBuilder.float32();
         break;
       }
 
@@ -1094,7 +1126,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       // for single precision
       case Types.FLOAT:
       case Types.DOUBLE: {
-        builder.field(fieldName, optional ? Schema.OPTIONAL_FLOAT64_SCHEMA : Schema.FLOAT64_SCHEMA);
+        schemaBuilder = SchemaBuilder.float64();
         break;
       }
 
@@ -1102,18 +1134,17 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         if (mapNumerics == NumericMapping.PRECISION_ONLY) {
           glog.debug("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
           if (scale == 0 && precision <= MAX_INTEGER_TYPE_PRECISION) { // integer
-            builder.field(fieldName, integerSchema(optional, precision));
+            schemaBuilder = integerSchema(precision);
             break;
           }
         } else if (mapNumerics == NumericMapping.BEST_FIT) {
           glog.debug("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
           if (precision <= MAX_INTEGER_TYPE_PRECISION) { // fits in primitive data types.
             if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
-              builder.field(fieldName, integerSchema(optional, precision));
+              schemaBuilder = integerSchema(precision);
               break;
             } else if (scale > 0) { // floating point - use double in all cases
-              Schema schema = (optional) ? Schema.OPTIONAL_FLOAT64_SCHEMA : Schema.FLOAT64_SCHEMA;
-              builder.field(fieldName, schema);
+              schemaBuilder = SchemaBuilder.float64();
               break;
             }
           }
@@ -1121,12 +1152,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           glog.debug("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
           if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
             if (precision <= MAX_INTEGER_TYPE_PRECISION) { // fits in primitive data types.
-              builder.field(fieldName, integerSchema(optional, precision));
+              schemaBuilder = integerSchema(precision);
               break;
             }
           } else if (scale > 0) { // floating point - use double in all cases
-            Schema schema = (optional) ? Schema.OPTIONAL_FLOAT64_SCHEMA : Schema.FLOAT64_SCHEMA;
-            builder.field(fieldName, schema);
+            schemaBuilder = SchemaBuilder.float64();
             break;
           }
         }
@@ -1135,12 +1165,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       case Types.DECIMAL: {
         glog.debug("DECIMAL with precision: '{}' and scale: '{}'", precision, scale);
         scale = decimalScale(columnDefn);
-        SchemaBuilder fieldBuilder = Decimal.builder(scale);
-        fieldBuilder.parameter(PRECISION_FIELD, Integer.toString(precision));
-        if (optional) {
-          fieldBuilder.optional();
-        }
-        builder.field(fieldName, fieldBuilder.build());
+        schemaBuilder = Decimal.builder(scale);
+        schemaBuilder.parameter(PRECISION_FIELD, Integer.toString(precision));
         break;
       }
 
@@ -1156,7 +1182,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       case Types.SQLXML: {
         // Some of these types will have fixed size, but we drop this from the schema conversion
         // since only fixed byte arrays can have a fixed size
-        builder.field(fieldName, optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA);
+        schemaBuilder = SchemaBuilder.string();
         break;
       }
 
@@ -1166,33 +1192,25 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       case Types.BLOB:
       case Types.VARBINARY:
       case Types.LONGVARBINARY: {
-        builder.field(fieldName, optional ? Schema.OPTIONAL_BYTES_SCHEMA : Schema.BYTES_SCHEMA);
+        schemaBuilder = SchemaBuilder.bytes();
         break;
       }
 
       // Date is day + moth + year
       case Types.DATE: {
-        SchemaBuilder dateSchemaBuilder = Date.builder();
-        if (optional) {
-          dateSchemaBuilder.optional();
-        }
-        builder.field(fieldName, dateSchemaBuilder.build());
+        schemaBuilder = Date.builder();
         break;
       }
 
       // Time is a time of day -- hour, minute, seconds, nanoseconds
       case Types.TIME: {
-        SchemaBuilder timeSchemaBuilder = Time.builder();
-        if (optional) {
-          timeSchemaBuilder.optional();
-        }
-        builder.field(fieldName, timeSchemaBuilder.build());
+        schemaBuilder = Time.builder();
         break;
       }
 
       // Timestamp is a date + time
       case Types.TIMESTAMP: {
-        builder.field(fieldName, tsGranularity.schemaFunction.apply(optional));
+        schemaBuilder = tsGranularity.schemaBuilder.get();
         break;
       }
 
@@ -1208,21 +1226,30 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         return null;
       }
     }
+    if (schemaBuilder != null) {
+      if (optional) {
+        schemaBuilder.optional();
+      }
+      if (defaultValue != null) {
+        schemaBuilder.defaultValue(defaultValue);
+      }
+      builder.field(fieldName, schemaBuilder.build());
+    }
     return fieldName;
   }
 
-  private Schema integerSchema(boolean optional, int precision) {
-    Schema schema;
+  private SchemaBuilder integerSchema(int precision) {
+    SchemaBuilder schemaBuilder;
     if (precision > 9) {
-      schema = (optional) ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA;
+      schemaBuilder = SchemaBuilder.int64();
     } else if (precision > 4) {
-      schema = (optional) ? Schema.OPTIONAL_INT32_SCHEMA : Schema.INT32_SCHEMA;
+      schemaBuilder = SchemaBuilder.int32();
     } else if (precision > 2) {
-      schema = (optional) ? Schema.OPTIONAL_INT16_SCHEMA : Schema.INT16_SCHEMA;
+      schemaBuilder = SchemaBuilder.int16();
     } else {
-      schema = (optional) ? Schema.OPTIONAL_INT8_SCHEMA : Schema.INT8_SCHEMA;
+      schemaBuilder = SchemaBuilder.int8();
     }
-    return schema;
+    return schemaBuilder;
   }
 
   @Override

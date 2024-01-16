@@ -15,18 +15,6 @@
 
 package io.confluent.connect.jdbc.source;
 
-import java.sql.Connection;
-import java.sql.Timestamp;
-import java.time.ZoneId;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.TimeZone;
-import java.util.concurrent.atomic.AtomicReference;
-
 import com.microsoft.sqlserver.jdbc.SQLServerConnection;
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
@@ -35,11 +23,6 @@ import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.EnumRecommender;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TimeZoneValidator;
-
-import java.util.function.BiFunction;
-import java.util.function.Function;
-import java.util.regex.Pattern;
-
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigDef;
@@ -51,10 +34,25 @@ import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.ConfigValue;
 import org.apache.kafka.common.utils.Time;
-import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.sql.Connection;
+import java.sql.Timestamp;
+import java.time.ZoneId;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TimeZone;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiFunction;
+import java.util.function.Supplier;
+import java.util.regex.Pattern;
 
 public class JdbcSourceConnectorConfig extends AbstractConfig {
 
@@ -922,17 +920,15 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   }
 
   public enum TimestampGranularity {
-    CONNECT_LOGICAL(optional -> optional
-        ? org.apache.kafka.connect.data.Timestamp.builder().optional().build()
-        : org.apache.kafka.connect.data.Timestamp.builder().build(),
+    CONNECT_LOGICAL(() -> org.apache.kafka.connect.data.Timestamp.builder(),
         (timestamp, tz) -> timestamp,
         (timestamp, tz) -> (Timestamp) timestamp),
 
-    NANOS_LONG(optional -> optional ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA,
+    NANOS_LONG(() -> SchemaBuilder.int64(),
         (timestamp, tz) -> DateTimeUtils.toEpochNanos(timestamp),
         (epochNanos, tz) -> DateTimeUtils.toTimestamp((Long) epochNanos)),
 
-    NANOS_STRING(optional -> optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA,
+    NANOS_STRING(() -> SchemaBuilder.string(),
         (timestamp, tz) -> DateTimeUtils.toEpochNanosString(timestamp),
         (epochNanosString, tz) -> {
           try {
@@ -945,13 +941,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
           }
         }),
 
-    NANOS_ISO_DATETIME_STRING(optional -> optional
-        ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA,
+    NANOS_ISO_DATETIME_STRING(() -> SchemaBuilder.string(),
         DateTimeUtils::toIsoDateTimeString,
         (isoDateTimeString, tz) ->
             DateTimeUtils.toTimestampFromIsoDateTime((String) isoDateTimeString, tz));
 
-    public final Function<Boolean, Schema> schemaFunction;
+    public final Supplier<SchemaBuilder> schemaBuilder;
     public final BiFunction<Timestamp, TimeZone, Object> fromTimestamp;
     public final BiFunction<Object, TimeZone, Timestamp> toTimestamp;
 
@@ -969,10 +964,10 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       return reverse.get(tsGranularity.toLowerCase(Locale.ROOT));
     }
 
-    TimestampGranularity(Function<Boolean, Schema> schemaFunction,
+    TimestampGranularity(Supplier<SchemaBuilder> schemaBuilder,
         BiFunction<Timestamp, TimeZone, Object> fromTimestamp,
         BiFunction<Object, TimeZone, Timestamp> toTimestamp) {
-      this.schemaFunction = schemaFunction;
+      this.schemaBuilder = schemaBuilder;
       this.fromTimestamp = fromTimestamp;
       this.toTimestamp = toTimestamp;
     }

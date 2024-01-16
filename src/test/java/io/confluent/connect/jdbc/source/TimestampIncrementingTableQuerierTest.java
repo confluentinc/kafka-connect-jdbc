@@ -30,6 +30,7 @@ import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Timestamp;
@@ -65,6 +66,8 @@ public class TimestampIncrementingTableQuerierTest {
   private ResultSet resultSet;
   @Mock
   private Connection db;
+  @Mock
+  private DatabaseMetaData dbMeta;
   @MockNice
   private ExpressionBuilder expressionBuilder;
   @Mock
@@ -114,6 +117,7 @@ public class TimestampIncrementingTableQuerierTest {
   }
 
   private void expectNewQuery() throws Exception {
+    expect(db.getMetaData()).andReturn(dbMeta);
     expect(dialect.createPreparedStatement(eq(db), anyObject())).andReturn(stmt);
     expect(dialect.expressionBuilder()).andReturn(expressionBuilder);
     expect(dialect.criteriaFor(anyObject(), anyObject())).andReturn(criteria);
@@ -125,7 +129,7 @@ public class TimestampIncrementingTableQuerierTest {
     expectLastCall();
     expect(stmt.executeQuery()).andReturn(resultSet);
     expect(resultSet.getMetaData()).andReturn(null);
-    expect(SchemaMapping.create(anyObject(), anyObject(), anyObject())).andReturn(schemaMapping);
+    expect(SchemaMapping.create(anyObject(), anyObject(), anyObject(), anyObject())).andReturn(schemaMapping);
   }
 
   @Test

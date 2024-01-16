@@ -510,7 +510,8 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       Boolean caseSensitive,
       Boolean searchable,
       Boolean currency,
-      Boolean isPrimaryKey
+      Boolean isPrimaryKey,
+      Object defaultValue
   ) {
     try {
       String isAutoIncremented = resultSet.getString(22);
@@ -540,7 +541,8 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       caseSensitive,
       searchable,
       currency,
-      isPrimaryKey
+      isPrimaryKey,
+      defaultValue
     );
   }
 

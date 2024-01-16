@@ -34,12 +34,15 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
+import java.util.concurrent.TimeUnit;
 
+import io.confluent.connect.jdbc.dialect.GenericDatabaseDialect;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.powermock.api.easymock.PowerMock;
@@ -58,6 +61,11 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
                                  JdbcSourceConnectorConstants.QUERY_NAME_VALUE);
 
   private static final TimeZone UTC_TIME_ZONE = TimeZone.getTimeZone(ZoneOffset.UTC);
+
+  @Before
+  public void before() {
+    GenericDatabaseDialect.DEFAULT_VALUE_CACHE.clear();
+  }
 
   @After
   public void tearDown() throws Exception {
@@ -286,6 +294,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     db.insert(SINGLE_TABLE_NAME, "modified", new Timestamp(currentTime+500L).toString(), "id", 4);
     db.insert(SINGLE_TABLE_NAME, "modified", new Timestamp(currentTime+501L).toString(), "id", 5);
 
+    Thread.sleep(2);
     verifyPoll(2, "id", Arrays.asList(2, 3), true, false, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     // make sure we get the rest

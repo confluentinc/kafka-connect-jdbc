@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.dialect.GenericDatabaseDialect;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
@@ -69,6 +70,7 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
 
   @Before
   public void setup() throws Exception {
+    GenericDatabaseDialect.DEFAULT_VALUE_CACHE.clear();
     super.setup();
     task.start(singleTableWithTimezoneConfig(extendedMapping, timezone));
   }

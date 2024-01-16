@@ -21,6 +21,7 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 
 import java.io.IOException;
+import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -52,15 +53,16 @@ public final class SchemaMapping {
    * @param schemaName the name of the schema; may be null
    * @param metadata   the result set metadata; never null
    * @param dialect    the dialect for the source database; never null
+   * @param dbMeta     the database metadata; never null
    * @return the schema mapping; never null
    * @throws SQLException if there is a problem accessing the result set metadata
    */
   public static SchemaMapping create(
       String schemaName,
       ResultSetMetaData metadata,
-      DatabaseDialect dialect
-  ) throws SQLException {
-    Map<ColumnId, ColumnDefinition> colDefns = dialect.describeColumns(metadata);
+      DatabaseDialect dialect,
+      DatabaseMetaData dbMeta) throws SQLException {
+    Map<ColumnId, ColumnDefinition> colDefns = dialect.describeColumns(metadata, dbMeta);
     Map<String, ColumnConverter> colConvertersByFieldName = new LinkedHashMap<>();
     SchemaBuilder builder = SchemaBuilder.struct().name(schemaName);
     int columnNumber = 0;

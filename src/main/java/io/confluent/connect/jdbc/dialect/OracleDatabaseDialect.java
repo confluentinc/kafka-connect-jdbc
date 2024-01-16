@@ -26,9 +26,13 @@ import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import java.io.ByteArrayInputStream;
 import java.io.StringReader;
+import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Types;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
@@ -377,5 +381,29 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       );
     }
     return tableId;
+  }
+
+  @Override
+  public Object parseDefaultValue(final Object defaultValue, final ResultSet rs) {
+    try {
+      Class<?> clazz = rs.getClass();
+      Field connectionField = null;
+      while (!clazz.getClass().equals(Object.class)) {
+        try {
+          connectionField = clazz.getDeclaredField("connection");
+          break;
+        } catch (NoSuchFieldException ignored) {
+          clazz = clazz.getSuperclass();
+        }
+      }
+      connectionField.setAccessible(true);
+      Connection connection = (Connection) connectionField.get(rs);
+      try (Statement statement = connection.createStatement();
+           ResultSet resultSet = statement.executeQuery("SELECT " + defaultValue + " FROM DUAL");) {
+        return resultSet.next() ? resultSet.getObject(1) : null;
+      }
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
   }
 }

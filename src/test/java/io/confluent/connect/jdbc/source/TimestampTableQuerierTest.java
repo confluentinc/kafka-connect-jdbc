@@ -31,6 +31,7 @@ import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Timestamp;
@@ -66,6 +67,8 @@ public class TimestampTableQuerierTest {
   private ResultSet resultSet;
   @Mock
   private Connection db;
+  @Mock
+  private DatabaseMetaData dbMeta;
   @MockNice
   private ExpressionBuilder expressionBuilder;
   @Mock
@@ -121,8 +124,9 @@ public class TimestampTableQuerierTest {
     criteria.setQueryParameters(eq(stmt), anyObject());
     expectLastCall();
     expect(stmt.executeQuery()).andReturn(resultSet);
+    expect(db.getMetaData()).andReturn(dbMeta);
     expect(resultSet.getMetaData()).andReturn(null);
-    expect(SchemaMapping.create(anyObject(), anyObject(), anyObject())).andReturn(schemaMapping);
+    expect(SchemaMapping.create(anyObject(), anyObject(), anyObject(), anyObject())).andReturn(schemaMapping);
   }
 
   @Test

@@ -16,9 +16,6 @@
 package io.confluent.connect.jdbc.util;
 
 import java.sql.JDBCType;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Collectors;
 
 public class ColumnDefinitionBuilder {
 
@@ -37,6 +34,7 @@ public class ColumnDefinitionBuilder {
   private ColumnDefinition.Nullability nullability = ColumnDefinition.Nullability.NULL;
   private ColumnDefinition.Mutability mutability = ColumnDefinition.Mutability.WRITABLE;
   private String classNameForType;
+  private String defaultValue;
 
   public ColumnDefinitionBuilder(String name) {
     this.columnName = name;
@@ -130,6 +128,11 @@ public class ColumnDefinitionBuilder {
     return this;
   }
 
+  public ColumnDefinitionBuilder mutability(String defaultValue) {
+    this.defaultValue = defaultValue;
+    return this;
+  }
+
   public ColumnDefinition buildFor(TableId tableId) {
     return new ColumnDefinition(
         new ColumnId(tableId, columnName),
@@ -146,8 +149,8 @@ public class ColumnDefinitionBuilder {
         caseSensitive,
         searchable,
         currency,
-        isPrimaryKey
-    );
+        isPrimaryKey,
+        defaultValue);
   }
 
 }

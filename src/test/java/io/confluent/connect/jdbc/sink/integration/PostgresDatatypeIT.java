@@ -101,6 +101,59 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
       stopConnect();
     }
   }
+  @Test
+  public void testNotNullColumnsWithDefaultAreCreated() throws Exception {
+    props.put(ERRORS_TOLERANCE_CONFIG, ToleranceType.ALL.value());
+    props.put(DLQ_TOPIC_NAME_CONFIG, DLQ_TOPIC_NAME);
+    props.put(DLQ_TOPIC_REPLICATION_FACTOR_CONFIG, "1");
+    props.put(MAX_RETRIES, "0");
+    props.put("auto.create", "true");
+    props.put("auto.evolve", "true");
+
+    createTable("CREATE TABLE %s(firstName TEXT PRIMARY KEY)");
+    connect.configureConnector("jdbc-sink-connector", props);
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+
+    final Schema schema = SchemaBuilder.struct().name("com.example.Person")
+            .field("firstname", Schema.STRING_SCHEMA)
+            .field("lastname", SchemaBuilder.string().defaultValue("SANTURBANO"))
+            .build();
+    final Struct firstStruct = new Struct(schema)
+            .put("firstname", "Andrea")
+            .put("lastname", "Santurbano");
+
+    produceRecord(schema, firstStruct);
+
+    // Now, create and send another normal record
+    Struct secondStruct = new Struct(schema)
+            .put("firstname", "Federico");
+
+    produceRecord(schema, secondStruct);
+
+    Thread.sleep(TimeUnit.SECONDS.toMillis(30));
+
+//    waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 2, 1,
+//            TimeUnit.SECONDS.toMillis(30));
+
+
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
+      c.setAutoCommit(false);
+      try (Statement s = c.createStatement()) {
+        String sql = String.format(
+                "SELECT * FROM %s",
+                tableName
+        );
+        LOG.info("Executing statement: {}", sql);
+        ResultSet resultSet = s.executeQuery(sql);
+        while (resultSet.next()) {
+          for (int i = 1; i <= resultSet.getMetaData().getColumnCount(); i++) {
+            System.out.println(resultSet.getMetaData().getColumnName(i) + " = " + resultSet.getObject(i));
+          }
+        }
+
+      }
+    }
+  }
 
   /**
    * Verifies that even when the connector encounters exceptions that would cause a connection

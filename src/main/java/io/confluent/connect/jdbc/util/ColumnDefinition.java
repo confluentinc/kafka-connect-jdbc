@@ -49,6 +49,7 @@ public class ColumnDefinition {
   private final Nullability nullability;
   private final Mutability mutability;
   private final String classNameForType;
+  private final Object defaultValue;
 
   public ColumnDefinition(
       ColumnId id,
@@ -65,8 +66,8 @@ public class ColumnDefinition {
       boolean caseSensitive,
       boolean searchable,
       boolean currency,
-      boolean isPrimaryKey
-  ) {
+      boolean isPrimaryKey,
+      Object defaultValue) {
     this.id = id;
     this.typeName = typeName;
     this.jdbcType = jdbcType;
@@ -82,6 +83,7 @@ public class ColumnDefinition {
     this.mutability = mutability != null ? mutability : Mutability.MAYBE_WRITABLE;
     this.classNameForType = classNameForType;
     this.isPrimaryKey = isPrimaryKey;
+    this.defaultValue = defaultValue;
   }
 
 
@@ -254,6 +256,9 @@ public class ColumnDefinition {
     return classNameForType;
   }
 
+  public Object defaultValue() {
+    return defaultValue;
+  }
 
   @Override
   public int hashCode() {
@@ -280,7 +285,8 @@ public class ColumnDefinition {
              && this.nullability == that.nullability
              && Objects.equals(this.typeName, that.typeName)
              && Objects.equals(this.classNameForType, that.classNameForType)
-             && Objects.equals(this.isPrimaryKey, that.isPrimaryKey);
+             && Objects.equals(this.isPrimaryKey, that.isPrimaryKey)
+             && Objects.equals(this.defaultValue, that.defaultValue);
     }
     return false;
   }
@@ -288,7 +294,7 @@ public class ColumnDefinition {
   @Override
   public String toString() {
     return "Column{'" + id.name() + '\'' + ", isPrimaryKey=" + isPrimaryKey + ", allowsNull="
-           + isOptional() + ", sqlType=" + typeName + '}';
+           + isOptional() + ", defaultValue=" + defaultValue + ", sqlType=" + typeName + '}';
   }
 
   /**
@@ -307,8 +313,8 @@ public class ColumnDefinition {
     ColumnId newId = new ColumnId(tableId, this.id().name());
     return new ColumnDefinition(newId, jdbcType, typeName, classNameForType, nullability,
                                 mutability, precision, scale, signedNumbers, displaySize,
-                                autoIncremented, caseSensitive, searchable, currency, isPrimaryKey
-    );
+                                autoIncremented, caseSensitive, searchable, currency, isPrimaryKey,
+                                defaultValue);
   }
 
   /**
@@ -327,7 +333,6 @@ public class ColumnDefinition {
     }
     return new ColumnDefinition(id, jdbcType, typeName, classNameForType, nullability, mutability,
                                 precision, scale, signedNumbers, displaySize, autoIncremented,
-                                caseSensitive, searchable, currency, isPrimaryKey
-    );
+                                caseSensitive, searchable, currency, isPrimaryKey, defaultValue);
   }
 }

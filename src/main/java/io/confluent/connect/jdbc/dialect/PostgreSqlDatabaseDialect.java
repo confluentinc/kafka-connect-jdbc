@@ -39,10 +39,12 @@ import org.apache.kafka.connect.errors.DataException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Field;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Types;
 import java.util.Arrays;
 import java.util.Collection;
@@ -198,43 +200,45 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   ) {
     // Add the PostgreSQL-specific types first
     final String fieldName = fieldNameFor(columnDefn);
+    boolean optional = columnDefn.isOptional();
     switch (columnDefn.type()) {
       case Types.BIT: {
         // PostgreSQL allows variable length bit strings, but when length is 1 then the driver
         // returns a 't' or 'f' string value to represent the boolean value, so we need to handle
         // this as well as lengths larger than 8.
-        boolean optional = columnDefn.isOptional();
         int numBits = columnDefn.precision();
-        Schema schema;
+        SchemaBuilder schemaBuilder;
         if (numBits <= 1) {
-          schema = optional ? Schema.OPTIONAL_BOOLEAN_SCHEMA : Schema.BOOLEAN_SCHEMA;
+          schemaBuilder = SchemaBuilder.bool();
         } else if (numBits <= 8) {
           // For consistency with what the connector did before ...
-          schema = optional ? Schema.OPTIONAL_INT8_SCHEMA : Schema.INT8_SCHEMA;
+          schemaBuilder = SchemaBuilder.int8();
         } else {
-          schema = optional ? Schema.OPTIONAL_BYTES_SCHEMA : Schema.BYTES_SCHEMA;
+          schemaBuilder = SchemaBuilder.bytes();
         }
-        builder.field(fieldName, schema);
+        if (optional) {
+          schemaBuilder.optional();
+        }
+        if (columnDefn.defaultValue() != null) {
+          schemaBuilder.defaultValue(columnDefn.defaultValue());
+        }
+        builder.field(fieldName, schemaBuilder.build());
         return fieldName;
       }
       case Types.OTHER: {
         // Some of these types will have fixed size, but we drop this from the schema conversion
         // since only fixed byte arrays can have a fixed size
-        if (isJsonType(columnDefn)) {
+        SchemaBuilder schemaBuilder = SchemaBuilder.string();
+        if (optional) {
+          schemaBuilder.optional();
+        }
+        if (columnDefn.defaultValue() != null) {
+          schemaBuilder.defaultValue(columnDefn.defaultValue());
+        }
+        if (isJsonType(columnDefn) || UUID.class.getName().equals(columnDefn.classNameForType())) {
           builder.field(
               fieldName,
-              columnDefn.isOptional() ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA
-          );
-          return fieldName;
-        }
-
-        if (UUID.class.getName().equals(columnDefn.classNameForType())) {
-          builder.field(
-                  fieldName,
-                  columnDefn.isOptional()
-                          ?
-                          Schema.OPTIONAL_STRING_SCHEMA :
-                          Schema.STRING_SCHEMA
+              schemaBuilder.build()
           );
           return fieldName;
         }
@@ -615,4 +619,27 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return defn.scale();
   }
 
+  @Override
+  public Object parseDefaultValue(Object defaultValue, ResultSet rs) {
+    try {
+      Class<?> clazz = rs.getClass();
+      Field connectionField = null;
+      while (!clazz.getClass().equals(Object.class)) {
+        try {
+          connectionField = clazz.getDeclaredField("connection");
+          break;
+        } catch (NoSuchFieldException ignored) {
+          clazz = clazz.getSuperclass();
+        }
+      }
+      connectionField.setAccessible(true);
+      Connection connection = (Connection) connectionField.get(rs);
+      try (Statement statement = connection.createStatement();
+           ResultSet resultSet = statement.executeQuery("SELECT " + defaultValue);) {
+        return resultSet.next() ? resultSet.getObject(1) : null;
+      }
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
 }

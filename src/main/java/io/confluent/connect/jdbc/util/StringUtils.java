@@ -72,4 +72,8 @@ public class StringUtils {
         return schema.type().getName();
     }
   }
+
+  public static boolean isNotBlank(String string) {
+    return string != null && !string.trim().isEmpty();
+  }
 }

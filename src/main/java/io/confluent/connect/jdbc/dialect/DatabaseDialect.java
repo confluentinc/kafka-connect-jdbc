@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.dialect;
 
 import java.io.IOException;
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -256,13 +257,14 @@ public interface DatabaseDialect extends ConnectionProvider {
    * Create the definition for the columns in the result set.
    *
    * @param rsMetadata the result set metadata; may not be null
+   * @param dbMeta     the result set metadata; may not be null
    * @return the column definitions keyed by their {@link ColumnId} and in the same order as the
    *     result set; never null
    * @throws SQLException if there is an error accessing the result set metadata
    */
   Map<ColumnId, ColumnDefinition> describeColumns(
-      ResultSetMetaData rsMetadata
-  ) throws SQLException;
+      ResultSetMetaData rsMetadata,
+      DatabaseMetaData dbMeta) throws SQLException;
 
   /**
    * Get the definition of the specified table.

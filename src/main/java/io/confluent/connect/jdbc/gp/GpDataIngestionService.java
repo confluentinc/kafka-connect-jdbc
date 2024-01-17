@@ -127,12 +127,14 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
                 final Struct valueStruct = (Struct) record.value();
                 for (int i = 0; i < totalColumns; i++) {
                     String value = String.valueOf(valueStruct.get(allColumns.get(i).toString()));
-                    if (value == null || value.equalsIgnoreCase("null")) {
+                    if (value == null) {
                         value = config.nullString;
                     }
                     row.add(i, value);
                 }
-                log.info("Adding row: {}", row.toString());
+                if (config.printDebugLogs){
+                    log.info("Adding row: {}", row);
+            }
                 data.add(row);
             }
         } else {
@@ -158,10 +160,14 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
                 final Struct valueStruct = (Struct) record.value();
                 for (int i = 0; i < totalColumns; i++) {
                     String value = String.valueOf(valueStruct.get(allColumns.get(i).toString()));
-                    if (value == null || value.equalsIgnoreCase("null")) {
+                    if (value == null) {
                         value = config.nullString;
                     }
                     row.add(i, value);
+                }
+                //update mode
+                if (config.printDebugLogs){
+                    log.info("Adding row: {}", row);
                 }
                 data.add(row);
             }

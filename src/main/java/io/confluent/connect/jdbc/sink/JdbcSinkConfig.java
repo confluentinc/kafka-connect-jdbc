@@ -39,7 +39,9 @@ import org.apache.kafka.common.config.types.Password;
 public class JdbcSinkConfig extends AbstractConfig {
 
 
-   public enum UpdateMode {
+  public int gpssTimeout = 3000;
+
+  public enum UpdateMode {
         DEFAULT,
         FIRST_ROW_ONLY,
         LAST_ROW_ONLY,
@@ -52,6 +54,10 @@ public class JdbcSinkConfig extends AbstractConfig {
             "`DEFAULT`: Do nothing, use default behavior." +
             "`FIRST_ROW_ONLY`: Choose first row only from a batch of updates." +
             "`LAST_ROW_ONLY`: Choose last row only from a batch of updates.";
+
+  public static final String DEBUG_LOG = "debug.logs";
+    private static final boolean DEBUG_LOG_DEFAULT = false;
+    private static final String DEBUG_LOG_DOC = "Whether to log debug logs.";
 
   public static final String UPDATE_MODE_DISPLAY = "Update Mode";
     public static final String GPSS_HOST = "gpss.host";
@@ -787,7 +793,7 @@ public class JdbcSinkConfig extends AbstractConfig {
                     NULL_STRING_DEFAULT,
                     ConfigDef.Importance.MEDIUM,
                     NULL_STRING_DOC
-            );
+            ).define(DEBUG_LOG, ConfigDef.Type.BOOLEAN, DEBUG_LOG_DEFAULT, ConfigDef.Importance.MEDIUM, DEBUG_LOG_DOC);
 
 //
 
@@ -852,6 +858,8 @@ public class JdbcSinkConfig extends AbstractConfig {
     public final String gpssPort;
     public final Integer gpErrorsPercentageLimit;
     public final boolean gpssUseStickySession;
+
+    public boolean printDebugLogs;
 
     //gpfdist
 
@@ -931,7 +939,7 @@ public class JdbcSinkConfig extends AbstractConfig {
         updateMode = UpdateMode.valueOf(getString(UPDATE_MODE).toUpperCase());
 
         nullString = getString(NULL_STRING);
-
+        printDebugLogs = getBoolean(DEBUG_LOG);
         printConfigDefTable(CONFIG_DEF);
 
     }

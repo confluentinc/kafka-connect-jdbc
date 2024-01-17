@@ -31,6 +31,8 @@ public class Version {
       Properties props = new Properties();
       props.load(stream);
       version = props.getProperty("version", version).trim();
+      // print the version info
+      log.info("Kafka Connect JDBC version: {}", version);
     } catch (Exception e) {
       log.warn("Error while loading version:", e);
     }

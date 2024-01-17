@@ -50,6 +50,17 @@ public class GPSSWrapper
      * Ingest data to specified database table.
      */
     public void ingestBatch(String tableName, List<String> insertColumns, List<String> matchColumns, List<String> updateColumns, String condition, List<List<String>> data) {
+
+        if(config.printDebugLogs){
+            log.info("GPSSWrapper:ingestBatch:tableName: " + tableName);
+            log.info("GPSSWrapper:ingestBatch:insertColumns: " + insertColumns);
+            log.info("GPSSWrapper:ingestBatch:matchColumns: " + matchColumns);
+            log.info("GPSSWrapper:ingestBatch:updateColumns: " + updateColumns);
+            log.info("GPSSWrapper:ingestBatch:condition: " + condition);
+            log.info("GPSSWrapper:ingestBatch:data: " + data);
+        }
+
+
         if(channel == null || channel.isShutdown() || channel.isTerminated()) {
             log.debug("Opening GPSS channel  .......");
             openGpssChannel();
@@ -177,13 +188,16 @@ public class GPSSWrapper
 //    int32 ErrorLimitPercentage = 6;
     private void openTableForWrite(String tableName, List<String> insertColumns, List<String> matchColumns, List<String> updateColumns, String condition ) {
         // TODO - support multiple formats
-        FormatCSV csv = FormatCSV.newBuilder().setNull(config.nullString).setDelimiter(config.delimiter).setQuote(config.csvQuote).setEscape("\"").setHeader(false).build();
+        FormatCSV.Builder csvBuilder = FormatCSV.newBuilder().setDelimiter(config.delimiter).setQuote(config.csvQuote).setEscape("\"").setHeader(false);
+        if(config.nullString != null) {
+            csvBuilder.setNull(config.nullString);
+        }
         OpenRequest.Builder oReq = OpenRequest.newBuilder()
                 .setSession(mSession)
                 .setSchemaName(config.dbSchema)
                 .setTableName(tableName)
-                .setTimeout(30000)
-                .setCsv(csv);
+                .setTimeout(config.gpssTimeout)
+                .setCsv(csvBuilder.build());
 
         if(config.insertMode == JdbcSinkConfig.InsertMode.MERGE || config.insertMode == JdbcSinkConfig.InsertMode.UPSERT) {
             MergeOption iOpt = MergeOption.newBuilder()

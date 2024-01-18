@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import io.confluent.connect.jdbc.util.StringUtils;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
 
@@ -63,19 +64,23 @@ public class JdbcDbWriter {
       throws SQLException, TableAlterOrCreateException {
     final Connection connection = cachedConnectionProvider.getConnection();
     try {
-      final Map<TableId, BufferedRecords> bufferByTable = new HashMap<>();
+      final Map<TableId, BufferedPlainRecords> bufferByTable = new HashMap<>();
       for (SinkRecord record : records) {
         final TableId tableId = destinationTable(record.topic());
-        BufferedRecords buffer = bufferByTable.get(tableId);
+        BufferedPlainRecords buffer = bufferByTable.get(tableId);
         if (buffer == null) {
-          buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
+          if (StringUtils.isNotBlank(config.query)) {
+            buffer = new BufferedQueryRecords(config, connection, dbDialect);
+          } else {
+            buffer = new BufferedTableRecords(config, tableId, dbDialect, dbStructure, connection);
+          }
           bufferByTable.put(tableId, buffer);
         }
         buffer.add(record);
       }
-      for (Map.Entry<TableId, BufferedRecords> entry : bufferByTable.entrySet()) {
+      for (Map.Entry<TableId, BufferedPlainRecords> entry : bufferByTable.entrySet()) {
         TableId tableId = entry.getKey();
-        BufferedRecords buffer = entry.getValue();
+        BufferedPlainRecords buffer = entry.getValue();
         log.debug("Flushing records in JDBC Writer for table ID: {}", tableId);
         buffer.flush();
         buffer.close();

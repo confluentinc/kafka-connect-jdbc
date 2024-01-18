@@ -271,6 +271,17 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String MSSQL_USE_MERGE_HOLDLOCK_DISPLAY =
       "SQL Server - Use HOLDLOCK in MERGE";
 
+  public static final String QUERY = "query";
+  private static final String QUERY_DEFAULT = "";
+  private static final String QUERY_DOC =
+          "An SQL query that allow you implement custom business logic. "
+          + "The query can have named parameters using the root key `event` "
+          + "to access to the message, then you can access to key, value or headers "
+          + "with the dot notation ie. event.value.my_field or "
+          + "event.key.my_field or event.header.my_header";
+  private static final String QUERY_DISPLAY =
+          "Custom SQL query";
+
   public static final ConfigDef CONFIG_DEF = new ConfigDef()
         // Connection
         .define(
@@ -446,6 +457,17 @@ public class JdbcSinkConfig extends AbstractConfig {
           ConfigDef.Width.MEDIUM,
           DB_TIMEZONE_CONFIG_DISPLAY
         )
+        .define(
+          QUERY,
+          ConfigDef.Type.STRING,
+          QUERY_DEFAULT,
+          ConfigDef.Importance.HIGH,
+          QUERY_DOC,
+          DATAMAPPING_GROUP,
+          6,
+          ConfigDef.Width.LONG,
+          QUERY_DISPLAY
+        )
         // DDL
         .define(
             AUTO_CREATE,
@@ -546,6 +568,8 @@ public class JdbcSinkConfig extends AbstractConfig {
 
   public final boolean trimSensitiveLogsEnabled;
 
+  public final String query;
+
   public JdbcSinkConfig(Map<?, ?> props) {
     super(CONFIG_DEF, props);
     connectorName = ConfigUtils.connectorName(props);
@@ -575,6 +599,7 @@ public class JdbcSinkConfig extends AbstractConfig {
           "Primary key mode must be 'record_key' when delete support is enabled");
     }
     tableTypes = TableType.parse(getList(TABLE_TYPES_CONFIG));
+    query = getString(QUERY);
   }
 
   private String getPasswordValue(String key) {

@@ -42,8 +42,8 @@ import io.confluent.connect.jdbc.util.TableId;
 import static java.util.Objects.isNull;
 import static java.util.Objects.nonNull;
 
-public class BufferedRecords {
-  private static final Logger log = LoggerFactory.getLogger(BufferedRecords.class);
+public class BufferedTableRecords implements BufferedPlainRecords {
+  private static final Logger log = LoggerFactory.getLogger(BufferedTableRecords.class);
 
   private final TableId tableId;
   private final JdbcSinkConfig config;
@@ -54,7 +54,7 @@ public class BufferedRecords {
   private List<SinkRecord> records = new ArrayList<>();
   private Schema keySchema;
   private Schema valueSchema;
-  private RecordValidator recordValidator;
+  private final RecordValidator recordValidator;
   private FieldsMetadata fieldsMetadata;
   private PreparedStatement updatePreparedStatement;
   private PreparedStatement deletePreparedStatement;
@@ -62,7 +62,7 @@ public class BufferedRecords {
   private StatementBinder deleteStatementBinder;
   private boolean deletesInBatch = false;
 
-  public BufferedRecords(
+  public BufferedTableRecords(
       JdbcSinkConfig config,
       TableId tableId,
       DatabaseDialect dbDialect,
@@ -77,6 +77,7 @@ public class BufferedRecords {
     this.recordValidator = RecordValidator.create(config);
   }
 
+  @Override
   public List<SinkRecord> add(SinkRecord record) throws SQLException, TableAlterOrCreateException {
     recordValidator.validate(record);
     final List<SinkRecord> flushed = new ArrayList<>();
@@ -170,6 +171,7 @@ public class BufferedRecords {
     return flushed;
   }
 
+  @Override
   public List<SinkRecord> flush() throws SQLException {
     if (records.isEmpty()) {
       log.debug("Records is empty");
@@ -214,6 +216,7 @@ public class BufferedRecords {
     }
   }
 
+  @Override
   public void close() throws SQLException {
     log.debug(
         "Closing BufferedRecords with updatePreparedStatement: {} deletePreparedStatement: {}",

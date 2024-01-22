@@ -6,4 +6,5 @@ common {
   pintMerge = true
   sonarqubeScannerEnable = true
   sonarqubeQualityCheck = true
+  disableConcurrentBuilds = true
 }

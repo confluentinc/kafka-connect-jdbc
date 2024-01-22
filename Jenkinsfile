@@ -2,7 +2,10 @@
 common {
   slackChannel = '#connect-warn'
   nodeLabel = 'docker-debian-jdk8'
-  upstreamProjects = 'confluentinc/common'
   pintMerge = true
   downStreamValidate = false
+  mvnSkipDeploy = true
+  disableConcurrentBuilds = true
+  sonarqubeScannerEnable = true
+  sonarqubeQualityCheck = true
 }

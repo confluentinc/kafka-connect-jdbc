@@ -5,4 +5,7 @@ common {
   pintMerge = true
   downStreamValidate = false
   mvnSkipDeploy = true
+  disableConcurrentBuilds = true
+  sonarqubeScannerEnable = true
+  sonarqubeQualityCheck = true
 }

@@ -67,7 +67,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.package.home>target/${project.artifactId}-${project.version}-package</project.package.home>
         <maven.release.plugin.version>2.5.3</maven.release.plugin.version>
-	      <jacoco.plugin.version>0.8.11</jacoco.plugin.version>
+	<jacoco.plugin.version>0.8.11</jacoco.plugin.version>
         <instruction.coverage.threshold>0.78</instruction.coverage.threshold>
         <branch.coverage.threshold>0.67</branch.coverage.threshold>
         <method.coverage.threshold>0.76</method.coverage.threshold>

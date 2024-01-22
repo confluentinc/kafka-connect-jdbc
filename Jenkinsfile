@@ -5,4 +5,7 @@ common {
   upstreamProjects = 'confluentinc/common'
   pintMerge = true
   downStreamValidate = false
+  disableConcurrentBuilds = true
+  sonarqubeScannerEnable = true
+  sonarqubeQualityCheck = true
 }

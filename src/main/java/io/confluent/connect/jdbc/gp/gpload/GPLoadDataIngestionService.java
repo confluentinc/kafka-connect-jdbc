@@ -11,13 +11,12 @@ import io.confluent.connect.jdbc.gp.gpload.config.GPloadConfig;
 import io.confluent.connect.jdbc.sink.GPBinder;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
+import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.util.CommonUtils;
-import io.confluent.connect.jdbc.util.ConnectionURLParser;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.apache.kafka.connect.data.Struct;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -26,8 +25,8 @@ import java.util.*;
 public class GPLoadDataIngestionService extends GpDataIngestionService {
     private static final Logger log = LoggerFactory.getLogger(GPBinder.class);
     private final String tempDir;
-    public GPLoadDataIngestionService(JdbcSinkConfig config, DatabaseDialect dialect, TableDefinition tableDefinition, FieldsMetadata fieldsMetadata) {
-       super(config,dialect, tableDefinition, fieldsMetadata);
+    public GPLoadDataIngestionService(JdbcSinkConfig config, DatabaseDialect dialect, TableDefinition tableDefinition, FieldsMetadata fieldsMetadata, SchemaPair schemaPair){
+       super(config,dialect, tableDefinition, fieldsMetadata, schemaPair);
         tempDir = System.getProperty("java.io.tmpdir") + "/gpload/";
         new File(tempDir).mkdirs();
     }

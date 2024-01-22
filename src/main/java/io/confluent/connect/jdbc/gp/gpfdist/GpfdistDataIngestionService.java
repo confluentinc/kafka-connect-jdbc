@@ -9,6 +9,7 @@ import io.confluent.connect.jdbc.gp.gpfdist.framweork.support.NetworkUtils;
 import io.confluent.connect.jdbc.gp.gpfdist.framweork.support.RuntimeContext;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
+import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import org.apache.kafka.connect.sink.SinkRecord;
 
@@ -23,8 +24,8 @@ public class GpfdistDataIngestionService extends GpDataIngestionService {
 
     private static final Logger log = LoggerFactory.getLogger(GpfdistDataIngestionService.class);
 
-    public GpfdistDataIngestionService(JdbcSinkConfig config, DatabaseDialect dialect, TableDefinition tabDef, FieldsMetadata fieldsMetadata) {
-        super(config, dialect, tabDef, fieldsMetadata);
+    public GpfdistDataIngestionService(JdbcSinkConfig config, DatabaseDialect dialect, TableDefinition tabDef, FieldsMetadata fieldsMetadata, SchemaPair schemaPair) {
+        super(config, dialect, tabDef, fieldsMetadata, schemaPair);
     }
 
     public GpfdistDataIngestionService(JdbcSinkConfig config, DatabaseDialect dialect, String tableName, FieldsMetadata fieldsMetadata) {

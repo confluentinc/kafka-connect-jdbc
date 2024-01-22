@@ -16,21 +16,14 @@
 package io.confluent.connect.jdbc.sink;
 
 import java.time.ZoneId;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.EnumSet;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.TimeZone;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.gp.gpfdist.framweork.support.SegmentRejectType;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 
 import io.confluent.connect.jdbc.util.*;
+import org.apache.kafka.clients.admin.ConfigEntry;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
@@ -38,14 +31,37 @@ import org.apache.kafka.common.config.types.Password;
 
 public class JdbcSinkConfig extends AbstractConfig {
 
+    public static final String COLUMN_ALTERNATIVE = "column.alternative";
+    private static final String COLUMN_ALTERNATIVE_DEFAULT = null;
+    private static final String COLUMN_ALTERNATIVE_DOC = "The column alternative, i.e. use value of other column if it is missed in the source.";
+    public static final String COLUMN_ALTERNATIVE_DISPLAY = "Column Alternative";
 
-  public int gpssTimeout = 3000;
 
-  public enum UpdateMode {
+
+    public static final String COLUMN_SELECTION_STRATEGY = "column.selection.strategy";
+    private static final String COLUMN_SELECTION_STRATEGY_DEFAULT = ColumnSelectionStrategy.DEFAULT.name();
+    private static final String COLUMN_SELECTION_STRATEGY_DOCS = "The column selection strategy to use (for gpss only). Supported strategies are:\n"
+            + "``DEFAULT``\n"
+            + "    Use all columns received from source table.\n"
+            + "``SINK_PREFERRED``\n"
+            + "    Prefer columns in the sink table if there is a difference between the source and sink tables.";
+    public static final String COLUMN_SELECTION_STRATEGY_DISPLAY = "Column Selection Strategy";
+
+    public enum ColumnSelectionStrategy {
+        DEFAULT,
+        SINK_PREFERRED,
+
+    }
+
+
+    public int gpssTimeout = 3000;
+
+    public enum UpdateMode {
         DEFAULT,
         FIRST_ROW_ONLY,
         LAST_ROW_ONLY,
     }
+
     public static final String UPDATE_MODE = "update.mode";
 
     public static final String UPDATE_MODE_DEFAULT = UpdateMode.DEFAULT.name();
@@ -55,11 +71,11 @@ public class JdbcSinkConfig extends AbstractConfig {
             "`FIRST_ROW_ONLY`: Choose first row only from a batch of updates." +
             "`LAST_ROW_ONLY`: Choose last row only from a batch of updates.";
 
-  public static final String DEBUG_LOG = "debug.logs";
+    public static final String DEBUG_LOG = "debug.logs";
     private static final boolean DEBUG_LOG_DEFAULT = false;
     private static final String DEBUG_LOG_DOC = "Whether to log debug logs.";
 
-  public static final String UPDATE_MODE_DISPLAY = "Update Mode";
+    public static final String UPDATE_MODE_DISPLAY = "Update Mode";
     public static final String GPSS_HOST = "gpss.host";
 
     public static final String GP_MAX_LINE_LENGTH = "gp.max.line.length";
@@ -793,7 +809,29 @@ public class JdbcSinkConfig extends AbstractConfig {
                     NULL_STRING_DEFAULT,
                     ConfigDef.Importance.MEDIUM,
                     NULL_STRING_DOC
-            ).define(DEBUG_LOG, ConfigDef.Type.BOOLEAN, DEBUG_LOG_DEFAULT, ConfigDef.Importance.MEDIUM, DEBUG_LOG_DOC);
+            ).define(DEBUG_LOG, ConfigDef.Type.BOOLEAN, DEBUG_LOG_DEFAULT, ConfigDef.Importance.MEDIUM, DEBUG_LOG_DOC)
+            .define(
+                    COLUMN_SELECTION_STRATEGY,
+                    ConfigDef.Type.STRING,
+                    COLUMN_SELECTION_STRATEGY_DEFAULT,
+                    EnumValidator.in(ColumnSelectionStrategy.values()),
+                    ConfigDef.Importance.MEDIUM,
+                    COLUMN_SELECTION_STRATEGY_DOCS,
+                    WRITES_GROUP,
+                    1,
+                    ConfigDef.Width.MEDIUM,
+                    COLUMN_SELECTION_STRATEGY_DISPLAY
+            ).define(
+                    COLUMN_ALTERNATIVE,
+                    ConfigDef.Type.STRING,
+                    COLUMN_ALTERNATIVE_DEFAULT,
+                    ConfigDef.Importance.MEDIUM,
+                    COLUMN_ALTERNATIVE_DOC,
+                    WRITES_GROUP,
+                    1,
+                    ConfigDef.Width.LONG,
+                    COLUMN_ALTERNATIVE_DISPLAY
+            );
 
 //
 
@@ -882,7 +920,9 @@ public class JdbcSinkConfig extends AbstractConfig {
 
     public final UpdateMode updateMode;
 
+    public final ColumnSelectionStrategy columnSelectionStrategy;
 
+    public final HashMap<String,String> columnAlternative = new HashMap<>(); // columnName, alternative
 
 
     public JdbcSinkConfig(Map<?, ?> props) {
@@ -940,6 +980,17 @@ public class JdbcSinkConfig extends AbstractConfig {
 
         nullString = getString(NULL_STRING);
         printDebugLogs = getBoolean(DEBUG_LOG);
+        columnSelectionStrategy = ColumnSelectionStrategy.valueOf(getString(COLUMN_SELECTION_STRATEGY).toUpperCase());
+        String columnAlternatives = getString(COLUMN_ALTERNATIVE);
+        if(columnAlternatives != null && !columnAlternatives.isEmpty()) {
+            String[] alternatives = columnAlternatives.split(",");
+            for(String alternative : alternatives) {
+                String[] alternativeParts = alternative.split(":");
+                if(alternativeParts.length == 2) {
+                    columnAlternative.put(alternativeParts[0], alternativeParts[1]);
+                }
+            }
+        }
         printConfigDefTable(CONFIG_DEF);
 
     }

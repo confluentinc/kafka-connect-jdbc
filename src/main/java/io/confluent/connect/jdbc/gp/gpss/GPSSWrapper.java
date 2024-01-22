@@ -3,6 +3,7 @@ package io.confluent.connect.jdbc.gp.gpss;
 import com.google.protobuf.ByteString;
 import io.confluent.connect.jdbc.gp.gpss.api.*;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.sink.metadata.ColumnDetails;
 import io.confluent.connect.jdbc.util.ConnectionURLParser;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -49,7 +50,7 @@ public class GPSSWrapper
     /**
      * Ingest data to specified database table.
      */
-    public void ingestBatch(String tableName, List<String> insertColumns, List<String> matchColumns, List<String> updateColumns, String condition, List<List<String>> data) {
+    public void ingestBatch(String tableName, List<String> insertColumns, List<String> matchColumns, List<String> updateColumns, List<ColumnDetails> columnsWithDataType, String condition, List<List<String>> data) {
 
         if(config.printDebugLogs){
             log.info("GPSSWrapper:ingestBatch:tableName: " + tableName);
@@ -70,7 +71,7 @@ public class GPSSWrapper
             connectToGP();
         }
         log.debug("Setting up GP table to write .......");
-        openTableForWrite(tableName, insertColumns, matchColumns, updateColumns, condition);
+        openTableForWrite(tableName, insertColumns, matchColumns, updateColumns, columnsWithDataType,  condition);
         log.debug(" writing events to GP table .......");
         writeToTable(data);
         log.debug("Closing up GP table after write .......");
@@ -186,9 +187,18 @@ public class GPSSWrapper
 //    string Condition = 4;
 //    int64 ErrorLimitCount = 5;
 //    int32 ErrorLimitPercentage = 6;
-    private void openTableForWrite(String tableName, List<String> insertColumns, List<String> matchColumns, List<String> updateColumns, String condition ) {
+    private void openTableForWrite(String tableName, List<String> insertColumns, List<String> matchColumns, List<String> updateColumns, List<ColumnDetails> columnsWithDataType, String condition ) {
         // TODO - support multiple formats
-        FormatCSV.Builder csvBuilder = FormatCSV.newBuilder().setDelimiter(config.delimiter).setQuote(config.csvQuote).setEscape("\"").setHeader(false);
+        FormatCSV.Builder csvBuilder = FormatCSV.newBuilder().setDelimiter(config.delimiter).setQuote(config.csvQuote).setHeader(false);
+//
+//       for (ColumnDetails col : columnsWithDataType) {
+//           try {
+//               IntermediateColumn.Builder colBuilder = IntermediateColumn.newBuilder().setName(col.getColumnName()).setType(col.getColumnType());
+//               csvBuilder.addColumns(colBuilder);
+//           } catch (Exception e) {
+//               throw new RuntimeException(e);
+//           }
+//       }
         if(config.nullString != null) {
             csvBuilder.setNull(config.nullString);
         }

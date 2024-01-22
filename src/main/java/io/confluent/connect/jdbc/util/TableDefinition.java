@@ -15,11 +15,9 @@
 
 package io.confluent.connect.jdbc.util;
 
-import java.util.Collection;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import io.confluent.connect.jdbc.sink.metadata.ColumnDetails;
+
+import java.util.*;
 
 /**
  * A description of a table.
@@ -29,6 +27,8 @@ public class TableDefinition {
   private final Map<String, ColumnDefinition> columnsByName = new LinkedHashMap<>();
   private final Map<String, String> pkColumnNames = new LinkedHashMap<>();
   private final TableType type;
+  private String schema;
+  private List<ColumnDetails> orderedColumns;
 
   public TableDefinition(
       TableId id,
@@ -114,5 +114,33 @@ public class TableDefinition {
         type,
         definitionsForColumns()
     );
+  }
+
+    public void setSchema(String schema) {
+        this.schema = schema;
+//        if(this.schema != null && !this.schema.isEmpty()) {
+//          List orderedColumns = new ArrayList();
+//          String[] lines = schema.split("\n");
+//          int i = 0;
+//          for (String line : lines) {
+//            if (line.trim().startsWith("`")) {
+//              String columnName = line.split("`")[1];
+//              orderedColumns.add(i++,columnName);
+//            }
+//          }
+//          this.orderedColumns = orderedColumns;
+//        }
+    }
+
+    public String getSchema() {
+        return schema;
+    }
+
+  public List<ColumnDetails> getOrderedColumns() {
+    return orderedColumns;
+  }
+
+  public void setOrderedColumns(List<ColumnDetails> orderedColumns) {
+    this.orderedColumns = orderedColumns;
   }
 }

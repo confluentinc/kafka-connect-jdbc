@@ -3,7 +3,9 @@ package io.confluent.connect.jdbc.gp.gpss;
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.gp.GpDataIngestionService;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.sink.metadata.ColumnDetails;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
+import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.slf4j.Logger;
@@ -15,8 +17,8 @@ public class GPSSDataIngestionService extends GpDataIngestionService {
 
     private static final Logger log = LoggerFactory.getLogger(GPSSDataIngestionService.class);
 
-    public GPSSDataIngestionService(JdbcSinkConfig config, DatabaseDialect dialect, TableDefinition tabDef, FieldsMetadata fieldsMetadata) {
-        super(config, dialect, tabDef, fieldsMetadata);
+    public GPSSDataIngestionService(JdbcSinkConfig config, DatabaseDialect dialect, TableDefinition tabDef, FieldsMetadata fieldsMetadata, SchemaPair schemaPair) {
+        super(config, dialect, tabDef, fieldsMetadata, schemaPair);
     }
 
     public GPSSDataIngestionService(JdbcSinkConfig config, DatabaseDialect dialect, String tableName, FieldsMetadata fieldsMetadata) {
@@ -27,8 +29,10 @@ public class GPSSDataIngestionService extends GpDataIngestionService {
     public void ingest(List<SinkRecord> records) {
         super.ingest(records);
         GPSSWrapper gpssWrapper = new GPSSWrapper(config);
-        gpssWrapper.ingestBatch(tableName, allColumns, keyColumns, nonKeyColumns, "", data);
+        gpssWrapper.ingestBatch(tableName, allColumns, keyColumns, nonKeyColumns, getSourceColumnDetails(),"", data);
     }
+
+
 //
 //    private void openGpssChannel() {
 //        try {

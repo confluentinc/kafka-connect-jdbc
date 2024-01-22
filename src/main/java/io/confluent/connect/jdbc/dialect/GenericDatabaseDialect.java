@@ -870,7 +870,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       return null;
     }
     TableType tableType = tableTypeFor(connection, tableId);
-    return new TableDefinition(tableId, columnDefns.values(), tableType);
+    TableDefinition tableDefn = new TableDefinition(tableId, columnDefns.values(), tableType);
+   // tableDefn.setSchema(getTableSchema(connection, tableId));
+    tableDefn.setOrderedColumns(getOrderedColumns(connection, tableId));
+    return tableDefn;
+  }
+
+  protected List getOrderedColumns(Connection connection, TableId tableId) {
+    return null;
   }
 
   protected TableType tableTypeFor(

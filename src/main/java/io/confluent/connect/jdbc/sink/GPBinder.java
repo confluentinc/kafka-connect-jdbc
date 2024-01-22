@@ -75,14 +75,14 @@ public class GPBinder implements StatementBinder {
 
         if (config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPLOAD) {
             log.info("Using GPLOAD to insert records");
-            gpDataIngestor = new GPLoadDataIngestionService(config, dialect, tabDef, this.fieldsMetadata );
+            gpDataIngestor = new GPLoadDataIngestionService(this.config, this.dialect, this.tabDef, this.fieldsMetadata , this.schemaPair);
 
         } else if (config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPSS) {
             log.info("Using GPSS to insert records");
-              gpDataIngestor = new GPSSDataIngestionService(config, dialect, tabDef, this.fieldsMetadata );
+              gpDataIngestor = new GPSSDataIngestionService(config, dialect, tabDef, this.fieldsMetadata, this.schemaPair );
         } else if (config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPFDIST) {
             log.info("Using GPFDIST to insert records");
-            gpDataIngestor =  new GpfdistDataIngestionService(config, dialect, tabDef, this.fieldsMetadata);
+            gpDataIngestor =  new GpfdistDataIngestionService(config, dialect, tabDef, this.fieldsMetadata, this.schemaPair);
         } else {
             throw new IllegalArgumentException("Invalid batch insert mode " + config.batchInsertMode);
 

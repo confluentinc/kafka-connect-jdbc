@@ -16,6 +16,7 @@
 package io.confluent.connect.jdbc.dialect;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
+import io.confluent.connect.jdbc.sink.metadata.ColumnDetails;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
@@ -39,17 +40,8 @@ import org.apache.kafka.connect.errors.DataException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Types;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.sql.*;
+import java.util.*;
 
 /**
  * A {@link DatabaseDialect} for PostgreSQL.
@@ -615,4 +607,26 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return defn.scale();
   }
 
+  @Override
+  protected List getOrderedColumns(Connection connection, TableId tableId) {
+    try (Statement statement = connection.createStatement();) {
+      // Retrieve the DDL for the specified table
+      List<ColumnDetails> orderedColumns = new ArrayList<>();
+      ResultSet resultSet = statement.executeQuery("SELECT column_name,data_type, column_name, data_type, column_default FROM information_schema.columns WHERE table_name = '" + tableId.tableName() + "' ORDER BY ordinal_position");
+
+      // Extract column names in order
+      while (resultSet.next()) {
+        String columnName = resultSet.getString("column_name");
+        String dataType = resultSet.getString("data_type");
+        String columnDefault = resultSet.getString("column_default");
+
+        orderedColumns.add(new ColumnDetails(columnName, dataType, columnDefault));
+      }
+      log.info("Ordered columns: {}", orderedColumns);
+      return orderedColumns;
+    } catch (SQLException e) {
+      e.printStackTrace();
+    }
+    return null;
+  }
 }

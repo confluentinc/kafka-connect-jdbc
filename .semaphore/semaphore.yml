@@ -58,7 +58,6 @@ blocks:
           commands:
             - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 --batch-mode -DaltDeploymentRepository=confluent-codeartifact-internal::default::https://confluent-519856050701.d.codeartifact.us-west-2.amazonaws.com/maven/maven-snapshots/
               -DrepositoryId=confluent-codeartifact-internal deploy -DskipTests
-
   - name: Release Notes
     dependencies: []
     run:
@@ -69,6 +68,7 @@ blocks:
           commands:
             - git clone --branch master --single-branch git@github.com:confluentinc/connect-releases.git
             - ./connect-releases/tasks/release-connect-plugins/generate-connect-changelogs.sh
+
 after_pipeline:
   task:
     agent:

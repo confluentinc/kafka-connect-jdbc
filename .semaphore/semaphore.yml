@@ -7,7 +7,7 @@ version: v1.0
 name: build-test-release
 agent:
   machine:
-    type: s1-prod-ubuntu20-04-amd64-1
+    type: s1-nonprod-ubuntu20-04-amd64-1
 
 fail_fast:
   cancel:
@@ -40,7 +40,7 @@ blocks:
             - pip install confluent-release-tools -q
             - . sem-pint
             - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 --batch-mode --no-transfer-progress clean verify install dependency:analyze validate
-            - . cve-scan
+            - cve-scan
             - . cache-maven store
       epilogue:
         always:

@@ -40,13 +40,14 @@ blocks:
             - pip install confluent-release-tools -q
             - . sem-pint
             - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 --batch-mode --no-transfer-progress clean verify install dependency:analyze validate
-            - . cve-scan
+            - cve-scan
             - . cache-maven store
       epilogue:
         always:
           commands:
             - . publish-test-results
             - artifact push workflow target/test-results
+            - artifact push workflow target
 
   - name: Release
     dependencies: ["Test"]
@@ -85,4 +86,5 @@ after_pipeline:
         commands:
           - checkout
           - sem-version java 11
-          - emit-sonarqube-data -a test-results
+          - artifact pull workflow target
+          - emit-sonarqube-data --run_only_sonar_scan

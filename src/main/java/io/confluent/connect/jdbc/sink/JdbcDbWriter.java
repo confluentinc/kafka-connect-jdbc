@@ -77,7 +77,7 @@ public class JdbcDbWriter {
         }
         buffer.add(record);
       }
-      // to remove enteries
+      // to remove entries from bufferByTable
       commitPendingRecords();
       connection.commit();
     } catch (SQLException | TableAlterOrCreateException e) {

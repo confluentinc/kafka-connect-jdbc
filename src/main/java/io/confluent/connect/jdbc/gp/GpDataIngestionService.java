@@ -7,14 +7,12 @@ import io.confluent.connect.jdbc.sink.metadata.ColumnDetails;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
-import io.confluent.connect.jdbc.util.ColumnDefinition;
-import io.confluent.connect.jdbc.util.CommonUtils;
-import io.confluent.connect.jdbc.util.ConnectionURLParser;
-import io.confluent.connect.jdbc.util.TableDefinition;
+import io.confluent.connect.jdbc.util.*;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -116,16 +114,16 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
 
 
         // apply for gpss case for now
-        if(config.columnSelectionStrategy == JdbcSinkConfig.ColumnSelectionStrategy.SINK_PREFERRED && config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPSS){
-               log.info("Applying column selection strategy {}", config.columnSelectionStrategy.name());
-               List<String> sinkTableColumns = tableDefinition.getOrderedColumns().stream().map(ColumnDetails::getColumnName).collect(Collectors.toList());
-               //log
-                log.info("Sink table columns: {}", sinkTableColumns);
-                keyColumns.retainAll(sinkTableColumns);
-               // nonKeyColumns.retainAll(sinkTableColumns);
-               // allColumns.retainAll(sinkTableColumns);
+        if (config.columnSelectionStrategy == JdbcSinkConfig.ColumnSelectionStrategy.SINK_PREFERRED && config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPSS) {
+            log.info("Applying column selection strategy {}", config.columnSelectionStrategy.name());
+            List<String> sinkTableColumns = tableDefinition.getOrderedColumns().stream().map(ColumnDetails::getColumnName).collect(Collectors.toList());
+            //log
+            log.info("Sink table columns: {}", sinkTableColumns);
+            keyColumns.retainAll(sinkTableColumns);
+            // nonKeyColumns.retainAll(sinkTableColumns);
+            // allColumns.retainAll(sinkTableColumns);
 
-                // now add columns to nonKeyColumns and allColumns from sinkTableColumn if they are missing, in the same order as they are in sinkTableColumns
+            // now add columns to nonKeyColumns and allColumns from sinkTableColumn if they are missing, in the same order as they are in sinkTableColumns
             nonKeyColumns.clear();
             allColumns.clear();
 
@@ -133,14 +131,13 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
             nonKeyColumns.addAll(sinkTableColumns);
             nonKeyColumns.removeAll(keyColumns);
 
-            if(config.printDebugLogs){
+            if (config.printDebugLogs) {
                 log.info("Column Selection::Key columns: {}", keyColumns);
                 log.info("Column Selection::Non Key columns: {}", nonKeyColumns);
                 log.info("Column Selection::All columns: {}", allColumns);
             }
 
         }
-
 
 
         totalColumns = allColumns.size();
@@ -158,7 +155,7 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
         if (config.updateMode == JdbcSinkConfig.UpdateMode.DEFAULT) {
 
             for (SinkRecord record : records) {
-               addRow(record);
+                addRow(record);
             }
         } else {
 
@@ -174,7 +171,7 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
                 for (String key : keyColumns) {
                     recordKey += String.valueOf(((Struct) record.key()).get(key));
                 }
-                if(addedKeysList.contains(recordKey)){
+                if (addedKeysList.contains(recordKey)) {
                     continue;
                 }
                 addedKeysList.add(recordKey);
@@ -197,12 +194,26 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
             String key = allColumns.get(i).toString();
             try {
                 value = String.valueOf(valueStruct.get(key));
-            }catch (Exception e){
+            } catch (Exception e) {
                 try {
+
                     String alternateKey = config.columnAlternative.get(key);
-                    if(alternateKey!=null)
-                        value = String.valueOf(valueStruct.get(alternateKey));
-                }catch (Exception e1) {
+                    if (alternateKey != null) {
+                        if (alternateKey != null) {
+                            if (alternateKey.startsWith("#")) {
+                                UniqueIdType sak = UniqueIdType.fromString(alternateKey.substring(1));
+                                if (sak != null) {
+                                    value = sak.generateUniqueId();
+                                }
+                            } else {
+                                value = String.valueOf(valueStruct.get(alternateKey));
+
+                            }
+                        }
+                    }
+
+                } catch (Exception e1) {
+                    log.error("Error while getting alternative value for column {} from record {}", allColumns.get(i).toString(), record);
                 }
                 log.error("Error while getting value for column {} from record {}", allColumns.get(i).toString(), record);
 //                        if(tableDefinition.getOrderedColumns()!=null) {
@@ -218,7 +229,7 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
             }
             row.add(i, value);
         }
-        if (config.printDebugLogs){
+        if (config.printDebugLogs) {
             log.info("Adding row: {}", row);
         }
         data.add(row);
@@ -246,6 +257,6 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
                 fieldsDataTypeMapList.add(new ColumnDetails(entry.getKey().toString(), column.typeName(), null));
             }
         }
-         return fieldsDataTypeMapList;
+        return fieldsDataTypeMapList;
     }
 }

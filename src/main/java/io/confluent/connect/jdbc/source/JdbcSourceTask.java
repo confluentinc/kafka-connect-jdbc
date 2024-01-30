@@ -197,6 +197,10 @@ public class JdbcSourceTask extends SourceTask {
     TimeZone timeZone = config.timeZone();
     String suffix = config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG).trim();
 
+    if (queryMode.equals(TableQuerier.QueryMode.TABLE)) {
+      validateColumnsExist(mode, incrementingColumn, timestampColumns, tables.get(0));
+    }
+
     for (String tableOrQuery : tablesOrQuery) {
       final List<Map<String, String>> tablePartitionsToCheck;
       final Map<String, String> partition;
@@ -307,6 +311,43 @@ public class JdbcSourceTask extends SourceTask {
     log.info("Started JDBC source task");
 
     maxRetriesPerQuerier = config.getInt(JdbcSourceConnectorConfig.QUERY_RETRIES_CONFIG);
+  }
+
+  private void validateColumnsExist(
+      String mode, String incrementingColumn, List<String> timestampColumns, String table) {
+    try {
+      final Connection conn = cachedConnectionProvider.getConnection();
+      boolean autoCommit = conn.getAutoCommit();
+      try {
+        conn.setAutoCommit(true);
+        Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, table, null);
+        Set<String> columnNames = defnsById.keySet().stream().map(ColumnId::name)
+            .map(String::toLowerCase).collect(Collectors.toSet());
+        if ((mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)
+            || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING))
+            && !incrementingColumn.isEmpty()) {
+          if (!columnNames.contains(incrementingColumn.toLowerCase(Locale.getDefault()))) {
+            throw new ConnectException("Incrementing column " + incrementingColumn
+                + " does not exist");
+          }
+        }
+
+        if ((mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)
+            || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING))
+            && !timestampColumns.isEmpty()) {
+          for (String timestampColumn : timestampColumns) {
+            if (!columnNames.contains(timestampColumn.toLowerCase(Locale.getDefault()))) {
+              throw new ConnectException("Timestamp column " + timestampColumn + " does not exist");
+            }
+          }
+        }
+      } finally {
+        conn.setAutoCommit(autoCommit);
+      }
+    } catch (SQLException e) {
+      throw new ConnectException("Failed trying to validate that columns used for offsets exist",
+          e);
+    }
   }
 
   protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {

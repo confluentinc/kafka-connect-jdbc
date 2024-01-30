@@ -14,7 +14,7 @@ public enum UniqueIdType {
         @Override
         public String generateUniqueId() {
             long timestamp = System.currentTimeMillis();
-            int randomNumber = (int) (Math.random() * 1000);
+            int randomNumber = (int) (Math.random() * 9999);
             return timestamp + "-" + randomNumber;
         }
     },

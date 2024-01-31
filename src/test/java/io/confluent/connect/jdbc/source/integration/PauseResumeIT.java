@@ -84,7 +84,7 @@ public class PauseResumeIT {
   @Test
   public void testPauseResume() throws Exception {
     try (Connection conn = getConnection(); Statement stmt = conn.createStatement()) {
-      stmt.executeUpdate("CREATE TABLE test_table ( c1 text )");
+      stmt.executeUpdate("CREATE TABLE test_table ( c1 text, id SERIAL PRIMARY KEY )");
     }
 
     connect.configureConnector(CONNECTOR_NAME, props);

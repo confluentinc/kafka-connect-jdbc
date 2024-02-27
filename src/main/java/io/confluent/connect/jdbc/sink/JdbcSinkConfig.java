@@ -31,11 +31,50 @@ import org.apache.kafka.common.config.types.Password;
 
 public class JdbcSinkConfig extends AbstractConfig {
 
+    // config for timestamp.auto.convert boolean default true
+    public static final String TIMESTAMP_AUTO_CONVERT = "timestamp.auto.convert";
+    private static final boolean TIMESTAMP_AUTO_CONVERT_DEFAULT = true;
+    private static final String TIMESTAMP_AUTO_CONVERT_DOC = "Whether to convert time-based fields to Timestamp, Date, and Time objects.";
+    public static final String TIMESTAMP_AUTO_CONVERT_DISPLAY = "Timestamp Auto Convert";
+
+
+
+
     public static final String COLUMN_ALTERNATIVE = "column.alternative";
     private static final String COLUMN_ALTERNATIVE_DEFAULT = null;
     private static final String COLUMN_ALTERNATIVE_DOC = "The column alternative, i.e. use value of other column if it is missed in the source.";
     public static final String COLUMN_ALTERNATIVE_DISPLAY = "Column Alternative";
 
+    // configs for timestamp.from.format and timestamp.to.format, date.from.format and date.to.format, time.from.format and time.to.format and timezone
+    public static final String TIMESTAMP_FROM_FORMAT = "timestamp.from.format";
+    private static final String TIMESTAMP_FROM_FORMAT_DEFAULT = "EEE MMM dd HH:mm:ss zzz yyyy";
+    private static final String TIMESTAMP_FROM_FORMAT_DOC = "The format of the timestamp in the source record.";
+    public static final String TIMESTAMP_FROM_FORMAT_DISPLAY = "Timestamp From Format";
+
+    public static final String TIMESTAMP_TO_FORMAT = "timestamp.to.format";
+    private static final String TIMESTAMP_TO_FORMAT_DEFAULT = "yyyy-MM-dd hh:mm:ss";
+    private static final String TIMESTAMP_TO_FORMAT_DOC = "The format of the timestamp in the sink record.";
+    public static final String TIMESTAMP_TO_FORMAT_DISPLAY = "Timestamp To Format";
+
+    public static final String DATE_FROM_FORMAT = "date.from.format";
+    private static final String DATE_FROM_FORMAT_DEFAULT = "EEE MMM dd HH:mm:ss zzz yyyy";
+    private static final String DATE_FROM_FORMAT_DOC = "The format of the date in the source record.";
+    public static final String DATE_FROM_FORMAT_DISPLAY = "Date From Format";
+
+    public static final String DATE_TO_FORMAT = "date.to.format";
+    private static final String DATE_TO_FORMAT_DEFAULT = "yyyy-MM-dd";
+    private static final String DATE_TO_FORMAT_DOC = "The format of the date in the sink record.";
+    public static final String DATE_TO_FORMAT_DISPLAY = "Date To Format";
+
+    public static final String TIME_FROM_FORMAT = "time.from.format";
+    private static final String TIME_FROM_FORMAT_DEFAULT = "EEE MMM dd HH:mm:ss zzz yyyy";
+    private static final String TIME_FROM_FORMAT_DOC = "The format of the time in the source record.";
+    public static final String TIME_FROM_FORMAT_DISPLAY = "Time From Format";
+
+    public static final String TIME_TO_FORMAT = "time.to.format";
+    private static final String TIME_TO_FORMAT_DEFAULT = "hh:mm:ss";
+    private static final String TIME_TO_FORMAT_DOC = "The format of the time in the sink record.";
+    public static final String TIME_TO_FORMAT_DISPLAY = "Time To Format";
 
 
     public static final String COLUMN_SELECTION_STRATEGY = "column.selection.strategy";
@@ -831,8 +870,78 @@ public class JdbcSinkConfig extends AbstractConfig {
                     1,
                     ConfigDef.Width.LONG,
                     COLUMN_ALTERNATIVE_DISPLAY
-            );
-
+                    // timestamp, time and date formats and timezone
+            ).define(
+            TIME_FROM_FORMAT,
+            ConfigDef.Type.STRING,
+            TIME_FROM_FORMAT_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            TIME_FROM_FORMAT_DOC,
+            WRITES_GROUP,
+                    1,
+            ConfigDef.Width.LONG,
+            TIME_FROM_FORMAT_DISPLAY
+            // timestamp, time and date formats and timezone
+    ).define(
+            TIME_TO_FORMAT,
+            ConfigDef.Type.STRING,
+            TIME_TO_FORMAT_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            TIME_TO_FORMAT_DOC,
+            WRITES_GROUP,
+                    1,
+            ConfigDef.Width.LONG,
+            TIME_TO_FORMAT_DISPLAY
+    ).define(
+            TIMESTAMP_FROM_FORMAT,
+            ConfigDef.Type.STRING,
+            TIMESTAMP_FROM_FORMAT_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            TIMESTAMP_FROM_FORMAT_DOC,
+            WRITES_GROUP,
+                    1,
+            ConfigDef.Width.LONG,
+            TIMESTAMP_FROM_FORMAT_DISPLAY
+    ).define(
+            TIMESTAMP_TO_FORMAT,
+            ConfigDef.Type.STRING,
+            TIMESTAMP_TO_FORMAT_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            TIMESTAMP_TO_FORMAT_DOC,
+            WRITES_GROUP,
+                    1,
+            ConfigDef.Width.LONG,
+            TIMESTAMP_TO_FORMAT_DISPLAY
+    ).define(
+            DATE_FROM_FORMAT,
+            ConfigDef.Type.STRING,
+            DATE_FROM_FORMAT_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            DATE_FROM_FORMAT_DOC,
+            WRITES_GROUP,
+                    1,
+            ConfigDef.Width.LONG,
+            DATE_FROM_FORMAT_DISPLAY
+    ).define(
+            DATE_TO_FORMAT,
+            ConfigDef.Type.STRING,
+            DATE_TO_FORMAT_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            DATE_TO_FORMAT_DOC,
+            WRITES_GROUP,
+                    1,
+            ConfigDef.Width.LONG,
+            DATE_TO_FORMAT_DISPLAY
+    ).define(
+                    TIMESTAMP_AUTO_CONVERT,
+                    ConfigDef.Type.BOOLEAN,
+                    TIMESTAMP_AUTO_CONVERT_DEFAULT,
+                    ConfigDef.Importance.MEDIUM,
+                    TIMESTAMP_AUTO_CONVERT_DOC,
+                    WRITES_GROUP,
+                    1,
+                    ConfigDef.Width.SHORT,
+                    TIMESTAMP_AUTO_CONVERT_DISPLAY);
 //
 
 
@@ -924,6 +1033,18 @@ public class JdbcSinkConfig extends AbstractConfig {
 
     public final HashMap<String,String> columnAlternative = new HashMap<>(); // columnName, alternative
 
+    public final String timeFromFormat;
+    public final String timeToFormat;
+    public final String timezone;
+    public final String timestampFromFormat;
+    public final String timestampToFormat;
+    public final String dateFromFormat;
+    public final String dateToFormat;
+
+    public final boolean timestampAutoConvert;
+
+
+
 
     public JdbcSinkConfig(Map<?, ?> props) {
         super(CONFIG_DEF, props);
@@ -992,6 +1113,15 @@ public class JdbcSinkConfig extends AbstractConfig {
             }
         }
         printConfigDefTable(CONFIG_DEF);
+        timeFromFormat = getString(TIME_FROM_FORMAT);
+        timeToFormat = getString(TIME_TO_FORMAT);
+        timezone = getString(DB_TIMEZONE_CONFIG);
+        timestampFromFormat = getString(TIMESTAMP_FROM_FORMAT);
+        timestampToFormat = getString(TIMESTAMP_TO_FORMAT);
+        dateFromFormat = getString(DATE_FROM_FORMAT);
+        dateToFormat = getString(DATE_TO_FORMAT);
+        timestampAutoConvert = getBoolean(TIMESTAMP_AUTO_CONVERT);
+
 
     }
 

@@ -1,14 +1,17 @@
 package io.confluent.connect.jdbc.sink.metadata;
 
+
 public class ColumnDetails {
+    private final String udtName;
     private String columnName;
-    private String columnType;
+    private String dataType;
     private String columnDefault;
 
-    public ColumnDetails(String columnName, String columnType, String columnDefault) {
+    public ColumnDetails(String columnName, String dataType, String udtName, String columnDefault) {
         this.columnName = columnName;
-        this.columnType = columnType;
+        this.dataType = dataType;
         this.columnDefault = columnDefault;
+        this.udtName = udtName;
     }
     // getter/setter
 
@@ -24,16 +27,25 @@ public class ColumnDetails {
         this.columnName = columnName;
     }
 
-    public void setColumnType(String columnType) {
-        this.columnType = columnType;
+    public void setDataType(String dataType) {
+        this.dataType = dataType;
     }
 
     public String getColumnDefault() {
         return columnDefault;
     }
 
-    public String getColumnType() {
-        return columnType;
+    public String getDataType() {
+        return dataType;
+    }
+
+    public String getUdtName() {
+        return udtName;
+    }
+    public DateType getDateType() {
+        return DateType.fromString(dataType);
     }
 
 }
+
+

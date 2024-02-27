@@ -28,7 +28,7 @@ public class TableDefinition {
   private final Map<String, String> pkColumnNames = new LinkedHashMap<>();
   private final TableType type;
   private String schema;
-  private List<ColumnDetails> orderedColumns;
+  private LinkedHashMap<String, ColumnDetails> orderedColumnsMap;
 
   public TableDefinition(
       TableId id,
@@ -137,10 +137,17 @@ public class TableDefinition {
     }
 
   public List<ColumnDetails> getOrderedColumns() {
-    return orderedColumns;
+    return Arrays.asList(this.orderedColumnsMap.values().toArray(new ColumnDetails[0]));
   }
+  // get by coliumnName
+    public ColumnDetails getOrderedColumn(String columnName) {
+        return this.orderedColumnsMap.get(columnName);
+    }
 
   public void setOrderedColumns(List<ColumnDetails> orderedColumns) {
-    this.orderedColumns = orderedColumns;
+    this.orderedColumnsMap = new LinkedHashMap<>();
+    for (ColumnDetails column : orderedColumns) {
+      this.orderedColumnsMap.put(column.getColumnName(), column);
+    }
   }
 }

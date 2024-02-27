@@ -159,6 +159,7 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
             }
         } else {
 
+
             if (config.updateMode == JdbcSinkConfig.UpdateMode.LAST_ROW_ONLY) {
                 Collections.reverse(records);
             }
@@ -189,6 +190,26 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
     private void addRow(SinkRecord record) {
         List row = new ArrayList(totalColumns);
         final Struct valueStruct = (Struct) record.value();
+
+//        valueStruct.schema().fields().forEach(field -> {
+//            if (config.printDebugLogs) {
+//                try {
+//                    String value = String.valueOf(valueStruct.get(field.name()));
+//                    log.info("==>>>> Field: {} - {} - {}", field.name(), field.schema().type().name(), field.schema().valueSchema().type());
+//
+//                }catch (Exception e){
+//                }
+//            }
+//        });
+
+        // print tableDefinition.getOrderedColumns()
+        tableDefinition.getOrderedColumns().forEach(c -> {
+            if (config.printDebugLogs) {
+                log.info(">>>>>TableDefinition Column: {} - {}", c.getColumnName(), c.getDataType());
+            }
+        });
+
+
         for (int i = 0; i < totalColumns; i++) {
             String value = null;
             String key = allColumns.get(i).toString();
@@ -227,6 +248,23 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
             if (value == null) {
                 value = config.nullString;
             }
+
+            // date format
+            if(config.timestampAutoConvert && value != null && value.length() > 0) {
+                ColumnDetails column = tableDefinition.getOrderedColumn(key);
+                if(column != null && column.getDateType() != null) {
+                    if (config.printDebugLogs) {
+                        log.info("Date Value before conversion: {} for column: {}", value, key);
+                    }
+                    value = column.getDateType().format(config, value);
+                    if (config.printDebugLogs) {
+                        log.info("Date Value after: {} for column: {}", value, key);
+                    }
+                }
+            }
+            if (config.printDebugLogs) {
+                log.info("Adding value: {} for column: {}", value, key);
+            }
             row.add(i, value);
         }
         if (config.printDebugLogs) {
@@ -248,13 +286,13 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
     }
 
 
-    protected List<ColumnDetails> getSourceColumnDetails() {
+    protected List<ColumnDetails> getSinkColumnDetails() {
         List<ColumnDetails> fieldsDataTypeMapList = new ArrayList<>();
 
         for (Map.Entry entry : fieldsMetadata.allFields.entrySet()) {
             ColumnDefinition column = tableDefinition.definitionForColumn(entry.getKey().toString());
             if (column != null) {
-                fieldsDataTypeMapList.add(new ColumnDetails(entry.getKey().toString(), column.typeName(), null));
+                fieldsDataTypeMapList.add(new ColumnDetails(entry.getKey().toString(), column.typeName(), null,null));
             }
         }
         return fieldsDataTypeMapList;

@@ -3,7 +3,6 @@ package io.confluent.connect.jdbc.gp.gpss;
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.gp.GpDataIngestionService;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
-import io.confluent.connect.jdbc.sink.metadata.ColumnDetails;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.util.TableDefinition;
@@ -29,7 +28,7 @@ public class GPSSDataIngestionService extends GpDataIngestionService {
     public void ingest(List<SinkRecord> records) {
         super.ingest(records);
         GPSSWrapper gpssWrapper = new GPSSWrapper(config);
-        gpssWrapper.ingestBatch(tableName, allColumns, keyColumns, nonKeyColumns, getSourceColumnDetails(),"", data);
+        gpssWrapper.ingestBatch(tableName, allColumns, keyColumns, nonKeyColumns, getSinkColumnDetails(),"", data);
     }
 
 

@@ -1728,11 +1728,19 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     if (schema.name() != null) {
       switch (schema.name()) {
         case Date.LOGICAL_NAME:
-          statement.setDate(
-              index,
-              new java.sql.Date(((java.util.Date) value).getTime()),
-              DateTimeUtils.getTimeZoneCalendar(timeZone)
-          );
+          String dateTimezone = ((JdbcSinkConfig) config).dbTimeZoneDate;
+          if (dateTimezone.equals(JdbcSinkConfig.DbTimezoneDate.UTC.toString())) {
+            statement.setDate(
+                index,
+                new java.sql.Date(((java.util.Date) value).getTime()),
+                DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone(ZoneOffset.UTC))
+            );
+          } else {
+            statement.setDate(
+                index,
+                new java.sql.Date(((java.util.Date) value).getTime()),
+                DateTimeUtils.getTimeZoneCalendar(timeZone));
+          }
           return true;
         case Decimal.LOGICAL_NAME:
           statement.setBigDecimal(index, (BigDecimal) value);

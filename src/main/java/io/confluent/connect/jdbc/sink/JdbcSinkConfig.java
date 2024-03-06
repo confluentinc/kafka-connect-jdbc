@@ -16,6 +16,7 @@
 package io.confluent.connect.jdbc.sink;
 
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -57,6 +58,11 @@ public class JdbcSinkConfig extends AbstractConfig {
     KAFKA,
     RECORD_KEY,
     RECORD_VALUE;
+  }
+
+  public enum DbTimezoneDate {
+    NONE,
+    UTC
   }
 
   public static final List<String> DEFAULT_KAFKA_PK_NAMES = Collections.unmodifiableList(
@@ -234,6 +240,11 @@ public class JdbcSinkConfig extends AbstractConfig {
       "Name of the JDBC timezone that should be used in the connector when "
       + "inserting time-based values. Defaults to UTC.";
   private static final String DB_TIMEZONE_CONFIG_DISPLAY = "DB Time Zone";
+
+  public static final String DB_TIMEZONE_DATE_CONFIG = "db.timezone.date";
+  public static final String DB_TIMEZONE_DATE_DEFAULT = DbTimezoneDate.NONE.toString();
+  private static final String DB_TIMEZONE_DATE_CONFIG_DISPLAY = "DB Time Zone for Date";
+  private static final String DB_TIMEZONE_DATE_CONFIG_DOC = "";
 
   public static final String QUOTE_SQL_IDENTIFIERS_CONFIG =
       JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_CONFIG;
@@ -446,6 +457,18 @@ public class JdbcSinkConfig extends AbstractConfig {
           ConfigDef.Width.MEDIUM,
           DB_TIMEZONE_CONFIG_DISPLAY
         )
+        .define(
+            DB_TIMEZONE_DATE_CONFIG,
+            ConfigDef.Type.STRING,
+            DB_TIMEZONE_DATE_DEFAULT,
+            EnumValidator.in(DbTimezoneDate.values()),
+            ConfigDef.Importance.LOW,
+            DB_TIMEZONE_DATE_CONFIG_DOC,
+            DATAMAPPING_GROUP,
+            6,
+            ConfigDef.Width.MEDIUM,
+            DB_TIMEZONE_DATE_CONFIG_DISPLAY
+        )
         // DDL
         .define(
             AUTO_CREATE,
@@ -541,6 +564,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final Set<String> fieldsWhitelist;
   public final String dialectName;
   public final TimeZone timeZone;
+  public final TimeZone dateTimeZone;
   public final EnumSet<TableType> tableTypes;
   public final boolean useHoldlockInMerge;
 
@@ -568,6 +592,9 @@ public class JdbcSinkConfig extends AbstractConfig {
     fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
     String dbTimeZone = getString(DB_TIMEZONE_CONFIG);
     timeZone = TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
+    String dbTimeZoneDate = getString(DB_TIMEZONE_DATE_CONFIG);
+    dateTimeZone = dbTimeZoneDate.equals(DbTimezoneDate.UTC.toString())
+        ? TimeZone.getTimeZone(ZoneOffset.UTC) : timeZone;
     useHoldlockInMerge = getBoolean(MSSQL_USE_MERGE_HOLDLOCK);
     trimSensitiveLogsEnabled = getBoolean(TRIM_SENSITIVE_LOG_ENABLED);
     if (deleteEnabled && pkMode != PrimaryKeyMode.RECORD_KEY) {

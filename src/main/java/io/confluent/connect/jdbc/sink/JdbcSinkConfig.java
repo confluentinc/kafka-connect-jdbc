@@ -272,6 +272,9 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
 
+  private static final EnumRecommender DATE_TIMEZONE_RECOMMENDER =
+      EnumRecommender.in(DbTimezoneDate.values());
+
   private static final EnumRecommender TABLE_TYPES_RECOMMENDER =
       EnumRecommender.in(TableType.values());
   public static final String MSSQL_USE_MERGE_HOLDLOCK = "mssql.use.merge.holdlock";
@@ -467,7 +470,8 @@ public class JdbcSinkConfig extends AbstractConfig {
             DATAMAPPING_GROUP,
             6,
             ConfigDef.Width.MEDIUM,
-            DB_TIMEZONE_DATE_CONFIG_DISPLAY
+            DB_TIMEZONE_DATE_CONFIG_DISPLAY,
+            DATE_TIMEZONE_RECOMMENDER
         )
         // DDL
         .define(

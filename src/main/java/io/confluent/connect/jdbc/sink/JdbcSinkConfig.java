@@ -596,8 +596,9 @@ public class JdbcSinkConfig extends AbstractConfig {
     fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
     String dbTimeZone = getString(DB_TIMEZONE_CONFIG);
     timeZone = TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
-    String dbTimeZoneDate = getString(DB_TIMEZONE_DATE_CONFIG);
-    dateTimeZone = dbTimeZoneDate.equals(DbTimezoneDate.UTC.toString())
+    DbTimezoneDate dbTimeZoneDate =
+        DbTimezoneDate.valueOf(getString(DB_TIMEZONE_DATE_CONFIG).toUpperCase());
+    dateTimeZone = dbTimeZoneDate.equals(DbTimezoneDate.UTC)
         ? TimeZone.getTimeZone(ZoneOffset.UTC) : timeZone;
     useHoldlockInMerge = getBoolean(MSSQL_USE_MERGE_HOLDLOCK);
     trimSensitiveLogsEnabled = getBoolean(TRIM_SENSITIVE_LOG_ENABLED);

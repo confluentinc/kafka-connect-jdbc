@@ -215,12 +215,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     if (config instanceof JdbcSourceConnectorConfig) {
       timeZone = ((JdbcSourceConnectorConfig) config).timeZone();
       dateTimeZone = TimeZone.getTimeZone(ZoneOffset.UTC);
-    } else if (config instanceof JdbcSinkConfig) {
+    } else {
       timeZone = ((JdbcSinkConfig) config).timeZone;
       dateTimeZone = ((JdbcSinkConfig) config).dateTimeZone;
-    } else {
-      timeZone = TimeZone.getTimeZone(ZoneOffset.UTC);
-      dateTimeZone = TimeZone.getTimeZone(ZoneOffset.UTC);
     }
 
     if (config instanceof JdbcSourceConnectorConfig) {

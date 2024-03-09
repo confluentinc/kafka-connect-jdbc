@@ -314,6 +314,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       Collection<ColumnId> keyColumns,
       Collection<ColumnId> nonKeyColumns
   ) {
+
     // https://blogs.oracle.com/cmar/entry/using_merge_to_do_an
     final Transform<ColumnId> transform = (builder, col) -> {
       builder.append(table)
@@ -321,6 +322,25 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
              .appendColumnName(col.name())
              .append("=incoming.")
              .appendColumnName(col.name());
+    };
+
+    final Transform<ColumnId> nullableKeyTransform = (builder, col) -> {
+      builder
+          .append("(")
+          .append(table)
+          .append(".")
+          .appendColumnName(col.name())
+          .append("=incoming.")
+          .appendColumnName(col.name())
+          .append(" OR (")
+          .append(table)
+          .append(".")
+          .appendColumnName(col.name())
+          .append(" IS NULL AND ")
+          .append("incoming.")
+          .appendColumnName(col.name())
+          .append(" IS NULL))")
+      ;
     };
 
     ExpressionBuilder builder = expressionBuilder();
@@ -334,7 +354,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     builder.append(" FROM dual) incoming on(");
     builder.appendList()
            .delimitedBy(" and ")
-           .transformedBy(transform)
+           .transformedBy(enabledSinkNullKeyProtection ? nullableKeyTransform : transform)
            .of(keyColumns);
     builder.append(")");
     if (nonKeyColumns != null && !nonKeyColumns.isEmpty()) {

@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 import java.io.ByteArrayInputStream;
@@ -70,6 +71,10 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
     int index = ThreadLocalRandom.current().nextInt();
     verifyBindField(++index, Schema.BYTES_SCHEMA, new byte[]{42}).setBlob(eq(index), any(ByteArrayInputStream.class));
     verifyBindField(++index, Schema.BYTES_SCHEMA, ByteBuffer.wrap(new byte[]{42})).setBlob(eq(index), any(ByteArrayInputStream.class));
+  }
+
+  protected OracleDatabaseDialect createSinkDialect(String... propertyPairs) {
+    return new OracleDatabaseDialect(sinkConfigWithUrl("jdbc:oracle:thin://something", propertyPairs));
   }
 
   @Test
@@ -253,6 +258,26 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
                       "values(incoming.\"body\",incoming.\"title\",incoming.\"author\")";
     String actual = dialect.buildUpsertQueryStatement(article, columns(article, "title", "author"),
                                                       columns(article, "body"));
+    assertEquals(expected, actual);
+  }
+
+  @Test
+  public void protectedNullKeyUpsert() {
+    TableId article = tableId("ARTICLE");
+    String expected = "merge into \"ARTICLE\" " +
+        "using (select ? \"title\", ? \"author\", ? \"body\" FROM dual) incoming on" +
+        "((\"ARTICLE\".\"title\"=incoming.\"title\" OR (\"ARTICLE\".\"title\" IS " +
+        "NULL AND incoming.\"title\" IS NULL)) and (\"ARTICLE\"" +
+        ".\"author\"=incoming.\"author\" OR (\"ARTICLE\".\"author\" IS NULL AND " +
+        "incoming.\"author\" IS NULL))) " +
+        "when matched then update set \"ARTICLE\".\"body\"=incoming.\"body\" " +
+        "when not matched then insert(\"ARTICLE\".\"body\",\"ARTICLE\".\"title\"," +
+        "\"ARTICLE\".\"author\") " +
+        "values(incoming.\"body\",incoming.\"title\",incoming.\"author\")";
+
+    OracleDatabaseDialect protectedSinkDialect = createSinkDialect(JdbcSinkConfig.ENABLE_NULL_KEY_PROTECTION, "true");
+    String actual = protectedSinkDialect.buildUpsertQueryStatement(article, columns(article, "title", "author"),
+        columns(article, "body"));
     assertEquals(expected, actual);
   }
 

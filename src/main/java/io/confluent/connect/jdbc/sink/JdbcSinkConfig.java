@@ -244,9 +244,10 @@ public class JdbcSinkConfig extends AbstractConfig {
   public static final String DATE_TIMEZONE_CONFIG = "date.timezone";
   public static final String DATE_TIMEZONE_DEFAULT = DateTimezone.DB_TIMEZONE.toString();
   private static final String DATE_TIMEZONE_CONFIG_DISPLAY = "Time Zone used for Date";
-  private static final String DATE_TIMEZONE_CONFIG_DOC = "Name of JDBC timezone that should be used"
-      + " when inserting DATE type values. Should be set to UTC for no conversion. "
-      + "Defaults to DB_TIMEZONE";
+  private static final String DATE_TIMEZONE_CONFIG_DOC = "Name of the JDBC timezone that should be "
+      + "used in the connector when inserting DATE type values. Defaults to DB_TIMEZONE that uses "
+      + "the timezone set for db.timzeone configuration (to maintain backward compatibility). It "
+      + "is recommended to set this to UTC to avoid conversion for DATE type values.";
 
   public static final String QUOTE_SQL_IDENTIFIERS_CONFIG =
       JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_CONFIG;

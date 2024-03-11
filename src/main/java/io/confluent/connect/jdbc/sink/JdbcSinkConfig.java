@@ -16,6 +16,7 @@
 package io.confluent.connect.jdbc.sink;
 
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -57,6 +58,11 @@ public class JdbcSinkConfig extends AbstractConfig {
     KAFKA,
     RECORD_KEY,
     RECORD_VALUE;
+  }
+
+  public enum DateTimezone {
+    DB_TIMEZONE,
+    UTC
   }
 
   public static final List<String> DEFAULT_KAFKA_PK_NAMES = Collections.unmodifiableList(
@@ -235,6 +241,13 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "inserting time-based values. Defaults to UTC.";
   private static final String DB_TIMEZONE_CONFIG_DISPLAY = "DB Time Zone";
 
+  public static final String DATE_TIMEZONE_CONFIG = "date.timezone";
+  public static final String DATE_TIMEZONE_DEFAULT = DateTimezone.DB_TIMEZONE.toString();
+  private static final String DATE_TIMEZONE_CONFIG_DISPLAY = "Time Zone used for Date";
+  private static final String DATE_TIMEZONE_CONFIG_DOC = "Name of JDBC timezone that should be used"
+      + " when inserting DATE type values. Should be set to UTC for no conversion. "
+      + "Defaults to DB_TIMEZONE";
+
   public static final String QUOTE_SQL_IDENTIFIERS_CONFIG =
       JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_CONFIG;
   public static final String QUOTE_SQL_IDENTIFIERS_DEFAULT =
@@ -260,6 +273,9 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String TRIM_SENSITIVE_LOG_ENABLED_DEFAULT = "false";
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
+
+  private static final EnumRecommender DATE_TIMEZONE_RECOMMENDER =
+      EnumRecommender.in(DateTimezone.values());
 
   private static final EnumRecommender TABLE_TYPES_RECOMMENDER =
       EnumRecommender.in(TableType.values());
@@ -446,6 +462,19 @@ public class JdbcSinkConfig extends AbstractConfig {
           ConfigDef.Width.MEDIUM,
           DB_TIMEZONE_CONFIG_DISPLAY
         )
+        .define(
+            DATE_TIMEZONE_CONFIG,
+            ConfigDef.Type.STRING,
+            DATE_TIMEZONE_DEFAULT,
+            EnumValidator.in(DateTimezone.values()),
+            ConfigDef.Importance.LOW,
+            DATE_TIMEZONE_CONFIG_DOC,
+            DATAMAPPING_GROUP,
+            6,
+            ConfigDef.Width.MEDIUM,
+            DATE_TIMEZONE_CONFIG_DISPLAY,
+            DATE_TIMEZONE_RECOMMENDER
+        )
         // DDL
         .define(
             AUTO_CREATE,
@@ -541,6 +570,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final Set<String> fieldsWhitelist;
   public final String dialectName;
   public final TimeZone timeZone;
+  public final TimeZone dateTimeZone;
   public final EnumSet<TableType> tableTypes;
   public final boolean useHoldlockInMerge;
 
@@ -568,6 +598,10 @@ public class JdbcSinkConfig extends AbstractConfig {
     fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
     String dbTimeZone = getString(DB_TIMEZONE_CONFIG);
     timeZone = TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
+    DateTimezone dateTimezoneConfig =
+        DateTimezone.valueOf(getString(DATE_TIMEZONE_CONFIG).toUpperCase());
+    dateTimeZone = dateTimezoneConfig.equals(DateTimezone.UTC)
+        ? TimeZone.getTimeZone(ZoneOffset.UTC) : timeZone;
     useHoldlockInMerge = getBoolean(MSSQL_USE_MERGE_HOLDLOCK);
     trimSensitiveLogsEnabled = getBoolean(TRIM_SENSITIVE_LOG_ENABLED);
     if (deleteEnabled && pkMode != PrimaryKeyMode.RECORD_KEY) {

@@ -34,6 +34,7 @@ import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.zonky.test.db.postgres.junit.EmbeddedPostgresRules;
 import io.zonky.test.db.postgres.junit.SingleInstancePostgresRule;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
+import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -414,6 +415,49 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
           assertTrue(rs.next());
           assertEquals(struct.getString("firstname"), rs.getString("firstname"));
           assertEquals(struct.getString("lastname"), rs.getString("lastname"));
+        }
+      }
+    }
+  }
+
+  @Test
+  public void testDbTimezoneDateConfig() throws Exception {
+    String topicName = "testtopic";
+
+    connect.kafka().createTopic(topicName, 1);
+
+    props.put(JdbcSinkConfig.AUTO_CREATE, "true");
+    props.put(JdbcSinkConfig.DB_TIMEZONE_CONFIG, "America/New_York");
+    props.put(JdbcSinkConfig.DATE_TIMEZONE_CONFIG, "UTC");
+    props.put("topics", topicName);
+
+    connect.configureConnector("jdbc-sink-connector", props);
+
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+
+    final Schema schema = SchemaBuilder.struct().name("com.example.Person")
+        .field("firstname", Schema.STRING_SCHEMA)
+        .field("lastname", Schema.STRING_SCHEMA)
+        .field("date", Date.SCHEMA)
+        .build();
+    final Struct struct = new Struct(schema)
+        .put("firstname", "Christina")
+        .put("lastname", "Brams")
+        .put("date", new java.util.Date(0));
+
+    String kafkaValue = new String(jsonConverter.fromConnectData(topicName, schema, struct));
+    connect.kafka().produce(topicName, null, kafkaValue);
+
+    waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(topicName), 1, 1,
+        TimeUnit.MINUTES.toMillis(2));
+
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
+      try (Statement s = c.createStatement()) {
+        try (ResultSet rs = s.executeQuery(String.format("SELECT * FROM \"%s\"", topicName))) {
+          assertTrue(rs.next());
+          assertEquals(struct.getString("firstname"), rs.getString("firstname"));
+          assertEquals(struct.getString("lastname"), rs.getString("lastname"));
+          assertEquals(struct.get("date"), rs.getDate("date", java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))));
         }
       }
     }

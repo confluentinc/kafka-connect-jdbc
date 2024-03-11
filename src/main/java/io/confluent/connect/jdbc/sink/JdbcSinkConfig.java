@@ -60,8 +60,8 @@ public class JdbcSinkConfig extends AbstractConfig {
     RECORD_VALUE;
   }
 
-  public enum DbTimezoneDate {
-    NONE,
+  public enum DateTimezone {
+    DB_TIMEZONE,
     UTC
   }
 
@@ -241,10 +241,12 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "inserting time-based values. Defaults to UTC.";
   private static final String DB_TIMEZONE_CONFIG_DISPLAY = "DB Time Zone";
 
-  public static final String DB_TIMEZONE_DATE_CONFIG = "db.timezone.date";
-  public static final String DB_TIMEZONE_DATE_DEFAULT = DbTimezoneDate.NONE.toString();
-  private static final String DB_TIMEZONE_DATE_CONFIG_DISPLAY = "DB Time Zone for Date";
-  private static final String DB_TIMEZONE_DATE_CONFIG_DOC = "";
+  public static final String DATE_TIMEZONE_CONFIG = "date.timezone";
+  public static final String DATE_TIMEZONE_DEFAULT = DateTimezone.DB_TIMEZONE.toString();
+  private static final String DATE_TIMEZONE_CONFIG_DISPLAY = "Time Zone used for Date";
+  private static final String DATE_TIMEZONE_CONFIG_DOC = "Name of JDBC timezone that should be used"
+      + " when inserting DATE type values. Should be set to UTC for no conversion. "
+      + "Defaults to DB_TIMEZONE";
 
   public static final String QUOTE_SQL_IDENTIFIERS_CONFIG =
       JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_CONFIG;
@@ -273,7 +275,7 @@ public class JdbcSinkConfig extends AbstractConfig {
       EnumRecommender.in(QuoteMethod.values());
 
   private static final EnumRecommender DATE_TIMEZONE_RECOMMENDER =
-      EnumRecommender.in(DbTimezoneDate.values());
+      EnumRecommender.in(DateTimezone.values());
 
   private static final EnumRecommender TABLE_TYPES_RECOMMENDER =
       EnumRecommender.in(TableType.values());
@@ -461,16 +463,16 @@ public class JdbcSinkConfig extends AbstractConfig {
           DB_TIMEZONE_CONFIG_DISPLAY
         )
         .define(
-            DB_TIMEZONE_DATE_CONFIG,
+            DATE_TIMEZONE_CONFIG,
             ConfigDef.Type.STRING,
-            DB_TIMEZONE_DATE_DEFAULT,
-            EnumValidator.in(DbTimezoneDate.values()),
+            DATE_TIMEZONE_DEFAULT,
+            EnumValidator.in(DateTimezone.values()),
             ConfigDef.Importance.LOW,
-            DB_TIMEZONE_DATE_CONFIG_DOC,
+            DATE_TIMEZONE_CONFIG_DOC,
             DATAMAPPING_GROUP,
             6,
             ConfigDef.Width.MEDIUM,
-            DB_TIMEZONE_DATE_CONFIG_DISPLAY,
+            DATE_TIMEZONE_CONFIG_DISPLAY,
             DATE_TIMEZONE_RECOMMENDER
         )
         // DDL
@@ -596,9 +598,9 @@ public class JdbcSinkConfig extends AbstractConfig {
     fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
     String dbTimeZone = getString(DB_TIMEZONE_CONFIG);
     timeZone = TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
-    DbTimezoneDate dbTimeZoneDate =
-        DbTimezoneDate.valueOf(getString(DB_TIMEZONE_DATE_CONFIG).toUpperCase());
-    dateTimeZone = dbTimeZoneDate.equals(DbTimezoneDate.UTC)
+    DateTimezone dateTimezoneConfig =
+        DateTimezone.valueOf(getString(DATE_TIMEZONE_CONFIG).toUpperCase());
+    dateTimeZone = dateTimezoneConfig.equals(DateTimezone.UTC)
         ? TimeZone.getTimeZone(ZoneOffset.UTC) : timeZone;
     useHoldlockInMerge = getBoolean(MSSQL_USE_MERGE_HOLDLOCK);
     trimSensitiveLogsEnabled = getBoolean(TRIM_SENSITIVE_LOG_ENABLED);

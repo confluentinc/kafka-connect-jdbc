@@ -428,7 +428,7 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
 
     props.put(JdbcSinkConfig.AUTO_CREATE, "true");
     props.put(JdbcSinkConfig.DB_TIMEZONE_CONFIG, "America/New_York");
-    props.put(JdbcSinkConfig.DB_TIMEZONE_DATE_CONFIG, "UTC");
+    props.put(JdbcSinkConfig.DATE_TIMEZONE_CONFIG, "UTC");
     props.put("topics", topicName);
 
     connect.configureConnector("jdbc-sink-connector", props);

@@ -1878,6 +1878,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           f.schemaType(),
           f.defaultValue()
       );
+      if (!isColumnOptional(f)) {
+        builder.append(" NOT NULL");
+      }
     } else if (isColumnOptional(f)) {
       builder.append(" NULL");
     } else {

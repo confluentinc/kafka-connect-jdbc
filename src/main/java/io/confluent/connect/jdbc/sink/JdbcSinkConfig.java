@@ -37,6 +37,17 @@ public class JdbcSinkConfig extends AbstractConfig {
     private static final String TIMESTAMP_AUTO_CONVERT_DOC = "Whether to convert time-based fields to Timestamp, Date, and Time objects.";
     public static final String TIMESTAMP_AUTO_CONVERT_DISPLAY = "Timestamp Auto Convert";
 
+    // config for date.from.timezone & date.to.timezone
+    public static final String DATE_FROM_TIMEZONE = "date.from.timezone";
+    private static final String DATE_FROM_TIMEZONE_DEFAULT = null;
+    private static final String DATE_FROM_TIMEZONE_DOC = "The timezone to use for the date in the source record.";
+    public static final String DATE_FROM_TIMEZONE_DISPLAY = "Date From Timezone";
+
+    public static final String DATE_TO_TIMEZONE = "date.to.timezone";
+    private static final String DATE_TO_TIMEZONE_DEFAULT = null;
+    private static final String DATE_TO_TIMEZONE_DOC = "The timezone to use for the date in the sink record.";
+    public static final String DATE_TO_TIMEZONE_DISPLAY = "Date To Timezone";
+
 
 
 
@@ -52,7 +63,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     public static final String TIMESTAMP_FROM_FORMAT_DISPLAY = "Timestamp From Format";
 
     public static final String TIMESTAMP_TO_FORMAT = "timestamp.to.format";
-    private static final String TIMESTAMP_TO_FORMAT_DEFAULT = "yyyy-MM-dd hh:mm:ss";
+    private static final String TIMESTAMP_TO_FORMAT_DEFAULT = "yyyy-MM-dd HH:mm:ss";
     private static final String TIMESTAMP_TO_FORMAT_DOC = "The format of the timestamp in the sink record.";
     public static final String TIMESTAMP_TO_FORMAT_DISPLAY = "Timestamp To Format";
 
@@ -72,7 +83,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     public static final String TIME_FROM_FORMAT_DISPLAY = "Time From Format";
 
     public static final String TIME_TO_FORMAT = "time.to.format";
-    private static final String TIME_TO_FORMAT_DEFAULT = "hh:mm:ss";
+    private static final String TIME_TO_FORMAT_DEFAULT = "HH:mm:ss";
     private static final String TIME_TO_FORMAT_DOC = "The format of the time in the sink record.";
     public static final String TIME_TO_FORMAT_DISPLAY = "Time To Format";
 
@@ -941,7 +952,28 @@ public class JdbcSinkConfig extends AbstractConfig {
                     WRITES_GROUP,
                     1,
                     ConfigDef.Width.SHORT,
-                    TIMESTAMP_AUTO_CONVERT_DISPLAY);
+                    TIMESTAMP_AUTO_CONVERT_DISPLAY)
+            .define(
+                    DATE_FROM_TIMEZONE,
+                    ConfigDef.Type.STRING,
+                    DATE_FROM_TIMEZONE_DEFAULT,
+                    ConfigDef.Importance.MEDIUM,
+                    DATE_FROM_TIMEZONE_DOC,
+                    WRITES_GROUP,
+                    1,
+                    ConfigDef.Width.MEDIUM,
+                    DATE_FROM_TIMEZONE_DISPLAY
+            ).define(
+                    DATE_TO_TIMEZONE,
+                    ConfigDef.Type.STRING,
+                    DATE_TO_TIMEZONE_DEFAULT,
+                    ConfigDef.Importance.MEDIUM,
+                    DATE_TO_TIMEZONE_DOC,
+                    WRITES_GROUP,
+                    1,
+                    ConfigDef.Width.MEDIUM,
+                    DATE_TO_TIMEZONE_DISPLAY
+            );
 //
 
 
@@ -1035,13 +1067,15 @@ public class JdbcSinkConfig extends AbstractConfig {
 
     public final String timeFromFormat;
     public final String timeToFormat;
-    public final String timezone;
     public final String timestampFromFormat;
     public final String timestampToFormat;
     public final String dateFromFormat;
     public final String dateToFormat;
 
     public final boolean timestampAutoConvert;
+
+    public TimeZone dateFromTimezone;
+    public TimeZone dateToTimezone;
 
 
 
@@ -1115,14 +1149,19 @@ public class JdbcSinkConfig extends AbstractConfig {
         printConfigDefTable(CONFIG_DEF);
         timeFromFormat = getString(TIME_FROM_FORMAT);
         timeToFormat = getString(TIME_TO_FORMAT);
-        timezone = getString(DB_TIMEZONE_CONFIG);
         timestampFromFormat = getString(TIMESTAMP_FROM_FORMAT);
         timestampToFormat = getString(TIMESTAMP_TO_FORMAT);
         dateFromFormat = getString(DATE_FROM_FORMAT);
         dateToFormat = getString(DATE_TO_FORMAT);
         timestampAutoConvert = getBoolean(TIMESTAMP_AUTO_CONVERT);
-
-
+        String fromTimezone = getString(DATE_FROM_TIMEZONE);
+        if (fromTimezone != null && !fromTimezone.isEmpty()){
+            dateFromTimezone = TimeZone.getTimeZone(ZoneId.of(fromTimezone));
+        }
+         String toTimezone = getString(DATE_TO_TIMEZONE);
+        if (toTimezone != null && !toTimezone.isEmpty()) {
+            dateToTimezone = TimeZone.getTimeZone(ZoneId.of(toTimezone));
+        }
     }
 
     private String getPasswordValue(String key) {

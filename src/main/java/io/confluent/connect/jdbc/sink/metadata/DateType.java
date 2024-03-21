@@ -6,30 +6,27 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.text.SimpleDateFormat;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.util.Arrays;
 import java.util.Date;
 
 public enum DateType {
 // Logger
 
     // add array
-    DATE(new String[]{"date", "date without time zone"}){
+    DATE("date"){
         @Override
         public String format(JdbcSinkConfig config, String dateValue) {
             log.info("DateType: DATE");
             return convertDateFormat(config, dateValue, config.dateFromFormat, config.dateToFormat);
         }
     },
-    DATETIME(new String[]{"time", "time without time zone"}){
+    TIME("time"){
         @Override
         public String format(JdbcSinkConfig config, String dateValue) {
-            log.info("DateType: DATETIME");
+            log.info("DateType: TIME");
             return convertDateFormat(config, dateValue, config.timeFromFormat, config.timeToFormat);
         }
     },
-    TIMESTAMP(new String[]{"timestamp", "timestamp with time zone"}){
+    TIMESTAMP("timestamp"){
         @Override
         public String format(JdbcSinkConfig config, String dateValue) {
             log.info("DateType: TIMESTAMP");
@@ -41,29 +38,32 @@ public enum DateType {
         return dateValue;
     }
     public String convertDateFormat(JdbcSinkConfig config, String originalDateString, String originalFormat, String targetFormat) {
-        if(config.deleteEnabled){
+        if (config.printDebugLogs) {
             // log all values in one line
             log.info("Converting: originalDateString: " + originalDateString + " originalFormat: " + originalFormat + " targetFormat: " + targetFormat);
 
         }
+        if (originalDateString == null || originalFormat == null || targetFormat == null || originalDateString.isEmpty() || originalFormat.isEmpty() || targetFormat.isEmpty() ||  "null".equalsIgnoreCase(originalDateString))
+            return originalDateString;
+
         // Define the original and target date formatters
         String[] formats = originalFormat.split("#");
 
         // for`
         for(String format: formats) {
             SimpleDateFormat originalFormatter = new SimpleDateFormat(format);
-            originalFormatter.setTimeZone(config.timeZone);
+            if(config.dateFromTimezone != null)
+                originalFormatter.setTimeZone(config.dateFromTimezone);
 
             SimpleDateFormat targetFormatter = new SimpleDateFormat(targetFormat);
-            targetFormatter.setTimeZone(config.timeZone);
+            if(config.dateToTimezone != null)
+                targetFormatter.setTimeZone(config.dateToTimezone);
 
             try {
                 // Parse the original date string
                 Date parsedDate = originalFormatter.parse(originalDateString);
-                LocalDate originalDate = parsedDate.toInstant().atZone(config.timeZone.toZoneId()).toLocalDate();
-
                 // Format the parsed date using the target formatter
-                return targetFormatter.format(Date.from(originalDate.atStartOfDay(config.timeZone.toZoneId()).toInstant()));
+                return targetFormatter.format(parsedDate);
 
             } catch (Exception e) {
                 // If parsing fails with the current formatter, try the next one
@@ -74,20 +74,27 @@ public enum DateType {
 
         return originalDateString;
     }
-    DateType(String[] type) {
+    DateType(String type) {
         this.type = type;
     }
-    private String[] type;
-    public String[] getType() {
+    private String type;
+    public String getType() {
         return type;
     }
     // find enum
     public static DateType fromString(String text) {
-        for (DateType b : DateType.values()) {
-            if (Arrays.stream(b.type).anyMatch(text::equals)) {
-                return b;
+         log.info("Getting DateType from string: "+text);
+        if(text != null) {
+            text = text.toLowerCase();
+            if(text.startsWith(DATE.type)) {
+               return DATE;
+           }else if(text.startsWith(TIMESTAMP.type)) {
+               return TIMESTAMP;
+           }else if(text.startsWith(TIME.type)){
+                return TIME;
             }
         }
+
         return null;
     }
 

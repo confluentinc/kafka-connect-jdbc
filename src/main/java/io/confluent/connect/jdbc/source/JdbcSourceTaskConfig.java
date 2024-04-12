@@ -31,8 +31,14 @@ public class JdbcSourceTaskConfig extends JdbcSourceConnectorConfig {
   private static final String TABLES_DOC = "List of tables for this task to watch for changes.";
   public static final String TABLES_FETCHED = "tables.fetched";
 
+  public static final String STORED_PROCEDURE_CONFIG = "stored.procedure.name";
+  public static final String STORED_PROCEDURE_DOC = "Stored Procedure name.";
+  private static final String STORED_PROCEDURE_DEFAULT = "";
+
   static ConfigDef config = baseConfigDef()
       .define(TABLES_CONFIG, Type.LIST, Importance.HIGH, TABLES_DOC)
+      .define(STORED_PROCEDURE_CONFIG, Type.STRING, STORED_PROCEDURE_DEFAULT,
+              Importance.HIGH, STORED_PROCEDURE_DOC)
       .defineInternal(TABLES_FETCHED, Type.BOOLEAN, false, Importance.HIGH);
 
   public JdbcSourceTaskConfig(Map<String, String> props) {

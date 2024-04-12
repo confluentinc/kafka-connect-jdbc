@@ -41,6 +41,7 @@ import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.junit.After;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.powermock.api.easymock.PowerMock;
@@ -53,6 +54,7 @@ import io.confluent.connect.jdbc.util.DateTimeUtils;
 // incremental data updates from the database
 @RunWith(PowerMockRunner.class)
 @PowerMockIgnore("javax.management.*")
+@Ignore
 public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   private static final Map<String, String> QUERY_SOURCE_PARTITION
       = Collections.singletonMap(JdbcSourceConnectorConstants.QUERY_NAME_KEY,

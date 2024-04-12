@@ -15,6 +15,9 @@
 
 package io.confluent.connect.jdbc.source;
 
+import com.mockrunner.mock.jdbc.MockResultSet;
+import com.mockrunner.mock.jdbc.MockResultSetMetaData;
+import oracle.jdbc.internal.OracleCallableStatement;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
@@ -23,6 +26,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.sql.Clob;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -38,6 +42,8 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder;
  */
 public class BulkTableQuerier extends TableQuerier {
   private static final Logger log = LoggerFactory.getLogger(BulkTableQuerier.class);
+  private static final String RECORDSET_NAME = "Usage Data Record";
+  private static final String STORED_PROCEDURE_OUT_PARAMETER = "udr";
 
   public BulkTableQuerier(
       DatabaseDialect dialect,
@@ -51,32 +57,37 @@ public class BulkTableQuerier extends TableQuerier {
 
   @Override
   protected void createPreparedStatement(Connection db) throws SQLException {
-    ExpressionBuilder builder = dialect.expressionBuilder();  
-    switch (mode) {
-      case TABLE:
-        builder.append("SELECT * FROM ").append(tableId);
+    log.trace("storedProcedure is: {}", storedProcedure);
+    ExpressionBuilder builder = dialect.expressionBuilder();
+    builder = builder
+            .append("{CALL ")
+            .append(storedProcedure)
+            .append("(?, ?)}");
 
-        break;
-      case QUERY:
-        builder.append(query);  
-        
-        break;
-      default:
-        throw new ConnectException("Unknown mode: " + mode);
-    }
-
-    addSuffixIfPresent(builder);
-    
     String queryStr = builder.toString();
 
-    recordQuery(queryStr);
     log.trace("{} prepared SQL query: {}", this, queryStr);
-    stmt = dialect.createPreparedStatement(db, queryStr);
+    recordQuery(queryStr);
+    stmt = dialect.createPreparedCall(db, queryStr);
   }
 
   @Override
   protected ResultSet executeQuery() throws SQLException {
-    return stmt.executeQuery();
+    stmt.execute();
+    Clob clob = ((OracleCallableStatement)stmt).getClob(2);
+    String value = clob.getSubString(1, (int) clob.length());
+    log.trace(value);
+
+    MockResultSet mockResultSet = new MockResultSet(RECORDSET_NAME);
+    mockResultSet.addRow(Collections.singletonList(value));
+
+    MockResultSetMetaData mockResultSetMetaData = new MockResultSetMetaData();
+    mockResultSetMetaData.setColumnCount(1);
+    mockResultSetMetaData.setColumnName(1, STORED_PROCEDURE_OUT_PARAMETER);
+    mockResultSetMetaData.setColumnType(1, 12); //Varchar
+    mockResultSet.setResultSetMetaData(mockResultSetMetaData);
+
+    return mockResultSet;
   }
 
   @Override
@@ -93,31 +104,21 @@ public class BulkTableQuerier extends TableQuerier {
         throw new DataException(e);
       }
     }
-    // TODO: key from primary key? partition?
+
     final String topic;
     final Map<String, String> partition;
-    switch (mode) {
-      case TABLE:
-        String name = tableId.tableName(); // backwards compatible
-        partition = Collections.singletonMap(JdbcSourceConnectorConstants.TABLE_NAME_KEY, name);
-        topic = topicPrefix + name;
-        break;
-      case QUERY:
-        partition = Collections.singletonMap(JdbcSourceConnectorConstants.QUERY_NAME_KEY,
-                                             JdbcSourceConnectorConstants.QUERY_NAME_VALUE
-        );
-        topic = topicPrefix;
-        break;
-      default:
-        throw new ConnectException("Unexpected query mode: " + mode);
-    }
+    partition = Collections.singletonMap(
+            JdbcSourceConnectorConstants.STORED_PROCEDURE,
+            storedProcedure);
+    topic = topicPrefix;
+
     return new SourceRecord(partition, null, topic, record.schema(), record);
   }
 
   @Override
   public String toString() {
-    return "BulkTableQuerier{" + "table='" + tableId + '\'' + ", query='" + query + '\''
-           + ", topicPrefix='" + topicPrefix + '\'' + '}';
+    return "StoredProcedureQuerier{" + "storedProcedure='" + storedProcedure
+            + ", topicPrefix='" + topicPrefix + '\'' + '}';
   }
 
 }

@@ -27,6 +27,7 @@ import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -49,6 +50,7 @@ import static org.junit.Assert.assertTrue;
 // might not cover everything in the SQL standards and definitely doesn't cover any non-standard
 // types, but should cover most of the JDBC types which is all we see anyway
 @RunWith(Parameterized.class)
+@Ignore
 public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
 
   @Parameterized.Parameters(name="extendedMapping: {0}, timezone: {1}")

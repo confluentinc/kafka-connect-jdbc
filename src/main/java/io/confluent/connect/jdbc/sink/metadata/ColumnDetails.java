@@ -7,11 +7,14 @@ public class ColumnDetails {
     private String dataType;
     private String columnDefault;
 
+    private DateType dateType;
+
     public ColumnDetails(String columnName, String dataType, String udtName, String columnDefault) {
         this.columnName = columnName;
         this.dataType = dataType;
         this.columnDefault = columnDefault;
         this.udtName = udtName;
+        this.dateType = DateType.fromString(dataType);
     }
     // getter/setter
 
@@ -43,7 +46,7 @@ public class ColumnDetails {
         return udtName;
     }
     public DateType getDateType() {
-        return DateType.fromString(dataType);
+        return dateType;
     }
 
 }

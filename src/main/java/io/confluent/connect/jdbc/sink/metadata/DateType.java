@@ -37,28 +37,32 @@ public enum DateType {
     public String format(JdbcSinkConfig config, String dateValue) {
         return dateValue;
     }
+    private SimpleDateFormat originalFormatter;
+    private SimpleDateFormat targetFormatter;
     public String convertDateFormat(JdbcSinkConfig config, String originalDateString, String originalFormat, String targetFormat) {
         if (config.printDebugLogs) {
             // log all values in one line
             log.info("Converting: originalDateString: " + originalDateString + " originalFormat: " + originalFormat + " targetFormat: " + targetFormat);
-
         }
         if (originalDateString == null || originalFormat == null || targetFormat == null || originalDateString.isEmpty() || originalFormat.isEmpty() || targetFormat.isEmpty() ||  "null".equalsIgnoreCase(originalDateString))
             return originalDateString;
 
         // Define the original and target date formatters
-        String[] formats = originalFormat.split("#");
+       // String[] formats = originalFormat.split("#");
 
         // for`
-        for(String format: formats) {
-            SimpleDateFormat originalFormatter = new SimpleDateFormat(format);
-            if(config.dateFromTimezone != null)
+      //  for(String format: formats) {
+        if(originalFormatter == null) {
+            originalFormatter = new SimpleDateFormat(originalFormat);
+            if (config.dateFromTimezone != null)
                 originalFormatter.setTimeZone(config.dateFromTimezone);
+        }
 
-            SimpleDateFormat targetFormatter = new SimpleDateFormat(targetFormat);
-            if(config.dateToTimezone != null)
+        if(targetFormatter == null ) {
+            targetFormatter = new SimpleDateFormat(targetFormat);
+            if (config.dateToTimezone != null)
                 targetFormatter.setTimeZone(config.dateToTimezone);
-
+        }
             try {
                 // Parse the original date string
                 Date parsedDate = originalFormatter.parse(originalDateString);
@@ -69,7 +73,7 @@ public enum DateType {
                 // If parsing fails with the current formatter, try the next one
                 e.printStackTrace();
             }
-        }
+     //   }
 
 
         return originalDateString;

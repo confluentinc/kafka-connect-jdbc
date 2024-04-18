@@ -21,6 +21,8 @@ import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.PrimaryKeyMode.RECOR
 
 import java.util.Locale;
 import java.util.Optional;
+
+import io.confluent.connect.jdbc.util.ConnectionURLParser;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigValue;
@@ -38,72 +40,98 @@ import io.confluent.connect.jdbc.sink.JdbcSinkTask;
 import io.confluent.connect.jdbc.util.Version;
 
 public class JdbcSinkConnector extends SinkConnector {
-  private static final Logger log = LoggerFactory.getLogger(JdbcSinkConnector.class);
+    private static final Logger log = LoggerFactory.getLogger(JdbcSinkConnector.class);
 
-  private Map<String, String> configProps;
+    private Map<String, String> configProps;
+    private MonitorThread monitorThread;
 
-  public Class<? extends Task> taskClass() {
-    return JdbcSinkTask.class;
-  }
-
-  @Override
-  public List<Map<String, String>> taskConfigs(int maxTasks) {
-    log.info("Setting task configurations for {} workers.", maxTasks);
-    final List<Map<String, String>> configs = new ArrayList<>(maxTasks);
-    for (int i = 0; i < maxTasks; ++i) {
-      configs.add(configProps);
+    public Class<? extends Task> taskClass() {
+        return JdbcSinkTask.class;
     }
-    return configs;
-  }
 
-  @Override
-  public void start(Map<String, String> props) {
-    configProps = props;
-  }
+    @Override
+    public List<Map<String, String>> taskConfigs(int maxTasks) {
+        log.info("Setting task configurations for {} workers.", maxTasks);
+        final List<Map<String, String>> configs = new ArrayList<>(maxTasks);
+        for (int i = 0; i < maxTasks; ++i) {
+            configs.add(configProps);
+        }
+        return configs;
+    }
 
-  @Override
-  public void stop() {
-  }
+    @Override
+    public void start(Map<String, String> props) {
+        configProps = props;
+        try {
+            JdbcSinkConfig config = new JdbcSinkConfig(props);
+            if (monitorThread != null && monitorThread.isAlive()) {
+                monitorThread.stopMonitoring();
+                monitorThread.interrupt();
+            }
+            setupMonitorThread(config);
+        } catch (Exception e) {
+            log.error("Error while starting the monitor thread", e);
+        }
+    }
 
-  @Override
-  public ConfigDef config() {
-    return JdbcSinkConfig.CONFIG_DEF;
-  }
+    private void setupMonitorThread(JdbcSinkConfig config) {
 
-  @Override
-  public Config validate(Map<String, String> connectorConfigs) {
-    /** get configuration parsed and validated individually */
-    Config config = super.validate(connectorConfigs);
+        if(config.monitoringThreadEnabled) {
+             if(config.kafkaConnectUrl == null){
+                log.error("Error: Kafka Connect URL is not provided. Monitoring thread will not be started.");
+                return;
+             }
 
-    return validateDeleteEnabledPkMode(config);
-  }
+            monitorThread = new MonitorThread(config.connectionUrl, config.kafkaConnectUrl, config.connectorName, config.monitoringThreadInterval, config.monitoringThreadInitialDelay);
+            monitorThread.startMonitoring();
+        }
+    }
 
-  private Config validateDeleteEnabledPkMode(Config config) {
-    configValue(config, DELETE_ENABLED)
-        .filter(deleteEnabled -> Boolean.TRUE.equals(deleteEnabled.value()))
-        .ifPresent(deleteEnabled -> configValue(config, PK_MODE)
-            .ifPresent(pkMode -> {
-              if (!RECORD_KEY.name().toLowerCase(Locale.ROOT).equals(pkMode.value())
-                  && !RECORD_KEY.name().toUpperCase(Locale.ROOT).equals(pkMode.value())) {
-                String conflictMsg = "Deletes are only supported for pk.mode record_key";
-                pkMode.addErrorMessage(conflictMsg);
-                deleteEnabled.addErrorMessage(conflictMsg);
-              }
-            }));
-    return config;
-  }
+    @Override
+    public void stop() {
+    }
 
-  /** only if individual validation passed. */
-  private Optional<ConfigValue> configValue(Config config, String name) {
-    return config.configValues()
-        .stream()
-        .filter(cfg -> name.equals(cfg.name())
-            && cfg.errorMessages().isEmpty())
-        .findFirst();
-  }
+    @Override
+    public ConfigDef config() {
+        return JdbcSinkConfig.CONFIG_DEF;
+    }
 
-  @Override
-  public String version() {
-    return Version.getVersion();
-  }
+    @Override
+    public Config validate(Map<String, String> connectorConfigs) {
+        /** get configuration parsed and validated individually */
+        Config config = super.validate(connectorConfigs);
+
+        return validateDeleteEnabledPkMode(config);
+    }
+
+    private Config validateDeleteEnabledPkMode(Config config) {
+        configValue(config, DELETE_ENABLED)
+                .filter(deleteEnabled -> Boolean.TRUE.equals(deleteEnabled.value()))
+                .ifPresent(deleteEnabled -> configValue(config, PK_MODE)
+                        .ifPresent(pkMode -> {
+                            if (!RECORD_KEY.name().toLowerCase(Locale.ROOT).equals(pkMode.value())
+                                    && !RECORD_KEY.name().toUpperCase(Locale.ROOT).equals(pkMode.value())) {
+                                String conflictMsg = "Deletes are only supported for pk.mode record_key";
+                                pkMode.addErrorMessage(conflictMsg);
+                                deleteEnabled.addErrorMessage(conflictMsg);
+                            }
+                        }));
+        return config;
+    }
+
+    /**
+     * only if individual validation passed.
+     */
+    private Optional<ConfigValue> configValue(Config config, String name) {
+        return config.configValues()
+                .stream()
+                .filter(cfg -> name.equals(cfg.name())
+                        && cfg.errorMessages().isEmpty())
+                .findFirst();
+    }
+
+    @Override
+    public String version() {
+        return Version.getVersion();
+    }
 }

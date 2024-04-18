@@ -189,6 +189,11 @@ public class DbStructure {
       }
     }
 
+    if(!config.autoEvolve && config.columnSelectionStrategy == JdbcSinkConfig.ColumnSelectionStrategy.SINK_PREFERRED){
+      log.info("Sink preferred column selection strategy is enabled and auto evolve is false. Skipping auto-evolution for table {}", tableId);
+      return true;
+    }
+
     if (!config.autoEvolve) {
       throw new TableAlterOrCreateException(String.format(
           "%s %s is missing fields (%s) and auto-evolution is disabled",

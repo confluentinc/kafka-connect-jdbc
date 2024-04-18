@@ -25,6 +25,8 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
     protected final FieldsMetadata fieldsMetadata;
     protected final String tableName;
     protected List<String> keyColumns;
+    protected List<String> updateColumnsList = new ArrayList<>();
+    protected List<String> insertColumnsList = new ArrayList<>();
     protected List<String> nonKeyColumns;
     protected List<String> allColumns;
     protected List<Map<String, String>> columnsWithDataType;
@@ -76,14 +78,29 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
             return field.schema().type().getName().toUpperCase();
     }
 
-    protected List<Map<String, String>> createColumnNameDataTypeMapList() {
+//    protected List<Map<String, String>> createColumnNameDataTypeMapList(List<String> allColumns) {
+//        List<Map<String, String>> fieldsDataTypeMapList = new ArrayList<>();
+//
+//        for (Map.Entry entry : fieldsMetadata.allFields.entrySet()) {
+//            Map<String, String> fieldsDataTypeMap = new HashMap<>();
+//            ColumnDefinition column = tableDefinition.definitionForColumn(entry.getKey().toString());
+//            if (column != null) {
+//                fieldsDataTypeMap.put(entry.getKey().toString(), column.typeName());
+//                fieldsDataTypeMapList.add(fieldsDataTypeMap);
+//            }
+//        }
+//
+//        return fieldsDataTypeMapList;
+//    }
+
+    protected List<Map<String, String>> createColumnNameDataTypeMapList(List<String> allColumns) {
         List<Map<String, String>> fieldsDataTypeMapList = new ArrayList<>();
 
-        for (Map.Entry entry : fieldsMetadata.allFields.entrySet()) {
+        for (String columnName : allColumns) {
             Map<String, String> fieldsDataTypeMap = new HashMap<>();
-            ColumnDefinition column = tableDefinition.definitionForColumn(entry.getKey().toString());
+            ColumnDefinition column = tableDefinition.definitionForColumn(columnName);
             if (column != null) {
-                fieldsDataTypeMap.put(entry.getKey().toString(), column.typeName());
+                fieldsDataTypeMap.put(columnName, column.typeName());
                 fieldsDataTypeMapList.add(fieldsDataTypeMap);
             }
         }
@@ -113,8 +130,7 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
         allColumns = new ArrayList<>(fieldsMetadata.allFields.keySet());
 
 
-        // apply for gpss case for now
-        if (config.columnSelectionStrategy == JdbcSinkConfig.ColumnSelectionStrategy.SINK_PREFERRED && config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPSS) {
+        if (config.columnSelectionStrategy == JdbcSinkConfig.ColumnSelectionStrategy.SINK_PREFERRED) {
             log.info("Applying column selection strategy {}", config.columnSelectionStrategy.name());
             List<String> sinkTableColumns = tableDefinition.getOrderedColumns().stream().map(ColumnDetails::getColumnName).collect(Collectors.toList());
             //log
@@ -140,12 +156,32 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
         }
 
 
+
+
+
+
+        // add all columns except the updateExcludeColumns to updateColumnsList, excluded columns may have fully qualified names like tablename.columnname
+        List<String> excludedColumns = config.updateExcludeColumns.stream().filter(
+                column -> column.contains(".") ? column.split("\\.")[0].equals(tableName) : true
+        ).collect(Collectors.toList());
+
+        updateColumnsList.addAll(nonKeyColumns);
+        updateColumnsList.removeAll(excludedColumns);
+
+        // add all columns except the insertExcludeColumns to insertColumnsList, excluded columns may have fully qualified names like tablename.columnname
+        excludedColumns = config.insertExcludeColumns.stream().filter(
+                column -> column.contains(".") ? column.split("\\.")[0].equals(tableName) : true
+        ).collect(Collectors.toList());
+
+        insertColumnsList.addAll(allColumns);
+        insertColumnsList.removeAll(excludedColumns);
+
         totalColumns = allColumns.size();
         totalKeyColumns = keyColumns.size();
         totalNonKeyColumns = nonKeyColumns.size();
         totalRecords = records.size();
 
-        columnsWithDataType = createColumnNameDataTypeMapList();
+        columnsWithDataType = createColumnNameDataTypeMapList(insertColumnsList);
 
         // print all counts in one shot
         log.info("Total Columns: {}, Total Key Columns: {}, Total Non Key Columns: {}, Total Records: {}", totalColumns, totalKeyColumns, totalNonKeyColumns, totalRecords);

@@ -31,6 +31,26 @@ import org.apache.kafka.common.config.types.Password;
 
 public class JdbcSinkConfig extends AbstractConfig {
 
+    public static final String UPDATE_COLUMN_EXCLUDE_LIST = "update.column.exclude.list";
+    private static final String UPDATE_COLUMN_EXCLUDE_LIST_DEFAULT = "";
+    private static final String UPDATE_COLUMN_EXCLUDE_LIST_DOC = "The columns to exclude from the update statement(GP).";
+    private static final String UPDATE_COLUMN_EXCLUDE_LIST_DISPLAY = "Update Column Exclude List";
+
+    // insert
+    public static final String INSERT_COLUMN_EXCLUDE_LIST = "insert.column.exclude.list";
+    private static final String INSERT_COLUMN_EXCLUDE_LIST_DEFAULT = "";
+    private static final String INSERT_COLUMN_EXCLUDE_LIST_DOC = "The columns to exclude from the insert statement(GP).";
+    private static final String INSERT_COLUMN_EXCLUDE_LIST_DISPLAY = "Insert Column Exclude List";
+
+
+
+
+    public static final String MONITORING_THREAD_INITIAL_DELAY = "monitoring.thread.initial.delay";
+    private static final long MONITORING_THREAD_INITIAL_DELAY_DEFAULT = 20000;
+    private static final String MONITORING_THREAD_INITIAL_DELAY_DOC = "The initial delay in milliseconds for the monitoring thread to check the status of the database.";
+    private static final String MONITORING_THREAD_INITIAL_DELAY_DISPLAY = "Monitoring Thread Initial Delay";
+
+
     // config for timestamp.auto.convert boolean default true
     public static final String TIMESTAMP_AUTO_CONVERT = "timestamp.auto.convert";
     private static final boolean TIMESTAMP_AUTO_CONVERT_DEFAULT = true;
@@ -47,6 +67,14 @@ public class JdbcSinkConfig extends AbstractConfig {
     private static final String DATE_TO_TIMEZONE_DEFAULT = null;
     private static final String DATE_TO_TIMEZONE_DOC = "The timezone to use for the date in the sink record.";
     public static final String DATE_TO_TIMEZONE_DISPLAY = "Date To Timezone";
+
+    // kafka connect url
+
+    public static final String KAFKA_CONNECT_URL = "kafka.connect.url";
+    private static final String KAFKA_CONNECT_URL_DEFAULT = "http://localhost:8083";
+    private static final String KAFKA_CONNECT_URL_DOC = "The url of the kafka connect server to pause and resume connectors.";
+    public static final String KAFKA_CONNECT_URL_DISPLAY = "Kafka Connect URL";
+
 
 
 
@@ -90,12 +118,13 @@ public class JdbcSinkConfig extends AbstractConfig {
 
     public static final String COLUMN_SELECTION_STRATEGY = "column.selection.strategy";
     private static final String COLUMN_SELECTION_STRATEGY_DEFAULT = ColumnSelectionStrategy.DEFAULT.name();
-    private static final String COLUMN_SELECTION_STRATEGY_DOCS = "The column selection strategy to use (for gpss only). Supported strategies are:\n"
+    private static final String COLUMN_SELECTION_STRATEGY_DOCS = "The column selection strategy to use (for gp only). Supported strategies are:\n"
             + "``DEFAULT``\n"
             + "    Use all columns received from source table.\n"
             + "``SINK_PREFERRED``\n"
             + "    Prefer columns in the sink table if there is a difference between the source and sink tables.";
     public static final String COLUMN_SELECTION_STRATEGY_DISPLAY = "Column Selection Strategy";
+    public long monitoringThreadInitialDelay;
 
     public enum ColumnSelectionStrategy {
         DEFAULT,
@@ -461,6 +490,19 @@ public class JdbcSinkConfig extends AbstractConfig {
     private static final String MSSQL_USE_MERGE_HOLDLOCK_DISPLAY =
             "SQL Server - Use HOLDLOCK in MERGE";
 
+
+
+    public static final String MONITORING_THREAD_INTERVAL = "monitoring.thread.interval";
+    private static final long MONITORING_THREAD_INTERVAL_DEFAULT = 60000;
+    private static final String MONITORING_THREAD_INTERVAL_DOC = "The interval in milliseconds for the monitoring thread to check the status of the database.";
+
+    private static final String MONITORING_THREAD_INTERVAL_DISPLAY = "Monitoring Thread Interval";
+
+    public static final String MONITORING_THREAD_ENABLED = "monitoring.thread.enabled";
+    private static final boolean MONITORING_THREAD_ENABLED_DEFAULT = false;
+    private static final String MONITORING_THREAD_ENABLED_DOC = "Enable the monitoring thread to check the status of the database.";
+
+    private static final String MONITORING_THREAD_ENABLED_DISPLAY = "Monitoring Thread Enabled";
     public static final ConfigDef CONFIG_DEF = new ConfigDef()
             // Connection
             .define(
@@ -973,10 +1015,35 @@ public class JdbcSinkConfig extends AbstractConfig {
                     1,
                     ConfigDef.Width.MEDIUM,
                     DATE_TO_TIMEZONE_DISPLAY
-            );
-//
+            ).
 
 
+
+
+            define(
+                    MONITORING_THREAD_INTERVAL,
+                    ConfigDef.Type.LONG,
+                    MONITORING_THREAD_INTERVAL_DEFAULT,
+                    ConfigDef.Importance.LOW,
+                    MONITORING_THREAD_INTERVAL_DOC,
+                    WRITES_GROUP,
+                    1,
+                    ConfigDef.Width.MEDIUM,
+                    MONITORING_THREAD_INTERVAL_DISPLAY
+            ).define(
+                    MONITORING_THREAD_ENABLED,
+                    ConfigDef.Type.BOOLEAN,
+                    MONITORING_THREAD_ENABLED_DEFAULT,
+                    ConfigDef.Importance.LOW,
+                    MONITORING_THREAD_ENABLED_DOC,
+                    WRITES_GROUP,
+                    1,
+                    ConfigDef.Width.MEDIUM,
+                    MONITORING_THREAD_ENABLED_DISPLAY
+            ).define(KAFKA_CONNECT_URL, ConfigDef.Type.STRING, KAFKA_CONNECT_URL_DEFAULT, ConfigDef.Importance.HIGH, KAFKA_CONNECT_URL_DOC, CONNECTION_GROUP, 1, ConfigDef.Width.LONG, KAFKA_CONNECT_URL_DISPLAY)
+            .define(MONITORING_THREAD_INITIAL_DELAY , ConfigDef.Type.LONG, MONITORING_THREAD_INITIAL_DELAY_DEFAULT, ConfigDef.Importance.LOW, MONITORING_THREAD_INITIAL_DELAY_DOC, WRITES_GROUP, 1, ConfigDef.Width.MEDIUM, MONITORING_THREAD_INITIAL_DELAY_DISPLAY)
+            .define(UPDATE_COLUMN_EXCLUDE_LIST, ConfigDef.Type.STRING, UPDATE_COLUMN_EXCLUDE_LIST_DEFAULT, ConfigDef.Importance.MEDIUM, UPDATE_COLUMN_EXCLUDE_LIST_DOC, WRITES_GROUP, 1, ConfigDef.Width.LONG, UPDATE_COLUMN_EXCLUDE_LIST_DISPLAY)
+            .define(INSERT_COLUMN_EXCLUDE_LIST, ConfigDef.Type.STRING, INSERT_COLUMN_EXCLUDE_LIST_DEFAULT, ConfigDef.Importance.MEDIUM, INSERT_COLUMN_EXCLUDE_LIST_DOC, WRITES_GROUP, 1, ConfigDef.Width.LONG, INSERT_COLUMN_EXCLUDE_LIST_DISPLAY);
     public static void printConfigDefTable(ConfigDef configDef) {
 
         System.out.format("%-30s %-20s %-30s %-15s %-50s%n", "Name", "Type", "Default", "Importance", "Documentation");
@@ -1077,8 +1144,15 @@ public class JdbcSinkConfig extends AbstractConfig {
     public TimeZone dateFromTimezone;
     public TimeZone dateToTimezone;
 
+    // Monitoring thread configuration
+    public String kafkaConnectUrl;
 
 
+    public final long monitoringThreadInterval;
+    public final boolean monitoringThreadEnabled;
+
+    public List<String> updateExcludeColumns = new ArrayList<>();
+    public List<String> insertExcludeColumns = new ArrayList<>();
 
     public JdbcSinkConfig(Map<?, ?> props) {
         super(CONFIG_DEF, props);
@@ -1162,6 +1236,25 @@ public class JdbcSinkConfig extends AbstractConfig {
         if (toTimezone != null && !toTimezone.isEmpty()) {
             dateToTimezone = TimeZone.getTimeZone(ZoneId.of(toTimezone));
         }
+
+        monitoringThreadInterval = getLong(MONITORING_THREAD_INTERVAL);
+        monitoringThreadEnabled = getBoolean(MONITORING_THREAD_ENABLED);
+        kafkaConnectUrl = getString(KAFKA_CONNECT_URL);
+        monitoringThreadInitialDelay = getLong(MONITORING_THREAD_INITIAL_DELAY);
+
+        String updateExcludeColumnsString = getString(UPDATE_COLUMN_EXCLUDE_LIST);
+        if (updateExcludeColumnsString != null && !updateExcludeColumnsString.isEmpty()) {
+            updateExcludeColumns = Arrays.asList(updateExcludeColumnsString.split(","));
+        }
+
+        String insertExcludeColumnsString = getString(INSERT_COLUMN_EXCLUDE_LIST);
+        if (insertExcludeColumnsString != null && !insertExcludeColumnsString.isEmpty()) {
+            insertExcludeColumns = Arrays.asList(insertExcludeColumnsString.split(","));
+        }
+
+
+
+
     }
 
     private String getPasswordValue(String key) {

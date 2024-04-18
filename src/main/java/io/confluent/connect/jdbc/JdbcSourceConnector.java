@@ -60,7 +60,6 @@ public class JdbcSourceConnector extends SourceConnector {
   private CachedConnectionProvider cachedConnectionProvider;
   private TableMonitorThread tableMonitorThread;
   private DatabaseDialect dialect;
-
   @Override
   public String version() {
     return Version.getVersion();

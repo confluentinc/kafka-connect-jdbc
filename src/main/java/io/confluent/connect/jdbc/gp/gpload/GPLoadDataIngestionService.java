@@ -42,7 +42,7 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
             String absolutePath = csvFile.toString();
             log.info("Writing to file {}", absolutePath);
             try (CsvWriter csv = CsvWriter.builder().build(writer)) {
-                csv.writeRow(allColumns);
+                csv.writeRow(insertColumnsList);
                 data.forEach(record -> {
                     csv.writeRow(record);
                 });
@@ -66,7 +66,7 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
 
             GPloadConfig.Input input = new GPloadConfig.Input.Builder()
                     .format("csv")
-                    .columns(createColumnNameDataTypeMapList())
+                    .columns(columnsWithDataType)
                     .delimiter(config.delimiter)
                     .errorLimit(config.gpErrorsLimit)
                     .header(true)
@@ -82,7 +82,7 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
                     .table(dbConnection.getSchema() + "." + tableName)
                     .mode(config.insertMode.toString().toLowerCase())
                     //.mapping(fieldsMap) one to one mapping of source and destination fields
-                    .updateColumns(nonKeyColumns)
+                    .updateColumns(updateColumnsList)
                     .matchColumns(keyColumns).build();
 
             GPloadConfig.External external = new GPloadConfig.External.Builder()
@@ -122,32 +122,72 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
                 gploadBinary = config.greenplumHome + "/bin/gpload";
             }
 
-            String gploadCommand = gploadBinary + " -l " + logFile.getAbsolutePath() + " -f " + yamlFile.getAbsolutePath();
-            log.info("Running gpload command {}", gploadCommand);
+            // check if there are any pending files
 
-            ArrayList<String> cmdOutput = CommonUtils.executeCommand(gploadCommand);
-            log.info("gpload output: {}", cmdOutput);
+            loadFile(gploadBinary, yamlFile, csvFile, logFile);
 
-            String errors = checkGPloadOutputForErrors(cmdOutput);
-            if (errors.length() > 0) {
-                log.error("Errors in GPLoad:{}", errors);
-                log.error("Yaml: {}", yamlFile.getAbsolutePath());
-                log.error("Command: {}", gploadCommand);
-                log.error("Keeping files for further analysis");
-            } else {
-                log.info("GPload finished successfully");
-                if (!config.keepGpFiles) {
-                    log.info("Deleting GP files");
-                    CommonUtils.deleteFile(yamlFile);
-                    CommonUtils.deleteFile(logFile);
-                    CommonUtils.deleteFile(csvFile);
-                } else {
-                    log.info("Keeping GP files");
-                }
+            if(!config.keepGpFiles) {
+                loadPendingFiles(gploadBinary);
             }
         } catch (Exception e) {
             log.error("Error running gpload", e);
             e.printStackTrace();
+        }
+    }
+
+    private void loadPendingFiles(String gploadBinary) {
+        log.info("Checking for pending files");
+        File[] files = new File(tempDir).listFiles();
+        if (files == null || files.length == 0) {
+            log.info("No pending files found");
+            return;
+        }
+
+        for (File file : files) {
+            if (file.getName().endsWith(".yml")) {
+                log.info("Pending file {}", file.getAbsolutePath());
+
+                try {
+                    // extract name and create csv and log file with same names
+                    String name = file.getName().replace(".yml", "");
+                    File csvFile = new File(tempDir + name + ".csv");
+                    File logFile = new File(tempDir + name + ".log");
+                    //log
+                    loadFile(gploadBinary, file, csvFile, logFile);
+
+
+
+                }catch (Exception e){
+                    log.error("Error while loading pending files", e);
+                }
+            }
+        }
+
+    }
+
+    private void loadFile(String gploadBinary, File yamlFile, File csvFile, File logFile) throws Exception{
+        String gploadCommand = gploadBinary + " -l " + logFile.getAbsolutePath() + " -f " + yamlFile.getAbsolutePath();
+        log.info("Running gpload command {}", gploadCommand);
+
+        ArrayList<String> cmdOutput = CommonUtils.executeCommand(gploadCommand);
+        log.info("gpload output: {}", cmdOutput);
+
+        String errors = checkGPloadOutputForErrors(cmdOutput);
+        if (errors.length() > 0) {
+            log.error("Errors in GPLoad:{}", errors);
+            log.error("Yaml: {}", yamlFile.getAbsolutePath());
+            log.error("Command: {}", gploadCommand);
+            log.error("Keeping files for further analysis");
+        } else {
+            log.info("GPload finished successfully");
+            if (!config.keepGpFiles) {
+                log.info("Deleting GP files");
+                CommonUtils.deleteFile(yamlFile);
+                CommonUtils.deleteFile(logFile);
+                CommonUtils.deleteFile(csvFile);
+            } else {
+                log.info("Keeping GP files");
+            }
         }
     }
 

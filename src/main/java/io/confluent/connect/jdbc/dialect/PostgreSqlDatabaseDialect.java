@@ -612,7 +612,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     try (Statement statement = connection.createStatement();) {
       // Retrieve the DDL for the specified table
       List<ColumnDetails> orderedColumns = new ArrayList<>();
-      ResultSet resultSet = statement.executeQuery("SELECT column_name,data_type, column_name, data_type, column_default, udt_name FROM information_schema.columns WHERE table_name = '" + tableId.tableName() + "' ORDER BY ordinal_position");
+      ResultSet resultSet = statement.executeQuery("SELECT column_name, data_type, column_default, udt_name FROM information_schema.columns WHERE table_name = '" + tableId.tableName() + "' ORDER BY ordinal_position");
 
       // Extract column names in order
       while (resultSet.next()) {

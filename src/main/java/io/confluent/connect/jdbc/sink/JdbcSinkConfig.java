@@ -31,6 +31,20 @@ import org.apache.kafka.common.config.types.Password;
 
 public class JdbcSinkConfig extends AbstractConfig {
 
+    // gp fast match
+    public static final String GP_FAST_MATCH = "gp.fast.match";
+    private static final boolean GP_FAST_MATCH_DEFAULT = false;
+    private static final String GP_FAST_MATCH_DOC = "Whether to use fast match for gpload.";
+    private static final String GP_FAST_MATCH_DISPLAY = "GP Fast Match";
+
+    // gp reuse table
+    public static final String GP_REUSE_TABLE = "gp.reuse.table";
+    private static final boolean GP_REUSE_TABLE_DEFAULT = true;
+    private static final String GP_REUSE_TABLE_DOC = "Whether to reuse the table for gpload.";
+    private static final String GP_REUSE_TABLE_DISPLAY = "GP Reuse Table";
+
+
+
     public static final String UPDATE_COLUMN_EXCLUDE_LIST = "update.column.exclude.list";
     private static final String UPDATE_COLUMN_EXCLUDE_LIST_DEFAULT = "";
     private static final String UPDATE_COLUMN_EXCLUDE_LIST_DOC = "The columns to exclude from the update statement(GP).";
@@ -1043,7 +1057,9 @@ public class JdbcSinkConfig extends AbstractConfig {
             ).define(KAFKA_CONNECT_URL, ConfigDef.Type.STRING, KAFKA_CONNECT_URL_DEFAULT, ConfigDef.Importance.HIGH, KAFKA_CONNECT_URL_DOC, CONNECTION_GROUP, 1, ConfigDef.Width.LONG, KAFKA_CONNECT_URL_DISPLAY)
             .define(MONITORING_THREAD_INITIAL_DELAY , ConfigDef.Type.LONG, MONITORING_THREAD_INITIAL_DELAY_DEFAULT, ConfigDef.Importance.LOW, MONITORING_THREAD_INITIAL_DELAY_DOC, WRITES_GROUP, 1, ConfigDef.Width.MEDIUM, MONITORING_THREAD_INITIAL_DELAY_DISPLAY)
             .define(UPDATE_COLUMN_EXCLUDE_LIST, ConfigDef.Type.STRING, UPDATE_COLUMN_EXCLUDE_LIST_DEFAULT, ConfigDef.Importance.MEDIUM, UPDATE_COLUMN_EXCLUDE_LIST_DOC, WRITES_GROUP, 1, ConfigDef.Width.LONG, UPDATE_COLUMN_EXCLUDE_LIST_DISPLAY)
-            .define(INSERT_COLUMN_EXCLUDE_LIST, ConfigDef.Type.STRING, INSERT_COLUMN_EXCLUDE_LIST_DEFAULT, ConfigDef.Importance.MEDIUM, INSERT_COLUMN_EXCLUDE_LIST_DOC, WRITES_GROUP, 1, ConfigDef.Width.LONG, INSERT_COLUMN_EXCLUDE_LIST_DISPLAY);
+            .define(INSERT_COLUMN_EXCLUDE_LIST, ConfigDef.Type.STRING, INSERT_COLUMN_EXCLUDE_LIST_DEFAULT, ConfigDef.Importance.MEDIUM, INSERT_COLUMN_EXCLUDE_LIST_DOC, WRITES_GROUP, 1, ConfigDef.Width.LONG, INSERT_COLUMN_EXCLUDE_LIST_DISPLAY)
+            .define(GP_FAST_MATCH, ConfigDef.Type.BOOLEAN, GP_FAST_MATCH_DEFAULT, ConfigDef.Importance.MEDIUM, GP_FAST_MATCH_DOC, WRITES_GROUP, 1, ConfigDef.Width.MEDIUM, GP_FAST_MATCH_DISPLAY)
+            .define(GP_REUSE_TABLE, ConfigDef.Type.BOOLEAN, GP_REUSE_TABLE_DEFAULT, ConfigDef.Importance.MEDIUM, GP_REUSE_TABLE_DOC, WRITES_GROUP, 1, ConfigDef.Width.MEDIUM, GP_REUSE_TABLE_DISPLAY);
     public static void printConfigDefTable(ConfigDef configDef) {
 
         System.out.format("%-30s %-20s %-30s %-15s %-50s%n", "Name", "Type", "Default", "Importance", "Documentation");
@@ -1154,6 +1170,9 @@ public class JdbcSinkConfig extends AbstractConfig {
     public List<String> updateExcludeColumns = new ArrayList<>();
     public List<String> insertExcludeColumns = new ArrayList<>();
 
+    public final boolean gpFastMatch;
+    public final boolean gpReuseTable;
+
     public JdbcSinkConfig(Map<?, ?> props) {
         super(CONFIG_DEF, props);
         connectorName = ConfigUtils.connectorName(props);
@@ -1251,9 +1270,8 @@ public class JdbcSinkConfig extends AbstractConfig {
         if (insertExcludeColumnsString != null && !insertExcludeColumnsString.isEmpty()) {
             insertExcludeColumns = Arrays.asList(insertExcludeColumnsString.split(","));
         }
-
-
-
+        gpFastMatch = getBoolean(GP_FAST_MATCH);
+        gpReuseTable = getBoolean(GP_REUSE_TABLE);
 
     }
 

@@ -28,7 +28,7 @@ public class GPSSDataIngestionService extends GpDataIngestionService {
     public void ingest(List<SinkRecord> records) {
         super.ingest(records);
         GPSSWrapper gpssWrapper = new GPSSWrapper(config);
-        gpssWrapper.ingestBatch(tableName, allColumns, keyColumns, nonKeyColumns, getSinkColumnDetails(),"", data);
+        gpssWrapper.ingestBatch(tableName, insertColumnsList, keyColumns, nonKeyColumns, getSinkColumnDetails(),"", data);
     }
 
 

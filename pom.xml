@@ -28,7 +28,7 @@
     <packaging>jar</packaging>
 <!--   <version>10.7.2-SNAPSHOT</version>-->
 
-    <version>10.7.3-22</version>
+    <version>10.7.3-26</version>
 
     <name>kafka-connect-jdbc</name>
     <organization>

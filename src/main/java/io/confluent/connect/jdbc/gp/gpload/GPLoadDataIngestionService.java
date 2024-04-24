@@ -88,7 +88,7 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
             GPloadConfig.External external = new GPloadConfig.External.Builder()
                     .schema(dbConnection.getSchema()).build();
 
-            GPloadConfig.Preload preload = new GPloadConfig.Preload.Builder().fastMatch(true).reuseTables(true).build();
+            GPloadConfig.Preload preload = new GPloadConfig.Preload.Builder().fastMatch(config.gpFastMatch).reuseTables(config.gpReuseTable).build();
 
 
             GPloadConfig.GPload gpload = new GPloadConfig.GPload.Builder()

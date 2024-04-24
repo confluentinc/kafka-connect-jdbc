@@ -25,10 +25,9 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
     protected final FieldsMetadata fieldsMetadata;
     protected final String tableName;
     protected List<String> keyColumns;
-    protected List<String> updateColumnsList = new ArrayList<>();
-    protected List<String> insertColumnsList = new ArrayList<>();
+    protected List<String> updateColumnsList;
+    protected List<String> insertColumnsList;
     protected List<String> nonKeyColumns;
-    protected List<String> allColumns;
     protected List<Map<String, String>> columnsWithDataType;
     protected List<List<String>> data;
     protected int totalColumns;
@@ -78,21 +77,6 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
             return field.schema().type().getName().toUpperCase();
     }
 
-//    protected List<Map<String, String>> createColumnNameDataTypeMapList(List<String> allColumns) {
-//        List<Map<String, String>> fieldsDataTypeMapList = new ArrayList<>();
-//
-//        for (Map.Entry entry : fieldsMetadata.allFields.entrySet()) {
-//            Map<String, String> fieldsDataTypeMap = new HashMap<>();
-//            ColumnDefinition column = tableDefinition.definitionForColumn(entry.getKey().toString());
-//            if (column != null) {
-//                fieldsDataTypeMap.put(entry.getKey().toString(), column.typeName());
-//                fieldsDataTypeMapList.add(fieldsDataTypeMap);
-//            }
-//        }
-//
-//        return fieldsDataTypeMapList;
-//    }
-
     protected List<Map<String, String>> createColumnNameDataTypeMapList(List<String> allColumns) {
         List<Map<String, String>> fieldsDataTypeMapList = new ArrayList<>();
 
@@ -127,7 +111,9 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
     public void ingest(List<SinkRecord> records) {
         keyColumns = new ArrayList<>(fieldsMetadata.keyFieldNames);
         nonKeyColumns = new ArrayList<>(fieldsMetadata.nonKeyFieldNames);
-        allColumns = new ArrayList<>(fieldsMetadata.allFields.keySet());
+        updateColumnsList = new ArrayList<>();
+        insertColumnsList = new ArrayList<>();
+        List<String> allColumns = new ArrayList<>(fieldsMetadata.allFields.keySet());
 
 
         if (config.columnSelectionStrategy == JdbcSinkConfig.ColumnSelectionStrategy.SINK_PREFERRED) {
@@ -147,17 +133,8 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
             nonKeyColumns.addAll(sinkTableColumns);
             nonKeyColumns.removeAll(keyColumns);
 
-            if (config.printDebugLogs) {
-                log.info("Column Selection::Key columns: {}", keyColumns);
-                log.info("Column Selection::Non Key columns: {}", nonKeyColumns);
-                log.info("Column Selection::All columns: {}", allColumns);
-            }
 
         }
-
-
-
-
 
 
         // add all columns except the updateExcludeColumns to updateColumnsList, excluded columns may have fully qualified names like tablename.columnname
@@ -176,13 +153,19 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
         insertColumnsList.addAll(allColumns);
         insertColumnsList.removeAll(excludedColumns);
 
-        totalColumns = allColumns.size();
+        totalColumns = insertColumnsList.size();
         totalKeyColumns = keyColumns.size();
         totalNonKeyColumns = nonKeyColumns.size();
         totalRecords = records.size();
 
         columnsWithDataType = createColumnNameDataTypeMapList(insertColumnsList);
 
+
+        if (config.printDebugLogs) {
+            log.info("Column Selection::Key columns: {}", keyColumns);
+            log.info("Column Selection::Non Key columns: {}", nonKeyColumns);
+            log.info("Column Selection::All columns: {}", insertColumnsList);
+        }
         // print all counts in one shot
         log.info("Total Columns: {}, Total Key Columns: {}, Total Non Key Columns: {}, Total Records: {}", totalColumns, totalKeyColumns, totalNonKeyColumns, totalRecords);
         log.info("Update mode is {}", config.updateMode.name());
@@ -248,7 +231,7 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
 
         for (int i = 0; i < totalColumns; i++) {
             String value = null;
-            String key = allColumns.get(i).toString();
+            String key = insertColumnsList.get(i).toString();
             try {
                 value = String.valueOf(valueStruct.get(key));
             } catch (Exception e) {
@@ -261,6 +244,8 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
                                 UniqueIdType sak = UniqueIdType.fromString(alternateKey.substring(1));
                                 if (sak != null) {
                                     value = sak.generateUniqueId();
+                                } else {
+                                    value = alternateKey.substring(1);
                                 }
                             } else {
                                 value = String.valueOf(valueStruct.get(alternateKey));
@@ -270,9 +255,9 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
                     }
 
                 } catch (Exception e1) {
-                    log.error("Error while getting alternative value for column {} from record {}", allColumns.get(i).toString(), record);
+                    log.error("Error while getting alternative value for column {} from record {}", key, record);
                 }
-                log.error("Error while getting value for column {} from record {}", allColumns.get(i).toString(), record);
+                log.error("Error while getting value for column {} from record {}", key, record);
 //                        if(tableDefinition.getOrderedColumns()!=null) {
 //                            final int j = i;
 //                            ColumnDetails column = tableDefinition.getOrderedColumns().stream().filter(c -> c.getColumnName().equals(allColumns.get(j).toString())).findFirst().orElse(null);
@@ -286,9 +271,9 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
             }
 
             // date format
-            if(config.timestampAutoConvert && value != null && value.length() > 0) {
+            if (config.timestampAutoConvert && value != null && value.length() > 0) {
                 ColumnDetails column = tableDefinition.getOrderedColumn(key);
-                if(column != null && column.getDateType() != null) {
+                if (column != null && column.getDateType() != null) {
                     if (config.printDebugLogs) {
                         log.info("Date Value before conversion: {} for column: {}", value, key);
                     }
@@ -328,7 +313,7 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
         for (Map.Entry entry : fieldsMetadata.allFields.entrySet()) {
             ColumnDefinition column = tableDefinition.definitionForColumn(entry.getKey().toString());
             if (column != null) {
-                fieldsDataTypeMapList.add(new ColumnDetails(entry.getKey().toString(), column.typeName(), null,null));
+                fieldsDataTypeMapList.add(new ColumnDetails(entry.getKey().toString(), column.typeName(), null, null));
             }
         }
         return fieldsDataTypeMapList;

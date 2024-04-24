@@ -16,6 +16,7 @@
 package io.confluent.connect.jdbc.dialect;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.ColumnDetails;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
@@ -610,9 +611,29 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   @Override
   protected List getOrderedColumns(Connection connection, TableId tableId) {
     try (Statement statement = connection.createStatement();) {
-      // Retrieve the DDL for the specified table
+
+
+      String dbSchema = null;
+
+      if(config instanceof JdbcSinkConfig) {
+          dbSchema = ((JdbcSinkConfig) config).dbSchema;
+      }
+
+        // Retrieve the DDL for the specified table
+      StringBuilder queryBuilder = new StringBuilder();
+      queryBuilder.append("SELECT column_name, data_type, column_default, udt_name ");
+      queryBuilder.append("FROM information_schema.columns ");
+      queryBuilder.append("WHERE table_name = '").append(tableId.tableName()).append("'");
+      if (dbSchema != null) {
+        queryBuilder.append(" AND TABLE_SCHEMA = '").append(dbSchema).append("'");
+      }
+      queryBuilder.append(" ORDER BY ordinal_position");
+
+      String query = queryBuilder.toString();
+      log.info("Executing query to get column data: {}", query);
+
       List<ColumnDetails> orderedColumns = new ArrayList<>();
-      ResultSet resultSet = statement.executeQuery("SELECT column_name, data_type, column_default, udt_name FROM information_schema.columns WHERE table_name = '" + tableId.tableName() + "' ORDER BY ordinal_position");
+      ResultSet resultSet = statement.executeQuery(query);
 
       // Extract column names in order
       while (resultSet.next()) {

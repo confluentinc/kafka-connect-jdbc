@@ -38,7 +38,7 @@ public class GpfdistDataIngestionService extends GpDataIngestionService {
         try {
             // convert it as following col1 datatype, col2 datatype, col3 datatype...
             String columnsWithDataType = createColumnNameDataTypeString(",");
-            String columns = String.join(",", allColumns); // , added deliberately - don't use config's delimiter
+            String columns = String.join(",", insertColumnsList); // , added deliberately - don't use config's delimiter
             String externalTableName = "ext_" + tableName + "_" + UUID.randomUUID().toString().replace("-", "_");
 
             log.info("Ingesting records into external table " + externalTableName);

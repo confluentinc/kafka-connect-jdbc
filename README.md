@@ -10,7 +10,7 @@ Documentation for this connector can be found [here](http://docs.confluent.io/cu
 To build a development version you'll need a recent version of Kafka as well as a set of upstream Confluent projects, which you'll have to build from their appropriate snapshot branch. See the [FAQ](https://github.com/confluentinc/kafka-connect-jdbc/wiki/FAQ)
 for guidance on this process.
 
-You can build kafka-connect-jdbc with Maven using the standard lifecycle phases.
+You can build kafka-connect-jdbc with Maven and Java 11 using the standard lifecycle phases.
 
 # FAQ
 

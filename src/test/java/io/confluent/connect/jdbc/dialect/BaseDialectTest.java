@@ -21,6 +21,11 @@ import io.confluent.connect.jdbc.util.ColumnDefinition.Mutability;
 import io.confluent.connect.jdbc.util.ColumnDefinition.Nullability;
 import java.sql.Types;
 import java.time.ZoneOffset;
+import io.debezium.data.geometry.Geography;
+import io.debezium.data.geometry.Geometry;
+import io.debezium.data.geometry.Point;
+import io.debezium.time.ZonedTime;
+import io.debezium.time.ZonedTimestamp;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
@@ -484,7 +489,12 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
         Decimal.schema(0),
         Date.SCHEMA,
         Time.SCHEMA,
-        Timestamp.SCHEMA
+        Timestamp.SCHEMA,
+        ZonedTime.schema(),
+        ZonedTimestamp.schema(),
+        Geometry.schema(),
+        Geography.schema(),
+        Point.schema()
     );
     int index = 0;
     for (Schema schema : nullableTypes) {
@@ -540,6 +550,15 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
           break;
         case Timestamp.LOGICAL_NAME:
           when(colDef.type()).thenReturn(Types.TIMESTAMP);
+          break;
+        case ZonedTime.SCHEMA_NAME:
+        case ZonedTimestamp.SCHEMA_NAME:
+          when(colDef.type()).thenReturn(Types.OTHER);
+          break;
+        case Geometry.LOGICAL_NAME:
+        case Geography.LOGICAL_NAME:
+        case Point.LOGICAL_NAME:
+          when(colDef.type()).thenReturn(Types.BLOB);
           break;
         default:
           when(colDef.type()).thenThrow(

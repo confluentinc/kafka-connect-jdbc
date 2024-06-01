@@ -95,7 +95,7 @@ public class TimestampIncrementingCriteriaTest {
       criteria = this.criteria;
     }
     TimestampIncrementingOffset offset = criteria.extractValues(schema, record,
-        null, timestampGranularity);
+        null, timestampGranularity, false);
     assertEquals(expectedT, offset.getTimestampOffset());
     assertEquals(expected, offset.getIncrementingOffset());
   }
@@ -160,7 +160,7 @@ public class TimestampIncrementingCriteriaTest {
             .field(TS2_COLUMN.name(), Timestamp.SCHEMA)
             .build();
     record = new Struct(schema).put("real-id", 42);
-    criteriaIncTs.extractValues(schema, record, null, TimestampGranularity.CONNECT_LOGICAL);
+    criteriaIncTs.extractValues(schema, record, null, TimestampGranularity.CONNECT_LOGICAL, false);
   }
 
   @Test
@@ -300,7 +300,7 @@ public class TimestampIncrementingCriteriaTest {
     record = new Struct(schema)
         .put(TS1_COLUMN.name().toUpperCase(), TS1)
         .put(TS2_COLUMN.name(), TS2);
-    TimestampIncrementingOffset offset = criteriaTs.extractValues(schema, record, null, TimestampGranularity.CONNECT_LOGICAL);
+    TimestampIncrementingOffset offset = criteriaTs.extractValues(schema, record, null, TimestampGranularity.CONNECT_LOGICAL, false);
     assertEquals(TS1, offset.getTimestampOffset());
   }
 
@@ -345,7 +345,7 @@ public class TimestampIncrementingCriteriaTest {
     record = new Struct(schema)
         .put(lowerCaseColumnName, TS1)
         .put(upperCaseColumnName, TS2);
-    criteriaTs.extractValues(schema, record, null, TimestampGranularity.CONNECT_LOGICAL);
+    criteriaTs.extractValues(schema, record, null, TimestampGranularity.CONNECT_LOGICAL, false);
   }
 
   @Test
@@ -366,7 +366,7 @@ public class TimestampIncrementingCriteriaTest {
     record = new Struct(schema)
         .put(lowerCaseColumnName, TS1)
         .put(upperCaseColumnName, TS2);
-    TimestampIncrementingOffset offset = criteriaTs.extractValues(schema, record, null, TimestampGranularity.CONNECT_LOGICAL);
+    TimestampIncrementingOffset offset = criteriaTs.extractValues(schema, record, null, TimestampGranularity.CONNECT_LOGICAL, false);
     assertEquals(TS1, offset.getTimestampOffset());
   }
 

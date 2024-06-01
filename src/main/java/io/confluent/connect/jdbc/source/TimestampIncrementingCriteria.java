@@ -124,19 +124,51 @@ public class TimestampIncrementingCriteria {
    *
    * @param stmt   the prepared statement; never null
    * @param values the values that can be used in the criteria parameters; never null
+   * @param queryParameters list of parameters to be passed into the criteria parameters; never null
    * @throws SQLException if there is a problem using the prepared statement
    */
   public void setQueryParameters(
       PreparedStatement stmt,
-      CriteriaValues values
+      CriteriaValues values,
+      List<JdbcSourceConnectorConfig.QueryParameter> queryParameters
   ) throws SQLException {
-    if (hasTimestampColumns() && hasIncrementedColumn()) {
+    if (!queryParameters.isEmpty()) {
+      setQueryParametersCustom(stmt, values, queryParameters);
+    } else if (hasTimestampColumns() && hasIncrementedColumn()) {
       setQueryParametersTimestampIncrementing(stmt, values);
     } else if (hasTimestampColumns()) {
       setQueryParametersTimestamp(stmt, values);
     } else if (hasIncrementedColumn()) {
       setQueryParametersIncrementing(stmt, values);
     }
+  }
+
+  protected void setQueryParametersCustom(
+          PreparedStatement stmt,
+          CriteriaValues values,
+          List<JdbcSourceConnectorConfig.QueryParameter> queryParameters
+  ) throws SQLException {
+    Long incrementingOffset = values.lastIncrementedValue();
+    Timestamp timestampOffset = values.beginTimestampValue();
+
+    for (int index = 0; index < queryParameters.size(); index++) {
+      switch (queryParameters.get(index)) {
+        case INCREMENTING_OFFSET:
+          stmt.setLong(index + 1, incrementingOffset);
+          break;
+        case TIMESTAMP_OFFSET:
+          stmt.setTimestamp(index + 1, timestampOffset,
+              DateTimeUtils.getTimeZoneCalendar(timeZone));
+          break;
+        default:
+          break;
+      }
+    }
+
+    log.debug("Executing prepared statement with queryParameters = {} end incrementingOffset = {} "
+        + "and timestampOffset = {}", queryParameters, incrementingOffset,
+        log.isDebugEnabled() ? DateTimeUtils.formatTimestamp(timestampOffset, timeZone) : null
+    );
   }
 
   protected void setQueryParametersTimestampIncrementing(
@@ -187,30 +219,36 @@ public class TimestampIncrementingCriteria {
    * @param record the record's struct; never null
    * @param previousOffset a previous timestamp offset if the table has timestamp columns
    * @param timestampGranularity defines the configured granularity of the timestamp field
+   * @param skipOffsetValidation defines whether to skip validation of new offsets
    * @return the timestamp for this row; may not be null
    */
   public TimestampIncrementingOffset extractValues(
       Schema schema,
       Struct record,
       TimestampIncrementingOffset previousOffset,
-      JdbcSourceConnectorConfig.TimestampGranularity timestampGranularity
+      JdbcSourceConnectorConfig.TimestampGranularity timestampGranularity,
+      boolean skipOffsetValidation
   ) {
     Timestamp extractedTimestamp = null;
     if (hasTimestampColumns()) {
       extractedTimestamp = extractOffsetTimestamp(schema, record, timestampGranularity);
-      assert previousOffset == null || (previousOffset.getTimestampOffset() != null
-                                        && previousOffset.getTimestampOffset().compareTo(
-          extractedTimestamp) <= 0
-      );
+      if (!skipOffsetValidation) {
+        assert previousOffset == null || (previousOffset.getTimestampOffset() != null
+                && previousOffset.getTimestampOffset().compareTo(
+                extractedTimestamp) <= 0
+        );
+      }
     }
     Long extractedId = null;
     if (hasIncrementedColumn()) {
       extractedId = extractOffsetIncrementedId(schema, record);
 
-      // If we are only using an incrementing column, then this must be incrementing.
-      // If we are also using a timestamp, then we may see updates to older rows.
-      assert previousOffset == null || previousOffset.getIncrementingOffset() == -1L
-             || extractedId > previousOffset.getIncrementingOffset() || hasTimestampColumns();
+      if (!skipOffsetValidation) {
+        // If we are only using an incrementing column, then this must be incrementing.
+        // If we are also using a timestamp, then we may see updates to older rows.
+        assert previousOffset == null || previousOffset.getIncrementingOffset() == -1L
+                || extractedId > previousOffset.getIncrementingOffset() || hasTimestampColumns();
+      }
     }
     return new TimestampIncrementingOffset(extractedTimestamp, extractedId);
   }

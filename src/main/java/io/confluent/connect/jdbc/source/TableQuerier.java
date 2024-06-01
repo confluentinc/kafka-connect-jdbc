@@ -36,7 +36,8 @@ import io.confluent.connect.jdbc.util.TableId;
 abstract class TableQuerier implements Comparable<TableQuerier> {
   public enum QueryMode {
     TABLE, // Copying whole tables, with queries constructed automatically
-    QUERY // User-specified query
+    QUERY,  // User-specified query
+    STORED_PROCEDURE // Stored Procedure
   }
 
   private final Logger log = LoggerFactory.getLogger(TableQuerier.class);
@@ -44,6 +45,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected final DatabaseDialect dialect;
   protected final QueryMode mode;
   protected final String query;
+  protected final String storedProcedure;
   protected final String topicPrefix;
   protected final TableId tableId;
   protected final String suffix;
@@ -70,6 +72,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     this.mode = mode;
     this.tableId = mode.equals(QueryMode.TABLE) ? dialect.parseTableIdentifier(nameOrQuery) : null;
     this.query = mode.equals(QueryMode.QUERY) ? nameOrQuery : null;
+    this.storedProcedure = mode.equals(QueryMode.STORED_PROCEDURE) ? nameOrQuery : null;
     this.topicPrefix = topicPrefix;
     this.lastUpdate = 0;
     this.suffix = suffix;

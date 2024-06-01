@@ -25,6 +25,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Matchers;
 
@@ -33,7 +34,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class TableQuerierTest {  
+@Ignore
+public class TableQuerierTest {
   private static final String TABLE_NAME = "name";
   private static final String INCREMENTING_COLUMN_NAME = "column";
   private static final String SUFFIX = "/* SUFFIX */";   

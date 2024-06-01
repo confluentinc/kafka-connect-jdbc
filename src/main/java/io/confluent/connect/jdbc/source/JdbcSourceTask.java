@@ -17,6 +17,8 @@ package io.confluent.connect.jdbc.source;
 
 import java.sql.SQLNonTransientException;
 import java.util.TimeZone;
+
+import io.confluent.connect.jdbc.source.TableQuerier.QueryMode;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.common.utils.Time;
@@ -71,7 +73,6 @@ public class JdbcSourceTask extends SourceTask {
   PriorityQueue<TableQuerier> tableQueue = new PriorityQueue<>();
   private final AtomicBoolean running = new AtomicBoolean(false);
   private final AtomicLong taskThreadId = new AtomicLong(0);
-
   int maxRetriesPerQuerier;
 
   public JdbcSourceTask() {
@@ -99,6 +100,7 @@ public class JdbcSourceTask extends SourceTask {
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
     Boolean tablesFetched = config.getBoolean(JdbcSourceTaskConfig.TABLES_FETCHED);
     String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
+    String storedProcedure = config.getString(JdbcSourceTaskConfig.STORED_PROCEDURE_CONFIG);
 
     if ((tables.isEmpty() && query.isEmpty())) {
       // We are still waiting for the tables call to complete.
@@ -150,10 +152,9 @@ public class JdbcSourceTask extends SourceTask {
                             )
                     )
     );
-    TableQuerier.QueryMode queryMode = !query.isEmpty() ? TableQuerier.QueryMode.QUERY :
-                                       TableQuerier.QueryMode.TABLE;
-    List<String> tablesOrQuery = queryMode == TableQuerier.QueryMode.QUERY
-                                 ? Collections.singletonList(query) : tables;
+
+    TableQuerier.QueryMode queryMode = QueryMode.STORED_PROCEDURE;
+    log.trace("queryMode: {}", queryMode);
 
     String mode = config.getString(JdbcSourceTaskConfig.MODE_CONFIG);
     //used only in table mode
@@ -201,6 +202,9 @@ public class JdbcSourceTask extends SourceTask {
       validateColumnsExist(mode, incrementingColumn, timestampColumns, tables.get(0));
     }
 
+    List<String> tablesOrQuery = queryMode == TableQuerier.QueryMode.QUERY
+            ? Collections.singletonList(query) : tables;
+
     for (String tableOrQuery : tablesOrQuery) {
       final List<Map<String, String>> tablePartitionsToCheck;
       final Map<String, String> partition;
@@ -223,6 +227,14 @@ public class JdbcSourceTask extends SourceTask {
           );
           tablePartitionsToCheck = Collections.singletonList(partition);
           break;
+        case STORED_PROCEDURE:
+          partition = Collections.singletonMap(
+                  JdbcSourceConnectorConstants.STORED_PROCEDURE,
+                  JdbcSourceConnectorConstants.STORED_PROCEDURE
+          );
+          tablePartitionsToCheck = Collections.singletonList(partition);
+          break;
+
         default:
           throw new ConfigException("Unexpected query mode: " + queryMode);
       }
@@ -249,10 +261,10 @@ public class JdbcSourceTask extends SourceTask {
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(
             new BulkTableQuerier(
-                dialect, 
-                queryMode, 
-                tableOrQuery, 
-                topicPrefix, 
+                dialect,
+                queryMode,
+                storedProcedure,
+                topicPrefix,
                 suffix
             )
         );

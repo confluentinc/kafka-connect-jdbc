@@ -146,6 +146,12 @@ public interface DatabaseDialect extends ConnectionProvider {
       String query
   ) throws SQLException;
 
+  PreparedStatement createPreparedCall(
+          Connection connection,
+          String query
+  ) throws SQLException;
+
+
   /**
    * Parse the supplied simple name or fully qualified name for a table into a {@link TableId}.
    *

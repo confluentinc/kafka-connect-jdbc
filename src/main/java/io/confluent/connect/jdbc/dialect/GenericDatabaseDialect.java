@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import java.sql.CallableStatement;
 import java.time.ZoneOffset;
 import java.util.TimeZone;
 
@@ -375,6 +376,21 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     initializePreparedStatement(stmt);
     return stmt;
   }
+
+  @Override
+  public PreparedStatement createPreparedCall(
+          Connection db,
+          String query
+  ) throws SQLException {
+    glog.trace("Creating a CallStatement '{}'", query);
+    CallableStatement stmt = db.prepareCall(query);
+    //TODO parametrize this
+    stmt.setInt(1, 5);
+    stmt.registerOutParameter(2, java.sql.Types.CLOB);
+    //initializePreparedStatement(stmt);
+    return stmt;
+  }
+
 
   /**
    * Perform any operations on a {@link PreparedStatement} before it is used. This is called from

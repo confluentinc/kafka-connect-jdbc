@@ -16,6 +16,8 @@
 
 package io.confluent.connect.jdbc;
 
+import io.confluent.connect.jdbc.querybuilder.QueryBuilder;
+import io.confluent.connect.jdbc.querybuilder.QueryBuilderFactory;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -26,13 +28,10 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
-import java.util.Calendar;
-import java.util.Collections;
-import java.util.Date;
-import java.util.GregorianCalendar;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.TimeZone;
+import java.util.*;
+
+import static io.confluent.connect.jdbc.querybuilder.QueryBuilder.QueryParameter;
+import static io.confluent.connect.jdbc.querybuilder.QueryBuilder.DBType;
 
 /**
  * <p>
@@ -60,103 +59,70 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
   private Long timestampOffset;
   private String incrementingColumn;
   private Long incrementingOffset = null;
+  private QueryBuilder queryBuilder = null;
+  private Integer queryLimit = null;
 
   public TimestampIncrementingTableQuerier(QueryMode mode, String name, String topicPrefix,
                                            String timestampColumn, Long timestampOffset,
-                                           String incrementingColumn, Long incrementingOffset) {
+                                           String incrementingColumn, Long incrementingOffset, Integer queryLimit) {
     super(mode, name, topicPrefix);
     this.timestampColumn = timestampColumn;
     this.timestampOffset = timestampOffset;
     this.incrementingColumn = incrementingColumn;
     this.incrementingOffset = incrementingOffset;
+    this.queryLimit = queryLimit;
   }
 
   @Override
   protected void createPreparedStatement(Connection db) throws SQLException {
+
+    // Get the DB type
+    String databaseProductName = db.getMetaData().getDatabaseProductName();
+    DBType dbType = QueryBuilderFactory.dbProductNameToDBType(databaseProductName);
+
+    log.debug("Using Database product \"" + databaseProductName + "\" with database SQL generator \"" + dbType.name() + "\".");
+
     // Default when unspecified uses an autoincrementing column
-    if (incrementingColumn != null && incrementingColumn.isEmpty()) {
+    if (incrementingColumn != null && incrementingColumn.isEmpty()) {  // This is really BAD Don't change the bean here
       incrementingColumn = JdbcUtils.getAutoincrementColumn(db, name);
     }
 
-    String quoteString = JdbcUtils.getIdentifierQuoteString(db);
-
-    StringBuilder builder = new StringBuilder();
-
-    switch (mode) {
-      case TABLE:
-        builder.append("SELECT * FROM ");
-        builder.append(JdbcUtils.quoteString(name, quoteString));
-        break;
-      case QUERY:
-        builder.append(query);
-        break;
-      default:
-        throw new ConnectException("Unknown mode encountered when preparing query: " + mode.toString());
+    if (mode == QueryMode.QUERY) {
+      queryBuilder = QueryBuilderFactory.getQueryBuilder(DBType.CUSTOM_QUERY)
+              .withUserQuery(query);
+    } else {
+      queryBuilder = QueryBuilderFactory.getQueryBuilder(dbType)
+              .withQuoteString(JdbcUtils.getIdentifierQuoteString(db))
+              .withLimit(queryLimit)
+              .withIncrementingColumn(incrementingColumn)
+              .withTimestampColumn(timestampColumn)
+              .withTableName(name);
     }
 
-    if (incrementingColumn != null && timestampColumn != null) {
-      // This version combines two possible conditions. The first checks timestamp == last
-      // timestamp and incrementing > last incrementing. The timestamp alone would include
-      // duplicates, but adding the incrementing condition ensures no duplicates, e.g. you would
-      // get only the row with id = 23:
-      //  timestamp 1234, id 22 <- last
-      //  timestamp 1234, id 23
-      // The second check only uses the timestamp >= last timestamp. This covers everything new,
-      // even if it is an update of the existing row. If we previously had:
-      //  timestamp 1234, id 22 <- last
-      // and then these rows were written:
-      //  timestamp 1235, id 22
-      //  timestamp 1236, id 23
-      // We should capture both id = 22 (an update) and id = 23 (a new row)
-      builder.append(" WHERE ");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-      builder.append(" < CURRENT_TIMESTAMP AND ((");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-      builder.append(" = ? AND ");
-      builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
-      builder.append(" > ?");
-      builder.append(") OR ");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-      builder.append(" > ?)");
-      builder.append(" ORDER BY ");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-      builder.append(",");
-      builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
-      builder.append(" ASC");
-    } else if (incrementingColumn != null) {
-      builder.append(" WHERE ");
-      builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
-      builder.append(" > ?");
-      builder.append(" ORDER BY ");
-      builder.append(JdbcUtils.quoteString(incrementingColumn, quoteString));
-      builder.append(" ASC");
-    } else if (timestampColumn != null) {
-      builder.append(" WHERE ");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-      builder.append(" > ? AND ");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-      builder.append(" < CURRENT_TIMESTAMP ORDER BY ");
-      builder.append(JdbcUtils.quoteString(timestampColumn, quoteString));
-      builder.append(" ASC");
-    }
-    String queryString = builder.toString();
+
+    queryBuilder.buildQuery();
+
+    String queryString = queryBuilder.getQueryString();
     log.debug("{} prepared SQL query: {}", this, queryString);
     stmt = db.prepareStatement(queryString);
   }
 
   @Override
   protected ResultSet executeQuery() throws SQLException {
-    if (incrementingColumn != null && timestampColumn != null) {
-      Timestamp ts = new Timestamp(timestampOffset == null ? 0 : timestampOffset);
-      stmt.setTimestamp(1, ts, UTC_CALENDAR);
-      stmt.setLong(2, (incrementingOffset == null ? -1 : incrementingOffset));
-      stmt.setTimestamp(3, ts, UTC_CALENDAR);
-    } else if (incrementingColumn != null) {
-      stmt.setLong(1, (incrementingOffset == null ? -1 : incrementingOffset));
-    } else if (timestampColumn != null) {
-      Timestamp ts = new Timestamp(timestampOffset == null ? 0 : timestampOffset);
-      stmt.setTimestamp(1, ts, UTC_CALENDAR);
+
+    List<QueryParameter> queryParameters = queryBuilder.getQueryParameters();
+    for (int i = 0; i < queryParameters.size(); i ++) {
+      switch (queryParameters.get(i)) {
+        case INCREMENTING_COLUMN:
+          stmt.setLong(i + 1, (incrementingOffset == null ? -1 : incrementingOffset));
+          break;
+        case TIMESTAMP_COLUMN:
+          Timestamp ts = new Timestamp(timestampOffset == null ? 0 : timestampOffset);
+          stmt.setTimestamp(i + 1, ts, UTC_CALENDAR);
+          break;
+      }
     }
+
     return stmt.executeQuery();
   }
 
@@ -221,6 +187,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier {
            ", topicPrefix='" + topicPrefix + '\'' +
            ", timestampColumn='" + timestampColumn + '\'' +
            ", incrementingColumn='" + incrementingColumn + '\'' +
+           ", queryLimit='" + queryLimit + '\'' +
            '}';
   }
 }

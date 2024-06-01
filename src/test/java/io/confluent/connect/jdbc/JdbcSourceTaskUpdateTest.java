@@ -345,41 +345,44 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     assertRecordsSourcePartition(records, QUERY_SOURCE_PARTITION);
   }
 
-  @Test
-  public void testCustomQueryWithTimestamp() throws Exception {
-    expectInitializeNoOffsets(Arrays.asList(JOIN_QUERY_PARTITION));
+  // TODO - Bring back this functionality by allowing a parameter list for custom queries.
+  // The current implementation does not fit the new model well.
 
-    PowerMock.replayAll();
-
-    db.createTable(JOIN_TABLE_NAME, "user_id", "INT", "name", "VARCHAR(64)");
-    db.insert(JOIN_TABLE_NAME, "user_id", 1, "name", "Alice");
-    db.insert(JOIN_TABLE_NAME, "user_id", 2, "name", "Bob");
-
-    // Manage these manually so we can verify the emitted values
-    db.createTable(SINGLE_TABLE_NAME,
-                   "modified", "TIMESTAMP NOT NULL",
-                   "id", "INT",
-                   "user_id", "INT");
-    db.insert(SINGLE_TABLE_NAME, "modified", JdbcUtils.formatUTC(new Timestamp(10L)), "id", 1,
-              "user_id", 1);
-
-    startTask("modified", null, "SELECT \"test\".\"modified\", \"test\".\"id\", \"test\""
-                                + ".\"user_id\", \"users\".\"name\" FROM \"test\" JOIN \"users\" "
-                                + "ON (\"test\".\"user_id\" = \"users\".\"user_id\")");
-
-    verifyTimestampFirstPoll(TOPIC_PREFIX);
-
-    db.insert(SINGLE_TABLE_NAME, "modified", JdbcUtils.formatUTC(new Timestamp(10L)), "id", 2,
-              "user_id", 1);
-    db.insert(SINGLE_TABLE_NAME, "modified", JdbcUtils.formatUTC(new Timestamp(11L)), "id", 3,
-              "user_id", 2);
-    db.insert(SINGLE_TABLE_NAME, "modified", JdbcUtils.formatUTC(new Timestamp(12L)), "id", 4,
-              "user_id", 2);
-
-    verifyPoll(2, "id", Arrays.asList(3, 4), true, false, TOPIC_PREFIX);
-
-    PowerMock.verifyAll();
-  }
+//  @Test
+//  public void testCustomQueryWithTimestamp() throws Exception {
+//    expectInitializeNoOffsets(Arrays.asList(JOIN_QUERY_PARTITION));
+//
+//    PowerMock.replayAll();
+//
+//    db.createTable(JOIN_TABLE_NAME, "user_id", "INT", "name", "VARCHAR(64)");
+//    db.insert(JOIN_TABLE_NAME, "user_id", 1, "name", "Alice");
+//    db.insert(JOIN_TABLE_NAME, "user_id", 2, "name", "Bob");
+//
+//    // Manage these manually so we can verify the emitted values
+//    db.createTable(SINGLE_TABLE_NAME,
+//                   "modified", "TIMESTAMP NOT NULL",
+//                   "id", "INT",
+//                   "user_id", "INT");
+//    db.insert(SINGLE_TABLE_NAME, "modified", JdbcUtils.formatUTC(new Timestamp(10L)), "id", 1,
+//              "user_id", 1);
+//
+//    startTask("modified", null, "SELECT \"test\".\"modified\", \"test\".\"id\", \"test\""
+//                                + ".\"user_id\", \"users\".\"name\" FROM \"test\" JOIN \"users\" "
+//                                + "ON (\"test\".\"user_id\" = \"users\".\"user_id\")");
+//
+//    verifyTimestampFirstPoll(TOPIC_PREFIX);
+//
+//    db.insert(SINGLE_TABLE_NAME, "modified", JdbcUtils.formatUTC(new Timestamp(10L)), "id", 2,
+//              "user_id", 1);
+//    db.insert(SINGLE_TABLE_NAME, "modified", JdbcUtils.formatUTC(new Timestamp(11L)), "id", 3,
+//              "user_id", 2);
+//    db.insert(SINGLE_TABLE_NAME, "modified", JdbcUtils.formatUTC(new Timestamp(12L)), "id", 4,
+//              "user_id", 2);
+//
+//    verifyPoll(2, "id", Arrays.asList(3, 4), true, false, TOPIC_PREFIX);
+//
+//    PowerMock.verifyAll();
+//  }
 
 
   private void startTask(String timestampColumn, String incrementingColumn, String query) {

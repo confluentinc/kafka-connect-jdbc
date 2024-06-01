@@ -36,10 +36,15 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final int POLL_INTERVAL_MS_DEFAULT = 5000;
 
   public static final String BATCH_MAX_ROWS_CONFIG = "batch.max.rows";
+  public static final String QUERY_LIMIT_CONFIG = "query.limit";
   private static final String BATCH_MAX_ROWS_DOC =
       "Maximum number of rows to include in a single batch when polling for new data. This "
       + "setting can be used to limit the amount of data buffered internally in the connector.";
+  private static final String QUERY_LIMIT_DOC =
+      "Maximum number of rows to retrieve from a single query from the database. "
+      + "This is similar to the LIMIT clause on many RDBMS's. A value of 0 indicates no limit";
   public static final int BATCH_MAX_ROWS_DEFAULT = 100;
+  public static final int QUERY_LIMIT_DEFAULT = 0;
 
   public static final String MODE_CONFIG = "mode";
   private static final String MODE_DOC =
@@ -112,6 +117,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         .define(CONNECTION_URL_CONFIG, Type.STRING, Importance.HIGH, CONNECTION_URL_DOC)
         .define(POLL_INTERVAL_MS_CONFIG, Type.INT, POLL_INTERVAL_MS_DEFAULT, Importance.HIGH,
                 POLL_INTERVAL_MS_DOC)
+        .define(QUERY_LIMIT_CONFIG, Type.INT, QUERY_LIMIT_DEFAULT, Importance.LOW,
+                QUERY_LIMIT_DOC)
         .define(BATCH_MAX_ROWS_CONFIG, Type.INT, BATCH_MAX_ROWS_DEFAULT, Importance.LOW,
                 BATCH_MAX_ROWS_DOC)
         .define(MODE_CONFIG, Type.STRING, MODE_UNSPECIFIED,

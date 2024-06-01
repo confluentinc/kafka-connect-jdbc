@@ -30,6 +30,8 @@ import io.confluent.connect.jdbc.util.TableId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static io.confluent.connect.jdbc.util.NameUtils.toTableName;
+
 public class JdbcDbWriter {
   private static final Logger log = LoggerFactory.getLogger(JdbcDbWriter.class);
 
@@ -97,7 +99,7 @@ public class JdbcDbWriter {
   }
 
   TableId destinationTable(String topic) {
-    final String tableName = config.tableNameFormat.replace("${topic}", topic);
+    final String tableName = toTableName(config.tableNameFormat, topic);
     if (tableName.isEmpty()) {
       throw new ConnectException(String.format(
           "Destination table name for topic '%s' is empty using the format string '%s'",

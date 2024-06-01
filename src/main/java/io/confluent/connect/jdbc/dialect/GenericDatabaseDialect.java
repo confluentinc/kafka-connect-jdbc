@@ -1237,7 +1237,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       List<String> statements
   ) throws SQLException {
     try (Statement statement = connection.createStatement()) {
-      for (String ddlStatement : statements) {
+      for (String ddlStatement : statements) {        
         statement.executeUpdate(ddlStatement);
       }
     }
@@ -1757,6 +1757,18 @@ public class GenericDatabaseDialect implements DatabaseDialect {
               DateTimeUtils.getTimeZoneCalendar(timeZone)
           );
           return true;
+        case "io.debezium.time.MicroTimestamp":
+          Long date = (Long) value;      
+          if (date == 0) {
+            statement.setObject(index, null);
+          } else {
+            statement.setTimestamp(
+              index,
+              new java.sql.Timestamp(date / 1000),
+              DateTimeUtils.getTimeZoneCalendar(timeZone)
+            );          
+          }
+          return true;  
         default:
           return false;
       }
@@ -1913,6 +1925,15 @@ public class GenericDatabaseDialect implements DatabaseDialect {
               DateTimeUtils.formatTimestamp((java.util.Date) value, timeZone)
           );
           return;
+        case "io.debezium.time.MicroTimestamp":
+          Long date = (Long) value;      
+          if (date == 0) {
+            builder.append("NULL");
+            return;
+          } else {
+            builder.append(builder.appendStringQuoted(DateTimeUtils.toTimestamp(date)));
+            return;
+          }  
         default:
           // fall through to regular types
           break;

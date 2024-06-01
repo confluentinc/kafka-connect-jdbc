@@ -44,6 +44,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.time.ZonedDateTime;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -307,6 +308,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           return "TIME";
         case Timestamp.LOGICAL_NAME:
           return "TIMESTAMP";
+        case "io.debezium.time.ZonedTimestamp":
+          return "TIMESTAMPTZ";
         default:
           // fall through to normal types
       }
@@ -431,6 +434,26 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
               .of(nonKeyColumns);
     }
     return builder.toString();
+  }
+
+  @Override
+  public void bindField(
+          PreparedStatement statement,
+          int index,
+          Schema schema,
+          Object value,
+          ColumnDefinition colDef
+  ) throws SQLException {
+    if (schema != null
+            && "io.debezium.time.ZonedTimestamp".equals(schema.name())
+            && value != null) {
+      ZonedDateTime zonedDateTimeValue = ZonedDateTime.parse(
+              (String)value, ZONED_DATE_TIME_FORMATTER
+      );
+      super.bindField(statement, index, schema, zonedDateTimeValue, colDef);
+    } else {
+      super.bindField(statement, index, schema, value, colDef);
+    }
   }
 
   @Override

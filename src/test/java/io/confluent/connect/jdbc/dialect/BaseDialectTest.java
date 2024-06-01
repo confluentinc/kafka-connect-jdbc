@@ -168,6 +168,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     connProps.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
     connProps.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, "test-");
     connProps.putAll(propertiesFromPairs(propertyPairs));
+    connProps.put(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG, "VIEW");
     connProps.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, url);
     if (quoteIdentfiiers != null) {
       connProps.put("quote.sql.identifiers", quoteIdentfiiers.toString());

@@ -15,42 +15,38 @@
 
 package io.confluent.connect.jdbc.dialect;
 
-import org.apache.kafka.common.config.AbstractConfig;
-import org.apache.kafka.connect.data.Date;
-import org.apache.kafka.connect.data.Decimal;
-import org.apache.kafka.connect.data.Time;
-import org.apache.kafka.connect.data.Timestamp;
-
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.TableId;
+import org.apache.kafka.common.config.AbstractConfig;
+import org.apache.kafka.connect.data.Date;
+import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.Time;
+import org.apache.kafka.connect.data.Timestamp;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+
 
 /**
  * A {@link DatabaseDialect} for SAP.
  */
 public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
-  /**
-   * The provider for {@link SapHanaDatabaseDialect}.
-   *
-   * <p>HANA url's are in the format: {@code jdbc:sap://$host:3(instance)(port)/}
-   */
-  public static class Provider extends SubprotocolBasedProvider {
-    public Provider() {
-      super(SapHanaDatabaseDialect.class.getSimpleName(), "sap");
-    }
 
-    @Override
-    public DatabaseDialect create(AbstractConfig config) {
-      return new SapHanaDatabaseDialect(config);
-    }
-  }
+
+  private static final Logger glog = LoggerFactory.getLogger(GenericDatabaseDialect.class);
 
   /**
    * Create a new dialect instance with the given connector configuration.
@@ -60,7 +56,7 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
   public SapHanaDatabaseDialect(AbstractConfig config) {
     super(config, new IdentifierRules(".", "\"", "\""));
   }
-  
+
   @Override
   protected String currentTimestampDatabaseQuery() {
     return "SELECT CURRENT_TIMESTAMP FROM DUMMY";
@@ -78,7 +74,6 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
         case Decimal.LOGICAL_NAME:
           return "DECIMAL";
         case Date.LOGICAL_NAME:
-          return "DATE";
         case Time.LOGICAL_NAME:
           return "DATE";
         case Timestamp.LOGICAL_NAME:
@@ -119,7 +114,7 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
   ) {
     // Defaulting to Column Store
     return super.buildCreateTableStatement(table, fields)
-                .replace("CREATE TABLE", "CREATE COLUMN TABLE");
+            .replace("CREATE TABLE", "CREATE COLUMN TABLE");
   }
 
   @Override
@@ -156,5 +151,53 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
     builder.append(")");
     builder.append(" WITH PRIMARY KEY");
     return builder.toString();
+  }
+
+  /**
+   * Case for TableType "VIEW" so that the right metadata
+   * table is read for calculation views
+   */
+  @Override
+  public List<TableId> tableIds(Connection conn) throws SQLException {
+    DatabaseMetaData metadata = conn.getMetaData();
+    String[] tableTypes = tableTypes(metadata, this.tableTypes);
+    String tableTypeDisplay = displayableTableTypes(tableTypes, ", ");
+    glog.debug("Using {} dialect to get {}", this, tableTypeDisplay);
+    final List<TableId> upperTableIds = super.tableIds(conn);
+    List<TableId> extTableIds = new ArrayList<>();
+    if (this.tableTypes.contains("VIEW")) {
+      PreparedStatement stmt = conn.prepareStatement("SELECT SCHEMA_NAME, VIEW_NAME "
+              + "from SYS.VIEWS WHERE SCHEMA_NAME=?");
+      stmt.setString(1, schemaPattern());
+      try (ResultSet rsView = stmt.executeQuery()) {
+        while (rsView.next()) {
+          String schemaName = rsView.getString(1);
+          String tableName = rsView.getString(2);
+          TableId tableId = new TableId(null, schemaName, tableName);
+          if (includeTable(tableId)) {
+            extTableIds.add(tableId);
+          }
+        }
+
+      }
+      extTableIds.addAll(upperTableIds);
+    }
+    return extTableIds;
+  }
+
+  /**
+    * The provider for {@link SapHanaDatabaseDialect}.
+    *
+    * <p>HANA url's are in the format: {@code jdbc:sap://$host:3(instance)(port)/}
+    */
+  public static class Provider extends SubprotocolBasedProvider {
+    public Provider() {
+      super(SapHanaDatabaseDialect.class.getSimpleName(), "sap");
+    }
+
+    @Override
+    public DatabaseDialect create(AbstractConfig config) {
+      return new SapHanaDatabaseDialect(config);
+    }
   }
 }

@@ -15,22 +15,26 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.util.QuoteMethod;
+import io.confluent.connect.jdbc.util.TableId;
+import org.apache.kafka.connect.data.*;
 import org.apache.kafka.connect.data.Date;
-import org.apache.kafka.connect.data.Decimal;
-import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.runners.MockitoJUnitRunner;
 
+import java.sql.*;
 import java.util.List;
 
-import io.confluent.connect.jdbc.util.QuoteMethod;
-import io.confluent.connect.jdbc.util.TableId;
-
 import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.*;
 
+@RunWith(MockitoJUnitRunner.class)
 public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseDialect> {
+
 
   @Override
   protected SapHanaDatabaseDialect createDialect() {
@@ -232,4 +236,30 @@ public class SapHanaDatabaseDialectTest extends BaseDialectTest<SapHanaDatabaseD
         + "user=smith&password=****&other=value"
     );
   }
+//   Removing -werror makes other tests pass
+  @Test
+  public void testTableIds() throws Exception {
+    Connection conn = mock(Connection.class);
+    DatabaseMetaData meta = mock(DatabaseMetaData.class);
+    // ResultSet for Building
+    ResultSet secondary = mock(ResultSet.class);
+    // ResultSet for Verification
+    ResultSet primary = mock(ResultSet.class);
+    PreparedStatement state = mock(PreparedStatement.class);
+
+    when(secondary.next()).thenReturn(true).thenReturn(false);
+    when(primary.next()).thenReturn(true).thenReturn(false);
+    when(secondary.getString(1)).thenReturn("VIEW");
+    doReturn(meta).when(conn).getMetaData();
+    doReturn(secondary).when(meta).getTableTypes();
+    doReturn(secondary).when(meta).getTables(any(), any(), any(), any());
+    when(conn.prepareStatement(any())).thenReturn(state);
+    when(state.executeQuery()).thenReturn(primary);
+
+    dialect.tableIds(conn);
+
+    verify(primary, times(1)).getString(1);
+    verify(primary, times(1)).getString(2);
+  }
+
 }

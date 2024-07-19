@@ -174,10 +174,10 @@ public class BufferedRecords {
 
   public List<SinkRecord> flush() throws SQLException { // work to be done here - bach insert
     if (records.isEmpty()) {
-      log.debug("Records is empty");
+      log.debug("Records list is empty");
       return new ArrayList<>();
     }
-    log.debug("Flushing {} buffered records", records.size());
+    log.info("Flushing {} buffered records", records.size());
     for (SinkRecord record : records) {
       if (isNull(record.value()) && nonNull(deleteStatementBinder)) {
         deleteStatementBinder.bindRecord(record);

@@ -65,6 +65,21 @@ public class JdbcSinkConfig extends AbstractConfig {
     private static final String MONITORING_THREAD_INITIAL_DELAY_DISPLAY = "Monitoring Thread Initial Delay";
 
 
+
+    public static final String MONITORING_THREAD_INTERVAL = "monitoring.thread.interval";
+    private static final long MONITORING_THREAD_INTERVAL_DEFAULT = 60000;
+    private static final String MONITORING_THREAD_INTERVAL_DOC = "The interval in milliseconds for the monitoring thread to check the status of the database.";
+
+    private static final String MONITORING_THREAD_INTERVAL_DISPLAY = "Monitoring Thread Interval";
+
+    public static final String MONITORING_THREAD_ENABLED = "monitoring.thread.enabled";
+    private static final boolean MONITORING_THREAD_ENABLED_DEFAULT = false;
+    private static final String MONITORING_THREAD_ENABLED_DOC = "Enable the monitoring thread to check the status of the database.";
+
+    private static final String MONITORING_THREAD_ENABLED_DISPLAY = "Monitoring Thread Enabled";
+
+
+
     // config for timestamp.auto.convert boolean default true
     public static final String TIMESTAMP_AUTO_CONVERT = "timestamp.auto.convert";
     private static final boolean TIMESTAMP_AUTO_CONVERT_DEFAULT = true;
@@ -163,12 +178,12 @@ public class JdbcSinkConfig extends AbstractConfig {
             "`DEFAULT`: Do nothing, use default behavior." +
             "`FIRST_ROW_ONLY`: Choose first row only from a batch of updates." +
             "`LAST_ROW_ONLY`: Choose last row only from a batch of updates.";
-
+    public static final String UPDATE_MODE_DISPLAY = "Update Mode";
     public static final String DEBUG_LOG = "debug.logs";
     private static final boolean DEBUG_LOG_DEFAULT = false;
     private static final String DEBUG_LOG_DOC = "Whether to log debug logs.";
 
-    public static final String UPDATE_MODE_DISPLAY = "Update Mode";
+
     public static final String GPSS_HOST = "gpss.host";
 
     public static final String GP_MAX_LINE_LENGTH = "gp.max.line.length";
@@ -189,6 +204,8 @@ public class JdbcSinkConfig extends AbstractConfig {
     public static final String DB_SCHEMA = "db.schema";
     private static final String DB_SCHEMA_DEFAULT = null;
     private static final String DB_SCHEMA_DOC = "The schema to use for the connector's tables.";
+
+
     public static final String GPFDIST_HOST = "gpfdist.host";
     public static final String GPFDIST_HOST_DEFAULT = null;
     public static final String GPFDIST_HOST_DOC = "The gpfdist host for gpfdist and gpload modes. Gpfdist server will fallback to current machine's ip or hostname if not specified.";
@@ -274,7 +291,7 @@ public class JdbcSinkConfig extends AbstractConfig {
         MERGE
 
     }
-
+//=====================
     public enum PrimaryKeyMode {
         NONE,
         KAFKA,
@@ -506,17 +523,6 @@ public class JdbcSinkConfig extends AbstractConfig {
 
 
 
-    public static final String MONITORING_THREAD_INTERVAL = "monitoring.thread.interval";
-    private static final long MONITORING_THREAD_INTERVAL_DEFAULT = 60000;
-    private static final String MONITORING_THREAD_INTERVAL_DOC = "The interval in milliseconds for the monitoring thread to check the status of the database.";
-
-    private static final String MONITORING_THREAD_INTERVAL_DISPLAY = "Monitoring Thread Interval";
-
-    public static final String MONITORING_THREAD_ENABLED = "monitoring.thread.enabled";
-    private static final boolean MONITORING_THREAD_ENABLED_DEFAULT = false;
-    private static final String MONITORING_THREAD_ENABLED_DOC = "Enable the monitoring thread to check the status of the database.";
-
-    private static final String MONITORING_THREAD_ENABLED_DISPLAY = "Monitoring Thread Enabled";
     public static final ConfigDef CONFIG_DEF = new ConfigDef()
             // Connection
             .define(

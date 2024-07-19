@@ -21,9 +21,12 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.FileWriter;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class GPLoadDataIngestionService extends GpDataIngestionService {
     private static final Logger log = LoggerFactory.getLogger(GPBinder.class);
+
+    private static ConcurrentHashMap<String, String> gpFiles = new ConcurrentHashMap<>();
     private final String tempDir;
     public GPLoadDataIngestionService(JdbcSinkConfig config, DatabaseDialect dialect, TableDefinition tableDefinition, FieldsMetadata fieldsMetadata, SchemaPair schemaPair){
        super(config,dialect, tableDefinition, fieldsMetadata, schemaPair);
@@ -126,9 +129,9 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
 
             loadFile(gploadBinary, yamlFile, csvFile, logFile);
 
-            if(!config.keepGpFiles) {
+            //if(!config.keepGpFiles) {
                 loadPendingFiles(gploadBinary);
-            }
+            //}
         } catch (Exception e) {
             log.error("Error running gpload", e);
             e.printStackTrace();
@@ -148,14 +151,21 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
                 log.info("Pending file {}", file.getAbsolutePath());
 
                 try {
-                    // extract name and create csv and log file with same names
                     String name = file.getName().replace(".yml", "");
-                    File csvFile = new File(tempDir + name + ".csv");
-                    File logFile = new File(tempDir + name + ".log");
-                    //log
-                    loadFile(gploadBinary, file, csvFile, logFile);
 
+                    if(gpFiles.putIfAbsent(name, name) == null) {
+                        // log thread id
+                        log.info("Loading pending file {} by thread id {}", name, Thread.currentThread().getId());
 
+                        // extract name and create csv and log file with same names
+                        File csvFile = new File(tempDir + name + ".csv");
+                        File logFile = new File(tempDir + name + ".log");
+                        //log
+                        loadFile(gploadBinary, file, csvFile, logFile);
+
+                    }else{
+                        log.info("File {} is already being processed", name);
+                    }
 
                 }catch (Exception e){
                     log.error("Error while loading pending files", e);
@@ -164,7 +174,6 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
         }
 
     }
-
     private void loadFile(String gploadBinary, File yamlFile, File csvFile, File logFile) throws Exception{
         String gploadCommand = gploadBinary + " -l " + logFile.getAbsolutePath() + " -f " + yamlFile.getAbsolutePath();
         log.info("Running gpload command {}", gploadCommand);
@@ -187,6 +196,13 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
                 CommonUtils.deleteFile(csvFile);
             } else {
                 log.info("Keeping GP files");
+                // TODO move files to other backup dir for analysis purpose
+                // rename all files to avoid conflicts
+                String name = yamlFile.getName().replace(".yml", "");
+                yamlFile.renameTo(new File(tempDir + name + ".yml.done"));
+                logFile.renameTo(new File(tempDir + name + ".log.done"));
+                csvFile.renameTo(new File(tempDir + name + ".csv.done"));
+
             }
         }
     }

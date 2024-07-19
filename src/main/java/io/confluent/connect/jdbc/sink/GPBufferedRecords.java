@@ -103,7 +103,7 @@ public class GPBufferedRecords extends BufferedRecords{
               dbStructure.tableDefinition(connection, tableId),
               config.insertMode, config);
 
-      if (config.deleteEnabled && nonNull(deleteSql)) {
+
         if (config.deleteEnabled && nonNull(deleteSql)) {
           deletePreparedStatement = dbDialect.createPreparedStatement(connection, deleteSql);
           deleteStatementBinder = dbDialect.statementBinder(
@@ -114,7 +114,7 @@ public class GPBufferedRecords extends BufferedRecords{
                   dbStructure.tableDefinition(connection, tableId),
                   config.insertMode
           );
-        }
+
       }
     }
 
@@ -155,6 +155,7 @@ public class GPBufferedRecords extends BufferedRecords{
 
   protected void executeUpdates()  {
       updateStatementBinder.flush();
+      setLastFlushTime(System.currentTimeMillis());
   }
 
 

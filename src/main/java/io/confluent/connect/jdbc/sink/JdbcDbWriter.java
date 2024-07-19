@@ -120,7 +120,7 @@ public class JdbcDbWriter {
         continue;
       }
       toRemoveEntries.add(tableId);
-      log.info("Flushing records in JDBC Writer for table ID: {}", tableId);
+      log.info("Flushing {} records in JDBC Writer for table ID: {}",buffer.records.size(), tableId);
       try {
         buffer.flush();
         buffer.close();

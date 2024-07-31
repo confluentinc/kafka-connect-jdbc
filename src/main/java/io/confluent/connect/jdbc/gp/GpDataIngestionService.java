@@ -255,9 +255,13 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
                     }
 
                 } catch (Exception e1) {
-                    log.error("Error while getting alternative value for column {} from record {}", key, record);
+                    if (config.printDebugLogs) {
+                        log.error("Error while getting alternative value for column {} from record {}", key, record);
+                    }
                 }
-                log.error("Error while getting value for column {} from record {}", key, record);
+                if (config.printDebugLogs) {
+                    log.error("Error while getting value for column {} from record {}", key, record);
+                }
 //                        if(tableDefinition.getOrderedColumns()!=null) {
 //                            final int j = i;
 //                            ColumnDetails column = tableDefinition.getOrderedColumns().stream().filter(c -> c.getColumnName().equals(allColumns.get(j).toString())).findFirst().orElse(null);

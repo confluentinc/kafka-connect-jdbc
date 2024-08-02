@@ -143,7 +143,7 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
 
         // add all columns except the updateExcludeColumns to updateColumnsList, excluded columns may have fully qualified names like tablename.columnname
         List<String> excludedColumns = config.updateExcludeColumns.stream().filter(
-                column -> column.contains(".") ? column.split("\\.")[0].equals(tableName) : true
+                column -> column.contains(".") ? column.split("\\.")[0].trim().equals(tableName) : true
         ).collect(Collectors.toList());
 
         updateColumnsList.addAll(nonKeyColumns);
@@ -151,7 +151,7 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
 
         // add all columns except the insertExcludeColumns to insertColumnsList, excluded columns may have fully qualified names like tablename.columnname
         excludedColumns = config.insertExcludeColumns.stream().filter(
-                column -> column.contains(".") ? column.split("\\.")[0].equals(tableName) : true
+                column -> column.contains(".") ? column.split("\\.")[0].trim().equals(tableName) : true
         ).collect(Collectors.toList());
 
         insertColumnsList.addAll(allColumns);

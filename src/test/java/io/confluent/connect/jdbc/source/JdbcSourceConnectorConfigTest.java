@@ -28,6 +28,7 @@ import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -37,6 +38,7 @@ import java.util.Map;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CachedRecommenderValues;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CachingRecommender;
 
+import static java.util.Collections.emptyList;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -94,7 +96,7 @@ public class JdbcSourceConnectorConfigTest {
   }
 
   @Test
-  public void testConfigTableNameRecommenderWithoutSchemaOrTableTypes() throws Exception {
+  public void testConfigTableNameRecommenderWithoutSchemaOrTableTypes() {
     props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, db.getUrl());
     configDef = JdbcSourceConnectorConfig.baseConfigDef();
     results = configDef.validate(props);
@@ -104,7 +106,7 @@ public class JdbcSourceConnectorConfigTest {
   }
 
   @Test
-  public void testConfigTableNameRecommenderWitSchemaAndWithoutTableTypes() throws Exception {
+  public void testConfigTableNameRecommenderWitSchemaAndWithoutTableTypes() {
     props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, db.getUrl());
     props.put(JdbcSourceConnectorConfig.SCHEMA_PATTERN_CONFIG, "PRIVATE_SCHEMA");
     configDef = JdbcSourceConnectorConfig.baseConfigDef();
@@ -115,7 +117,7 @@ public class JdbcSourceConnectorConfigTest {
   }
 
   @Test
-  public void testConfigTableNameRecommenderWithSchemaAndTableTypes() throws Exception {
+  public void testConfigTableNameRecommenderWithSchemaAndTableTypes() {
     props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, db.getUrl());
     props.put(JdbcSourceConnectorConfig.SCHEMA_PATTERN_CONFIG, "PRIVATE_SCHEMA");
     props.put(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG, "VIEW");
@@ -251,6 +253,59 @@ public class JdbcSourceConnectorConfigTest {
         validatedConfig.get(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG);
     assertNotNull(connectionAttemptsConfig);
     assertFalse(connectionAttemptsConfig.errorMessages().isEmpty());
+  }
+
+  @Test
+  public void testMaxPollingWaitTimeMs() {
+    // given
+    props.put(JdbcSourceConnectorConfig.POLL_MAX_WAIT_TIME_MS_CONFIG, "7777");
+
+    // when
+    Map<String, ConfigValue> validatedConfig =
+        JdbcSourceConnectorConfig.baseConfigDef().validateAll(props);
+
+    // then
+    ConfigValue configValue =
+        validatedConfig.get(JdbcSourceConnectorConfig.POLL_MAX_WAIT_TIME_MS_CONFIG);
+    assertNotNull(configValue);
+    assertEquals(7777, configValue.value());
+    assertEquals(emptyList(), configValue.errorMessages());
+    assertEquals(emptyList(), configValue.recommendedValues());
+  }
+
+  @Test
+  public void testMaxPollingWaitTimeMsDefaultValue() {
+    // when
+    Map<String, ConfigValue> validatedConfig =
+        JdbcSourceConnectorConfig.baseConfigDef().validateAll(props);
+
+    // then
+    ConfigValue configValue =
+        validatedConfig.get(JdbcSourceConnectorConfig.POLL_MAX_WAIT_TIME_MS_CONFIG);
+    assertNotNull(configValue);
+    assertEquals(1000, configValue.value());
+    assertEquals(emptyList(), configValue.errorMessages());
+    assertEquals(emptyList(), configValue.recommendedValues());
+  }
+
+  @Test
+  public void testMaxPollingWaitTimeMsInvalidValue() {
+    // given
+    props.put(JdbcSourceConnectorConfig.POLL_MAX_WAIT_TIME_MS_CONFIG, "-1");
+
+    // when
+    Map<String, ConfigValue> validatedConfig =
+        JdbcSourceConnectorConfig.baseConfigDef().validateAll(props);
+
+    // then
+    ConfigValue configValue =
+        validatedConfig.get(JdbcSourceConnectorConfig.POLL_MAX_WAIT_TIME_MS_CONFIG);
+    assertNotNull(configValue);
+    assertEquals(-1, configValue.value());
+    assertEquals(Arrays.asList("Invalid value -1 for configuration "
+        + "poll.max.wait.time.ms: Value must be at least 0"),
+        configValue.errorMessages());
+    assertEquals(emptyList(), configValue.recommendedValues());
   }
 
   @SuppressWarnings("unchecked")

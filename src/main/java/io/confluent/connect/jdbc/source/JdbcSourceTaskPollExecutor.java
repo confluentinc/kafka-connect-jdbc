@@ -22,12 +22,14 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import java.io.Closeable;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
@@ -55,6 +57,7 @@ final class JdbcSourceTaskPollExecutor implements Closeable {
   private static final List<SourceRecord> NO_DATA = null;
 
   private final AtomicReference<PollingFuture> pollFuture = new AtomicReference<>();
+  private final AtomicBoolean closed = new AtomicBoolean();
 
   private final Time time;
   private final ExecutorService pollTaskExecutor;
@@ -81,6 +84,10 @@ final class JdbcSourceTaskPollExecutor implements Closeable {
   }
 
   List<SourceRecord> poll() throws InterruptedException {
+    if (isClosed()) {
+      LOG.debug("Ignoring poll request - the {} is closed", getClass().getSimpleName());
+      return NO_DATA;
+    }
     if (pollMaxWaitTimeMs <= 0) {
       // waiting without timeout
       return pollOperation.get();
@@ -94,6 +101,9 @@ final class JdbcSourceTaskPollExecutor implements Closeable {
       LOG.info("Polling exceeded maximum duration of {}ms the total elapsed time is {}ms",
           pollMaxWaitTimeMs, polling.elapsed(time));
       return NO_DATA;
+    } catch (CancellationException e) {
+      LOG.debug("Polling cancelled", e);
+      return NO_DATA;
     } catch (ExecutionException e) {
       if (e.getCause() instanceof RuntimeException) {
         throw (RuntimeException) e.getCause();
@@ -102,14 +112,19 @@ final class JdbcSourceTaskPollExecutor implements Closeable {
     }
   }
 
+  private boolean isClosed() {
+    return closed.get();
+  }
+
   private PollingFuture getOrCreatePollingFuture() {
-    return pollFuture.updateAndGet(polling -> polling != null
+    return pollFuture.updateAndGet(polling -> polling != null && !polling.future.isCancelled()
         ? polling : new PollingFuture(time.milliseconds(),
             pollTaskExecutor.submit(pollOperation::get)));
   }
 
   @Override
   public void close() {
+    closed.set(true);
     cancelCurrentPolling();
     pollTaskExecutor.shutdown();
   }

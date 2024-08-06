@@ -96,6 +96,7 @@ public class JdbcSourceTask extends SourceTask {
     } catch (ConfigException e) {
       throw new ConfigException("Couldn't start JdbcSourceTask due to configuration error", e);
     }
+    pollExecutor = new JdbcSourceTaskPollExecutor(time, config, this::doPoll);
 
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
     Boolean tablesFetched = config.getBoolean(JdbcSourceTaskConfig.TABLES_FETCHED);
@@ -307,7 +308,6 @@ public class JdbcSourceTask extends SourceTask {
       }
     }
     maxRetriesPerQuerier = config.getInt(JdbcSourceConnectorConfig.QUERY_RETRIES_CONFIG);
-    pollExecutor = new JdbcSourceTaskPollExecutor(time, config, this::doPoll);
 
     running.set(true);
     taskThreadId.set(Thread.currentThread().getId());
@@ -566,7 +566,6 @@ public class JdbcSourceTask extends SourceTask {
   private void closePollExecutor() {
     if (pollExecutor != null) {
       pollExecutor.close();
-      pollExecutor = null;
     }
   }
 

@@ -28,7 +28,9 @@ import static org.mockito.Mockito.mock;
 import static org.testcontainers.shaded.org.awaitility.Awaitility.await;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -56,8 +58,10 @@ public class JdbcSourceTaskPollExecutorTest {
   @Before
   public void setup() {
     config = mock(JdbcSourceConnectorConfig.class);
-    doReturn("test-connector").when(config).getString("name");
-    doReturn("7").when(config).getString("task.id");
+    Map<String, String> originalStrings = new HashMap<>();
+    originalStrings.put("name", "test-connector");
+    originalStrings.put("task.id", "7");
+    doReturn(originalStrings).when(config).originalsStrings();
 
     recordsToPoll.clear();
     pollThreadNames.clear();

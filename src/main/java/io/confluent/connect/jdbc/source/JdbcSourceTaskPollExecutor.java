@@ -21,10 +21,12 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 import java.io.Closeable;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
@@ -75,12 +77,7 @@ final class JdbcSourceTaskPollExecutor implements Closeable {
     this.pollOperation = requireNonNull(pollOperation, "pollOperation must not be null");
     pollMaxWaitTimeMs = requireNonNull(config, "config must not be null")
         .getInt(POLL_MAX_WAIT_TIME_MS_CONFIG);
-    pollTaskExecutor = Executors.newSingleThreadExecutor(task -> {
-      Thread thread = new Thread(task);
-      thread.setName(String.format("%s-poll-thread-%s",
-          config.getString("name"), config.getString("task.id")));
-      return thread;
-    });
+    pollTaskExecutor = Executors.newSingleThreadExecutor(createPollThreadFactory(config));
   }
 
   List<SourceRecord> poll() throws InterruptedException {
@@ -124,6 +121,22 @@ final class JdbcSourceTaskPollExecutor implements Closeable {
       }
       return null;
     });
+  }
+
+  private static ThreadFactory createPollThreadFactory(JdbcSourceConnectorConfig config) {
+    final String threadName = pollThreadName(config);
+    return task -> {
+      Thread thread = new Thread(task);
+      thread.setName(threadName);
+      return thread;
+    };
+  }
+
+  private static String pollThreadName(JdbcSourceConnectorConfig config) {
+    Map<String, String> originalStrings = config.originalsStrings();
+    String connectorName = originalStrings.getOrDefault("name", "connector");
+    String taskId = originalStrings.getOrDefault("task.id", "0");
+    return String.format("%s-poll-thread-%s", connectorName, taskId);
   }
 
   private static class PollingFuture {

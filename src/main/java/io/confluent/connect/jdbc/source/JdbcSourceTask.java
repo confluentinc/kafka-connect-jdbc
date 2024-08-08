@@ -15,19 +15,9 @@
 
 package io.confluent.connect.jdbc.source;
 
-import java.sql.SQLNonTransientException;
-import java.util.TimeZone;
-import org.apache.kafka.common.config.ConfigException;
-import org.apache.kafka.common.utils.SystemTime;
-import org.apache.kafka.common.utils.Time;
-import org.apache.kafka.connect.errors.ConnectException;
-import org.apache.kafka.connect.source.SourceRecord;
-import org.apache.kafka.connect.source.SourceTask;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.SQLNonTransientException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -39,19 +29,29 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
+import java.util.TimeZone;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.utils.SystemTime;
+import org.apache.kafka.common.utils.Time;
+import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.source.SourceRecord;
+import org.apache.kafka.connect.source.SourceTask;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIsolationMode;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.Version;
-import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIsolationMode;
 
 /**
  * JdbcSourceTask is a Kafka Connect SourceTask implementation that reads from JDBC databases and
@@ -66,6 +66,7 @@ public class JdbcSourceTask extends SourceTask {
   private Time time;
   private JdbcSourceTaskConfig config;
   private DatabaseDialect dialect;
+  private JdbcSourceTaskPollExecutor pollExecutor;
   //Visible for Testing
   CachedConnectionProvider cachedConnectionProvider;
   PriorityQueue<TableQuerier> tableQueue = new PriorityQueue<>();
@@ -95,10 +96,11 @@ public class JdbcSourceTask extends SourceTask {
     } catch (ConfigException e) {
       throw new ConfigException("Couldn't start JdbcSourceTask due to configuration error", e);
     }
+    pollExecutor = new JdbcSourceTaskPollExecutor(time, config, this::doPoll);
 
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
     Boolean tablesFetched = config.getBoolean(JdbcSourceTaskConfig.TABLES_FETCHED);
-    String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
+    String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
 
     if ((tables.isEmpty() && query.isEmpty())) {
       // We are still waiting for the tables call to complete.
@@ -155,13 +157,13 @@ public class JdbcSourceTask extends SourceTask {
     List<String> tablesOrQuery = queryMode == TableQuerier.QueryMode.QUERY
                                  ? Collections.singletonList(query) : tables;
 
-    String mode = config.getString(JdbcSourceTaskConfig.MODE_CONFIG);
+    String mode = config.getString(JdbcSourceConnectorConfig.MODE_CONFIG);
     //used only in table mode
     Map<String, List<Map<String, String>>> partitionsByTableFqn = new HashMap<>();
     Map<Map<String, String>, Map<String, Object>> offsets = null;
-    if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)
-        || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)
-        || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
+    if (mode.equals(JdbcSourceConnectorConfig.MODE_INCREMENTING)
+        || mode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP)
+        || mode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING)) {
       List<Map<String, String>> partitions = new ArrayList<>(tables.size());
       switch (queryMode) {
         case TABLE:
@@ -187,15 +189,15 @@ public class JdbcSourceTask extends SourceTask {
     }
 
     String incrementingColumn
-        = config.getString(JdbcSourceTaskConfig.INCREMENTING_COLUMN_NAME_CONFIG);
+        = config.getString(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG);
     List<String> timestampColumns
-        = config.getList(JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
+        = config.getList(JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
     Long timestampDelayInterval
-        = config.getLong(JdbcSourceTaskConfig.TIMESTAMP_DELAY_INTERVAL_MS_CONFIG);
+        = config.getLong(JdbcSourceConnectorConfig.TIMESTAMP_DELAY_INTERVAL_MS_CONFIG);
     boolean validateNonNulls
-        = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
+        = config.getBoolean(JdbcSourceConnectorConfig.VALIDATE_NON_NULL_CONFIG);
     TimeZone timeZone = config.timeZone();
-    String suffix = config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG).trim();
+    String suffix = config.getString(JdbcSourceConnectorConfig.QUERY_SUFFIX_CONFIG).trim();
 
     if (queryMode.equals(TableQuerier.QueryMode.TABLE)) {
       validateColumnsExist(mode, incrementingColumn, timestampColumns, tables.get(0));
@@ -246,17 +248,17 @@ public class JdbcSourceTask extends SourceTask {
       JdbcSourceConnectorConfig.TimestampGranularity timestampGranularity
           = JdbcSourceConnectorConfig.TimestampGranularity.get(config);
 
-      if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
+      if (mode.equals(JdbcSourceConnectorConfig.MODE_BULK)) {
         tableQueue.add(
             new BulkTableQuerier(
-                dialect, 
-                queryMode, 
-                tableOrQuery, 
-                topicPrefix, 
+                dialect,
+                queryMode,
+                tableOrQuery,
+                topicPrefix,
                 suffix
             )
         );
-      } else if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)) {
+      } else if (mode.equals(JdbcSourceConnectorConfig.MODE_INCREMENTING)) {
         tableQueue.add(
             new TimestampIncrementingTableQuerier(
                 dialect,
@@ -272,7 +274,7 @@ public class JdbcSourceTask extends SourceTask {
                 timestampGranularity
             )
         );
-      } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
+      } else if (mode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP)) {
         tableQueue.add(
             new TimestampTableQuerier(
                 dialect,
@@ -287,7 +289,7 @@ public class JdbcSourceTask extends SourceTask {
                 timestampGranularity
             )
         );
-      } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
+      } else if (mode.endsWith(JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING)) {
         tableQueue.add(
             new TimestampIncrementingTableQuerier(
                 dialect,
@@ -305,12 +307,11 @@ public class JdbcSourceTask extends SourceTask {
         );
       }
     }
+    maxRetriesPerQuerier = config.getInt(JdbcSourceConnectorConfig.QUERY_RETRIES_CONFIG);
 
     running.set(true);
     taskThreadId.set(Thread.currentThread().getId());
     log.info("Started JDBC source task");
-
-    maxRetriesPerQuerier = config.getInt(JdbcSourceConnectorConfig.QUERY_RETRIES_CONFIG);
   }
 
   private void validateColumnsExist(
@@ -324,16 +325,16 @@ public class JdbcSourceTask extends SourceTask {
         Set<String> columnNames = defnsById.keySet().stream().map(ColumnId::name)
             .map(String::toLowerCase).collect(Collectors.toSet());
 
-        if ((mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)
-            || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING))
+        if ((mode.equals(JdbcSourceConnectorConfig.MODE_INCREMENTING)
+            || mode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING))
             && !incrementingColumn.isEmpty()
             && !columnNames.contains(incrementingColumn.toLowerCase(Locale.getDefault()))) {
           throw new ConfigException("Incrementing column: " + incrementingColumn
               + " does not exist.");
         }
 
-        if ((mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)
-            || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING))
+        if ((mode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP)
+            || mode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING))
             && !timestampColumns.isEmpty()) {
 
           Set<String> missingTsColumns = timestampColumns.stream()
@@ -443,14 +444,18 @@ public class JdbcSourceTask extends SourceTask {
 
   @Override
   public List<SourceRecord> poll() throws InterruptedException {
+    return pollExecutor.poll();
+  }
+
+  private List<SourceRecord> doPoll() {
     log.trace("Polling for new data");
 
     // If the call to get tables has not completed we will not do anything.
     // This is only valid in table mode.
     Boolean tablesFetched = config.getBoolean(JdbcSourceTaskConfig.TABLES_FETCHED);
-    String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
+    String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
     if (query.isEmpty() && !tablesFetched) {
-      final long sleepMs = config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
+      final long sleepMs = config.getInt(JdbcSourceConnectorConfig.POLL_INTERVAL_MS_CONFIG);
       log.trace("Waiting for tables to be fetched from the database. No records will be polled. "
           + "Waiting {} ms to poll", sleepMs);
       time.sleep(sleepMs);
@@ -458,19 +463,19 @@ public class JdbcSourceTask extends SourceTask {
     }
 
     Map<TableQuerier, Integer> consecutiveEmptyResults = tableQueue.stream().collect(
-        Collectors.toMap(Function.identity(), (q) -> 0));
+        Collectors.toMap(Function.identity(), q -> 0));
     while (running.get()) {
       final TableQuerier querier = tableQueue.peek();
 
       if (!querier.querying()) {
         // If not in the middle of an update, wait for next update time
         final long nextUpdate = querier.getLastUpdate()
-            + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
+            + config.getInt(JdbcSourceConnectorConfig.POLL_INTERVAL_MS_CONFIG);
         final long now = time.milliseconds();
         final long sleepMs = Math.min(nextUpdate - now, 100);
 
         if (sleepMs > 0) {
-          log.trace("Waiting {} ms to poll {} next", nextUpdate - now, querier.toString());
+          log.trace("Waiting {} ms to poll {} next", nextUpdate - now, querier);
           time.sleep(sleepMs);
           continue; // Re-check stop flag before continuing
         }
@@ -478,10 +483,10 @@ public class JdbcSourceTask extends SourceTask {
 
       final List<SourceRecord> results = new ArrayList<>();
       try {
-        log.debug("Checking for next block of results from {}", querier.toString());
+        log.debug("Checking for next block of results from {}", querier);
         querier.maybeStartQuery(cachedConnectionProvider.getConnection());
 
-        int batchMaxRows = config.getInt(JdbcSourceTaskConfig.BATCH_MAX_ROWS_CONFIG);
+        int batchMaxRows = config.getInt(JdbcSourceConnectorConfig.BATCH_MAX_ROWS_CONFIG);
         boolean hadNext = true;
         while (results.size() < batchMaxRows && (hadNext = querier.next())) {
           results.add(querier.extractRecord());
@@ -496,7 +501,7 @@ public class JdbcSourceTask extends SourceTask {
 
         if (results.isEmpty()) {
           consecutiveEmptyResults.compute(querier, (k, v) -> v + 1);
-          log.trace("No updates for {}", querier.toString());
+          log.trace("No updates for {}", querier);
 
           if (Collections.min(consecutiveEmptyResults.values())
               >= CONSECUTIVE_EMPTY_RESULTS_BEFORE_RETURN) {
@@ -554,11 +559,18 @@ public class JdbcSourceTask extends SourceTask {
     if (querier != null) {
       resetAndRequeueHead(querier, true);
     }
+    closePollExecutor();
     closeResources();
   }
 
+  private void closePollExecutor() {
+    if (pollExecutor != null) {
+      pollExecutor.close();
+    }
+  }
+
   private void resetAndRequeueHead(TableQuerier expectedHead, boolean resetOffset) {
-    log.debug("Resetting querier {}", expectedHead.toString());
+    log.debug("Resetting querier {}", expectedHead);
     TableQuerier removedQuerier = tableQueue.poll();
     assert removedQuerier == expectedHead;
     expectedHead.reset(time.milliseconds(), resetOffset);
@@ -588,7 +600,7 @@ public class JdbcSourceTask extends SourceTask {
           String columnName = defn.id().name();
           if (columnName.equalsIgnoreCase(incrementingColumn)) {
             incrementingOptional = defn.isOptional();
-          } else if (lowercaseTsColumns.contains(columnName.toLowerCase(Locale.getDefault()))) {
+          } else if (lowercaseTsColumns.contains(columnName.toLowerCase(Locale.ROOT))) {
             if (!defn.isOptional()) {
               atLeastOneTimestampNotOptional = true;
             }

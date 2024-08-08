@@ -107,7 +107,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "the worker task for the poll operation. This includes additional poll.interval.ms "
       + "wait time applied in between subsequent poll calls. If the set maximum time is exceeded, "
       + "the task will signal no-data to the worker. The polling operation however will not be "
-      + "interrupted until the task is stopped. Each time the worker is poll the records from the "
+      + "interrupted until the task is stopped. Each time the worker polls the records from the "
       + "source task it will either wait for the result from the previously started polling "
       + "operation or a new polling operation will be started. "
       + "When the poll.max.wait.time.ms is set to zero, then the worker will wait indefinitely "

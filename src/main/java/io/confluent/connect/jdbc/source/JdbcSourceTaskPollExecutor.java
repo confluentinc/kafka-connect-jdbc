@@ -89,7 +89,7 @@ final class JdbcSourceTaskPollExecutor implements Closeable {
       return NO_DATA;
     }
     if (pollMaxWaitTimeMs <= 0) {
-      // waiting without timeout
+      // executing polling directly without any timeout
       return pollOperation.get();
     }
     PollingFuture polling = getOrCreatePollingFuture();

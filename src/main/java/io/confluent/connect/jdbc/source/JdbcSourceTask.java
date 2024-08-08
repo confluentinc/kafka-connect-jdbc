@@ -206,6 +206,7 @@ public class JdbcSourceTask extends SourceTask {
       final Map<String, String> partition;
       switch (queryMode) {
         case TABLE:
+          log.trace("Task executing in {} mode",queryMode);
           if (validateNonNulls) {
             validateNonNullable(
                 mode,
@@ -217,6 +218,7 @@ public class JdbcSourceTask extends SourceTask {
           tablePartitionsToCheck = partitionsByTableFqn.get(tableOrQuery);
           break;
         case QUERY:
+          log.trace("Task executing in {} mode",queryMode);
           partition = Collections.singletonMap(
               JdbcSourceConnectorConstants.QUERY_NAME_KEY,
               JdbcSourceConnectorConstants.QUERY_NAME_VALUE
@@ -224,6 +226,7 @@ public class JdbcSourceTask extends SourceTask {
           tablePartitionsToCheck = Collections.singletonList(partition);
           break;
         default:
+          log.error("Unexpected query mode: {}", queryMode);
           throw new ConfigException("Unexpected query mode: " + queryMode);
       }
 
@@ -380,8 +383,10 @@ public class JdbcSourceTask extends SourceTask {
           Map<String, Object> partitionOffset,
           TimeZone timezone) {
     if (!(partitionOffset == null)) {
+      log.info("Partition offset for '{}' is not null. Using existing offset.", tableOrQuery);
       return partitionOffset;
     } else {
+      log.info("Partition offset for '{}' is null. Computing initial offset.", tableOrQuery);
       Map<String, Object> initialPartitionOffset = null;
       // no offsets found
       Long timestampInitial = config.getLong(JdbcSourceConnectorConfig.TIMESTAMP_INITIAL_CONFIG);
@@ -571,6 +576,7 @@ public class JdbcSourceTask extends SourceTask {
       String incrementingColumn,
       List<String> timestampColumns
   ) {
+    log.info("Validating non-nullable fields for table: {}", table);
     try {
       Set<String> lowercaseTsColumns = new HashSet<>();
       for (String timestampColumn: timestampColumns) {

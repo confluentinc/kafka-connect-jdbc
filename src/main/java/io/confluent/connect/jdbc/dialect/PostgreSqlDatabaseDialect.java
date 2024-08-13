@@ -31,10 +31,10 @@ import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -441,12 +441,61 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       Schema.Type type,
       Object value
   ) {
-    if (schemaName == null && Type.BOOLEAN.equals(type)) {
-      builder.append((Boolean) value ? "TRUE" : "FALSE");
-    } else {
-      super.formatColumnValue(builder, schemaName, schemaParameters, type, value);
+    if (schemaName == null) {
+      switch (type) {
+        case BOOLEAN:
+          builder.append((Boolean) value ? "TRUE" : "FALSE");
+          return;
+        case ARRAY:
+          formatArrayValue(builder, value);
+          return;
+        default:
+          // Fall through to base implementation
+          break;
+      }
     }
+    super.formatColumnValue(builder, schemaName, schemaParameters, type, value);
   }
+
+  private void formatArrayValue(ExpressionBuilder builder, Object value) {
+    if (value == null) {
+      builder.append("NULL");
+      return;
+    }
+
+    builder.append("'{");
+
+    Collection<?> valueCollection;
+    if (value instanceof Collection) {
+      valueCollection = (Collection<?>) value;
+    } else if (value.getClass().isArray()) {
+      valueCollection = Arrays.asList((Object[]) value);
+    } else {
+      throw new ConnectException("Unsupported type for array value: " + value.getClass().getName());
+    }
+
+    boolean first = true;
+    for (Object item : valueCollection) {
+      if (!first) {
+        builder.append(",");
+      }
+      if (item instanceof String) {
+        builder.appendStringQuoted(item);
+      } else if (item instanceof Number) {
+        builder.append(item);
+      } else if (item instanceof Boolean) {
+        builder.append((Boolean) item ? "TRUE" : "FALSE");
+      } else if (item == null) {
+        builder.append("NULL");
+      } else {
+        throw new ConnectException("Unsupported type for array item: " + item.getClass().getName());
+      }
+      first = false;
+    }
+
+    builder.append("}'");
+  }
+
 
   @Override
   protected boolean maybeBindPrimitive(

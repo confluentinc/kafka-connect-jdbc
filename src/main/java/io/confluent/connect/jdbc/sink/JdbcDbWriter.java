@@ -61,6 +61,7 @@ public class JdbcDbWriter {
 
   void write(final Collection<SinkRecord> records)
       throws SQLException, TableAlterOrCreateException {
+    log.info("Writing {} records to the database", records.size());
     final Connection connection = cachedConnectionProvider.getConnection();
     try {
       final Map<TableId, BufferedRecords> bufferByTable = new HashMap<>();
@@ -80,6 +81,7 @@ public class JdbcDbWriter {
         buffer.flush();
         buffer.close();
       }
+      log.trace("Committing transaction");
       connection.commit();
     } catch (SQLException | TableAlterOrCreateException e) {
       try {

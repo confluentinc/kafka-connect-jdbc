@@ -115,6 +115,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
 
     this.timeZone = timeZone;
     this.timestampGranularity = timestampGranularity;
+    log.trace("TimestampIncrementingTableQuerier initialized with timeZone: {}, timestampGranularity: {}", timeZone, timestampGranularity);
   }
 
   /**
@@ -124,6 +125,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
 
   @Override
   protected void createPreparedStatement(Connection db) throws SQLException {
+    log.info("Creating PreparedStatement");
     findDefaultAutoIncrementingColumn(db);
 
     ColumnId incrementingColumn = null;
@@ -166,6 +168,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
       ResultSetMetaData metadata = resultSet.getMetaData();
       dialect.validateSpecificColumnTypes(metadata, timestampColumns);
       schemaMapping = SchemaMapping.create(schemaName, metadata, dialect);
+      log.info("Creating new ResultSet and current ResultSet is null.");
     } else {
       log.trace("Current ResultSet {} isn't null. Continuing to seek.", resultSet.hashCode());
     }
@@ -196,10 +199,12 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     // If still not found, query the table and use the result set metadata.
     // This doesn't work if the table is empty.
     if (incrementingColumnName != null && incrementingColumnName.isEmpty()) {
+
       log.debug("Falling back to describe '{}' table by querying {}", tableId, db);
       for (ColumnDefinition defn : dialect.describeColumnsByQuerying(db, tableId).values()) {
         if (defn.isAutoIncrement()) {
           incrementingColumnName = defn.id().name();
+          log.info("Found auto incrementing column after fallback: {}", incrementingColumnName);
           break;
         }
       }

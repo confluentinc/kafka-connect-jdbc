@@ -322,6 +322,7 @@ public class JdbcSourceTask extends SourceTask {
       final Connection conn = cachedConnectionProvider.getConnection();
       boolean autoCommit = conn.getAutoCommit();
       try {
+        log.info("Validating columns exist for table");
         conn.setAutoCommit(true);
         Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, table, null);
         Set<String> columnNames = defnsById.keySet().stream().map(ColumnId::name)

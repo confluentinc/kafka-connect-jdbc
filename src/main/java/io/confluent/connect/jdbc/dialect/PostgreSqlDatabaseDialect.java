@@ -463,7 +463,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       return;
     }
 
-    builder.append("'{");
+    builder.append("ARRAY[");
 
     Collection<?> valueCollection;
     if (value instanceof Collection) {
@@ -480,7 +480,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         builder.append(",");
       }
       if (item instanceof String) {
-        builder.appendStringQuoted(item);
+        // postgres requires escaping single quotes by doubling them
+        String escapedString = ((String) item).replace("'", "''");
+        builder.appendStringQuoted(escapedString);
       } else if (item instanceof Number) {
         builder.append(item);
       } else if (item instanceof Boolean) {
@@ -493,7 +495,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       first = false;
     }
 
-    builder.append("}'");
+    builder.append("]");
   }
 
 

@@ -21,6 +21,7 @@ import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableDefinitionBuilder;
 import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.util.ExpressionBuilder;
 
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -591,6 +592,65 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     when(definition.scale()).thenReturn(5);
 
     assertEquals(5, dialect.decimalScale(definition));
+  }
+  @Test
+  public void testArrayDefaultsFormatting() {
+    PostgreSqlDatabaseDialect dialect = createDialect();
+
+    verifyArrayFormatting(dialect, new ExpressionBuilder(),
+            Collections.emptyList(),
+            "ARRAY[]");
+
+    verifyArrayFormatting(dialect,  new ExpressionBuilder(),
+            Arrays.asList("simple", "string", "array"),
+            "ARRAY['simple','string','array']");
+
+    verifyArrayFormatting(dialect,  new ExpressionBuilder(),
+            Arrays.asList("Van'Der Waal", "O'Neill", "l'église"),
+            "ARRAY['Van''Der Waal','O''Neill','l''église']");
+
+    verifyArrayFormatting(dialect,  new ExpressionBuilder(),
+            Arrays.asList("double''quote", "already''escaped"),
+            "ARRAY['double''''quote','already''''escaped']");
+
+    verifyArrayFormatting(dialect,  new ExpressionBuilder(),
+            Arrays.asList("contains \"quotes\"", "and 'apostrophes'"),
+            "ARRAY['contains \"quotes\"','and ''apostrophes''']");
+
+    verifyArrayFormatting(dialect,  new ExpressionBuilder(),
+            Arrays.asList("backslash\\test", "percent%sign"),
+            "ARRAY['backslash\\test','percent%sign']");
+
+
+    verifyArrayFormatting(dialect,  new ExpressionBuilder(),
+            Arrays.asList("newline\ntest", "tab\ttest", "return\rtest"),
+            "ARRAY['newline\ntest','tab\ttest','return\rtest']");
+
+    verifyArrayFormatting(dialect,  new ExpressionBuilder(),
+            Arrays.asList("unicode: ü, é, ñ", "emoji: 😊, 🌟, 🚀"),
+            "ARRAY['unicode: ü, é, ñ','emoji: 😊, 🌟, 🚀']");
+
+    verifyArrayFormatting(dialect,  new ExpressionBuilder(),
+            Arrays.asList("mixed", "array", null, "with", "null"),
+            "ARRAY['mixed','array',NULL,'with','null']");
+
+    verifyArrayFormatting(dialect, new ExpressionBuilder(),
+            Arrays.asList("1", "2", "3", "4", "5"),
+            "ARRAY['1','2','3','4','5']");
+
+    verifyArrayFormatting(dialect, new ExpressionBuilder(),
+            Arrays.asList(1, 2, 3, 4, 5),
+            "ARRAY[1,2,3,4,5]");
+
+    verifyArrayFormatting(dialect, new ExpressionBuilder(),
+            Arrays.asList(true, false, true),
+            "ARRAY[TRUE,FALSE,TRUE]");
+  }
+
+  private <T> void verifyArrayFormatting(PostgreSqlDatabaseDialect dialect, ExpressionBuilder builder,
+                                         List<T> input, String expected) {
+    dialect.formatColumnValue(builder, null, null, Schema.Type.ARRAY, input);
+    assertEquals(expected, builder.toString());
   }
 
 }

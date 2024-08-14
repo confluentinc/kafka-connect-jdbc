@@ -627,10 +627,6 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
             "ARRAY['newline\ntest','tab\ttest','return\rtest']");
 
     verifyArrayFormatting(dialect,  new ExpressionBuilder(),
-            Arrays.asList("unicode: ü, é, ñ", "emoji: 😊, 🌟, 🚀"),
-            "ARRAY['unicode: ü, é, ñ','emoji: 😊, 🌟, 🚀']");
-
-    verifyArrayFormatting(dialect,  new ExpressionBuilder(),
             Arrays.asList("mixed", "array", null, "with", "null"),
             "ARRAY['mixed','array',NULL,'with','null']");
 

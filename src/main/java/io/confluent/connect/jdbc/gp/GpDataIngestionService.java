@@ -135,23 +135,32 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
 
 
         }
+        log.info("excluded columns list for update " + config.updateExcludeColumns);
 
+        log.info("excluded columns list for insert " + config.insertExcludeColumns);
 
         // add all columns except the updateExcludeColumns to updateColumnsList, excluded columns may have fully qualified names like tablename.columnname
         List<String> excludedColumns = config.updateExcludeColumns.stream().filter(
                 column -> column.contains(".") ? column.split("\\.")[0].equals(tableName) : true
         ).collect(Collectors.toList());
+        log.info("list of excluded columns for update for table: " + tableName + " " + excludedColumns);
 
         updateColumnsList.addAll(nonKeyColumns);
+        log.info("The list of columns before exclusion from update list for table " + tableName + " "+ updateColumnsList );
         updateColumnsList.removeAll(excludedColumns);
+        log.info("The list of columns after exclusion from update list for table " + tableName + " " + updateColumnsList );
 
         // add all columns except the insertExcludeColumns to insertColumnsList, excluded columns may have fully qualified names like tablename.columnname
         excludedColumns = config.insertExcludeColumns.stream().filter(
                 column -> column.contains(".") ? column.split("\\.")[0].equals(tableName) : true
         ).collect(Collectors.toList());
+        log.info("list of excluded columns for insert for table: " + tableName + " "+ excludedColumns);
 
         insertColumnsList.addAll(allColumns);
+        log.info("The list of columns before exclusion from update list for table " + tableName + " " + insertColumnsList );
         insertColumnsList.removeAll(excludedColumns);
+        log.info("The list of columns after exclusion from update list for table " + tableName + " " + insertColumnsList );
+
 
         totalColumns = insertColumnsList.size();
         totalKeyColumns = keyColumns.size();

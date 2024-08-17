@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public abstract class GpDataIngestionService implements IGPDataIngestionService {
     private static final Logger log = LoggerFactory.getLogger(GpDataIngestionService.class);
@@ -142,11 +143,14 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
         }
 
         // add all columns except the updateExcludeColumns to updateColumnsList, excluded columns may have fully qualified names like tablename.columnname
-        List<String> excludedColumns = config.updateExcludeColumns.stream()
-                .map(String::trim)
-                .filter(column -> column.contains(".") && column.split("\\.")[0].equals(tableName))
-                .map(column -> column.split("\\.", 2)[1])
-                .collect(Collectors.toList());
+        List<String> excludedColumns = Stream.concat(
+                Stream.of(config.updateExcludeColumns.get(0)),
+                config.updateExcludeColumns.stream()
+                        .skip(1)
+                        .map(String::trim)
+                        .filter(column -> column.contains(".") && column.split("\\.")[0].equals(tableName))
+                        .map(column -> column.split("\\.", 2)[1])
+        ).collect(Collectors.toList());
 
         if (config.printDebugLogs) {
             log.info("list of excluded columns for update for table: " + tableName + " " + excludedColumns);
@@ -165,11 +169,14 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
         }
 
         // add all columns except the insertExcludeColumns to insertColumnsList, excluded columns may have fully qualified names like tablename.columnname
-        excludedColumns =config.insertExcludeColumns.stream()
-                .map(String::trim)
-                .filter(column -> column.contains(".") && column.split("\\.")[0].equals(tableName))
-                .map(column -> column.split("\\.", 2)[1])
-                .collect(Collectors.toList());
+        excludedColumns = Stream.concat(
+                Stream.of(config.insertExcludeColumns.get(0)),
+                config.insertExcludeColumns.stream()
+                        .skip(1)
+                        .map(String::trim)
+                        .filter(column -> column.contains(".") && column.split("\\.")[0].equals(tableName))
+                        .map(column -> column.split("\\.", 2)[1])
+        ).collect(Collectors.toList());
 
         if (config.printDebugLogs) {
             log.info("list of excluded columns for insert for table: " + tableName + " " + excludedColumns);

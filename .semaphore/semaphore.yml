@@ -39,7 +39,7 @@ blocks:
           commands:
             - pip install confluent-release-tools -q
             - . sem-pint
-            - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 --batch-mode --no-transfer-progress clean verify install validate
+            - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 --batch-mode --no-transfer-progress clean verify install dependency:analyze validate
             - . cve-scan
             - . cache-maven store
       epilogue:

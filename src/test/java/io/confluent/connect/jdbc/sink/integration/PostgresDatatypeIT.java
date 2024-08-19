@@ -24,6 +24,7 @@ import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -336,6 +337,58 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
           assertTrue(rs.next());
           assertEquals(secondStruct.getString("firstname"), rs.getString("firstname"));
           assertEquals(secondStruct.getString("lastname"), rs.getString("lastname"));
+        }
+      }
+    }
+  }
+
+  @Test
+  public void testTableCreatedWithArrayDefaults() throws Exception {
+    props.put(JdbcSinkConfig.AUTO_CREATE, "true");
+    props.put(DLQ_TOPIC_NAME_CONFIG, DLQ_TOPIC_NAME);
+    props.put(DLQ_TOPIC_REPLICATION_FACTOR_CONFIG, "1");
+    props.put(MAX_RETRIES, "0");
+    connect.configureConnector("jdbc-sink-connector", props);
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+
+    final Schema schema = SchemaBuilder.struct().name("com.example.Person")
+            .field("firstname", Schema.STRING_SCHEMA)
+            .field("lastname", Schema.STRING_SCHEMA)
+            .field("hobbies", SchemaBuilder.array(Schema.STRING_SCHEMA).defaultValue(Arrays.asList("Fencing","Horse Riding")).build())
+            .build();
+    final Struct firstStruct = new Struct(schema)
+            .put("firstname", "Christina")
+            .put("lastname", "Brams")
+            .put("hobbies", Arrays.asList("Skiing","Swimming"));
+    final Struct secondStruct = new Struct(schema)
+            .put("firstname", "Jerry")
+            .put("lastname", "Mcguire");
+
+    produceRecord(schema, firstStruct);
+    produceRecord(schema, secondStruct);
+
+    waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 1, 1,
+            TimeUnit.MINUTES.toMillis(2));
+
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
+      try (Statement s = c.createStatement()) {
+        try (ResultSet rs = s.executeQuery("SELECT * FROM " + tableName + " ORDER BY firstname")) {
+          assertTrue(rs.next());
+          assertEquals(firstStruct.getString("firstname"), rs.getString("firstname"));
+          assertEquals(firstStruct.getString("lastname"), rs.getString("lastname"));
+
+          Array sqlArray = rs.getArray("hobbies");
+          List<String> actualHobbies = Arrays.asList((String[]) sqlArray.getArray());
+          assertEquals(firstStruct.getArray("hobbies"), actualHobbies);
+
+          // test the case where default values for array column should be picked
+          assertTrue(rs.next());
+          assertEquals(secondStruct.getString("firstname"), rs.getString("firstname"));
+          assertEquals(secondStruct.getString("lastname"), rs.getString("lastname"));
+
+          sqlArray = rs.getArray("hobbies");
+          actualHobbies = Arrays.asList((String[]) sqlArray.getArray());
+          assertEquals(Arrays.asList("Fencing", "Horse Riding"), actualHobbies);
         }
       }
     }

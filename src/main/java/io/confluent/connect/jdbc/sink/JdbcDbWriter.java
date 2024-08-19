@@ -23,6 +23,7 @@ import java.sql.SQLException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
@@ -62,10 +63,12 @@ public class JdbcDbWriter {
   void write(final Collection<SinkRecord> records)
       throws SQLException, TableAlterOrCreateException {
     final Connection connection = cachedConnectionProvider.getConnection();
+    String schemaName = getSchemaSafe(connection).orElse(null);
+    String catalogName = getCatalogSafe(connection).orElse(null);
     try {
       final Map<TableId, BufferedRecords> bufferByTable = new HashMap<>();
       for (SinkRecord record : records) {
-        final TableId tableId = destinationTable(record.topic());
+        final TableId tableId = destinationTable(record.topic(), schemaName, catalogName);
         BufferedRecords buffer = bufferByTable.get(tableId);
         if (buffer == null) {
           buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
@@ -96,7 +99,7 @@ public class JdbcDbWriter {
     cachedConnectionProvider.close();
   }
 
-  TableId destinationTable(String topic) {
+  TableId destinationTable(String topic, String schemaName, String catalogName) {
     final String tableName = config.tableNameFormat.replace("${topic}", topic);
     if (tableName.isEmpty()) {
       throw new ConnectException(String.format(
@@ -105,6 +108,31 @@ public class JdbcDbWriter {
           config.tableNameFormat
       ));
     }
-    return dbDialect.parseTableIdentifier(tableName);
+    TableId parsedTableId = dbDialect.parseTableIdentifier(tableName);
+    String finalCatalogName =
+            (parsedTableId.catalogName() != null) ? parsedTableId.catalogName() : catalogName;
+    String finalSchemaName =
+            (parsedTableId.schemaName() != null) ? parsedTableId.schemaName() : schemaName;
+
+
+    return new TableId(finalCatalogName, finalSchemaName, parsedTableId.tableName());
+  }
+
+  private Optional<String> getSchemaSafe(Connection connection) {
+    try {
+      return Optional.ofNullable(connection.getSchema());
+    } catch (AbstractMethodError | SQLException e) {
+      log.warn("Failed to get schema: {}", e.getMessage());
+      return Optional.empty();
+    }
+  }
+
+  private Optional<String> getCatalogSafe(Connection connection) {
+    try {
+      return Optional.ofNullable(connection.getCatalog());
+    } catch (AbstractMethodError | SQLException e) {
+      log.warn("Failed to get catalog: {}", e.getMessage());
+      return Optional.empty();
+    }
   }
 }

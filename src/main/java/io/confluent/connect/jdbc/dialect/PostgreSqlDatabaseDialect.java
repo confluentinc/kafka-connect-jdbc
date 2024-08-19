@@ -468,34 +468,29 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     Collection<?> valueCollection;
     if (value instanceof Collection) {
       valueCollection = (Collection<?>) value;
-    } else if (value.getClass().isArray()) {
-      valueCollection = Arrays.asList((Object[]) value);
     } else {
       throw new ConnectException("Unsupported type for array value: " + value.getClass().getName());
     }
-
-    boolean first = true;
-    for (Object item : valueCollection) {
-      if (!first) {
-        builder.append(",");
-      }
-      if (item instanceof String) {
-        // postgres requires escaping single quotes by doubling them
-        String escapedString = ((String) item).replace("'", "''");
-        builder.appendStringQuoted(escapedString);
-      } else if (item instanceof Number) {
-        builder.append(item);
-      } else if (item instanceof Boolean) {
-        builder.append((Boolean) item ? "TRUE" : "FALSE");
-      } else if (item == null) {
-        builder.append("NULL");
-      } else {
-        throw new ConnectException("Unsupported type for array item: " + item.getClass().getName());
-      }
-      first = false;
-    }
-
+    builder.appendList()
+            .delimitedBy(",")
+            .transformedBy(PostgreSqlDatabaseDialect::formatArrayItem)
+            .of(valueCollection);
     builder.append("]");
+  }
+
+  private static void formatArrayItem(ExpressionBuilder builder, Object item) {
+    if (item == null) {
+      builder.append("NULL");
+    } else if (item instanceof String) {
+      String escapedString = ((String) item).replace("'", "''");
+      builder.appendStringQuoted(escapedString);
+    } else if (item instanceof Number) {
+      builder.append(item.toString());
+    } else if (item instanceof Boolean) {
+      builder.append((Boolean) item ? "TRUE" : "FALSE");
+    } else {
+      throw new ConnectException("Unsupported type for array item: " + item.getClass().getName());
+    }
   }
 
 

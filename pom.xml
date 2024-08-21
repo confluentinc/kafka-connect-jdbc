@@ -76,6 +76,7 @@
         <complexity.coverage.threshold>0.65</complexity.coverage.threshold>
         <line.coverage.threshold>0.80</line.coverage.threshold>
         <maven-surefire-plugin.version>3.0.0-M7</maven-surefire-plugin.version>
+        <maven-failsafe-plugin.version>3.0.0-M7</maven-failsafe-plugin.version>
     </properties>
     <repositories>
         <repository>
@@ -528,6 +529,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
+                <version>${maven-failsafe-plugin.version}</version>
                 <executions>
                     <execution>
                         <!--normal integration tests should not run the memory-restricted tests -->

@@ -116,6 +116,9 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
         insertColumnsList = new ArrayList<>();
         List<String> allColumns = new ArrayList<>(fieldsMetadata.allFields.keySet());
 
+        // log table name
+        log.info("Table Name: {}", tableName);
+
 
         if (config.columnSelectionStrategy == JdbcSinkConfig.ColumnSelectionStrategy.SINK_PREFERRED) {
             log.info("Applying column selection strategy {}", config.columnSelectionStrategy.name());

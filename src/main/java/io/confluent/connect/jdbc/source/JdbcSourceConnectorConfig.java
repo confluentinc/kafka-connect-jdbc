@@ -412,7 +412,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
                 .addErrorMessage("Isolation mode of `"
                         + TransactionIsolationMode.SQL_SERVER_SNAPSHOT.name()
                         + "` can only be configured with a Sql Server Dialect"
-          );
+            );
       }
     }
 

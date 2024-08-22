@@ -26,7 +26,7 @@
     <groupId>io.confluent</groupId>
     <artifactId>kafka-connect-jdbc</artifactId>
     <packaging>jar</packaging>
-    <version>10.7.7-SNAPSHOT</version>
+    <version>10.7.6-SP</version>
     <name>kafka-connect-jdbc</name>
     <organization>
         <name>Confluent, Inc.</name>
@@ -68,7 +68,7 @@
         <project.package.home>target/${project.artifactId}-${project.version}-package</project.package.home>
         <maven.release.plugin.version>2.5.3</maven.release.plugin.version>
         <testcontainers.version>1.17.3</testcontainers.version>
-	<jacoco.plugin.version>0.8.11</jacoco.plugin.version>
+	    <jacoco.plugin.version>0.8.11</jacoco.plugin.version>
         <instruction.coverage.threshold>0.78</instruction.coverage.threshold>
         <branch.coverage.threshold>0.67</branch.coverage.threshold>
         <method.coverage.threshold>0.76</method.coverage.threshold>
@@ -190,6 +190,12 @@
             <artifactId>jtds</artifactId>
             <version>${jtds.driver.version}</version>
             <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.mockrunner</groupId>
+            <artifactId>mockrunner-jdbc</artifactId>
+            <version>2.0.7</version>
         </dependency>
 
         <dependency>

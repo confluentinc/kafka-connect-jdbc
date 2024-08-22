@@ -162,6 +162,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "  * incrementing: use a strictly incrementing column on each table to "
       + "detect only new rows. Note that this will not detect modifications or "
       + "deletions of existing rows.\n"
+      + "  * storedprocedure: perform a call to a Stored Procedure.\n"
       + "  * timestamp: use a timestamp (or timestamp-like) column to detect new and modified "
       + "rows. This assumes the column is updated with each write, and that values are "
       + "monotonically incrementing, but not necessarily unique.\n"

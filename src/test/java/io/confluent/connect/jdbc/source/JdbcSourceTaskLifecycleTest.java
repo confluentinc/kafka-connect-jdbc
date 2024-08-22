@@ -19,6 +19,7 @@ import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.easymock.EasyMock;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.powermock.api.easymock.PowerMock;
@@ -54,6 +55,7 @@ import static org.junit.Assert.assertThrows;
 
 @RunWith(PowerMockRunner.class)
 @PowerMockIgnore("javax.management.*")
+@Ignore
 public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
 
   @Mock

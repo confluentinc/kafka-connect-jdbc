@@ -252,7 +252,6 @@ public class TimestampIncrementingCriteria {
     final Long extractedId;
     final Field field = schema.field(incrementingColumn.name());
     if (field == null) {
-      log.error("Incrementing column {} not found in schema", incrementingColumn.name());
       throw new DataException("Incrementing column " + incrementingColumn.name() + " not found in "
               + schema.fields().stream().map(Field::name).collect(Collectors.joining(",")));
     }
@@ -260,7 +259,6 @@ public class TimestampIncrementingCriteria {
     final Schema incrementingColumnSchema = field.schema();
     final Object incrementingColumnValue = record.get(incrementingColumn.name());
     if (incrementingColumnValue == null) {
-      log.error("Null value for incrementing column of type: {}", incrementingColumnSchema.type());
       throw new ConnectException(
           "Null value for incrementing column of type: " + incrementingColumnSchema.type());
     } else if (isIntegralPrimitiveType(incrementingColumnValue)) {
@@ -269,7 +267,6 @@ public class TimestampIncrementingCriteria {
         Decimal.LOGICAL_NAME)) {
       extractedId = extractDecimalId(incrementingColumnValue);
     } else {
-      log.error("Invalid type for incrementing column: {}", incrementingColumnSchema.type());
       throw new ConnectException(
           "Invalid type for incrementing column: " + incrementingColumnSchema.type());
     }
@@ -363,7 +360,6 @@ public class TimestampIncrementingCriteria {
     for (ColumnId timestampColumn : timestampColumns) {
       String columnName = timestampColumn.name();
       if (schema.field(columnName) != null) {
-        log.info("Timestamp column name case-sensitively matches column read from database");
         log.trace(
             "Timestamp column name {} case-sensitively matches column read from database",
             columnName

@@ -125,7 +125,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
 
   @Override
   protected void createPreparedStatement(Connection db) throws SQLException {
-    log.info("Creating PreparedStatement");
+    log.debug("Creating PreparedStatement");
     findDefaultAutoIncrementingColumn(db);
 
     ColumnId incrementingColumn = null;
@@ -168,7 +168,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
       ResultSetMetaData metadata = resultSet.getMetaData();
       dialect.validateSpecificColumnTypes(metadata, timestampColumns);
       schemaMapping = SchemaMapping.create(schemaName, metadata, dialect);
-      log.info("Creating new ResultSet and current ResultSet is null.");
+      log.info("Current Result is null. Executing query.");
     } else {
       log.trace("Current ResultSet {} isn't null. Continuing to seek.", resultSet.hashCode());
     }

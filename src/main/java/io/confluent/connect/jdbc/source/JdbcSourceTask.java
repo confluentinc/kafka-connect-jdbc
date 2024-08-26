@@ -226,7 +226,6 @@ public class JdbcSourceTask extends SourceTask {
           tablePartitionsToCheck = Collections.singletonList(partition);
           break;
         default:
-          log.error("Unexpected query mode: {}", queryMode);
           throw new ConfigException("Unexpected query mode: " + queryMode);
       }
 

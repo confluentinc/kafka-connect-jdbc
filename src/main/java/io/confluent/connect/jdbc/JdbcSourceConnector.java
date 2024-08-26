@@ -94,7 +94,6 @@ public class JdbcSourceConnector extends SourceConnector {
     // Initial connection attempt
     log.info("Initial connection attempt with the database.");
     cachedConnectionProvider.getConnection();
-    log.info("Connection established successfully");
 
     long tablePollMs = config.getLong(JdbcSourceConnectorConfig.TABLE_POLL_INTERVAL_MS_CONFIG);
     long tableStartupLimitMs =
@@ -112,7 +111,7 @@ public class JdbcSourceConnector extends SourceConnector {
     String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
     if (!query.isEmpty()) {
       if (whitelistSet != null || blacklistSet != null) {
-        log.error("Both whitelist and blacklist are provided which is not allowed");
+        log.error("Configuration error: {} is set, but table whitelist or blacklist is also specified. These settings cannot be used together.", JdbcSourceConnectorConfig.QUERY_CONFIG);
         throw new ConnectException(JdbcSourceConnectorConfig.QUERY_CONFIG + " may not be combined"
                                    + " with whole-table copying settings.");
       }

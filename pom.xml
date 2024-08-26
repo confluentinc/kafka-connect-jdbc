@@ -85,6 +85,12 @@
             <url>https://packages.confluent.io/maven/</url>
         </repository>
     </repositories>
+    <distributionManagement>
+        <repository>
+            <id>confluent</id>
+            <url>https://packages.confluent.io/maven/</url>
+        </repository>
+    </distributionManagement>
     <pluginRepositories>
         <pluginRepository>
             <id>confluent</id>

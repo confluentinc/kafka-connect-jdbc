@@ -87,8 +87,8 @@
     </repositories>
     <distributionManagement>
         <repository>
-            <id>confluent</id>
-            <url>https://packages.confluent.io/maven/</url>
+            <id>confluent-codeartifact-internal</id>
+            <url>https://confluent-519856050701.d.codeartifact.us-west-2.amazonaws.com/maven/maven-releases</url>
         </repository>
     </distributionManagement>
     <pluginRepositories>

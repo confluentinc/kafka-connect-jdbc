@@ -413,6 +413,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
                         + TransactionIsolationMode.SQL_SERVER_SNAPSHOT.name()
                         + "` can only be configured with a Sql Server Dialect"
           );
+        LOG.warn("Isolation mode of '{}' can only be configured with a Sql Server Dialect", TransactionIsolationMode.SQL_SERVER_SNAPSHOT.name());
       }
     }
 
@@ -854,6 +855,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     public List<Object> cachedValue(Map<String, Object> config, long currentTimeInMillis) {
       if (currentTimeInMillis < expiryTimeInMillis
           && lastConfig != null && lastConfig.equals(config)) {
+        LOG.trace("Returning Cached values for the given configuration.");
         return results;
       }
       return null;

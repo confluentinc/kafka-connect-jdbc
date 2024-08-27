@@ -80,16 +80,21 @@ public class JdbcDbWriter {
         buffer.flush();
         buffer.close();
       }
+      log.trace("Committing transaction");
       connection.commit();
     } catch (SQLException | TableAlterOrCreateException e) {
+      log.error("Error during write operation. Attempting rollback.", e);
       try {
         connection.rollback();
+        log.info("Successfully rolled back transaction");
       } catch (SQLException sqle) {
+        log.error("Failed to rollback transaction", sqle);
         e.addSuppressed(sqle);
       } finally {
         throw e;
       }
     }
+    log.info("Completed write operation for {} records to the database", records.size());
   }
 
   void closeQuietly() {

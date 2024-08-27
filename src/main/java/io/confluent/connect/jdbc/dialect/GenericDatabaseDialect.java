@@ -615,6 +615,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           Connection connection,
           TransactionIsolationMode transactionIsolationMode
   ) {
+    log.info("Setting connection isolation mode to: {}", transactionIsolationMode.name());
     if (transactionIsolationMode
             == TransactionIsolationMode.DEFAULT) {
       return;

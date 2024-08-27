@@ -15,29 +15,6 @@
 
 package io.confluent.connect.jdbc.source;
 
-import org.apache.kafka.connect.errors.ConnectException;
-import org.apache.kafka.common.config.ConfigException;
-import org.apache.kafka.connect.source.SourceRecord;
-import org.easymock.EasyMock;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.powermock.api.easymock.PowerMock;
-import org.powermock.api.easymock.annotation.Mock;
-import org.powermock.core.classloader.annotations.PowerMockIgnore;
-import org.powermock.modules.junit4.PowerMockRunner;
-
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.sql.SQLNonTransientException;
-import java.util.List;
-import java.util.Map;
-import java.util.PriorityQueue;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import io.confluent.connect.jdbc.util.CachedConnectionProvider;
-
 import static org.easymock.EasyMock.anyBoolean;
 import static org.easymock.EasyMock.anyLong;
 import static org.easymock.EasyMock.anyObject;
@@ -50,6 +27,33 @@ import static org.hamcrest.core.StringContains.containsString;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
+
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.SQLNonTransientException;
+import java.util.List;
+import java.util.Map;
+import java.util.PriorityQueue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+
+import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.source.SourceRecord;
+import org.easymock.EasyMock;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.powermock.api.easymock.PowerMock;
+import org.powermock.api.easymock.annotation.Mock;
+import org.powermock.core.classloader.annotations.PowerMockIgnore;
+import org.powermock.modules.junit4.PowerMockRunner;
+
+import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 
 
 @RunWith(PowerMockRunner.class)
@@ -100,30 +104,29 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
     PowerMock.replayAll();
 
     ExecutorService executor = Executors.newSingleThreadExecutor();
-    Object lock = new Object();
     AtomicBoolean running = new AtomicBoolean(true);
+    AtomicReference<CountDownLatch> lock = new AtomicReference<>();
+    lock.set(new CountDownLatch(1));
 
     executor.submit(() -> {
       task.start(singleTableConfig());
       while (running.get()) {
         task.poll();
-
-        synchronized (lock) {
-          lock.notifyAll();
+        CountDownLatch latch = lock.get();
+        if (latch != null && latch.getCount() > 0) {
+          latch.countDown();
         }
       }
       return null;
     });
-
-    synchronized (lock) {
-      lock.wait();
-    }
+    assertTrue("At least one polling is finished",
+        lock.get().await(5, TimeUnit.SECONDS));
 
     try {
+      lock.set(new CountDownLatch(1));
       task.stop();
-      synchronized (lock) {
-          lock.wait();
-      }
+      assertTrue("Records polled after task stoppage",
+          lock.get().await(5, TimeUnit.SECONDS));
       running.set(false);
     } finally {
       executor.shutdown();

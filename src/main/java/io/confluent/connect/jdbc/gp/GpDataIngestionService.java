@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public abstract class GpDataIngestionService implements IGPDataIngestionService {
     private static final Logger log = LoggerFactory.getLogger(GpDataIngestionService.class);
@@ -31,7 +32,6 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
     protected List<Map<String, String>> columnsWithDataType;
     protected List<List<String>> data;
     protected int totalColumns;
-
     protected int totalKeyColumns;
     protected int totalNonKeyColumns;
     protected int totalRecords;
@@ -139,23 +139,57 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
 
 
         }
+        if (config.printDebugLogs) {
+            log.info("excluded columns list for update " + config.updateExcludeColumns);
 
+            log.info("excluded columns list for insert " + config.insertExcludeColumns);
+        }
 
         // add all columns except the updateExcludeColumns to updateColumnsList, excluded columns may have fully qualified names like tablename.columnname
-        List<String> excludedColumns = config.updateExcludeColumns.stream().filter(
-                column -> column.contains(".") ? column.split("\\.")[0].trim().equals(tableName) : true
-        ).collect(Collectors.toList());
+        List<String> excludedColumns = config.updateExcludeColumns.stream()
+                .filter(column -> column.contains(".") ? column.split("\\.").length > 1 && column.split("\\.")[0].equals(tableName) : true)
+                .map(column -> column.contains(".") ? column.split("\\.")[1] : column )
+                .map(String::trim)
+                .collect(Collectors.toList());
+
+        if (config.printDebugLogs) {
+            log.info("list of excluded columns for update for table: " + tableName + " " + excludedColumns);
+        }
 
         updateColumnsList.addAll(nonKeyColumns);
+
+        if (config.printDebugLogs) {
+            log.info("The list of columns before exclusion from update list for table " + tableName + " " + updateColumnsList);
+        }
+
         updateColumnsList.removeAll(excludedColumns);
 
+        if (config.printDebugLogs) {
+            log.info("The list of columns after exclusion from update list for table " + tableName + " " + updateColumnsList);
+        }
+
         // add all columns except the insertExcludeColumns to insertColumnsList, excluded columns may have fully qualified names like tablename.columnname
-        excludedColumns = config.insertExcludeColumns.stream().filter(
-                column -> column.contains(".") ? column.split("\\.")[0].trim().equals(tableName) : true
-        ).collect(Collectors.toList());
+        excludedColumns =config.insertExcludeColumns.stream()
+                .filter(column -> column.contains(".") ? column.split("\\.").length > 1 && column.split("\\.")[0].equals(tableName) : true)
+                .map(column -> column.contains(".") ? column.split("\\.")[1] : column )
+                .map(String::trim)
+                .collect(Collectors.toList());
+
+        if (config.printDebugLogs) {
+            log.info("list of excluded columns for insert for table: " + tableName + " " + excludedColumns);
+        }
 
         insertColumnsList.addAll(allColumns);
+
+        if (config.printDebugLogs) {
+            log.info("The list of columns before exclusion from insert list for table " + tableName + " " + insertColumnsList);
+        }
+
         insertColumnsList.removeAll(excludedColumns);
+
+        if (config.printDebugLogs) {
+            log.info("The list of columns after exclusion from insert list for table " + tableName + " " + insertColumnsList);
+        }
 
         totalColumns = insertColumnsList.size();
         totalKeyColumns = keyColumns.size();
@@ -259,9 +293,13 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
                     }
 
                 } catch (Exception e1) {
-                    log.error("Error while getting alternative value for column {} from record {}", key, record);
+                    if (config.printDebugLogs) {
+                        log.error("Error while getting alternative value for column {} from record {}", key, record);
+                    }
                 }
-                log.error("Error while getting value for column {} from record {}", key, record);
+                if (config.printDebugLogs) {
+                    log.error("Error while getting value for column {} from record {}", key, record);
+                }
 //                        if(tableDefinition.getOrderedColumns()!=null) {
 //                            final int j = i;
 //                            ColumnDetails column = tableDefinition.getOrderedColumns().stream().filter(c -> c.getColumnName().equals(allColumns.get(j).toString())).findFirst().orElse(null);

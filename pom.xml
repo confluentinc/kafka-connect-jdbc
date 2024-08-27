@@ -20,7 +20,7 @@
     <parent>
         <groupId>io.confluent</groupId>
         <artifactId>common</artifactId>
-        <version>7.0.15-20</version>
+        <version>7.0.12</version>
     </parent>
 
     <groupId>io.confluent</groupId>
@@ -85,12 +85,6 @@
             <url>https://packages.confluent.io/maven/</url>
         </repository>
     </repositories>
-    <distributionManagement>
-        <repository>
-            <id>confluent-codeartifact-internal</id>
-            <url>https://confluent-519856050701.d.codeartifact.us-west-2.amazonaws.com/maven/maven-releases</url>
-        </repository>
-    </distributionManagement>
     <pluginRepositories>
         <pluginRepository>
             <id>confluent</id>

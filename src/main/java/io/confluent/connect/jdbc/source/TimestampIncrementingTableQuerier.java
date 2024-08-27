@@ -199,7 +199,6 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     // If still not found, query the table and use the result set metadata.
     // This doesn't work if the table is empty.
     if (incrementingColumnName != null && incrementingColumnName.isEmpty()) {
-
       log.debug("Falling back to describe '{}' table by querying {}", tableId, db);
       for (ColumnDefinition defn : dialect.describeColumnsByQuerying(db, tableId).values()) {
         if (defn.isAutoIncrement()) {

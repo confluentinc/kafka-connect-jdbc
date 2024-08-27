@@ -204,9 +204,9 @@ public class JdbcSourceTask extends SourceTask {
     for (String tableOrQuery : tablesOrQuery) {
       final List<Map<String, String>> tablePartitionsToCheck;
       final Map<String, String> partition;
+      log.trace("Task executing in {} mode",queryMode);
       switch (queryMode) {
         case TABLE:
-          log.trace("Task executing in {} mode",queryMode);
           if (validateNonNulls) {
             validateNonNullable(
                 mode,
@@ -218,7 +218,6 @@ public class JdbcSourceTask extends SourceTask {
           tablePartitionsToCheck = partitionsByTableFqn.get(tableOrQuery);
           break;
         case QUERY:
-          log.trace("Task executing in {} mode",queryMode);
           partition = Collections.singletonMap(
               JdbcSourceConnectorConstants.QUERY_NAME_KEY,
               JdbcSourceConnectorConstants.QUERY_NAME_VALUE

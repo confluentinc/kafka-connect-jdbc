@@ -15,6 +15,7 @@ import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.util.CommonUtils;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.eclipse.jetty.server.AcceptRateLimit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,13 +27,17 @@ import java.util.concurrent.ConcurrentHashMap;
 public class GPLoadDataIngestionService extends GpDataIngestionService {
     private static final Logger log = LoggerFactory.getLogger(GPBinder.class);
 
+    private final String gploadBinaryPath;
+
     private static ConcurrentHashMap<String, String> gpFiles = new ConcurrentHashMap<>();
     private final String tempDir;
     public GPLoadDataIngestionService(JdbcSinkConfig config, DatabaseDialect dialect, TableDefinition tableDefinition, FieldsMetadata fieldsMetadata, SchemaPair schemaPair){
        super(config,dialect, tableDefinition, fieldsMetadata, schemaPair);
         tempDir = System.getProperty("java.io.tmpdir") + "/gpload/";
         new File(tempDir).mkdirs();
+        gploadBinaryPath = config.greenplumHome + "/bin";
     }
+
 
     @Override
     public void ingest(List<SinkRecord> records) {
@@ -175,6 +180,9 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
 
     }
     private void loadFile(String gploadBinary, File yamlFile, File csvFile, File logFile) throws Exception{
+        if(!checkForGploadBinariesInPath()){
+            setGpLoadBinaryInPath();
+        }
         String gploadCommand = gploadBinary + " -l " + logFile.getAbsolutePath() + " -f " + yamlFile.getAbsolutePath();
         log.info("Running gpload command {}", gploadCommand);
 
@@ -222,4 +230,50 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
         return errMsg;
     }
 
+    private Boolean checkForGploadBinariesInPath() throws Exception {
+        String os = System.getProperty("os.name").toLowerCase();
+        String command;
+
+        if (os.contains("win")) {
+            command = "cmd /c echo %PATH%";
+        } else {
+            command = "echo $PATH";
+        }
+
+        ArrayList<String> output = CommonUtils.executeCommand(command);
+
+        for (String line : output) {
+            if (line.contains(gploadBinaryPath)) {
+                log.info("Gpload binaries are in PATH");
+                return true;
+            }
+        }
+
+        log.warn("Gpload binaries are not in PATH");
+        return false;
+    }
+
+    private void setGpLoadBinaryInPath() {
+        String os = System.getProperty("os.name").toLowerCase();
+
+        if (os.contains("win")) {
+            String newPath = System.getenv("PATH") + ";" + gploadBinaryPath;
+            String command = "setx PATH \"" + newPath + "\"";
+            try {
+                CommonUtils.executeCommand(command);
+                log.info("Updated PATH for Windows.");
+            } catch (Exception e) {
+                log.error("Failed to update PATH on Windows.", e);
+            }
+        } else {
+            String newPath = System.getenv("PATH") + ":" + gploadBinaryPath;
+            String command = "export PATH=" + newPath;
+            try {
+                CommonUtils.executeCommand(command);
+                log.info("Updated PATH for Unix-like system.");
+            } catch (Exception e) {
+                log.error("Failed to update PATH on Unix-like system.", e);
+            }
+        }
+    }
 }

@@ -1194,7 +1194,7 @@ public class JdbcSinkConfig extends AbstractConfig {
         connectionUrl = dbConnection.getUrl();
         if (printDebugLogs) {
             log.info("schemaName is: {} for connector {}", schemaName, connectorName);
-            log.error("Connection url is : {} for connector {}", connectionUrl, connectorName);
+            log.info("Connection url is : {} for connector {}", connectionUrl, connectorName);
         }
         dbSchema = schemaName;
         connectionUser = getString(CONNECTION_USER);

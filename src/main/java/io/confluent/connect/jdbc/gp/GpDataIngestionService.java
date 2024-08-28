@@ -59,16 +59,6 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
 
     private void setupDbConnection() {
         dbConnection = new ConnectionURLParser(config.connectionUrl);
-        if (dbConnection.getSchema() == null) {
-            log.warn("Schema not found in jdbc url, getting schema from connector config");
-            if (config.dbSchema != null) {
-                log.info("Setting schema to {}", config.dbSchema);
-                dbConnection.setSchema(config.dbSchema);
-            } else {
-                log.warn("Schema not found in connector config, using default schema: public");
-                dbConnection.setSchema("public");
-            }
-        }
     }
 
     protected String getSQLType(SinkRecordField field) {

@@ -222,15 +222,18 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
         return errMsg;
     }
 
-    public static Boolean checkForGploadBinariesInPath(String greenplumHome) throws Exception {
+    public static Boolean checkForGploadBinariesInPath(String greenplumHome) {
         String gploadBinaryPath = greenplumHome + "/bin";
         String os = System.getProperty("os.name").toLowerCase();
         String command = os.contains("win") ? "cmd /c echo %PATH%" : "echo $PATH";
+        boolean isInPath = false;
+        try {
+            List<String> output = CommonUtils.executeCommand(command);
 
-        List<String> output = CommonUtils.executeCommand(command);
-
-        boolean isInPath = output.stream().anyMatch(line -> line.contains(gploadBinaryPath));
-
+            isInPath = output.stream().anyMatch(line -> line.contains(gploadBinaryPath));
+        } catch (Exception e){
+            log.error("Error while executing command to find PATH", e);
+        }
         if (isInPath) {
             log.info("Gpload binaries are in PATH");
         } else {

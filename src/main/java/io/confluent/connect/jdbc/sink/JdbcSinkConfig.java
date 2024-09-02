@@ -1186,7 +1186,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     public final boolean gpFastMatch;
     public final boolean gpReuseTable;
 
-    public JdbcSinkConfig(Map<?, ?> props) throws Exception {
+    public JdbcSinkConfig(Map<?, ?> props) {
         super(CONFIG_DEF, props);
         connectorName = ConfigUtils.connectorName(props);
         dbConnection = new ConnectionURLParser(getString(CONNECTION_URL));

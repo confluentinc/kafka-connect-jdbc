@@ -238,10 +238,6 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
                     ? CommonUtils.executeCommand("cmd", "/c", "echo", "%PATH%")
                     : CommonUtils.executeCommand("/bin/sh", "-c", "echo $PATH");
 
-            for (String out : output) {
-                log.warn(out);
-            }
-
             isInPath = output.stream().anyMatch(line -> line.contains(gploadBinaryPath));
         } catch (Exception e) {
             log.error("Error while executing command to find PATH", e);

@@ -15,7 +15,6 @@ import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.util.CommonUtils;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import org.apache.kafka.connect.sink.SinkRecord;
-import org.eclipse.jetty.server.AcceptRateLimit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

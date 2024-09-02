@@ -40,7 +40,7 @@ public class CommonUtils {
         return localIpOrHost;
     }
 
-    public static ArrayList<String> executeCommand(String command) throws Exception{
+    public static ArrayList<String> executeCommand(String... command) throws Exception{
 
         ArrayList<String> output = new ArrayList<String>();
 

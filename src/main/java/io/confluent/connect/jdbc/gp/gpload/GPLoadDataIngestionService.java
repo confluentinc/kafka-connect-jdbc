@@ -175,10 +175,15 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
 
     }
     private void loadFile(String gploadBinary, File yamlFile, File csvFile, File logFile) throws Exception{
-        String gploadCommand = gploadBinary + " -l " + logFile.getAbsolutePath() + " -f " + yamlFile.getAbsolutePath();
-        log.info("Running gpload command {}", gploadCommand);
+        List<String> gploadCommand = Arrays.asList(
+                gploadBinary,
+                "-l", logFile.getAbsolutePath(),
+                "-f", yamlFile.getAbsolutePath()
+        );
 
-        ArrayList<String> cmdOutput = CommonUtils.executeCommand(gploadCommand);
+        log.info("Running gpload command {}", String.join(" ", gploadCommand));
+
+        ArrayList<String> cmdOutput = CommonUtils.executeCommand(gploadCommand.toArray(new String[0]));
         log.info("gpload output: {}", cmdOutput);
 
         String errors = checkGPloadOutputForErrors(cmdOutput);
@@ -224,16 +229,24 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
 
     public static Boolean checkForGploadBinariesInPath(String greenplumHome) {
         String gploadBinaryPath = greenplumHome + "/bin";
+        log.warn("gploadBinaryPath {}", gploadBinaryPath);
         String os = System.getProperty("os.name").toLowerCase();
-        String command = os.contains("win") ? "cmd /c echo %PATH%" : "echo $PATH";
         boolean isInPath = false;
+
         try {
-            List<String> output = CommonUtils.executeCommand(command);
+            List<String> output = os.contains("win")
+                    ? CommonUtils.executeCommand("cmd", "/c", "echo", "%PATH%")
+                    : CommonUtils.executeCommand("/bin/sh", "-c", "echo $PATH");
+
+            for (String out : output) {
+                log.warn(out);
+            }
 
             isInPath = output.stream().anyMatch(line -> line.contains(gploadBinaryPath));
-        } catch (Exception e){
+        } catch (Exception e) {
             log.error("Error while executing command to find PATH", e);
         }
+
         if (isInPath) {
             log.info("Gpload binaries are in PATH");
         } else {
@@ -242,4 +255,5 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
 
         return isInPath;
     }
+
 }

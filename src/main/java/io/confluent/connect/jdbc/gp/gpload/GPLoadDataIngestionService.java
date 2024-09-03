@@ -175,15 +175,11 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
 
     }
     private void loadFile(String gploadBinary, File yamlFile, File csvFile, File logFile) throws Exception{
-        List<String> gploadCommand = Arrays.asList(
-                gploadBinary,
-                "-l", logFile.getAbsolutePath(),
-                "-f", yamlFile.getAbsolutePath()
-        );
+        String gploadCommand = gploadBinary + " -l " + logFile.getAbsolutePath() + " -f " + yamlFile.getAbsolutePath();
+        log.info("Running gpload command {}", gploadCommand);
 
-        log.info("Running gpload command {}", String.join(" ", gploadCommand));
 
-        ArrayList<String> cmdOutput = CommonUtils.executeCommand(gploadCommand.toArray(new String[0]));
+        ArrayList<String> cmdOutput = CommonUtils.executeCommand(gploadCommand);
         log.info("gpload output: {}", cmdOutput);
 
         String errors = checkGPloadOutputForErrors(cmdOutput);
@@ -229,14 +225,12 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
 
     public static Boolean checkForGploadBinariesInPath(String greenplumHome) {
         String gploadBinaryPath = greenplumHome + "/bin";
-        log.warn("gploadBinaryPath {}", gploadBinaryPath);
-        String os = System.getProperty("os.name").toLowerCase();
+        log.info("gploadBinaryPath {}", gploadBinaryPath);
+        String command = "which gpload";
         boolean isInPath = false;
 
         try {
-            List<String> output = os.contains("win")
-                    ? CommonUtils.executeCommand("cmd", "/c", "echo", "%PATH%")
-                    : CommonUtils.executeCommand("/bin/sh", "-c", "echo $PATH");
+            List<String> output = CommonUtils.executeCommand(command);
 
             isInPath = output.stream().anyMatch(line -> line.contains(gploadBinaryPath));
         } catch (Exception e) {

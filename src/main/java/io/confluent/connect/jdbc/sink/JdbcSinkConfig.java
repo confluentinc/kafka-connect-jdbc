@@ -1233,7 +1233,7 @@ public class JdbcSinkConfig extends AbstractConfig {
         csvEncoding = getString(CSV_ENCODING);
         gpLogErrors = getBoolean(GP_LOG_ERRORS);
         greenplumHome = getString(GREENPLUM_HOME_CONFIG);
-        if(greenplumHome == null || !GPLoadDataIngestionService.checkForGploadBinariesInPath(greenplumHome)) {
+        if(greenplumHome == null || greenplumHome.isEmpty() || !GPLoadDataIngestionService.checkForGploadBinariesInPath(greenplumHome)) {
             throw new ConfigException("Please check the path for GPLOAD binary which is not set properly");
         }
         keepGpFiles = getBoolean(KEEP_GP_FILES_CONFIG);

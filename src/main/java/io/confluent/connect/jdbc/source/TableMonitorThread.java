@@ -110,6 +110,7 @@ public class TableMonitorThread extends Thread {
     awaitTablesReady(startupMs);
     List<TableId> tablesSnapshot = tables.get();
     if (tablesSnapshot == null) {
+      log.info("No Tables snapshot available");
       return null;
     }
 
@@ -120,7 +121,7 @@ public class TableMonitorThread extends Thread {
         .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
     if (tablesSnapshot.isEmpty()) {
-      log.debug(
+      log.info(
           "Based on the supplied filtering rules, there are no matching tables to read from"
       );
     } else {

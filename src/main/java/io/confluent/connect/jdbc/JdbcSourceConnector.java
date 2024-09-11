@@ -89,6 +89,7 @@ public class JdbcSourceConnector extends SourceConnector {
         config
     );
     cachedConnectionProvider = connectionProvider(maxConnectionAttempts, connectionRetryBackoff);
+    log.info("Cached Connection Provider created");
 
     // Initial connection attempt
     log.info("Initial connection attempt with the database.");
@@ -110,6 +111,10 @@ public class JdbcSourceConnector extends SourceConnector {
     String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
     if (!query.isEmpty()) {
       if (whitelistSet != null || blacklistSet != null) {
+        log.error(
+            "Configuration error: {} is set, but table whitelist or blacklist is also specified."
+                + "These settings cannot be used together.",
+            JdbcSourceConnectorConfig.QUERY_CONFIG);
         throw new ConnectException(JdbcSourceConnectorConfig.QUERY_CONFIG + " may not be combined"
                                    + " with whole-table copying settings.");
       }
@@ -130,6 +135,7 @@ public class JdbcSourceConnector extends SourceConnector {
     );
     if (query.isEmpty()) {
       tableMonitorThread.start();
+      log.info("Starting Table Monitor Thread");
     }
   }
 
@@ -156,6 +162,7 @@ public class JdbcSourceConnector extends SourceConnector {
     String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
     List<Map<String, String>> taskConfigs;
     if (!query.isEmpty()) {
+      log.info("Custom query provided, generating task configuration for the query");
       Map<String, String> taskProps = new HashMap<>(configProperties);
       taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
       taskProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
@@ -163,6 +170,7 @@ public class JdbcSourceConnector extends SourceConnector {
       log.trace("Producing task configs with custom query");
       return taskConfigs;
     } else {
+      log.info("No custom query provided, generating task configurations for tables");
       List<TableId> currentTables = tableMonitorThread.tables();
       if (currentTables == null || currentTables.isEmpty()) {
         taskConfigs = new ArrayList<>(1);

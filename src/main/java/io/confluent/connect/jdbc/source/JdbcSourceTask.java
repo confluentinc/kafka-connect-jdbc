@@ -204,6 +204,7 @@ public class JdbcSourceTask extends SourceTask {
     for (String tableOrQuery : tablesOrQuery) {
       final List<Map<String, String>> tablePartitionsToCheck;
       final Map<String, String> partition;
+      log.trace("Task executing in {} mode",queryMode);
       switch (queryMode) {
         case TABLE:
           if (validateNonNulls) {
@@ -319,6 +320,7 @@ public class JdbcSourceTask extends SourceTask {
       final Connection conn = cachedConnectionProvider.getConnection();
       boolean autoCommit = conn.getAutoCommit();
       try {
+        log.info("Validating columns exist for table");
         conn.setAutoCommit(true);
         Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, table, null);
         Set<String> columnNames = defnsById.keySet().stream().map(ColumnId::name)
@@ -380,8 +382,10 @@ public class JdbcSourceTask extends SourceTask {
           Map<String, Object> partitionOffset,
           TimeZone timezone) {
     if (!(partitionOffset == null)) {
+      log.info("Partition offset for '{}' is not null. Using existing offset.", tableOrQuery);
       return partitionOffset;
     } else {
+      log.info("Partition offset for '{}' is null. Computing initial offset.", tableOrQuery);
       Map<String, Object> initialPartitionOffset = null;
       // no offsets found
       Long timestampInitial = config.getLong(JdbcSourceConnectorConfig.TIMESTAMP_INITIAL_CONFIG);
@@ -571,6 +575,7 @@ public class JdbcSourceTask extends SourceTask {
       String incrementingColumn,
       List<String> timestampColumns
   ) {
+    log.info("Validating non-nullable fields for table: {}", table);
     try {
       Set<String> lowercaseTsColumns = new HashSet<>();
       for (String timestampColumn: timestampColumns) {

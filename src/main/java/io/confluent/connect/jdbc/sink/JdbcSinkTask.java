@@ -88,6 +88,7 @@ public class JdbcSinkTask extends SinkTask {
     );
     try {
       writer.write(records);
+      log.info("Successfully wrote {} records.", recordsCount);
     } catch (TableAlterOrCreateException tace) {
       if (reporter != null) {
         unrollAndRetry(records);
@@ -139,6 +140,7 @@ public class JdbcSinkTask extends SinkTask {
   private void unrollAndRetry(Collection<SinkRecord> records) {
     writer.closeQuietly();
     initWriter();
+    log.warn("Retrying write operation for {} records.", records.size());
     for (SinkRecord record : records) {
       try {
         writer.write(Collections.singletonList(record));

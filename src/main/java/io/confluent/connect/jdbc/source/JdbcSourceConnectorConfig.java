@@ -408,12 +408,14 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       )
       ) {
         configValues
-                .get(JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG)
-                .addErrorMessage("Isolation mode of `"
-                        + TransactionIsolationMode.SQL_SERVER_SNAPSHOT.name()
-                        + "` can only be configured with a Sql Server Dialect"
-          );
-        LOG.warn("Isolation mode of '{}' can only be configured with a Sql Server Dialect", TransactionIsolationMode.SQL_SERVER_SNAPSHOT.name());
+            .get(JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG)
+            .addErrorMessage(
+                "Isolation mode of `"
+                    + TransactionIsolationMode.SQL_SERVER_SNAPSHOT.name()
+                    + "` can only be configured with a Sql Server Dialect");
+        LOG.warn(
+            "Isolation mode of '{}' can only be configured with a Sql Server Dialect",
+            TransactionIsolationMode.SQL_SERVER_SNAPSHOT.name());
       }
     }
 

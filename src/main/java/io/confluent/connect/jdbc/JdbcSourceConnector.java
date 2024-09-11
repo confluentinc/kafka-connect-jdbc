@@ -111,7 +111,10 @@ public class JdbcSourceConnector extends SourceConnector {
     String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
     if (!query.isEmpty()) {
       if (whitelistSet != null || blacklistSet != null) {
-        log.error("Configuration error: {} is set, but table whitelist or blacklist is also specified. These settings cannot be used together.", JdbcSourceConnectorConfig.QUERY_CONFIG);
+        log.error(
+            "Configuration error: {} is set, but table whitelist or blacklist is also specified."
+                + "These settings cannot be used together.",
+            JdbcSourceConnectorConfig.QUERY_CONFIG);
         throw new ConnectException(JdbcSourceConnectorConfig.QUERY_CONFIG + " may not be combined"
                                    + " with whole-table copying settings.");
       }

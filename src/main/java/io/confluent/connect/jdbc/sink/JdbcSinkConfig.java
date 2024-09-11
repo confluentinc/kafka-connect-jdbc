@@ -28,6 +28,8 @@ import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class JdbcSinkConfig extends AbstractConfig {
 
@@ -1126,6 +1128,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     public final String gpssPort;
     public final Integer gpErrorsPercentageLimit;
     public final boolean gpssUseStickySession;
+    private static final Logger log = LoggerFactory.getLogger(JdbcSinkConfig.class);
 
     public boolean printDebugLogs;
 
@@ -1233,7 +1236,7 @@ public class JdbcSinkConfig extends AbstractConfig {
         updateMode = UpdateMode.valueOf(getString(UPDATE_MODE).toUpperCase());
 
         nullString = getString(NULL_STRING);
-        printDebugLogs = getBoolean(DEBUG_LOG);
+        printDebugLogs = getBoolean(DEBUG_LOG) || log.isDebugEnabled();
         columnSelectionStrategy = ColumnSelectionStrategy.valueOf(getString(COLUMN_SELECTION_STRATEGY).toUpperCase());
         String columnAlternatives = getString(COLUMN_ALTERNATIVE);
         if(columnAlternatives != null && !columnAlternatives.isEmpty()) {

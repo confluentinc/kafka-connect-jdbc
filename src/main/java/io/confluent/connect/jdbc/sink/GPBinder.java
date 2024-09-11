@@ -103,7 +103,10 @@ public class GPBinder implements StatementBinder {
 //            dataRows.add(row);
             records.add(record);
         }else {
-            log.info("Ignoring delete record {}", record);
+            log.info("Ignoring delete record");
+            if (config.printDebugLogs) {
+                log.info("Ignored deleted record {}", record);
+            }
         }
     }
 

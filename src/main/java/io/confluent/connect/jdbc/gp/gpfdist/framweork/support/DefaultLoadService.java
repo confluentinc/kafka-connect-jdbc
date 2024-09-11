@@ -90,7 +90,9 @@ public class DefaultLoadService implements LoadService {
             String sqlInsert = SqlUtils.load(loadConfiguration);
             log.debug("sqlCreateTable={}", sqlCreateTable);
             log.debug("sqlDropTable={}", sqlDropTable);
-            log.debug("sqlInsert={}", sqlInsert);
+            if (log.isDebugEnabled()) {
+                log.debug("sqlInsert={}", sqlInsert);
+            }
 
             operations.setPrepareSql(Arrays.asList(sqlCreateTable));
             operations.setCleanSql(Arrays.asList(sqlDropTable));

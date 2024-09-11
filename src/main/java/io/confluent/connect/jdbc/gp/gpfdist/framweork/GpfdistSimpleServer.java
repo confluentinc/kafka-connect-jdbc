@@ -105,7 +105,9 @@ private GpfdistSimpleServer() {
 
             List<List<String>> batch = GpfdistSimpleServer.this.getBatch(); // Implement logic to get a batch of data
             String responseBody = convertDataToString(batch);
-            log.debug("Sending data from gpfdist: "+responseBody);
+            if (config.printDebugLogs) {
+                log.debug("Sending data from gpfdist: " + responseBody);
+            }
 
            Headers headers = exchange.getResponseHeaders();
             // Set response headers

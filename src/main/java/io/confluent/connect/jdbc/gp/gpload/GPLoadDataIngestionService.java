@@ -40,7 +40,12 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
         try {
 
             String suffix = ".csv";
-            File csvFile = File.createTempFile(tableName, suffix, new File(tempDir));
+            String fileName = tableName;
+
+            File csvFile = File.createTempFile(fileName, suffix, new File(tempDir));
+            File yamlFile = File.createTempFile(fileName, ".yml", new File(tempDir));
+            File logFile = File.createTempFile(fileName, ".log", new File(tempDir));
+
             FileWriter writer = new FileWriter(csvFile);
             String absolutePath = csvFile.toString();
             log.info("Writing to file {}", absolutePath);
@@ -114,15 +119,12 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
                 }
             }
 
-            String fileName = tableName + "_" + UUID.randomUUID().toString().replace("-", "_");
 
-            File yamlFile = File.createTempFile(fileName, ".yml", new File(tempDir));
             ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
             mapper.setPropertyNamingStrategy(new UpperCaseStrategy());
             mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
             mapper.writeValue(yamlFile, gPloadConfig);
 
-            File logFile = File.createTempFile(fileName, ".log", new File(tempDir));
             String gploadBinary = "gpload";
             if (config.greenplumHome != null) {
                 gploadBinary = config.greenplumHome + "/bin/gpload";
@@ -190,6 +192,16 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
             log.error("Yaml: {}", yamlFile.getAbsolutePath());
             log.error("Command: {}", gploadCommand);
             log.error("Keeping files for further analysis");
+            // rename to failed (after 5 minutes) because if failed once, it is posibility that it will fail again
+
+            // check if file is more than 5 minutes old
+            if( config.gploadFileRetentionTime != -1 && yamlFile.lastModified() < System.currentTimeMillis() - config.gploadFileRetentionTime) {
+                String name = yamlFile.getName().replace(".yml", "");
+                yamlFile.renameTo(new File(tempDir + name + ".yml.failed"));
+                logFile.renameTo(new File(tempDir + name + ".log.failed"));
+                csvFile.renameTo(new File(tempDir + name + ".csv.failed"));
+            }
+
         } else {
             log.info("GPload finished successfully");
             if (!config.keepGpFiles) {

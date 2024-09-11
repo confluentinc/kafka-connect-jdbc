@@ -124,6 +124,7 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
   @Override
   public SourceRecord extractRecord() {
     if (nextRecord == null) {
+      log.error("No more records are available");
       throw new IllegalStateException("No more records are available");
     }
     PendingRecord currentRecord = nextRecord;

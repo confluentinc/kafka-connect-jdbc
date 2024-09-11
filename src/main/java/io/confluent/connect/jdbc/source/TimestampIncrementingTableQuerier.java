@@ -115,7 +115,10 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
 
     this.timeZone = timeZone;
     this.timestampGranularity = timestampGranularity;
-    log.trace("TimestampIncrementingTableQuerier initialized with timeZone: {}, timestampGranularity: {}", timeZone, timestampGranularity);
+    log.trace(
+        "TimestampIncrementingTableQuerier initialized with timeZone: {}, timestampGranularity: {}",
+        timeZone,
+        timestampGranularity);
   }
 
   /**

@@ -156,6 +156,15 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
                 log.info("Pending file {}", file.getAbsolutePath());
 
                 try {
+
+                    // load file only if it is there for more than 2 minutes
+// check if file is already opened by another thread
+
+                    if(file.lastModified() > System.currentTimeMillis() - config.gploadRetryLoadInitialInterval){
+                        log.info("File {} is not old enough to be re-loaded", file.getName());
+                        continue;
+                    }
+
                     String name = file.getName().replace(".yml", "");
 
                     if(gpFiles.putIfAbsent(name, name) == null) {

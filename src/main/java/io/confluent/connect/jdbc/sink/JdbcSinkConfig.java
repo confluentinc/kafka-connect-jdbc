@@ -156,7 +156,8 @@ public class JdbcSinkConfig extends AbstractConfig {
             + "    Prefer columns in the sink table if there is a difference between the source and sink tables.";
     public static final String COLUMN_SELECTION_STRATEGY_DISPLAY = "Column Selection Strategy";
     public long monitoringThreadInitialDelay;
-    public long gploadFileRetentionTime = -1; //300000; // milisec
+    public long gploadFileRetentionTime = 300000; // milisec
+    public long gploadRetryLoadInitialInterval = 120000; // milisec
 
     public enum ColumnSelectionStrategy {
         DEFAULT,

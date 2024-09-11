@@ -113,13 +113,16 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
                     return propertyName.toUpperCase();
                 }
             }
-            File yamlFile = File.createTempFile(tableName, ".yml", new File(tempDir));
+
+            String fileName = tableName + "_" + UUID.randomUUID().toString().replace("-", "_");
+
+            File yamlFile = File.createTempFile(fileName, ".yml", new File(tempDir));
             ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
             mapper.setPropertyNamingStrategy(new UpperCaseStrategy());
             mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
             mapper.writeValue(yamlFile, gPloadConfig);
 
-            File logFile = File.createTempFile(tableName, ".log", new File(tempDir));
+            File logFile = File.createTempFile(fileName, ".log", new File(tempDir));
             String gploadBinary = "gpload";
             if (config.greenplumHome != null) {
                 gploadBinary = config.greenplumHome + "/bin/gpload";

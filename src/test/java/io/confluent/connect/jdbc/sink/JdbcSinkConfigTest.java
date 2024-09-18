@@ -19,6 +19,9 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
 
+import io.confluent.connect.jdbc.util.ConfigurableJdbcCredentialsProvider;
+import io.confluent.connect.jdbc.util.DefaultJdbcCredentialsProvider;
+import io.confluent.connect.jdbc.util.JdbcCredentialsProvider;
 import io.confluent.connect.jdbc.util.TableType;
 
 import org.apache.kafka.common.config.ConfigException;
@@ -27,6 +30,8 @@ import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 public class JdbcSinkConfigTest {
 
@@ -131,6 +136,68 @@ public class JdbcSinkConfigTest {
     props.put("table.types", "table \t \n");
     createConfig();
     assertTableTypes(TableType.TABLE);
+  }
+
+  @Test
+  public void shouldCreateConfigWithValidCredentialsProviderClass() {
+    props.put(JdbcSinkConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG,
+        DefaultJdbcCredentialsProvider.class.getName());
+    createConfig();
+    JdbcCredentialsProvider provider = config.credentialsProvider();
+    assertNotNull(provider);
+    assertTrue(provider instanceof DefaultJdbcCredentialsProvider);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldFailToCreateConfigWithInvalidCredentialsProviderClass() {
+    // Configuring SqliteHelper Class here which does not extends JdbcCredentialsProvider Interface
+    props.put(JdbcSinkConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG,
+        SqliteHelper.class.getName());
+    createConfig();
+  }
+
+  @Test
+  public void testConfigurableCredentialsProviderClass() {
+    // Test username and password value
+    String username = "test_user";
+    String password = "test_password";
+
+    props.put(JdbcSinkConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG,
+        ConfigurableJdbcCredentialsProvider.class.getName());
+
+    // Adding custom config with prefix - jdbc.credentials.provider. to verify Configurable
+    // functionality
+    props.put(JdbcSinkConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX + "username", username);
+    props.put(JdbcSinkConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX + "password", password);
+
+    createConfig();
+    JdbcCredentialsProvider provider = config.credentialsProvider();
+    assertNotNull(provider);
+    assertTrue(provider instanceof ConfigurableJdbcCredentialsProvider);
+
+    // Assert Username and password are returned from config provider instance correctly
+    assertEquals(username, provider.getJdbcCredentials().getUsername());
+    assertEquals(password, provider.getJdbcCredentials().getPassword());
+  }
+
+  @Test
+  public void testDefaultBehaviorWhenConnectionConfigsArePresent() {
+    // Test username and password value
+    String username = "test_user";
+    String password = "test_password";
+
+    props.put(JdbcSinkConfig.CONNECTION_USER , username);
+    props.put(JdbcSinkConfig.CONNECTION_PASSWORD, password);
+
+    createConfig();
+    JdbcCredentialsProvider provider = config.credentialsProvider();
+    assertNotNull(provider);
+    assertTrue(provider instanceof DefaultJdbcCredentialsProvider);
+
+    // Assert username and password are updated in provider class instance according to
+    // connection.user and connection.password config values.
+    assertEquals(username, provider.getJdbcCredentials().getUsername());
+    assertEquals(password, provider.getJdbcCredentials().getPassword());
   }
 
   protected void createConfig() {

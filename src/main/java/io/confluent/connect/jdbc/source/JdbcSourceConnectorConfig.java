@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.util.StringUtils;
 import java.sql.Connection;
 import java.sql.Timestamp;
 import java.time.ZoneId;
@@ -32,7 +33,10 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
+import io.confluent.connect.jdbc.util.DefaultJdbcCredentialsProvider;
 import io.confluent.connect.jdbc.util.EnumRecommender;
+import io.confluent.connect.jdbc.util.JdbcCredentialsProvider;
+import io.confluent.connect.jdbc.util.JdbcCredentialsProviderValidator;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TimeZoneValidator;
 
@@ -40,6 +44,7 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 
+import org.apache.kafka.common.Configurable;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigDef;
@@ -50,6 +55,7 @@ import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.ConfigValue;
+import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -324,6 +330,26 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
           "Number of times to retry SQL exceptions encountered when executing queries.";
   public static final String QUERY_RETRIES_DISPLAY = "Query Retry Attempts";
 
+  public static final String CREDENTIALS_PROVIDER_CLASS_CONFIG = "jdbc.credentials.provider.class";
+  public static final Class<? extends JdbcCredentialsProvider> CREDENTIALS_PROVIDER_CLASS_DEFAULT =
+      DefaultJdbcCredentialsProvider.class;
+
+  public static final String CREDENTIALS_PROVIDER_CLASS_DISPLAY = "JDBC Credentials Provider Class";
+
+  public static final String CREDENTIALS_PROVIDER_CLASS_DOC = "Credentials provider or provider "
+      + "chain to use for authentication to database. By default the connector uses ``"
+      + DefaultJdbcCredentialsProvider.class.getName() + "``.";
+
+  /**
+   * The properties that begin with this prefix will be used to configure a class, specified by
+   * {@code jdbc.credentials.provider.class} if it implements {@link Configurable}.
+   */
+  public static final String CREDENTIALS_PROVIDER_CONFIG_PREFIX =
+      CREDENTIALS_PROVIDER_CLASS_CONFIG.substring(
+          0,
+          CREDENTIALS_PROVIDER_CLASS_CONFIG.lastIndexOf(".") + 1
+      );
+
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
 
@@ -455,6 +481,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.SHORT,
         CONNECTION_PASSWORD_DISPLAY
+    ).define(
+        CREDENTIALS_PROVIDER_CLASS_CONFIG,
+        Type.CLASS,
+        CREDENTIALS_PROVIDER_CLASS_DEFAULT,
+        new JdbcCredentialsProviderValidator(),
+        Importance.LOW,
+        CREDENTIALS_PROVIDER_CLASS_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        CREDENTIALS_PROVIDER_CLASS_DISPLAY
     ).define(
         CONNECTION_ATTEMPTS_CONFIG,
         Type.INT,
@@ -796,6 +833,39 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public String topicPrefix() {
     return getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG).trim();
+  }
+
+
+  @SuppressWarnings("unchecked")
+  public JdbcCredentialsProvider credentialsProvider() {
+    String username = getString(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG);
+    Password dbPassword = getPassword(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG);
+
+    try {
+      JdbcCredentialsProvider provider = ((Class<? extends JdbcCredentialsProvider>) getClass(
+          JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG)).newInstance();
+
+      if (provider instanceof Configurable) {
+        Map<String, Object> configs = originalsWithPrefix(CREDENTIALS_PROVIDER_CONFIG_PREFIX);
+        configs.remove(
+            CREDENTIALS_PROVIDER_CLASS_CONFIG.substring(CREDENTIALS_PROVIDER_CONFIG_PREFIX.length())
+        );
+
+        if (StringUtils.isNotBlank(username) && StringUtils.isNotBlank(dbPassword.value())) {
+          configs.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, username);
+          configs.put(
+              JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, dbPassword.value()
+          );
+        }
+
+        ((Configurable) provider).configure(configs);
+      }
+
+      return provider;
+    } catch (ClassCastException | IllegalAccessException | InstantiationException e) {
+      throw new ConnectException(
+          "Invalid class for: " + JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG, e);
+    }
   }
 
   /**

@@ -15,6 +15,8 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.util.JdbcCredentials;
+import io.confluent.connect.jdbc.util.JdbcCredentialsProvider;
 import java.time.ZoneOffset;
 import java.util.TimeZone;
 
@@ -114,6 +116,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
   private static final String PRECISION_FIELD = "connect.decimal.precision";
 
+  private JdbcCredentialsProvider jdbcCredentialsProvider;
+
   /**
    * The provider for {@link GenericDatabaseDialect}.
    */
@@ -191,6 +195,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       quoteSqlIdentifiers = QuoteMethod.get(
           config.getString(JdbcSinkConfig.QUOTE_SQL_IDENTIFIERS_CONFIG)
       );
+      jdbcCredentialsProvider = ((JdbcSinkConfig) config).credentialsProvider();
     } else {
       catalogPattern = config.getString(JdbcSourceTaskConfig.CATALOG_PATTERN_CONFIG);
       schemaPattern = config.getString(JdbcSourceTaskConfig.SCHEMA_PATTERN_CONFIG);
@@ -202,6 +207,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     if (config instanceof JdbcSourceConnectorConfig) {
       mapNumerics = ((JdbcSourceConnectorConfig)config).numericMapping();
       batchMaxRows = config.getInt(JdbcSourceConnectorConfig.BATCH_MAX_ROWS_CONFIG);
+      jdbcCredentialsProvider = ((JdbcSourceConnectorConfig) config).credentialsProvider();
     } else {
       mapNumerics = NumericMapping.NONE;
       batchMaxRows = 0;
@@ -238,15 +244,16 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
   @Override
   public Connection getConnection() throws SQLException {
-    // These config names are the same for both source and sink configs ...
-    String username = config.getString(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG);
+    JdbcCredentials jdbcCredentials = jdbcCredentialsProvider.getJdbcCredentials();
+
     Password dbPassword = config.getPassword(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG);
+
     Properties properties = new Properties();
-    if (username != null) {
-      properties.setProperty("user", username);
+    if (jdbcCredentials.getUsername() != null) {
+      properties.setProperty("user", jdbcCredentials.getUsername());
     }
-    if (dbPassword != null) {
-      properties.setProperty("password", dbPassword.value());
+    if (jdbcCredentials.getPassword() != null) {
+      properties.setProperty("password", jdbcCredentials.getPassword());
     }
     properties = addConnectionProperties(properties);
     // Timeout is 40 seconds to be as long as possible for customer to have a long connection

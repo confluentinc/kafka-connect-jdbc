@@ -665,8 +665,10 @@ public class JdbcSinkConfig extends AbstractConfig {
             CREDENTIALS_PROVIDER_CLASS_CONFIG.substring(CREDENTIALS_PROVIDER_CONFIG_PREFIX.length())
         );
 
-        if (StringUtils.isNotBlank(username) && StringUtils.isNotBlank(dbPassword.value())) {
+        if (StringUtils.isNotBlank(username)) {
           configs.put(JdbcSinkConfig.CONNECTION_USER, username);
+        }
+        if (dbPassword != null && StringUtils.isNotBlank(dbPassword.value())) {
           configs.put(JdbcSinkConfig.CONNECTION_PASSWORD, dbPassword.value());
         }
 

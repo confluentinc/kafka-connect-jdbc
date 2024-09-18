@@ -851,11 +851,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
             CREDENTIALS_PROVIDER_CLASS_CONFIG.substring(CREDENTIALS_PROVIDER_CONFIG_PREFIX.length())
         );
 
-        if (StringUtils.isNotBlank(username) && StringUtils.isNotBlank(dbPassword.value())) {
+        if (StringUtils.isNotBlank(username)) {
           configs.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, username);
-          configs.put(
-              JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, dbPassword.value()
-          );
+        }
+        if (dbPassword != null && StringUtils.isNotBlank(dbPassword.value())) {
+          configs.put(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, dbPassword.value());
         }
 
         ((Configurable) provider).configure(configs);

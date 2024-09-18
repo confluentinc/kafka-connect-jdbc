@@ -246,8 +246,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   public Connection getConnection() throws SQLException {
     JdbcCredentials jdbcCredentials = jdbcCredentialsProvider.getJdbcCredentials();
 
-    Password dbPassword = config.getPassword(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG);
-
     Properties properties = new Properties();
     if (jdbcCredentials.getUsername() != null) {
       properties.setProperty("user", jdbcCredentials.getUsername());

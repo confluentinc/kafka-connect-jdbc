@@ -101,4 +101,41 @@ public class ConnectionURLParser {
     public void setSchema(String schema) {
         this.schema = schema;
     }
+
+    public String getUrl() {
+        StringBuilder urlBuilder = new StringBuilder();
+        urlBuilder.append("jdbc:").append(this.scheme).append("://");
+
+        if (this.host != null) {
+            urlBuilder.append(this.host);
+        }
+        if (this.port > 0) {
+            urlBuilder.append(":").append(this.port);
+        }
+        if (this.database != null) {
+            urlBuilder.append("/").append(this.database);
+        }
+
+        boolean hasParams = this.username != null || this.password != null || this.schema != null;
+        if (hasParams) {
+            urlBuilder.append("?");
+            boolean first = true;
+            if (this.schema != null) {
+                urlBuilder.append("schema=").append(this.schema);
+                first = false;
+            }
+            if (this.username != null) {
+                if (!first) urlBuilder.append("&");
+                urlBuilder.append("user=").append(this.username);
+                first = false;
+            }
+            if (this.password != null) {
+                if (!first) urlBuilder.append("&");
+                urlBuilder.append("password=").append(this.password);
+            }
+        }
+
+        return urlBuilder.toString();
+    }
+
 }

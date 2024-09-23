@@ -20,6 +20,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.gp.gpfdist.framweork.support.SegmentRejectType;
+import io.confluent.connect.jdbc.gp.gpload.GPLoadDataIngestionService;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 
 import io.confluent.connect.jdbc.util.*;
@@ -262,6 +263,9 @@ public class JdbcSinkConfig extends AbstractConfig {
     private static final String PORT_RANGE_DOC = "The range of ports to use for gpfdist.";
     private static final String PORT_RANGE_DISPLAY = "Port Range";
     public String dataLineSeparator = "\n";
+
+    protected ConnectionURLParser dbConnection;
+
 
     public int getGpfdistPort() {
         return portRange.size() > 0 ? portRange.get(0) : 5120;
@@ -1187,7 +1191,15 @@ public class JdbcSinkConfig extends AbstractConfig {
     public JdbcSinkConfig(Map<?, ?> props) {
         super(CONFIG_DEF, props);
         connectorName = ConfigUtils.connectorName(props);
-        connectionUrl = getString(CONNECTION_URL);
+        dbConnection = new ConnectionURLParser(getString(CONNECTION_URL));
+        String schemaName = matchSchemaNames(dbConnection.getSchema(), getString(DB_SCHEMA));
+        dbConnection.setSchema(schemaName);
+        connectionUrl = dbConnection.getUrl();
+        if (printDebugLogs) {
+            log.info("schemaName is: {} for connector {}", schemaName, connectorName);
+            log.info("Connection url is : {} for connector {}", connectionUrl, connectorName);
+        }
+        dbSchema = schemaName;
         connectionUser = getString(CONNECTION_USER);
         connectionPassword = getPasswordValue(CONNECTION_PASSWORD);
         connectionAttempts = getInt(CONNECTION_ATTEMPTS);
@@ -1223,10 +1235,17 @@ public class JdbcSinkConfig extends AbstractConfig {
         csvEncoding = getString(CSV_ENCODING);
         gpLogErrors = getBoolean(GP_LOG_ERRORS);
         greenplumHome = getString(GREENPLUM_HOME_CONFIG);
+        if (greenplumHome == null || greenplumHome.isEmpty() || !GPLoadDataIngestionService.checkForGploadBinariesInPath()) {
+            throw new ConfigException("The system environment variable (PATH) does not include the directory where the gpload binaries are located. Please set the binaries in the PATH"
+                    + System.lineSeparator()
+                    + "Or"
+                    + System.lineSeparator()
+                    + "Execute 'greenplum_path.sh' found in the greenplum installation directory and restart Connect.");
+        }
+
         keepGpFiles = getBoolean(KEEP_GP_FILES_CONFIG);
 
         gpfdistHost = getString(GPFDIST_HOST);
-        dbSchema = getString(DB_SCHEMA);
 
         gpssHost = getString(GPSS_HOST);
         gpssPort = getString(GPSS_PORT);
@@ -1292,6 +1311,21 @@ public class JdbcSinkConfig extends AbstractConfig {
             return password.value();
         }
         return null;
+    }
+
+    public String matchSchemaNames(String schemaUrl, String dbSchema) {
+        if (printDebugLogs) {
+            log.info("schemaUrl is: {} for connector {}", schemaUrl, connectorName);
+            log.info("dbSchema is: {} for connector {}", dbSchema, connectorName);
+        }
+        if (schemaUrl != null && dbSchema != null) {
+            if (!dbSchema.equals(schemaUrl)) {
+                throw new ConfigException("The schema in the URL (" + schemaUrl + ") does not match the provided schema (" + dbSchema + ")");
+            }
+            return schemaUrl;
+        }
+
+        return schemaUrl != null ? schemaUrl : (dbSchema != null ? dbSchema : "public");
     }
 
     public String connectorName() {

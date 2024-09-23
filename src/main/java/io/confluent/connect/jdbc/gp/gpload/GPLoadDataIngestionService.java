@@ -25,7 +25,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class GPLoadDataIngestionService extends GpDataIngestionService {
     private static final Logger log = LoggerFactory.getLogger(GPBinder.class);
-
     private static ConcurrentHashMap<String, String> gpFiles = new ConcurrentHashMap<>();
     private final String tempDir;
     public GPLoadDataIngestionService(JdbcSinkConfig config, DatabaseDialect dialect, TableDefinition tableDefinition, FieldsMetadata fieldsMetadata, SchemaPair schemaPair){
@@ -33,6 +32,7 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
         tempDir = System.getProperty("java.io.tmpdir") + "/gpload/";
         new File(tempDir).mkdirs();
     }
+
 
     @Override
     public void ingest(List<SinkRecord> records) {
@@ -192,6 +192,7 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
         String gploadCommand = gploadBinary + " -l " + logFile.getAbsolutePath() + " -f " + yamlFile.getAbsolutePath();
         log.info("Running gpload command {}", gploadCommand);
 
+
         ArrayList<String> cmdOutput = CommonUtils.executeCommand(gploadCommand);
         log.info("gpload output: {}", cmdOutput);
 
@@ -244,6 +245,28 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
             }
         }
         return errMsg;
+    }
+
+    public static Boolean checkForGploadBinariesInPath() {
+        String command = "which gpload";
+        boolean isInPath = false;
+
+        try {
+            List<String> output = CommonUtils.executeCommand(command);
+
+            isInPath = output.stream().anyMatch(line -> line.contains("no gpload") || line.contains("gpload not found"));
+
+        } catch (Exception e) {
+            log.error("Error while executing command to find PATH", e);
+        }
+
+        if (isInPath) {
+            log.info("Gpload binaries are in PATH");
+        } else {
+            log.warn("Gpload binaries are not in PATH");
+        }
+
+        return isInPath;
     }
 
 }

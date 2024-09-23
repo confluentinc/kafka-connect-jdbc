@@ -232,7 +232,7 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
         try {
             List<String> output = CommonUtils.executeCommand(command);
 
-            isInPath = output.stream().anyMatch(line -> line.contains(gploadBinaryPath));
+            isInPath = output.stream().anyMatch(line -> line.contains("no gpload"));
         } catch (Exception e) {
             log.error("Error while executing command to find PATH", e);
         }

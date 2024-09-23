@@ -1234,11 +1234,11 @@ public class JdbcSinkConfig extends AbstractConfig {
         gpLogErrors = getBoolean(GP_LOG_ERRORS);
         greenplumHome = getString(GREENPLUM_HOME_CONFIG);
         if (greenplumHome == null || greenplumHome.isEmpty() || !GPLoadDataIngestionService.checkForGploadBinariesInPath()) {
-            throw new ConfigException("Please check the path for GPLOAD binary, which is not set properly."
+            throw new ConfigException("gpload binaries not found in system path. Please set gpload binaries path."
                     + System.lineSeparator()
                     + "Or"
                     + System.lineSeparator()
-                    + "Execute 'greenplum_path.sh' and restart Connect.");
+                    + "Execute 'greenplum_path.sh' found in the greenplum installation direcotry and restart Connect.");
         }
 
         keepGpFiles = getBoolean(KEEP_GP_FILES_CONFIG);

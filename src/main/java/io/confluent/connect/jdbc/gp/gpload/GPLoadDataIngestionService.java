@@ -223,16 +223,15 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
         return errMsg;
     }
 
-    public static Boolean checkForGploadBinariesInPath(String greenplumHome) {
-        String gploadBinaryPath = greenplumHome + "/bin";
-        log.info("gploadBinaryPath {}", gploadBinaryPath);
+    public static Boolean checkForGploadBinariesInPath() {
         String command = "which gpload";
         boolean isInPath = false;
 
         try {
             List<String> output = CommonUtils.executeCommand(command);
 
-            isInPath = output.stream().anyMatch(line -> line.contains("no gpload"));
+            isInPath = output.stream().anyMatch(line -> line.contains("no gpload") || line.contains("gpload not found"));
+
         } catch (Exception e) {
             log.error("Error while executing command to find PATH", e);
         }

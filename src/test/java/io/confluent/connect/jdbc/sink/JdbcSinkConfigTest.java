@@ -19,9 +19,11 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
 
-import io.confluent.connect.jdbc.util.ConfigurableJdbcCredentialsProvider;
 import io.confluent.connect.jdbc.util.DefaultJdbcCredentialsProvider;
 import io.confluent.connect.jdbc.util.JdbcCredentialsProvider;
+import io.confluent.connect.jdbc.util.JdbcCredentials;
+import io.confluent.connect.jdbc.util.TestConfigurableJdbcCredentialsProvider;
+import io.confluent.connect.jdbc.util.TestRefreshJdbcCredentialsProvider;
 import io.confluent.connect.jdbc.util.TableType;
 
 import org.apache.kafka.common.config.ConfigException;
@@ -163,7 +165,7 @@ public class JdbcSinkConfigTest {
     String password = "test_password";
 
     props.put(JdbcSinkConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG,
-        ConfigurableJdbcCredentialsProvider.class.getName());
+        TestConfigurableJdbcCredentialsProvider.class.getName());
 
     // Adding custom config with prefix - jdbc.credentials.provider. to verify Configurable
     // functionality
@@ -173,11 +175,31 @@ public class JdbcSinkConfigTest {
     createConfig();
     JdbcCredentialsProvider provider = config.credentialsProvider();
     assertNotNull(provider);
-    assertTrue(provider instanceof ConfigurableJdbcCredentialsProvider);
+    assertTrue(provider instanceof TestConfigurableJdbcCredentialsProvider);
 
     // Assert Username and password are returned from config provider instance correctly
     assertEquals(username, provider.getJdbcCredentials().getUsername());
     assertEquals(password, provider.getJdbcCredentials().getPassword());
+  }
+
+  @Test
+  public void testRefreshFunctionalityOfCredentialsProviderClass() {
+
+    props.put(JdbcSinkConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG,
+        TestRefreshJdbcCredentialsProvider.class.getName());
+
+    createConfig();
+    JdbcCredentialsProvider provider = config.credentialsProvider();
+    assertNotNull(provider);
+    assertTrue(provider instanceof TestRefreshJdbcCredentialsProvider);
+
+    // Assert Username and password are returned from config provider instance correctly. Also
+    // password field is rotated everytime password is fetched.
+    for (int i = 0; i < 5; i++) {
+      JdbcCredentials basicJdbcCredentials = provider.getJdbcCredentials();
+      assertEquals("test-user", basicJdbcCredentials.getUsername());
+      assertEquals("test-password-" + i, basicJdbcCredentials.getPassword());
+    }
   }
 
   @Test

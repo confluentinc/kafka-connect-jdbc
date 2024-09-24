@@ -8,7 +8,7 @@ import org.apache.kafka.common.Configurable;
  * This is a test class for JdbcCredentialsProvider Interface which is created to test the
  * configurable functionality
  */
-public class ConfigurableJdbcCredentialsProvider implements JdbcCredentialsProvider,
+public class TestConfigurableJdbcCredentialsProvider implements JdbcCredentialsProvider,
     Configurable {
 
   Map<String, ?> configMap = new HashMap<>();

@@ -194,7 +194,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       quoteSqlIdentifiers = QuoteMethod.get(
           config.getString(JdbcSinkConfig.QUOTE_SQL_IDENTIFIERS_CONFIG)
       );
-      jdbcCredentialsProvider = ((JdbcSinkConfig) config).credentialsProvider();
+      jdbcCredentialsProvider = sinkConfig.credentialsProvider();
     } else {
       catalogPattern = config.getString(JdbcSourceTaskConfig.CATALOG_PATTERN_CONFIG);
       schemaPattern = config.getString(JdbcSourceTaskConfig.SCHEMA_PATTERN_CONFIG);

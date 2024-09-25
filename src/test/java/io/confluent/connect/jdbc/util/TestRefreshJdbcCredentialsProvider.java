@@ -7,7 +7,6 @@ package io.confluent.connect.jdbc.util;
  */
 public class TestRefreshJdbcCredentialsProvider implements JdbcCredentialsProvider {
 
-
   String username = "test-user";
   String password;
   private int numRotations;
@@ -27,5 +26,4 @@ public class TestRefreshJdbcCredentialsProvider implements JdbcCredentialsProvid
     password = "test-password-" + numRotations;
     numRotations++;
   }
-
 }

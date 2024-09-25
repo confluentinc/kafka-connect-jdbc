@@ -295,6 +295,12 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String MSSQL_USE_MERGE_HOLDLOCK_DISPLAY =
       "SQL Server - Use HOLDLOCK in MERGE";
 
+  /**
+   * The properties that begin with this prefix will be used to configure a class, specified by
+   * {@code jdbc.credentials.provider.class} if it implements {@link Configurable}.
+   */
+  public static final String CREDENTIALS_PROVIDER_CONFIG_PREFIX =
+      JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX;
   public static final String CREDENTIALS_PROVIDER_CLASS_CONFIG =
       JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG;
   public static final Class<? extends JdbcCredentialsProvider> CREDENTIALS_PROVIDER_CLASS_DEFAULT =
@@ -306,15 +312,6 @@ public class JdbcSinkConfig extends AbstractConfig {
   public static final String CREDENTIALS_PROVIDER_CLASS_DOC =
       JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_DOC;
 
-  /**
-   * The properties that begin with this prefix will be used to configure a class, specified by
-   * {@code jdbc.credentials.provider.class} if it implements {@link Configurable}.
-   */
-  public static final String CREDENTIALS_PROVIDER_CONFIG_PREFIX =
-      CREDENTIALS_PROVIDER_CLASS_CONFIG.substring(
-          0,
-          CREDENTIALS_PROVIDER_CLASS_CONFIG.lastIndexOf(".") + 1
-      );
 
   public static final ConfigDef CONFIG_DEF = new ConfigDef()
         // Connection

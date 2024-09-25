@@ -330,7 +330,14 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
           "Number of times to retry SQL exceptions encountered when executing queries.";
   public static final String QUERY_RETRIES_DISPLAY = "Query Retry Attempts";
 
-  public static final String CREDENTIALS_PROVIDER_CLASS_CONFIG = "jdbc.credentials.provider.class";
+  /**
+   * The properties that begin with this prefix will be used to configure a class, specified by
+   * {@code jdbc.credentials.provider.class} if it implements {@link Configurable}.
+   */
+  public static final String CREDENTIALS_PROVIDER_CONFIG_PREFIX = "jdbc.credentials.provider.";
+
+  public static final String CREDENTIALS_PROVIDER_CLASS_CONFIG = CREDENTIALS_PROVIDER_CONFIG_PREFIX
+      + "class";
   public static final Class<? extends JdbcCredentialsProvider> CREDENTIALS_PROVIDER_CLASS_DEFAULT =
       DefaultJdbcCredentialsProvider.class;
 
@@ -339,16 +346,6 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String CREDENTIALS_PROVIDER_CLASS_DOC = "Credentials provider or provider "
       + "chain to use for authentication to database. By default the connector uses ``"
       + DefaultJdbcCredentialsProvider.class.getName() + "``.";
-
-  /**
-   * The properties that begin with this prefix will be used to configure a class, specified by
-   * {@code jdbc.credentials.provider.class} if it implements {@link Configurable}.
-   */
-  public static final String CREDENTIALS_PROVIDER_CONFIG_PREFIX =
-      CREDENTIALS_PROVIDER_CLASS_CONFIG.substring(
-          0,
-          CREDENTIALS_PROVIDER_CLASS_CONFIG.lastIndexOf(".") + 1
-      );
 
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());

@@ -15,7 +15,6 @@
 
 package io.confluent.connect.jdbc.source;
 
-import io.confluent.connect.jdbc.util.StringUtils;
 import java.sql.Connection;
 import java.sql.Timestamp;
 import java.time.ZoneId;
@@ -55,7 +54,6 @@ import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.ConfigValue;
-import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -830,39 +828,6 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public String topicPrefix() {
     return getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG).trim();
-  }
-
-
-  @SuppressWarnings("unchecked")
-  public JdbcCredentialsProvider credentialsProvider() {
-    String username = getString(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG);
-    Password dbPassword = getPassword(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG);
-
-    try {
-      JdbcCredentialsProvider provider = ((Class<? extends JdbcCredentialsProvider>) getClass(
-          JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG)).newInstance();
-
-      if (provider instanceof Configurable) {
-        Map<String, Object> configs = originalsWithPrefix(CREDENTIALS_PROVIDER_CONFIG_PREFIX);
-        configs.remove(
-            CREDENTIALS_PROVIDER_CLASS_CONFIG.substring(CREDENTIALS_PROVIDER_CONFIG_PREFIX.length())
-        );
-
-        if (StringUtils.isNotBlank(username)) {
-          configs.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, username);
-        }
-        if (dbPassword != null && StringUtils.isNotBlank(dbPassword.value())) {
-          configs.put(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, dbPassword.value());
-        }
-
-        ((Configurable) provider).configure(configs);
-      }
-
-      return provider;
-    } catch (ClassCastException | IllegalAccessException | InstantiationException e) {
-      throw new ConnectException(
-          "Invalid class for: " + JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG, e);
-    }
   }
 
   /**

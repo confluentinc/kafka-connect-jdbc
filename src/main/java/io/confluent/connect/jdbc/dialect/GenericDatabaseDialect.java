@@ -15,13 +15,13 @@
 
 package io.confluent.connect.jdbc.dialect;
 
-import io.confluent.connect.jdbc.util.JdbcCredentials;
-import io.confluent.connect.jdbc.util.JdbcCredentialsProvider;
 import java.time.ZoneOffset;
 import java.util.TimeZone;
 
+import org.apache.kafka.common.Configurable;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -90,8 +90,11 @@ import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
+import io.confluent.connect.jdbc.util.JdbcCredentials;
+import io.confluent.connect.jdbc.util.JdbcCredentialsProvider;
 import io.confluent.connect.jdbc.util.JdbcDriverInfo;
 import io.confluent.connect.jdbc.util.QuoteMethod;
+import io.confluent.connect.jdbc.util.StringUtils;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.TableType;
@@ -115,7 +118,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
   private static final String PRECISION_FIELD = "connect.decimal.precision";
 
-  private JdbcCredentialsProvider jdbcCredentialsProvider;
+  private final JdbcCredentialsProvider jdbcCredentialsProvider;
 
   /**
    * The provider for {@link GenericDatabaseDialect}.
@@ -186,6 +189,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     this.defaultIdentifierRules = defaultIdentifierRules;
     this.jdbcUrl = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
     this.jdbcUrlInfo = DatabaseDialects.extractJdbcUrlInfo(jdbcUrl);
+    this.jdbcCredentialsProvider = getJdbcCredentialsProvider(config);
+
     if (config instanceof JdbcSinkConfig) {
       JdbcSinkConfig sinkConfig = (JdbcSinkConfig) config;
       catalogPattern = JdbcSourceTaskConfig.CATALOG_PATTERN_DEFAULT;
@@ -194,7 +199,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       quoteSqlIdentifiers = QuoteMethod.get(
           config.getString(JdbcSinkConfig.QUOTE_SQL_IDENTIFIERS_CONFIG)
       );
-      jdbcCredentialsProvider = sinkConfig.credentialsProvider();
     } else {
       catalogPattern = config.getString(JdbcSourceTaskConfig.CATALOG_PATTERN_CONFIG);
       schemaPattern = config.getString(JdbcSourceTaskConfig.SCHEMA_PATTERN_CONFIG);
@@ -206,7 +210,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     if (config instanceof JdbcSourceConnectorConfig) {
       mapNumerics = ((JdbcSourceConnectorConfig)config).numericMapping();
       batchMaxRows = config.getInt(JdbcSourceConnectorConfig.BATCH_MAX_ROWS_CONFIG);
-      jdbcCredentialsProvider = ((JdbcSourceConnectorConfig) config).credentialsProvider();
     } else {
       mapNumerics = NumericMapping.NONE;
       batchMaxRows = 0;
@@ -1974,6 +1977,51 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   protected String sanitizedUrl(String url) {
     // Only replace standard URL-type properties ...
     return url.replaceAll("(?i)([?&]([^=&]*)password([^=&]*)=)[^&]*", "$1****");
+  }
+
+  /**
+   * This is a common method to get an instance of configured JdbcCredentialsProvider class
+   * @param config Source or sink connector config
+   * @return an instance of configured JdbcCredentialsProvider class
+   */
+  @SuppressWarnings("unchecked")
+  protected JdbcCredentialsProvider getJdbcCredentialsProvider(AbstractConfig config) {
+    // All the config key variables referred in this method are same in both source and sink
+    // connector. Using source connector config keys here but method should work for sink
+    // connector as well.
+    String username = config.getString(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG);
+    Password dbPassword = config.getPassword(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG);
+
+    try {
+      JdbcCredentialsProvider provider = ((Class<? extends JdbcCredentialsProvider>)
+          config.getClass(JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG)
+      ).newInstance();
+
+      if (provider instanceof Configurable) {
+        Map<String, Object> configs = config.originalsWithPrefix(
+            JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX
+        );
+        configs.remove(
+            JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG.substring(
+                JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX.length()
+            )
+        );
+
+        if (StringUtils.isNotBlank(username)) {
+          configs.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, username);
+        }
+        if (dbPassword != null && StringUtils.isNotBlank(dbPassword.value())) {
+          configs.put(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, dbPassword.value());
+        }
+
+        ((Configurable) provider).configure(configs);
+      }
+
+      return provider;
+    } catch (ClassCastException | IllegalAccessException | InstantiationException e) {
+      throw new ConnectException(
+          "Invalid class for: " + JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG, e);
+    }
   }
 
   @Override

@@ -49,7 +49,6 @@ import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
-import org.apache.kafka.connect.errors.ConnectException;
 
 public class JdbcSinkConfig extends AbstractConfig {
 
@@ -645,38 +644,6 @@ public class JdbcSinkConfig extends AbstractConfig {
           "Primary key mode must be 'record_key' when delete support is enabled");
     }
     tableTypes = TableType.parse(getList(TABLE_TYPES_CONFIG));
-  }
-
-  @SuppressWarnings("unchecked")
-  public JdbcCredentialsProvider credentialsProvider() {
-    String username = getString(JdbcSinkConfig.CONNECTION_USER);
-    Password dbPassword = getPassword(JdbcSinkConfig.CONNECTION_PASSWORD);
-
-    try {
-      JdbcCredentialsProvider provider = ((Class<? extends JdbcCredentialsProvider>) getClass(
-          JdbcSinkConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG)).newInstance();
-
-      if (provider instanceof Configurable) {
-        Map<String, Object> configs = originalsWithPrefix(CREDENTIALS_PROVIDER_CONFIG_PREFIX);
-        configs.remove(
-            CREDENTIALS_PROVIDER_CLASS_CONFIG.substring(CREDENTIALS_PROVIDER_CONFIG_PREFIX.length())
-        );
-
-        if (StringUtils.isNotBlank(username)) {
-          configs.put(JdbcSinkConfig.CONNECTION_USER, username);
-        }
-        if (dbPassword != null && StringUtils.isNotBlank(dbPassword.value())) {
-          configs.put(JdbcSinkConfig.CONNECTION_PASSWORD, dbPassword.value());
-        }
-
-        ((Configurable) provider).configure(configs);
-      }
-
-      return provider;
-    } catch (ClassCastException | IllegalAccessException | InstantiationException e) {
-      throw new ConnectException(
-          "Invalid class for: " + JdbcSinkConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG, e);
-    }
   }
 
   private String getPasswordValue(String key) {

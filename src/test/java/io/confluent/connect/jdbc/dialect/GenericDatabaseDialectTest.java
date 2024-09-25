@@ -16,7 +16,6 @@
 package io.confluent.connect.jdbc.dialect;
 
 import org.apache.kafka.common.config.AbstractConfig;
-import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -59,6 +58,12 @@ import io.confluent.connect.jdbc.util.StringUtils;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.TableType;
+import io.confluent.connect.jdbc.util.DefaultJdbcCredentialsProvider;
+import io.confluent.connect.jdbc.util.JdbcCredentials;
+import io.confluent.connect.jdbc.util.JdbcCredentialsProvider;
+import io.confluent.connect.jdbc.util.TestConfigurableJdbcCredentialsProvider;
+import io.confluent.connect.jdbc.util.TestRefreshJdbcCredentialsProvider;
+
 
 import static org.easymock.EasyMock.expect;
 import static org.easymock.EasyMock.replay;
@@ -648,5 +653,89 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
     // should not include props not prefixed with 'connection.'
     assertFalse(modified.containsKey("foo2"));
     assertFalse(modified.containsKey("connection.foo2"));
+  }
+
+  @Test
+  public void shouldCreateDialectWithValidCredentialsProviderClass() {
+    connProps.put(JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG,
+        DefaultJdbcCredentialsProvider.class.getName());
+    config = new JdbcSourceConnectorConfig(connProps);
+    dialect = createDialect(config);
+
+
+    JdbcCredentialsProvider provider = dialect.getJdbcCredentialsProvider(config);
+    assertNotNull(provider);
+    assertTrue(provider instanceof DefaultJdbcCredentialsProvider);
+  }
+
+  @Test
+  public void testConfigurableCredentialsProviderClass() {
+    // Test username and password value
+    String username = "test_user";
+    String password = "test_password";
+
+    connProps.put(JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG,
+        TestConfigurableJdbcCredentialsProvider.class.getName());
+
+    // Adding custom config with prefix - jdbc.credentials.provider. to verify Configurable
+    // functionality
+    connProps.put(JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX + "username", username);
+    connProps.put(JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX + "password", password);
+    config = new JdbcSourceConnectorConfig(connProps);
+    dialect = createDialect(config);
+
+    JdbcCredentialsProvider provider = dialect.getJdbcCredentialsProvider(config);
+
+    assertNotNull(provider);
+    assertTrue(provider instanceof TestConfigurableJdbcCredentialsProvider);
+
+    // Assert Username and password are returned from config provider instance correctly
+    JdbcCredentials basicJdbcCredentials = provider.getJdbcCredentials();
+    assertEquals(username, basicJdbcCredentials.getUsername());
+    assertEquals(password, basicJdbcCredentials.getPassword());
+  }
+
+  @Test
+  public void testRefreshFunctionalityOfCredentialsProviderClass() {
+
+    connProps.put(JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG,
+        TestRefreshJdbcCredentialsProvider.class.getName());
+
+    config = new JdbcSourceConnectorConfig(connProps);
+    dialect = createDialect(config);
+
+    JdbcCredentialsProvider provider = dialect.getJdbcCredentialsProvider(config);
+
+    assertNotNull(provider);
+    assertTrue(provider instanceof TestRefreshJdbcCredentialsProvider);
+
+    // Assert Username and password are returned from config provider instance correctly. Also
+    // password field is rotated everytime password is fetched.
+    for (int i = 0; i < 5; i++) {
+      JdbcCredentials basicJdbcCredentials = provider.getJdbcCredentials();
+      assertEquals("test-user", basicJdbcCredentials.getUsername());
+      assertEquals("test-password-" + i, basicJdbcCredentials.getPassword());
+    }
+  }
+
+  @Test
+  public void testDefaultBehaviorWhenConnectionConfigsArePresent() {
+    // Test username and password value
+    String username = "test_user";
+    String password = "test_password";
+
+    connProps.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG , username);
+    connProps.put(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, password);
+    config = new JdbcSourceConnectorConfig(connProps);
+    dialect = createDialect(config);
+
+    JdbcCredentialsProvider provider = dialect.getJdbcCredentialsProvider(config);
+    assertTrue(provider instanceof DefaultJdbcCredentialsProvider);
+
+    // Assert username and password are updated in provider class instance according to
+    // connection.user and connection.password config values.
+    JdbcCredentials basicJdbcCredentials = provider.getJdbcCredentials();
+    assertEquals(username, basicJdbcCredentials.getUsername());
+    assertEquals(password, basicJdbcCredentials.getPassword());
   }
 }

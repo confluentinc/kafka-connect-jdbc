@@ -34,13 +34,19 @@ import io.confluent.connect.jdbc.util.ConfigUtils;
 import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
 import io.confluent.connect.jdbc.util.DeleteEnabledRecommender;
 import io.confluent.connect.jdbc.util.EnumRecommender;
+import io.confluent.connect.jdbc.util.JdbcCredentialsProvider;
+import io.confluent.connect.jdbc.util.JdbcCredentialsProviderValidator;
 import io.confluent.connect.jdbc.util.PrimaryKeyModeRecommender;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.StringUtils;
 import io.confluent.connect.jdbc.util.TableType;
 import io.confluent.connect.jdbc.util.TimeZoneValidator;
+import org.apache.kafka.common.Configurable;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
+import org.apache.kafka.common.config.ConfigDef.Importance;
+import org.apache.kafka.common.config.ConfigDef.Type;
+import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 
@@ -288,6 +294,24 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String MSSQL_USE_MERGE_HOLDLOCK_DISPLAY =
       "SQL Server - Use HOLDLOCK in MERGE";
 
+  /**
+   * The properties that begin with this prefix will be used to configure a class, specified by
+   * {@code jdbc.credentials.provider.class} if it implements {@link Configurable}.
+   */
+  public static final String CREDENTIALS_PROVIDER_CONFIG_PREFIX =
+      JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX;
+  public static final String CREDENTIALS_PROVIDER_CLASS_CONFIG =
+      JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG;
+  public static final Class<? extends JdbcCredentialsProvider> CREDENTIALS_PROVIDER_CLASS_DEFAULT =
+      JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_DEFAULT;
+
+  public static final String CREDENTIALS_PROVIDER_CLASS_DISPLAY =
+      JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_DISPLAY;
+
+  public static final String CREDENTIALS_PROVIDER_CLASS_DOC =
+      JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_DOC;
+
+
   public static final ConfigDef CONFIG_DEF = new ConfigDef()
         // Connection
         .define(
@@ -322,8 +346,18 @@ public class JdbcSinkConfig extends AbstractConfig {
             3,
             ConfigDef.Width.MEDIUM,
             CONNECTION_PASSWORD_DISPLAY
-        )
-        .define(
+        ).define(
+            CREDENTIALS_PROVIDER_CLASS_CONFIG,
+            Type.CLASS,
+            CREDENTIALS_PROVIDER_CLASS_DEFAULT,
+            new JdbcCredentialsProviderValidator(),
+            Importance.LOW,
+            CREDENTIALS_PROVIDER_CLASS_DOC,
+            CONNECTION_GROUP,
+            4,
+            Width.LONG,
+            CREDENTIALS_PROVIDER_CLASS_DISPLAY
+      ).define(
             DIALECT_NAME_CONFIG,
             ConfigDef.Type.STRING,
             DIALECT_NAME_DEFAULT,
@@ -331,7 +365,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Importance.LOW,
             DIALECT_NAME_DOC,
             CONNECTION_GROUP,
-            4,
+            5,
             ConfigDef.Width.LONG,
             DIALECT_NAME_DISPLAY,
             DatabaseDialectRecommender.INSTANCE
@@ -344,7 +378,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Importance.LOW,
             CONNECTION_ATTEMPTS_DOC,
             CONNECTION_GROUP,
-            5,
+            6,
             ConfigDef.Width.SHORT,
             CONNECTION_ATTEMPTS_DISPLAY
         ).define(
@@ -354,7 +388,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Importance.LOW,
             CONNECTION_BACKOFF_DOC,
             CONNECTION_GROUP,
-            6,
+            7,
             ConfigDef.Width.SHORT,
             CONNECTION_BACKOFF_DISPLAY
         )

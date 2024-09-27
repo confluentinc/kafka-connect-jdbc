@@ -14,6 +14,7 @@
  */
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.util.DefaultJdbcCredentialsProvider;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Recommender;
 import org.apache.kafka.common.config.ConfigValue;
@@ -251,6 +252,31 @@ public class JdbcSourceConnectorConfigTest {
         validatedConfig.get(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG);
     assertNotNull(connectionAttemptsConfig);
     assertFalse(connectionAttemptsConfig.errorMessages().isEmpty());
+  }
+
+  @Test
+  public void testCredentialsProviderClassConfig() {
+    // Configuring MockTime Class here which does not extends JdbcCredentialsProvider Interface
+    props.put(JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG,
+        MockTime.class.getName());
+    Map<String, ConfigValue> validatedConfig =
+        JdbcSourceConnectorConfig.baseConfigDef().validateAll(props);
+    ConfigValue credentialsProviderConfig =
+        validatedConfig.get(JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG);
+
+    assertNotNull(credentialsProviderConfig);
+    assertFalse(credentialsProviderConfig.errorMessages().isEmpty());
+
+    // Configuring DefaultJdbcCredentialsProvider Class here which extends JdbcCredentialsProvider
+    // Interface
+    props.put(JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG,
+        DefaultJdbcCredentialsProvider.class.getName());
+    validatedConfig =
+        JdbcSourceConnectorConfig.baseConfigDef().validateAll(props);
+    credentialsProviderConfig =
+        validatedConfig.get(JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG);
+    assertNotNull(credentialsProviderConfig);
+    assertTrue(credentialsProviderConfig.errorMessages().isEmpty());
   }
 
   @SuppressWarnings("unchecked")

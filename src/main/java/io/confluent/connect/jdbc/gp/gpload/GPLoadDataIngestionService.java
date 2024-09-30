@@ -131,7 +131,7 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
             }
 
             // check if there are any pending files
-
+            if (config.skipDataLoad) return;
             loadFile(gploadBinary, yamlFile, csvFile, logFile);
 
             //if(!config.keepGpFiles) {
@@ -189,7 +189,6 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
 
     }
     private void loadFile(String gploadBinary, File yamlFile, File csvFile, File logFile) throws Exception{
-        if (!config.gpOnLoadedData) return;
         String gploadCommand = gploadBinary + " -l " + logFile.getAbsolutePath() + " -f " + yamlFile.getAbsolutePath();
         log.info("Running gpload command {}", gploadCommand);
 

@@ -264,9 +264,9 @@ public class JdbcSinkConfig extends AbstractConfig {
     private static final String PORT_RANGE_DISPLAY = "Port Range";
     public String dataLineSeparator = "\n";
 
-    public static final String GP_ON_LOADED_DATA_CONFIG = "gp.on.loaded.data";
-    private static final boolean GP_ON_LOADED_DATA_DEFAULT = true;
-    private static final String GP_ON_LOADED_DATA_DOC = "Whether to perform gpload on the loaded data";
+    public static final String SKIP_DATA_LOAD_CONFIG = "skip.data.load";
+    private static final boolean SKIP_DATA_LOAD_DEFAULT = false;
+    private static final String SKIP_DATA_LOAD_DOC = "Whether to perform gpload on the loaded data";
 
     protected ConnectionURLParser dbConnection;
 
@@ -1078,7 +1078,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             .define(INSERT_COLUMN_EXCLUDE_LIST, ConfigDef.Type.STRING, INSERT_COLUMN_EXCLUDE_LIST_DEFAULT, ConfigDef.Importance.MEDIUM, INSERT_COLUMN_EXCLUDE_LIST_DOC, WRITES_GROUP, 1, ConfigDef.Width.LONG, INSERT_COLUMN_EXCLUDE_LIST_DISPLAY)
             .define(GP_FAST_MATCH, ConfigDef.Type.BOOLEAN, GP_FAST_MATCH_DEFAULT, ConfigDef.Importance.MEDIUM, GP_FAST_MATCH_DOC, WRITES_GROUP, 1, ConfigDef.Width.MEDIUM, GP_FAST_MATCH_DISPLAY)
             .define(GP_REUSE_TABLE, ConfigDef.Type.BOOLEAN, GP_REUSE_TABLE_DEFAULT, ConfigDef.Importance.MEDIUM, GP_REUSE_TABLE_DOC, WRITES_GROUP, 1, ConfigDef.Width.MEDIUM, GP_REUSE_TABLE_DISPLAY)
-            .define(GP_ON_LOADED_DATA_CONFIG, ConfigDef.Type.BOOLEAN, GP_ON_LOADED_DATA_DEFAULT, ConfigDef.Importance.MEDIUM, GP_ON_LOADED_DATA_DOC);
+            .define(SKIP_DATA_LOAD_CONFIG, ConfigDef.Type.BOOLEAN, SKIP_DATA_LOAD_DEFAULT, ConfigDef.Importance.MEDIUM, SKIP_DATA_LOAD_DOC);
     public static void printConfigDefTable(ConfigDef configDef) {
 
         System.out.format("%-30s %-20s %-30s %-15s %-50s%n", "Name", "Type", "Default", "Importance", "Documentation");
@@ -1140,7 +1140,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     public final Integer gpErrorsPercentageLimit;
     public final boolean gpssUseStickySession;
     private static final Logger log = LoggerFactory.getLogger(JdbcSinkConfig.class);
-    public final boolean gpOnLoadedData;
+    public final boolean skipDataLoad;
 
     public boolean printDebugLogs;
 
@@ -1248,7 +1248,7 @@ public class JdbcSinkConfig extends AbstractConfig {
                     + System.lineSeparator()
                     + "Execute 'greenplum_path.sh' found in the greenplum installation directory and restart Connect.");
         }
-        gpOnLoadedData = getBoolean(GP_ON_LOADED_DATA_CONFIG);
+        skipDataLoad = getBoolean(SKIP_DATA_LOAD_CONFIG);
 
         keepGpFiles = getBoolean(KEEP_GP_FILES_CONFIG);
 

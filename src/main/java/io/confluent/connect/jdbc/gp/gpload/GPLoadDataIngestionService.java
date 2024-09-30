@@ -189,6 +189,7 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
 
     }
     private void loadFile(String gploadBinary, File yamlFile, File csvFile, File logFile) throws Exception{
+        if (!config.gpOnLoadedData) return;
         String gploadCommand = gploadBinary + " -l " + logFile.getAbsolutePath() + " -f " + yamlFile.getAbsolutePath();
         log.info("Running gpload command {}", gploadCommand);
 
@@ -247,14 +248,14 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
         return errMsg;
     }
 
-    public static Boolean checkForGploadBinariesInPath() {
+    public static Boolean isGploadInPath() {
         String command = "which gpload";
         boolean isInPath = false;
 
         try {
             List<String> output = CommonUtils.executeCommand(command);
 
-            isInPath = output.stream().anyMatch(line -> line.contains("no gpload") || line.contains("gpload not found"));
+            isInPath = output.stream().anyMatch(line -> !line.contains("no gpload") && !line.contains("gpload not found"));
 
         } catch (Exception e) {
             log.error("Error while executing command to find PATH", e);

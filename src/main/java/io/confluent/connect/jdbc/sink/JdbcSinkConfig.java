@@ -264,6 +264,10 @@ public class JdbcSinkConfig extends AbstractConfig {
     private static final String PORT_RANGE_DISPLAY = "Port Range";
     public String dataLineSeparator = "\n";
 
+    public static final String SKIP_DATA_LOAD_CONFIG = "skip.data.load";
+    private static final boolean SKIP_DATA_LOAD_DEFAULT = false;
+    private static final String SKIP_DATA_LOAD_DOC = "Skip data loading to the destination database";
+
     protected ConnectionURLParser dbConnection;
 
 
@@ -1073,7 +1077,8 @@ public class JdbcSinkConfig extends AbstractConfig {
             .define(UPDATE_COLUMN_EXCLUDE_LIST, ConfigDef.Type.STRING, UPDATE_COLUMN_EXCLUDE_LIST_DEFAULT, ConfigDef.Importance.MEDIUM, UPDATE_COLUMN_EXCLUDE_LIST_DOC, WRITES_GROUP, 1, ConfigDef.Width.LONG, UPDATE_COLUMN_EXCLUDE_LIST_DISPLAY)
             .define(INSERT_COLUMN_EXCLUDE_LIST, ConfigDef.Type.STRING, INSERT_COLUMN_EXCLUDE_LIST_DEFAULT, ConfigDef.Importance.MEDIUM, INSERT_COLUMN_EXCLUDE_LIST_DOC, WRITES_GROUP, 1, ConfigDef.Width.LONG, INSERT_COLUMN_EXCLUDE_LIST_DISPLAY)
             .define(GP_FAST_MATCH, ConfigDef.Type.BOOLEAN, GP_FAST_MATCH_DEFAULT, ConfigDef.Importance.MEDIUM, GP_FAST_MATCH_DOC, WRITES_GROUP, 1, ConfigDef.Width.MEDIUM, GP_FAST_MATCH_DISPLAY)
-            .define(GP_REUSE_TABLE, ConfigDef.Type.BOOLEAN, GP_REUSE_TABLE_DEFAULT, ConfigDef.Importance.MEDIUM, GP_REUSE_TABLE_DOC, WRITES_GROUP, 1, ConfigDef.Width.MEDIUM, GP_REUSE_TABLE_DISPLAY);
+            .define(GP_REUSE_TABLE, ConfigDef.Type.BOOLEAN, GP_REUSE_TABLE_DEFAULT, ConfigDef.Importance.MEDIUM, GP_REUSE_TABLE_DOC, WRITES_GROUP, 1, ConfigDef.Width.MEDIUM, GP_REUSE_TABLE_DISPLAY)
+            .define(SKIP_DATA_LOAD_CONFIG, ConfigDef.Type.BOOLEAN, SKIP_DATA_LOAD_DEFAULT, ConfigDef.Importance.MEDIUM, SKIP_DATA_LOAD_DOC);
     public static void printConfigDefTable(ConfigDef configDef) {
 
         System.out.format("%-30s %-20s %-30s %-15s %-50s%n", "Name", "Type", "Default", "Importance", "Documentation");
@@ -1135,6 +1140,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     public final Integer gpErrorsPercentageLimit;
     public final boolean gpssUseStickySession;
     private static final Logger log = LoggerFactory.getLogger(JdbcSinkConfig.class);
+    public final boolean skipDataLoad;
 
     public boolean printDebugLogs;
 
@@ -1235,13 +1241,14 @@ public class JdbcSinkConfig extends AbstractConfig {
         csvEncoding = getString(CSV_ENCODING);
         gpLogErrors = getBoolean(GP_LOG_ERRORS);
         greenplumHome = getString(GREENPLUM_HOME_CONFIG);
-        if (greenplumHome == null || greenplumHome.isEmpty() || !GPLoadDataIngestionService.checkForGploadBinariesInPath()) {
+        if (greenplumHome == null || greenplumHome.isEmpty() || !GPLoadDataIngestionService.isGploadInPath()) {
             throw new ConfigException("The system environment variable (PATH) does not include the directory where the gpload binaries are located. Please set the binaries in the PATH"
                     + System.lineSeparator()
                     + "Or"
                     + System.lineSeparator()
                     + "Execute 'greenplum_path.sh' found in the greenplum installation directory and restart Connect.");
         }
+        skipDataLoad = getBoolean(SKIP_DATA_LOAD_CONFIG);
 
         keepGpFiles = getBoolean(KEEP_GP_FILES_CONFIG);
 

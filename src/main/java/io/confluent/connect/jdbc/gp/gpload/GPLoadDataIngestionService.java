@@ -131,7 +131,7 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
             }
 
             // check if there are any pending files
-
+            if (config.skipDataLoad) return;
             loadFile(gploadBinary, yamlFile, csvFile, logFile);
 
             //if(!config.keepGpFiles) {
@@ -247,14 +247,14 @@ public class GPLoadDataIngestionService extends GpDataIngestionService {
         return errMsg;
     }
 
-    public static Boolean checkForGploadBinariesInPath() {
+    public static Boolean isGploadInPath() {
         String command = "which gpload";
         boolean isInPath = false;
 
         try {
             List<String> output = CommonUtils.executeCommand(command);
 
-            isInPath = output.stream().anyMatch(line -> line.contains("no gpload") || line.contains("gpload not found"));
+            isInPath = output.stream().anyMatch(line -> !line.contains("no gpload") && !line.contains("gpload not found"));
 
         } catch (Exception e) {
             log.error("Error while executing command to find PATH", e);

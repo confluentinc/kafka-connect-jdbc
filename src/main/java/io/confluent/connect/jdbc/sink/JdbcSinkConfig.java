@@ -266,7 +266,7 @@ public class JdbcSinkConfig extends AbstractConfig {
 
     public static final String SKIP_DATA_LOAD_CONFIG = "skip.data.load";
     private static final boolean SKIP_DATA_LOAD_DEFAULT = false;
-    private static final String SKIP_DATA_LOAD_DOC = "Whether to perform gpload on the loaded data";
+    private static final String SKIP_DATA_LOAD_DOC = "Skip data loading to the destination database";
 
     protected ConnectionURLParser dbConnection;
 

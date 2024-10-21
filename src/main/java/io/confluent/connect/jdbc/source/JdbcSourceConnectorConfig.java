@@ -19,6 +19,7 @@ import java.sql.Connection;
 import java.sql.Timestamp;
 import java.time.ZoneId;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -42,6 +43,7 @@ import io.confluent.connect.jdbc.util.TimeZoneValidator;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.apache.kafka.common.Configurable;
 import org.apache.kafka.common.config.AbstractConfig;
@@ -277,6 +279,26 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "handle incremental queries itself.";
   public static final String QUERY_DEFAULT = "";
   private static final String QUERY_DISPLAY = "Query";
+
+  public static final String QUERY_PARAMETERS_DEFAULT = "";
+  public static final String QUERY_PARAMETERS_CONFIG = "query.parameters";
+  private static final String QUERY_PARAMETERS_DOC =
+      "By default, the JDBC connector will set query parameters for WHERE clause automatically if "
+      + "you defined the names for incrementing or timestamp columns even if you specified custom "
+      + "``query`` configuration. If specified, the statement query parameters will not be set "
+      + "and WHERE/ORDER clauses will not be appended automatically anymore. Together with "
+      + "``query`` configuration this allows you to define the result SELECT query fully on your "
+      + "own and without loosing the capability to pass the stored offsets for incrementing and "
+      + "timestamp columns into your defined query. Configuration is list of query parameters "
+      + "which are:\n"
+      + "  * INCREMENTING_OFFSET\n"
+      + "  * TIMESTAMP_OFFSET\n"
+      + "  (for example, ``query.parameters: \"INCREMENTING_OFFSET, TIMESTAMP_OFFSET\"``). "
+      + "  Options might be repeated.";
+  private static final String QUERY_PARAMETERS_DISPLAY = "Query Parameters";
+
+  private static final EnumRecommender QUERY_PARAMETERS_RECOMMENDER =
+      EnumRecommender.in(QueryParameter.values());
 
   public static final String TOPIC_PREFIX_CONFIG = "topic.prefix";
   private static final String TOPIC_PREFIX_DOC =
@@ -663,6 +685,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Width.SHORT,
         QUERY_DISPLAY
     ).define(
+        QUERY_PARAMETERS_CONFIG,
+        Type.LIST,
+        QUERY_PARAMETERS_DEFAULT,
+        Importance.LOW,
+        QUERY_PARAMETERS_DOC,
+        MODE_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        QUERY_PARAMETERS_DISPLAY,
+        QUERY_PARAMETERS_RECOMMENDER
+    ).define(
         QUOTE_SQL_IDENTIFIERS_CONFIG,
         Type.STRING,
         QUOTE_SQL_IDENTIFIERS_DEFAULT,
@@ -954,6 +987,35 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         return NumericMapping.PRECISION_ONLY;
       }
       return NumericMapping.NONE;
+    }
+  }
+
+  public enum QueryParameter {
+    INCREMENTING_OFFSET,
+    TIMESTAMP_OFFSET;
+
+    private static final Map<String, QueryParameter> reverse = new HashMap<>(values().length);
+    static {
+      for (QueryParameter val : values()) {
+        reverse.put(val.name().toLowerCase(Locale.ROOT), val);
+      }
+    }
+
+    public static QueryParameter get(String prop) {
+      // not adding a check for null value because the recommender/validator should catch those.
+      return reverse.get(prop.toLowerCase(Locale.ROOT));
+    }
+
+    public static List<QueryParameter> get(JdbcSourceConnectorConfig config) {
+      List<String> queryParametersConfig =
+          config.getList(JdbcSourceConnectorConfig.QUERY_PARAMETERS_CONFIG);
+      if (queryParametersConfig == null) {
+        return Collections.emptyList();
+      }
+
+      return queryParametersConfig.stream()
+        .map(QueryParameter::get)
+        .collect(Collectors.toList());
     }
   }
 

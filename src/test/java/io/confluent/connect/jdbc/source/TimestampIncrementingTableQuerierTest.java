@@ -38,6 +38,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.TimeZone;
 
+import static org.easymock.EasyMock.anyBoolean;
 import static org.easymock.EasyMock.anyObject;
 import static org.easymock.EasyMock.eq;
 import static org.easymock.EasyMock.expect;
@@ -95,6 +96,7 @@ public class TimestampIncrementingTableQuerierTest {
         tableName,
         "",
         timestampMode ? TIMESTAMP_COLUMNS : null,
+        Collections.emptyList(),
         INCREMENTING_COLUMN,
         initialOffset.toMap(),
         10211197100L, // Timestamp delay
@@ -121,7 +123,7 @@ public class TimestampIncrementingTableQuerierTest {
     expectLastCall();
     criteria.whereClause(expressionBuilder);
     expectLastCall();
-    criteria.setQueryParameters(eq(stmt), anyObject());
+    criteria.setQueryParameters(eq(stmt), anyObject(), anyObject());
     expectLastCall();
     expect(stmt.executeQuery()).andReturn(resultSet);
     expect(resultSet.getMetaData()).andReturn(null);
@@ -233,7 +235,7 @@ public class TimestampIncrementingTableQuerierTest {
     expect(schemaMapping.schema()).andReturn(schema()).times(2);
     expect(resultSet.next()).andReturn(true);
     expect(schemaMapping.fieldSetters()).andReturn(Collections.emptyList());
-    expect(criteria.extractValues(anyObject(), anyObject(), anyObject(), anyObject())).andReturn(offset);
+    expect(criteria.extractValues(anyObject(), anyObject(), anyObject(), anyObject(), anyBoolean())).andReturn(offset);
   }
 
   private void expectReset() throws Exception {

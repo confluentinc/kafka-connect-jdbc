@@ -137,7 +137,7 @@ public class JdbcDbWriterTest {
     PreparedStatement mockStatement = mock(PreparedStatement.class);
     when(dialect.parseTableIdentifier(any())).thenReturn(mock(TableId.class));
     when(dialect.createPreparedStatement(any(), any())).thenReturn(mockStatement);
-    when(dialect.statementBinder(any(), any(), any(), any(), any(), any()))
+    when(dialect.statementBinder(any(), any(), any(), any(), any(), any(), any()))
         .thenReturn(mock(PreparedStatementBinder.class));
     when(mockStatement.executeBatch()).thenReturn(new int[3]);
 

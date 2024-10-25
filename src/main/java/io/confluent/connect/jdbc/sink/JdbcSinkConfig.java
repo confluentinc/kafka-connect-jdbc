@@ -178,6 +178,13 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "the connector, e.g. ``UPDATE``.";
   private static final String INSERT_MODE_DISPLAY = "Insert Mode";
 
+  public static final String ENABLE_NULL_KEY_PROTECTION = "enable.null.key.protection";
+  private static final String ENABLE_NULL_KEY_PROTECTION_DEFAULT = "false";
+  private static final String ENABLE_NULL_KEY_PROTECTION_DOC =
+      "If upsert mode is enabled (Only in OracleDialect), the system will protect \n"
+          + "<table.column>=<incoming.column> to prevent 0 row results in nullable keys.";
+  private static final String ENABLE_NULL_KEY_PROTECTION_DISPLAY = "Enable Null Key Protection";
+
   public static final String PK_FIELDS = "pk.fields";
   private static final String PK_FIELDS_DEFAULT = "";
   private static final String PK_FIELDS_DOC =
@@ -439,6 +446,17 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Width.MEDIUM,
             TABLE_TYPES_DISPLAY
         )
+        .define(
+            ENABLE_NULL_KEY_PROTECTION,
+            ConfigDef.Type.BOOLEAN,
+            ENABLE_NULL_KEY_PROTECTION_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            ENABLE_NULL_KEY_PROTECTION_DOC,
+            WRITES_GROUP,
+            5,
+            ConfigDef.Width.MEDIUM,
+            ENABLE_NULL_KEY_PROTECTION_DISPLAY
+        )
         // Data Mapping
         .define(
             TABLE_NAME_FORMAT,
@@ -610,6 +628,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final boolean useHoldlockInMerge;
 
   public final boolean trimSensitiveLogsEnabled;
+  public final boolean enableNullKeyProtection;
 
   public JdbcSinkConfig(Map<?, ?> props) {
     super(CONFIG_DEF, props);
@@ -644,6 +663,7 @@ public class JdbcSinkConfig extends AbstractConfig {
           "Primary key mode must be 'record_key' when delete support is enabled");
     }
     tableTypes = TableType.parse(getList(TABLE_TYPES_CONFIG));
+    enableNullKeyProtection = getBoolean(ENABLE_NULL_KEY_PROTECTION);
   }
 
   private String getPasswordValue(String key) {

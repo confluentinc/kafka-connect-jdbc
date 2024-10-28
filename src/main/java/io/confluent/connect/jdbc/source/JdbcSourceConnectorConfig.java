@@ -104,13 +104,25 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
                                                      + "each table.";
   public static final int POLL_INTERVAL_MS_DEFAULT = 5000;
   private static final String POLL_INTERVAL_MS_DISPLAY = "Poll Interval (ms)";
-
+  
   public static final String BATCH_MAX_ROWS_CONFIG = "batch.max.rows";
   private static final String BATCH_MAX_ROWS_DOC =
       "Maximum number of rows to include in a single batch when polling for new data. This "
       + "setting can be used to limit the amount of data buffered internally in the connector.";
   public static final int BATCH_MAX_ROWS_DEFAULT = 100;
   private static final String BATCH_MAX_ROWS_DISPLAY = "Max Rows Per Batch";
+
+  public static final String POLL_SLEEP_MS_CONFIG = "poll.sleep.ms";
+  private static final String POLL_SLEEP_MS_DOC =
+      "Time to sleep after the whole table result set has been consumed. The batch result"
+      + "set is read internally without sending an next SQL query, whereas " 
+      + BATCH_MAX_ROWS_CONFIG
+      + "are consumed during each poll interval (" + POLL_INTERVAL_MS_CONFIG + ")"
+      + "This setting can be used to limit the frequency at which the SQL server is being"
+      + "queried without limiting the processing speed of already obtained result sets.\n\n"
+      + "This is especially useful with mode=bulk.";
+  public static final int POLL_SLEEP_MS_DEFAULT = 0;
+  private static final String POLL_SLEEP_MS_DISPLAY = "Sleep between table queries (ms)";
 
   public static final String NUMERIC_PRECISION_MAPPING_CONFIG = "numeric.precision.mapping";
   private static final String NUMERIC_PRECISION_MAPPING_DOC =
@@ -739,7 +751,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.SHORT,
         BATCH_MAX_ROWS_DISPLAY
-    ).defineInternal(
+    ).define(
+        POLL_SLEEP_MS_CONFIG,
+        Type.INT,
+        POLL_SLEEP_MS_DEFAULT,
+        Importance.LOW,
+        POLL_SLEEP_MS_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        POLL_SLEEP_MS_DISPLAY
+     ).defineInternal(
         TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_CONFIG,
         Type.LONG,
         TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_DEFAULT,

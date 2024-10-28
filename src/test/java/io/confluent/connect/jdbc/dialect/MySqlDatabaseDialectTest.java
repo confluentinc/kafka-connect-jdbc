@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -23,6 +24,7 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.List;
 
 import io.confluent.connect.jdbc.util.QuoteMethod;
@@ -254,5 +256,18 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
         + "db?password=****&key1=value1&key2=value2&key3=value3&"
         + "user=smith&password=****&other=value"
     );
+  }
+
+  @Test
+  public void mustConvertStringTypeToVarcharWhenUsedAsKey(){
+
+    SinkRecordField f1 = new SinkRecordField(Schema.STRING_SCHEMA, "c1", true);
+    SinkRecordField f2 = new SinkRecordField(Schema.OPTIONAL_INT64_SCHEMA, "c2", false);
+
+    String expected =
+            "CREATE TABLE `myTable` (\n" + "`c1` VARCHAR(256) NOT NULL,\n" +
+                    "`c2` BIGINT NULL,\nPRIMARY KEY(`c1`))";
+    String sql = dialect.buildCreateTableStatement(tableId, Arrays.asList(f1,f2));
+    assertEquals(expected, sql);
   }
 }

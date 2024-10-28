@@ -536,7 +536,10 @@ public class JdbcSourceTask extends SourceTask {
         if (maxRetriesPerQuerier > 0
                 && querier.getAttemptedRetryCount() >= maxRetriesPerQuerier) {
           closeResources();
-          throw new ConnectException("Failed to Query table after retries", sqle);
+          throw new ConnectException("Failed to query table after retries", sqle);
+        } else if (maxRetriesPerQuerier == 0) {
+          closeResources();
+          throw new ConnectException("Failed to query table, no retries configured !", sqle);
         }
         querier.incrementRetryCount();
         return null;

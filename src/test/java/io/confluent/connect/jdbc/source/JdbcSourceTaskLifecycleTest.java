@@ -321,6 +321,24 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
   }
 
   @Test(expected = ConnectException.class)
+  public void testTransientSQLExceptionNoRetries() throws Exception {
+
+    TableQuerier bulkTableQuerier = EasyMock.createMock(BulkTableQuerier.class);
+
+    expect(bulkTableQuerier.querying()).andReturn(true);
+    bulkTableQuerier.maybeStartQuery(anyObject());
+    expectLastCall().andThrow(new SQLException("This is a transient exception"));
+
+    expect(bulkTableQuerier.getAttemptedRetryCount()).andReturn(0);
+    expectLastCall().once();
+    bulkTableQuerier.reset(anyLong(), anyBoolean());
+    replay(bulkTableQuerier);
+
+    JdbcSourceTask mockedTask = setUpMockedTask(bulkTableQuerier, 0);
+    mockedTask.poll();
+  }
+
+  @Test(expected = ConnectException.class)
   public void testTransientSQLExceptionRetries() throws Exception {
 
     int retryMax = 2; //max times to retry

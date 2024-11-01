@@ -6,33 +6,30 @@ import org.slf4j.LoggerFactory;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
 
 public class DateTypeConverter {
     private final Logger log = LoggerFactory.getLogger(DateTypeConverter.class);
 
     private final JdbcSinkConfig config;
+
     public DateTypeConverter(JdbcSinkConfig config) {
         this.config = config;
     }
 
+    public String convertDate(String dateValue) {
+        log.info("Converting date...");
+        return convertDateFormat(dateValue, config.dateFromFormat, config.dateToFormat, config.dateFromTimezone, config.dateToTimezone);
+    }
 
+    public String convertTime(String dateValue) {
+        log.info("Converting time...");
+        return convertDateFormat(dateValue, config.timeFromFormat, config.timeToFormat, config.dateFromTimezone, config.dateToTimezone);
+    }
 
-        public String convertDate(String dateValue) {
-            log.info("Converting date...");
-            return convertDateFormat(dateValue, config.dateFromFormat, config.dateToFormat, config.dateFromTimezone, config.dateToTimezone);
-        }
-
-        public String convertTime(String dateValue) {
-            log.info("Converting time...");
-            return convertDateFormat(dateValue, config.timeFromFormat, config.timeToFormat, config.dateFromTimezone, config.dateToTimezone);
-        }
-
-        public String convertTimeStamp(String dateValue) {
-            log.info("Converting timestamp...");
-            return convertDateFormat(dateValue, config.timestampFromFormat, config.timestampToFormat, config.dateFromTimezone, config.dateToTimezone);
-        }
+    public String convertTimeStamp(String dateValue) {
+        log.info("Converting timestamp...");
+        return convertDateFormat(dateValue, config.timestampFromFormat, config.timestampToFormat, config.dateFromTimezone, config.dateToTimezone);
+    }
 
     private synchronized String convertDateFormat(String originalDateString, String originalFormat, String targetFormat, java.util.TimeZone fromTimeZone, java.util.TimeZone toTimeZone) {
         if (config.printDebugLogs) {

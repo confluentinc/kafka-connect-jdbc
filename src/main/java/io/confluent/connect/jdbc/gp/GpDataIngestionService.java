@@ -3,10 +3,7 @@ package io.confluent.connect.jdbc.gp;
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.PostgreSqlDatabaseDialect;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
-import io.confluent.connect.jdbc.sink.metadata.ColumnDetails;
-import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
-import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
-import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import io.confluent.connect.jdbc.sink.metadata.*;
 import io.confluent.connect.jdbc.util.*;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.sink.SinkRecord;
@@ -302,19 +299,37 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
                 value = config.nullString;
             }
 
-            // date format
-            if (config.timestampAutoConvert && value != null && value.length() > 0) {
-                ColumnDetails column = tableDefinition.getOrderedColumn(key);
-                if (column != null && column.getDateType() != null) {
-                    if (config.printDebugLogs) {
-                        log.info("Date Value before conversion: {} for column: {}", value, key);
+            if (config.useEnumForDateConversion) {
+
+                if (config.timestampAutoConvert && value != null && value.length() > 0) {
+                    ColumnDetails column = tableDefinition.getOrderedColumn(key);
+                    if (column != null && column.getDateType() != null) {
+                        if (config.printDebugLogs) {
+                            log.info("Date Value before conversion: {} for column: {}", value, key);
+                        }
+                        value = column.getDateType().format(config, value);
+                        if (config.printDebugLogs) {
+                            log.info("Date Value after: {} for column: {}", value, key);
+                        }
                     }
-                    value = column.getDateType().format(config, value);
-                    if (config.printDebugLogs) {
-                        log.info("Date Value after: {} for column: {}", value, key);
+                }
+            } else {
+                DateTypeConverter dateTypeConverter = new DateTypeConverter();
+
+                if (config.timestampAutoConvert && value != null && value.length() > 0) {
+                    ColumnDetails column = tableDefinition.getOrderedColumn(key);
+                    if (column != null && column.getDateType() != null) {
+                        if (config.printDebugLogs) {
+                            log.info("Date Value before conversion: {} for column: {}", value, key);
+                        }
+                        value = dateTypeConverter.format(config, column.getDataType(), value);
+                        if (config.printDebugLogs) {
+                            log.info("Date Value after: {} for column: {}", value, key);
+                        }
                     }
                 }
             }
+
             if (config.printDebugLogs) {
                 log.info("Adding value: {} for column: {}", value, key);
             }

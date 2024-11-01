@@ -33,6 +33,10 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
     protected int totalNonKeyColumns;
     protected int totalRecords;
     protected ConnectionURLParser dbConnection;
+    public static final String DATE_TYPE = "date";
+    public static final String TIME_TYPE = "time";
+    public static final String TIMESTAMP_TYPE = "timestamp";
+
 
     public GpDataIngestionService(JdbcSinkConfig config, DatabaseDialect dialect, TableDefinition tableDefinition, FieldsMetadata fieldsMetadata, SchemaPair schemaPair) {
         this.config = config;
@@ -233,6 +237,7 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
 
     private void addRow(SinkRecord record) {
         List row = new ArrayList(totalColumns);
+        DateTypeConverter dateTypeConverter = new DateTypeConverter(config);
         final Struct valueStruct = (Struct) record.value();
 
 //        valueStruct.schema().fields().forEach(field -> {
@@ -252,7 +257,6 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
                 log.info(">>>>>TableDefinition Column: {} - {}", c.getColumnName(), c.getDataType());
             }
         });
-
 
         for (int i = 0; i < totalColumns; i++) {
             String value = null;
@@ -299,34 +303,23 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
                 value = config.nullString;
             }
 
-            if (config.useEnumForDateConversion) {
 
-                if (config.timestampAutoConvert && value != null && value.length() > 0) {
-                    ColumnDetails column = tableDefinition.getOrderedColumn(key);
-                    if (column != null && column.getDateType() != null) {
-                        if (config.printDebugLogs) {
-                            log.info("Date Value before conversion: {} for column: {}", value, key);
+            if (config.dateConversionMode != JdbcSinkConfig.DateConversionMode.DEFAULT && value != null && value.length() > 0) {
+                ColumnDetails column = tableDefinition.getOrderedColumn(key);
+                if (column != null && column.getDateType() != null) {
+
+                    if (config.dateConversionMode == JdbcSinkConfig.DateConversionMode.CLASS_METHOD) {
+                        if (DATE_TYPE.equalsIgnoreCase(column.getDataType())) {
+                            value = dateTypeConverter.convertDate(value);
+                        } else if (TIME_TYPE.equalsIgnoreCase(column.getDataType())) {
+                            value = dateTypeConverter.convertTime(value);
+                        } else if (TIMESTAMP_TYPE.equalsIgnoreCase(column.getDataType())) {
+                            value = dateTypeConverter.convertTimeStamp(value);
                         }
+                    }else if (config.dateConversionMode == JdbcSinkConfig.DateConversionMode.ENUM) {
                         value = column.getDateType().format(config, value);
-                        if (config.printDebugLogs) {
-                            log.info("Date Value after: {} for column: {}", value, key);
-                        }
                     }
-                }
-            } else {
-                DateTypeConverter dateTypeConverter = new DateTypeConverter();
-
-                if (config.timestampAutoConvert && value != null && value.length() > 0) {
-                    ColumnDetails column = tableDefinition.getOrderedColumn(key);
-                    if (column != null && column.getDateType() != null) {
-                        if (config.printDebugLogs) {
-                            log.info("Date Value before conversion: {} for column: {}", value, key);
-                        }
-                        value = dateTypeConverter.format(config, column.getDataType(), value);
-                        if (config.printDebugLogs) {
-                            log.info("Date Value after: {} for column: {}", value, key);
-                        }
-                    }
+                    log.info("Converted value: {} for column: {}", value, key);
                 }
             }
 

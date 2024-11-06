@@ -7,6 +7,7 @@ import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,8 +17,8 @@ public class GPSSDataIngestionService extends GpDataIngestionService {
 
     private static final Logger log = LoggerFactory.getLogger(GPSSDataIngestionService.class);
 
-    public GPSSDataIngestionService(JdbcSinkConfig config, DatabaseDialect dialect, TableDefinition tabDef, FieldsMetadata fieldsMetadata, SchemaPair schemaPair) {
-        super(config, dialect, tabDef, fieldsMetadata, schemaPair);
+    public GPSSDataIngestionService(JdbcSinkConfig config, DatabaseDialect dialect, TableDefinition tabDef, FieldsMetadata fieldsMetadata, SchemaPair schemaPair, SinkTaskContext context) {
+        super(config, dialect, tabDef, fieldsMetadata, schemaPair, context);
     }
 
     public GPSSDataIngestionService(JdbcSinkConfig config, DatabaseDialect dialect, String tableName, FieldsMetadata fieldsMetadata) {

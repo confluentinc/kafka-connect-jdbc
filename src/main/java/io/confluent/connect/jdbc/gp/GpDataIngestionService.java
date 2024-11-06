@@ -9,6 +9,7 @@ import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.apache.kafka.connect.sink.SinkTaskContext;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -16,6 +17,7 @@ import java.util.stream.Stream;
 
 public abstract class GpDataIngestionService implements IGPDataIngestionService {
     private static final Logger log = LoggerFactory.getLogger(GpDataIngestionService.class);
+    private static SinkTaskContext context;
     protected final JdbcSinkConfig config;
     protected final DatabaseDialect dialect;
     protected SchemaPair schemaPair;
@@ -38,13 +40,14 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
     public static final String TIMESTAMP_TYPE = "timestamp";
 
 
-    public GpDataIngestionService(JdbcSinkConfig config, DatabaseDialect dialect, TableDefinition tableDefinition, FieldsMetadata fieldsMetadata, SchemaPair schemaPair) {
+    public GpDataIngestionService(JdbcSinkConfig config, DatabaseDialect dialect, TableDefinition tableDefinition, FieldsMetadata fieldsMetadata, SchemaPair schemaPair, SinkTaskContext context) {
         this.config = config;
         this.tableDefinition = tableDefinition;
         this.fieldsMetadata = fieldsMetadata;
         this.tableName = tableDefinition.id().tableName();
         this.dialect = dialect;
         this.schemaPair = schemaPair;
+        this.context = context;
         setupDbConnection();
 
     }
@@ -309,12 +312,13 @@ public abstract class GpDataIngestionService implements IGPDataIngestionService 
                 if (column != null && column.getDateType() != null) {
 
                     if (config.dateConversionMode == JdbcSinkConfig.DateConversionMode.CLASS_METHOD) {
-                        if (DATE_TYPE.equalsIgnoreCase(column.getDataType())) {
+                        log.info("DataType: {}", column.getDataType());
+                        if (column.getDateType() == DateType.DATE) {
                             value = dateTypeConverter.convertDate(value);
-                        } else if (TIME_TYPE.equalsIgnoreCase(column.getDataType())) {
-                            value = dateTypeConverter.convertTime(value);
-                        } else if (TIMESTAMP_TYPE.equalsIgnoreCase(column.getDataType())) {
+                        } else if (column.getDateType() == DateType.TIMESTAMP) {
                             value = dateTypeConverter.convertTimeStamp(value);
+                        } else if (column.getDateType() == DateType.TIME) {
+                            value = dateTypeConverter.convertTime(value);
                         }
                     }else if (config.dateConversionMode == JdbcSinkConfig.DateConversionMode.ENUM) {
                         value = column.getDateType().format(config, value);

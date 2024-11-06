@@ -20,6 +20,7 @@ import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.util.TableId;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,8 +33,8 @@ import static java.util.Objects.nonNull;
 public class GPBufferedRecords extends BufferedRecords{
   private static final Logger log = LoggerFactory.getLogger(GPBufferedRecords.class);
   private GPBinder updateStatementBinder;
-  public GPBufferedRecords(JdbcSinkConfig config, TableId tableId, DatabaseDialect dbDialect, DbStructure dbStructure, Connection connection) {
-    super(config, tableId, dbDialect, dbStructure, connection);
+  public GPBufferedRecords(JdbcSinkConfig config, TableId tableId, DatabaseDialect dbDialect, DbStructure dbStructure, Connection connection, SinkTaskContext context) {
+    super(config, tableId, dbDialect, dbStructure, connection, context);
   }
 
   @Override
@@ -101,7 +102,7 @@ public class GPBufferedRecords extends BufferedRecords{
               schemaPair,
               fieldsMetadata,
               dbStructure.tableDefinition(connection, tableId),
-              config.insertMode, config);
+              config.insertMode, config, context);
 
 
         if (config.deleteEnabled && nonNull(deleteSql)) {

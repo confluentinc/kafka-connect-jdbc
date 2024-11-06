@@ -18,6 +18,7 @@ package io.confluent.connect.jdbc.sink;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,6 +45,7 @@ import static java.util.Objects.nonNull;
 
 public class BufferedRecords {
   protected static final Logger log = LoggerFactory.getLogger(BufferedRecords.class);
+  protected final SinkTaskContext context;
 
   protected final TableId tableId;
   protected final JdbcSinkConfig config;
@@ -69,7 +71,8 @@ public class BufferedRecords {
       TableId tableId,
       DatabaseDialect dbDialect,
       DbStructure dbStructure,
-      Connection connection
+      Connection connection,
+      SinkTaskContext context
   ) {
     this.tableId = tableId;
     this.config = config;
@@ -77,6 +80,7 @@ public class BufferedRecords {
     this.dbStructure = dbStructure;
     this.connection = connection;
     this.recordValidator = RecordValidator.create(config);
+    this.context = context;
   }
 
   public List<SinkRecord> add(SinkRecord record) throws SQLException, TableAlterOrCreateException {

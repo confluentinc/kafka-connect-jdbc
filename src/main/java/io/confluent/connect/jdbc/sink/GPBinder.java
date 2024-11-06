@@ -11,6 +11,7 @@ import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,6 +23,7 @@ import java.util.Map;
 public class GPBinder implements StatementBinder {
 
     private final JdbcSinkConfig.PrimaryKeyMode pkMode;
+    private final SinkTaskContext context;
     private final SchemaPair schemaPair;
     private final FieldsMetadata fieldsMetadata;
     private final JdbcSinkConfig.InsertMode insertMode;
@@ -42,7 +44,7 @@ public class GPBinder implements StatementBinder {
             JdbcSinkConfig.PrimaryKeyMode pkMode,
             SchemaPair schemaPair,
             FieldsMetadata fieldsMetadata,
-            JdbcSinkConfig.InsertMode insertMode
+            JdbcSinkConfig.InsertMode insertMode, SinkTaskContext context
     ) {
         this(
                 dialect,
@@ -51,7 +53,8 @@ public class GPBinder implements StatementBinder {
                 fieldsMetadata,
                 null,
                 insertMode,
-                null
+                null,
+                context
         );
     }
 
@@ -62,7 +65,7 @@ public class GPBinder implements StatementBinder {
             FieldsMetadata fieldsMetadata,
             TableDefinition tabDef,
             JdbcSinkConfig.InsertMode insertMode,
-            JdbcSinkConfig config
+            JdbcSinkConfig config, SinkTaskContext context
     ) {
         this.dialect = dialect;
         this.pkMode = pkMode;
@@ -72,17 +75,18 @@ public class GPBinder implements StatementBinder {
         this.tabDef = tabDef;
         this.records = new ArrayList<>();
         this.config = config;
+        this.context = context;
 
         if (config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPLOAD) {
             log.info("Using GPLOAD to insert records");
-            gpDataIngestor = new GPLoadDataIngestionService(this.config, this.dialect, this.tabDef, this.fieldsMetadata , this.schemaPair);
+            gpDataIngestor = new GPLoadDataIngestionService(this.config, this.dialect, this.tabDef, this.fieldsMetadata , this.schemaPair, this.context);
 
         } else if (config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPSS) {
             log.info("Using GPSS to insert records");
-              gpDataIngestor = new GPSSDataIngestionService(config, dialect, tabDef, this.fieldsMetadata, this.schemaPair );
+              gpDataIngestor = new GPSSDataIngestionService(config, dialect, tabDef, this.fieldsMetadata, this.schemaPair, this.context);
         } else if (config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPFDIST) {
             log.info("Using GPFDIST to insert records");
-            gpDataIngestor =  new GpfdistDataIngestionService(config, dialect, tabDef, this.fieldsMetadata, this.schemaPair);
+            gpDataIngestor =  new GpfdistDataIngestionService(config, dialect, tabDef, this.fieldsMetadata, this.schemaPair, this.context);
         } else {
             throw new IllegalArgumentException("Invalid batch insert mode " + config.batchInsertMode);
 

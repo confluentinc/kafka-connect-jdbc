@@ -25,6 +25,7 @@ import java.util.*;
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.TableId;
+import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,14 +33,17 @@ public class JdbcDbWriter {
   private static final Logger log = LoggerFactory.getLogger(JdbcDbWriter.class);
 
   private final JdbcSinkConfig config;
+  private final SinkTaskContext context;
   private final DatabaseDialect dbDialect;
   private final DbStructure dbStructure;
+
   final CachedConnectionProvider cachedConnectionProvider;
 
-  JdbcDbWriter(final JdbcSinkConfig config, DatabaseDialect dbDialect, DbStructure dbStructure) {
+  JdbcDbWriter(final JdbcSinkConfig config, DatabaseDialect dbDialect, DbStructure dbStructure, SinkTaskContext context) {
     this.config = config;
     this.dbDialect = dbDialect;
     this.dbStructure = dbStructure;
+    this.context = context;
 
     this.cachedConnectionProvider = connectionProvider(
         config.connectionAttempts,
@@ -71,7 +75,7 @@ public class JdbcDbWriter {
           buffer = config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPLOAD
                   || config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPSS
                   || config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPFDIST
-                  ? new GPBufferedRecords(config, tableId, dbDialect, dbStructure, connection) : new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
+                  ? new GPBufferedRecords(config, tableId, dbDialect, dbStructure, connection, context) : new BufferedRecords(config, tableId, dbDialect, dbStructure, connection, context);
           buffer.setLastFlushTime(System.currentTimeMillis());
           bufferByTable.put(tableId, buffer);
         }

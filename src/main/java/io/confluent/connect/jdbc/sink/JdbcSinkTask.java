@@ -72,7 +72,7 @@ public class JdbcSinkTask extends SinkTask {
     }
     final DbStructure dbStructure = new DbStructure(dialect);
     log.info("Initializing writer using SQL dialect: {}", dialect.getClass().getSimpleName());
-    writer = new JdbcDbWriter(config, dialect, dbStructure);
+    writer = new JdbcDbWriter(config, dialect, dbStructure, context);
 
 //
     if(config.batchInsertMode == JdbcSinkConfig.BatchInsertMode.GPFDIST){

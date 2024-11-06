@@ -24,6 +24,7 @@ import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -59,6 +60,7 @@ public class JdbcDbWriterTest {
   private final SqliteHelper sqliteHelper = new SqliteHelper(getClass().getSimpleName());
 
   private JdbcDbWriter writer = null;
+  private final SinkTaskContext context = mock(SinkTaskContext.class);
   private DatabaseDialect dialect;
 
   @Before
@@ -77,14 +79,14 @@ public class JdbcDbWriterTest {
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
     dialect = new SqliteDatabaseDialect(config);
     final DbStructure dbStructure = new DbStructure(dialect);
-    return new JdbcDbWriter(config, dialect, dbStructure);
+    return new JdbcDbWriter(config, dialect, dbStructure, context);
   }
 
   private JdbcDbWriter newWriterWithMockConnection(Map<String, String> props, Connection mockConnection) {
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
     dialect = mock(DatabaseDialect.class);
     final DbStructure dbStructure = mock(DbStructure.class);
-    return new JdbcDbWriter(config, dialect, dbStructure) {
+    return new JdbcDbWriter(config, dialect, dbStructure, context) {
       protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
         CachedConnectionProvider mockConnectionProvider = mock(CachedConnectionProvider.class);
         when(mockConnectionProvider.getConnection()).thenReturn(mockConnection);

@@ -503,6 +503,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   ) throws SQLException {
 
     switch (schema.type()) {
+      case STRING: {
+        String newValue = ((String) value).replace("\u0000", "");
+        statement.setString(index, newValue);
+        return true;
+      }
       case ARRAY: {
         Class<?> valueClass = value.getClass();
         Object newValue = null;

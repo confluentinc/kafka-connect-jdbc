@@ -24,6 +24,7 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.apache.kafka.connect.sink.SinkTaskContext;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -59,6 +60,7 @@ import static org.mockito.Mockito.when;
 public class BufferedRecordsTest {
 
   private final SqliteHelper sqliteHelper = new SqliteHelper(getClass().getSimpleName());
+  private final SinkTaskContext context = mock(SinkTaskContext.class);
 
   private Map<Object, Object> props;
 
@@ -89,7 +91,7 @@ public class BufferedRecordsTest {
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
     final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection, context);
 
     final Schema schemaA = SchemaBuilder.struct()
         .field("name", Schema.STRING_SCHEMA)
@@ -141,7 +143,7 @@ public class BufferedRecordsTest {
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
     final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection, context);
 
     final Schema keySchemaA = SchemaBuilder.struct()
         .field("id", Schema.INT64_SCHEMA)
@@ -195,7 +197,7 @@ public class BufferedRecordsTest {
 	    final DbStructure dbStructure = new DbStructure(dbDialect);
 
 	    final TableId tableId = new TableId(null, null, "dummy");
-	    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+	    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection, context);
 
 	    final Schema keySchemaA = SchemaBuilder.struct()
 	        .field("id", Schema.INT64_SCHEMA)
@@ -253,7 +255,7 @@ public class BufferedRecordsTest {
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
     final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection, context);
 
     final Schema keySchemaA = SchemaBuilder.struct()
         .field("id", Schema.INT64_SCHEMA)
@@ -307,7 +309,7 @@ public class BufferedRecordsTest {
 	    final DbStructure dbStructure = new DbStructure(dbDialect);
 
 	    final TableId tableId = new TableId(null, null, "dummy");
-	    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+	    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection, context);
 
 	    final Schema keySchemaA = SchemaBuilder.struct()
 	        .field("id", Schema.INT64_SCHEMA)
@@ -361,7 +363,7 @@ public class BufferedRecordsTest {
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
     final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection, context);
 
     final Schema keySchemaA = SchemaBuilder.struct()
         .field("id", Schema.INT64_SCHEMA)
@@ -413,7 +415,7 @@ public class BufferedRecordsTest {
 	    final DbStructure dbStructure = new DbStructure(dbDialect);
 
 	    final TableId tableId = new TableId(null, null, "dummy");
-	    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+	    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection, context);
 
 	    final Schema keySchemaA = SchemaBuilder.struct()
 	        .field("id", Schema.INT64_SCHEMA)
@@ -488,7 +490,7 @@ public class BufferedRecordsTest {
 
     final TableId tableId = new TableId(null, null, "dummy");
     final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect,
-                                                       dbStructureMock, connectionMock);
+                                                       dbStructureMock, connectionMock, context);
 
     final Schema schemaA = SchemaBuilder.struct().field("name", Schema.STRING_SCHEMA).build();
     final Struct valueA = new Struct(schemaA).put("name", "cuba");
@@ -522,7 +524,7 @@ public class BufferedRecordsTest {
     final Connection connectionMock = mock(Connection.class);
     final TableId tableId = new TableId(null, null, "dummy");
     final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructureMock,
-            connectionMock);
+            connectionMock, context);
 
     final Schema schemaA = SchemaBuilder.struct().field("name", Schema.STRING_SCHEMA).build();
     final Struct valueA = new Struct(schemaA).put("name", "cuba");
@@ -758,7 +760,7 @@ public class BufferedRecordsTest {
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
     final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection, context);
 
     ConnectException e = assertThrows(ConnectException.class, () -> {
       buffer.add(record);
@@ -790,7 +792,7 @@ public class BufferedRecordsTest {
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
     final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection, context);
 
     List<SinkRecord> flushed = buffer.add(record);
     assertEquals(Collections.emptyList(), flushed);

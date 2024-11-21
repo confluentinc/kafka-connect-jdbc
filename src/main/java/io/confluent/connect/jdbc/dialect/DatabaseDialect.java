@@ -536,7 +536,8 @@ public interface DatabaseDialect extends ConnectionProvider {
       JdbcSinkConfig.PrimaryKeyMode pkMode,
       SchemaPair schemaPair,
       FieldsMetadata fieldsMetadata,
-      JdbcSinkConfig.InsertMode insertMode
+      JdbcSinkConfig.InsertMode insertMode,
+      boolean replaceNullWithDefault
   );
 
   /**
@@ -560,9 +561,11 @@ public interface DatabaseDialect extends ConnectionProvider {
       SchemaPair schemaPair,
       FieldsMetadata fieldsMetadata,
       TableDefinition tableDefinition,
-      JdbcSinkConfig.InsertMode insertMode
+      JdbcSinkConfig.InsertMode insertMode,
+      boolean replaceNullWithDefault
   ) {
-    return statementBinder(statement, pkMode, schemaPair, fieldsMetadata, insertMode);
+    return statementBinder(statement, pkMode, schemaPair, fieldsMetadata, insertMode,
+        replaceNullWithDefault);
   }
 
   /**

@@ -152,7 +152,8 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
       SchemaPair schemaPair,
       FieldsMetadata fieldsMetadata,
       TableDefinition tableDefinition,
-      InsertMode insertMode
+      InsertMode insertMode,
+      boolean replaceNullWithDefault
   ) {
     return new PreparedStatementBinder(
         this,
@@ -161,7 +162,8 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
         schemaPair,
         fieldsMetadata,
         tableDefinition,
-        insertMode
+        insertMode,
+        replaceNullWithDefault
     );
   }
 

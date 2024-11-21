@@ -42,6 +42,8 @@ public class PreparedStatementBinder implements StatementBinder {
   private final JdbcSinkConfig.InsertMode insertMode;
   private final DatabaseDialect dialect;
   private final TableDefinition tabDef;
+  private final boolean replaceNullWithDefault;
+
 
   @Deprecated
   public PreparedStatementBinder(
@@ -50,7 +52,8 @@ public class PreparedStatementBinder implements StatementBinder {
       JdbcSinkConfig.PrimaryKeyMode pkMode,
       SchemaPair schemaPair,
       FieldsMetadata fieldsMetadata,
-      JdbcSinkConfig.InsertMode insertMode
+      JdbcSinkConfig.InsertMode insertMode,
+      boolean replaceNullWithDefault
   ) {
     this(
         dialect,
@@ -59,7 +62,8 @@ public class PreparedStatementBinder implements StatementBinder {
         schemaPair,
         fieldsMetadata,
         null,
-        insertMode
+        insertMode,
+        replaceNullWithDefault
     );
   }
 
@@ -70,7 +74,8 @@ public class PreparedStatementBinder implements StatementBinder {
       SchemaPair schemaPair,
       FieldsMetadata fieldsMetadata,
       TableDefinition tabDef,
-      JdbcSinkConfig.InsertMode insertMode
+      JdbcSinkConfig.InsertMode insertMode,
+      boolean replaceNullWithDefault
   ) {
     this.dialect = dialect;
     this.pkMode = pkMode;
@@ -79,6 +84,7 @@ public class PreparedStatementBinder implements StatementBinder {
     this.fieldsMetadata = fieldsMetadata;
     this.insertMode = insertMode;
     this.tabDef = tabDef;
+    this.replaceNullWithDefault = replaceNullWithDefault;
   }
 
   @Override
@@ -169,7 +175,11 @@ public class PreparedStatementBinder implements StatementBinder {
   ) throws SQLException {
     for (final String fieldName : fieldsMetadata.nonKeyFieldNames) {
       final Field field = record.valueSchema().field(fieldName);
-      bindField(index++, field.schema(), valueStruct.get(field), fieldName);
+      if (this.replaceNullWithDefault) {
+        bindField(index++, field.schema(), valueStruct.get(field), fieldName);
+      } else {
+        bindField(index++, field.schema(), valueStruct.getWithoutDefault(field.name()), fieldName);
+      }
     }
     return index;
   }

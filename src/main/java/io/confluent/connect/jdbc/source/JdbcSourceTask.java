@@ -99,6 +99,8 @@ public class JdbcSourceTask extends SourceTask {
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
     Boolean tablesFetched = config.getBoolean(JdbcSourceTaskConfig.TABLES_FETCHED);
     String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
+    List<JdbcSourceConnectorConfig.QueryParameter> queryParameters
+            = JdbcSourceConnectorConfig.QueryParameter.get(config);
 
     if ((tables.isEmpty() && query.isEmpty())) {
       // We are still waiting for the tables call to complete.
@@ -265,6 +267,7 @@ public class JdbcSourceTask extends SourceTask {
                 tableOrQuery,
                 topicPrefix,
                 null,
+                queryParameters,
                 incrementingColumn,
                 offset,
                 timestampDelayInterval,
@@ -281,6 +284,7 @@ public class JdbcSourceTask extends SourceTask {
                 tableOrQuery,
                 topicPrefix,
                 timestampColumns,
+                queryParameters,
                 offset,
                 timestampDelayInterval,
                 timeZone,
@@ -296,6 +300,7 @@ public class JdbcSourceTask extends SourceTask {
                 tableOrQuery,
                 topicPrefix,
                 timestampColumns,
+                queryParameters,
                 incrementingColumn,
                 offset,
                 timestampDelayInterval,

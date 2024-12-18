@@ -912,6 +912,40 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     PowerMock.verifyAll();
   }
 
+  @Test
+  public void testCustomQueryWithIncrementingAndTimestampQueryParameters() throws Exception {
+    expectInitializeNoOffsets(Arrays.asList(JOIN_QUERY_PARTITION));
+
+    PowerMock.replayAll();
+
+    // Manage these manually so we can verify the emitted values
+    db.createTable(SINGLE_TABLE_NAME,
+            "modified", "TIMESTAMP NOT NULL",
+            "id", "INT");
+    db.insert(SINGLE_TABLE_NAME,
+            "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_TIME_ZONE),
+            "id", 1);
+
+    startTask("modified", "id", "SELECT * FROM \"test\" WHERE "
+            + "\"id\" > ? AND \"modified\" >= ? ORDER BY \"id\", \"modified\"", "incrementing_offset, timestamp_offset", 0L, "UTC", null, null);
+
+    verifyTimestampFirstPoll(TOPIC_PREFIX);
+
+    db.insert(SINGLE_TABLE_NAME,
+            "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_TIME_ZONE),
+            "id", 3);
+    db.insert(SINGLE_TABLE_NAME,
+            "modified", DateTimeUtils.formatTimestamp(new Timestamp(11L), UTC_TIME_ZONE),
+            "id", 0); // This record will be skipped as we already fetched record with ID 0 as part of initial poll
+    db.insert(SINGLE_TABLE_NAME,
+            "modified", DateTimeUtils.formatTimestamp(new Timestamp(12L), UTC_TIME_ZONE),
+            "id", 2);
+
+    verifyPoll(2, "id", Arrays.asList(2, 3), true, true, false, TOPIC_PREFIX);
+
+    PowerMock.verifyAll();
+  }
+
   @Test (expected = ConfigException.class)
   public void testTaskFailsIfNoQueryOrTablesConfigProvided() {
     initializeTask();
@@ -1015,18 +1049,18 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   }
 
   private void startTask(String timestampColumn, String incrementingColumn, String query, int batchSize) {
-    startTask(timestampColumn, incrementingColumn, query, 0L, "UTC", null, batchSize);
+    startTask(timestampColumn, incrementingColumn, query, null, 0L, "UTC", null, batchSize);
   }
 
   private void startTask(String timestampColumn, String incrementingColumn, String query, Long delay, String timeZone) {
-    startTask(timestampColumn, incrementingColumn, query, delay, timeZone, null, null);
+    startTask(timestampColumn, incrementingColumn, query, null, delay, timeZone, null, null);
   }
 
   private void startTask(String timestampColumn, String incrementingColumn, String query, Long delay, String timeZone, Long timestampInitial) {
-    startTask(timestampColumn, incrementingColumn, query, delay, timeZone, timestampInitial, null);
+    startTask(timestampColumn, incrementingColumn, query, null, delay, timeZone, timestampInitial, null);
   }
 
-  private void startTask(String timestampColumn, String incrementingColumn, String query, Long delay, String timeZone, Long timestampInitial, Integer batchSize) {
+  private void startTask(String timestampColumn, String incrementingColumn, String query, String queryParameters, Long delay, String timeZone, Long timestampInitial, Integer batchSize) {
     String mode = null;
     if (timestampColumn != null && incrementingColumn != null) {
       mode = JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING;
@@ -1044,6 +1078,9 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
       taskConfig.put(JdbcSourceTaskConfig.QUERY_CONFIG, query);
       taskConfig.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
       taskConfig.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
+    }
+    if (queryParameters != null) {
+      taskConfig.put(JdbcSourceTaskConfig.QUERY_PARAMETERS_CONFIG, queryParameters);
     }
     if (timestampColumn != null) {
       taskConfig.put(JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG, timestampColumn);

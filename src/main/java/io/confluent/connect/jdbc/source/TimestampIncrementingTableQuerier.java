@@ -36,6 +36,7 @@ import java.util.Map;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TimestampGranularity;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.QueryParameter;
 import io.confluent.connect.jdbc.source.SchemaMapping.FieldSetter;
 import io.confluent.connect.jdbc.source.TimestampIncrementingCriteria.CriteriaValues;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
@@ -73,6 +74,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   protected final String topic;
   protected final TimestampGranularity timestampGranularity;
   private final List<ColumnId> timestampColumns;
+  protected final List<QueryParameter> queryParameters;
   private String incrementingColumnName;
   private final long timestampDelay;
   private final TimeZone timeZone;
@@ -80,6 +82,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   public TimestampIncrementingTableQuerier(DatabaseDialect dialect, QueryMode mode, String name,
                                            String topicPrefix,
                                            List<String> timestampColumnNames,
+                                           List<QueryParameter> queryParameters,
                                            String incrementingColumnName,
                                            Map<String, Object> offsetMap, Long timestampDelay,
                                            TimeZone timeZone, String suffix,
@@ -91,6 +94,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     this.timestampDelay = timestampDelay;
     this.committedOffset = this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
 
+    this.queryParameters = queryParameters == null ? Collections.emptyList() : queryParameters;
     this.timestampColumns = new ArrayList<>();
     for (String timestampColumn : this.timestampColumnNames) {
       if (timestampColumn != null && !timestampColumn.isEmpty()) {
@@ -151,7 +155,11 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
 
     // Append the criteria using the columns ...
     criteria = dialect.criteriaFor(incrementingColumn, timestampColumns);
-    criteria.whereClause(builder);
+
+    if (queryParameters.isEmpty()) {
+      criteria.whereClause(builder);
+    }
+
 
     addSuffixIfPresent(builder);
     
@@ -215,7 +223,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
 
   @Override
   protected ResultSet executeQuery() throws SQLException {
-    criteria.setQueryParameters(stmt, this);
+    criteria.setQueryParameters(stmt, this, queryParameters);
     log.trace("Statement to execute: {}", stmt.toString());
     return stmt.executeQuery();
   }
@@ -234,7 +242,8 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
         throw new DataException(e);
       }
     }
-    offset = criteria.extractValues(schemaMapping.schema(), record, offset, timestampGranularity);
+    offset = criteria.extractValues(schemaMapping.schema(), record, offset, timestampGranularity,
+        !queryParameters.isEmpty());
     return new SourceRecord(partition, offset.toMap(), topic, record.schema(), record);
   }
 

@@ -156,6 +156,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   protected final String jdbcUrl;
   protected final DatabaseDialectProvider.JdbcUrlInfo jdbcUrlInfo;
   protected final QuoteMethod quoteSqlIdentifiers;
+  protected boolean enabledSinkNullKeyProtection;
   private final IdentifierRules defaultIdentifierRules;
   private final AtomicReference<IdentifierRules> identifierRules = new AtomicReference<>();
   private final Queue<Connection> connections = new ConcurrentLinkedQueue<>();
@@ -199,6 +200,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       quoteSqlIdentifiers = QuoteMethod.get(
           config.getString(JdbcSinkConfig.QUOTE_SQL_IDENTIFIERS_CONFIG)
       );
+      enabledSinkNullKeyProtection = config.getBoolean(JdbcSinkConfig.ENABLE_NULL_KEY_PROTECTION);
     } else {
       catalogPattern = config.getString(JdbcSourceTaskConfig.CATALOG_PATTERN_CONFIG);
       schemaPattern = config.getString(JdbcSourceTaskConfig.SCHEMA_PATTERN_CONFIG);

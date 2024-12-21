@@ -83,8 +83,8 @@ public class BulkTableQuerier extends TableQuerier {
   /**
  * adding polling timestamp in metadata
  */
-  private Map<String, Object> sourceOffset(){
-    Map <String, Object> offset = new HashMap<>();
+  private Map<String, Object> sourceOffset() {
+    Map<String, Object> offset = new HashMap<>();
     offset.put("polling.timestamp", System.currentTimeMillis());
     return offset;
   }

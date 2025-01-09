@@ -159,6 +159,7 @@ public class JdbcSourceConnector extends SourceConnector {
 
   @Override
   public List<Map<String, String>> taskConfigs(int maxTasks) {
+    log.info("Starting with the task Configuration method.");
     String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
     List<Map<String, String>> taskConfigs;
     if (!query.isEmpty()) {
@@ -205,6 +206,7 @@ public class JdbcSourceConnector extends SourceConnector {
           taskProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
           taskConfigs.add(taskProps);
         }
+        log.info("Current Tables size: {}", currentTables.size());
         log.trace(
             "Producing task configs with no custom query for tables: {}",
             currentTables.toArray()

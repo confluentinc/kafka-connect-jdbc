@@ -83,6 +83,7 @@ public class TableMonitorThread extends Thread {
     while (shutdownLatch.getCount() > 0) {
       try {
         if (updateTables()) {
+          log.info("Task Reconfiguration has been invoked.");
           context.requestTaskReconfiguration();
         }
       } catch (Exception e) {
@@ -208,6 +209,7 @@ public class TableMonitorThread extends Thread {
       filteredTables.addAll(allTables);
     }
 
+    log.info("Filtered tables size: {}", filteredTables);
     List<TableId> priorTablesSnapshot = tables.getAndSet(filteredTables);
     synchronized (tables) {
       tables.notifyAll();

@@ -114,13 +114,13 @@ public class JdbcDriverInfo {
       int jdbcMinorVersion
   ) {
     if (this.jdbcMajorVersion() > jdbcMajorVersion) {
-      log.info("JDBC driver version {} is newer than required version {}.{}",
-               this.jdbcMajorVersion(), jdbcMajorVersion, jdbcMinorVersion);
+      log.debug("Current JDBC Driver Version {}.{}. The minimum required version {}.{}",
+               this.jdbcMajorVersion(),this.jdbcMinorVersion(), jdbcMajorVersion, jdbcMinorVersion);
       return true;
     }
     if (jdbcMajorVersion == jdbcMajorVersion() && jdbcMinorVersion() >= jdbcMinorVersion) {
-      log.info("JDBC driver version {} is newer than required version {}.{}",
-               this.jdbcMinorVersion(), jdbcMajorVersion, jdbcMinorVersion);
+      log.debug("Current JDBC Driver Version is {}.{}. The minimum required version is {}.{}",
+       this.jdbcMajorVersion(),this.jdbcMinorVersion(), jdbcMajorVersion, jdbcMinorVersion);
       return true;
     }
     return false;

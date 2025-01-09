@@ -109,18 +109,23 @@ public class JdbcDriverInfo {
    * @return true if the driver supports at least the specified version of the JDBC specification,
    *     or false if the driver supports an older version of the JDBC specification
    */
-  public boolean jdbcVersionAtLeast(
-      int jdbcMajorVersion,
-      int jdbcMinorVersion
-  ) {
+  public boolean jdbcVersionAtLeast(int jdbcMajorVersion, int jdbcMinorVersion) {
     if (this.jdbcMajorVersion() > jdbcMajorVersion) {
-      log.debug("Current JDBC Driver Version {}.{}. The minimum required version {}.{}",
-               this.jdbcMajorVersion(),this.jdbcMinorVersion(), jdbcMajorVersion, jdbcMinorVersion);
+      log.debug(
+          "Current JDBC Driver Version {}.{}. The minimum required version {}.{}",
+          this.jdbcMajorVersion(),
+          this.jdbcMinorVersion(),
+          jdbcMajorVersion,
+          jdbcMinorVersion);
       return true;
     }
     if (jdbcMajorVersion == jdbcMajorVersion() && jdbcMinorVersion() >= jdbcMinorVersion) {
-      log.debug("Current JDBC Driver Version is {}.{}. The minimum required version is {}.{}",
-       this.jdbcMajorVersion(),this.jdbcMinorVersion(), jdbcMajorVersion, jdbcMinorVersion);
+      log.debug(
+          "Current JDBC Driver Version is {}.{}. The minimum required version is {}.{}",
+          this.jdbcMajorVersion(),
+          this.jdbcMinorVersion(),
+          jdbcMajorVersion,
+          jdbcMinorVersion);
       return true;
     }
     return false;

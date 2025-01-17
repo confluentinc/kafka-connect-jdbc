@@ -23,7 +23,7 @@
     <parent>
         <groupId>io.confluent</groupId>
         <artifactId>common</artifactId>
-        <version>4.1.5-SNAPSHOT</version>
+        <version>5.0.5-SNAPSHOT</version>
     </parent>
 
     <groupId>io.confluent</groupId>
@@ -56,23 +56,30 @@
 
     <properties>
         <confluent.version>${project.version}</confluent.version>
-        <derby.version>10.12.1.1</derby.version>
+        <derby.version>10.14.2.0</derby.version>
         <commons-io.version>2.4</commons-io.version>
         <kafka.connect.maven.plugin.version>0.11.1</kafka.connect.maven.plugin.version>
         <sqlite-jdbc.version>3.41.2.2</sqlite-jdbc.version>
         <postgresql.version>42.4.4</postgresql.version>
+        <jtds.driver.version>1.3.1</jtds.driver.version>
         <licenses.name>Apache License 2.0</licenses.name>
         <licenses.version>${project.version}</licenses.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.package.home>target/${project.artifactId}-${project.version}-package</project.package.home>
-        <confluent.maven.repo>http://packages.confluent.io/maven/</confluent.maven.repo>
+	<jacoco.plugin.version>0.8.11</jacoco.plugin.version>
+        <instruction.coverage.threshold>0.78</instruction.coverage.threshold>
+        <branch.coverage.threshold>0.67</branch.coverage.threshold>
+        <method.coverage.threshold>0.76</method.coverage.threshold>
+        <class.coverage.threshold>0.91</class.coverage.threshold>
+        <complexity.coverage.threshold>0.65</complexity.coverage.threshold>
+        <line.coverage.threshold>0.80</line.coverage.threshold>
     </properties>
 
     <repositories>
         <repository>
             <id>confluent</id>
             <name>Confluent</name>
-            <url>${confluent.maven.repo}</url>
+            <url>http://packages.confluent.io/maven/</url>
         </repository>
     </repositories>
 
@@ -94,6 +101,12 @@
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <version>${postgresql.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>net.sourceforge.jtds</groupId>
+            <artifactId>jtds</artifactId>
+            <version>${jtds.driver.version}</version>
             <scope>runtime</scope>
         </dependency>
 
@@ -139,70 +152,155 @@
             <artifactId>slf4j-log4j12</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>io.zonky.test</groupId>
+            <artifactId>embedded-postgres</artifactId>
+            <version>1.2.6</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>ch.vorburger.mariaDB4j</groupId>
+            <artifactId>mariaDB4j</artifactId>
+            <version>2.4.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mariadb.jdbc</groupId>
+            <artifactId>mariadb-java-client</artifactId>
+            <version>2.5.3</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>connect-runtime</artifactId>
+            <version>${kafka.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>connect-runtime</artifactId>
+            <version>${kafka.version}</version>
+            <type>test-jar</type>
+            <classifier>test</classifier>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka_${kafka.scala.version}</artifactId>
+            <version>${kafka.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka_${kafka.scala.version}</artifactId>
+            <version>${kafka.version}</version>
+            <type>test-jar</type>
+            <classifier>test</classifier>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-clients</artifactId>
+            <version>${kafka.version}</version>
+            <classifier>test</classifier>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
         <plugins>
-            <plugin>
-                <groupId>io.confluent</groupId>
-                <version>0.10.0</version>
-                <artifactId>kafka-connect-maven-plugin</artifactId>
+	    <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco.plugin.version}</version>
                 <executions>
                     <execution>
+                        <id>prepare-agent</id>
                         <goals>
-                            <goal>kafka-connect</goal>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>prepare-agent-it</id>
+                        <goals>
+                            <goal>prepare-agent-integration</goal>
+                        </goals>
+                        <phase>pre-integration-test</phase>
+                    </execution>
+                    <execution>
+                        <id>merge-coverage-reports</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>merge</goal>
                         </goals>
                         <configuration>
-                            <title>Kafka Connect JDBC</title>
-                            <documentationUrl>https://docs.confluent.io/current/connect/connect-jdbc/docs/index.html</documentationUrl>
-                            <description>
-                                The JDBC source connector allows you to import data from any relational database with a JDBC driver into Kafka topics. By using JDBC, this connector can support a wide variety of databases without requiring custom code for each one.
-
-                                Data is loaded by periodically executing a SQL query and creating an output record for each row in the result set. By default, all tables in a database are copied, each to its own output topic. The database is monitored for new or deleted tables and adapts automatically. When copying data from a table, the connector can load only new or modified rows by specifying which columns should be used to detect new or modified data.
-
-                                The JDBC sink connector allows you to export data from Kafka topics to any relational database with a JDBC driver. By using JDBC, this connector can support a wide variety of databases without requiring a dedicated connector for each one. The connector polls data from Kafka to write to the database based on the topics subscription. It is possible to achieve idempotent writes with upserts. Auto-creation of tables, and limited auto-evolution is also supported.
-                            </description>
-                            <logo>logos/jdbc.jpg</logo>
-
-                            <supportProviderName>Confluent, Inc.</supportProviderName>
-                            <supportSummary>Confluent supports the JDBC sink and source connectors alongside community members as part of its Confluent Platform open source offering.</supportSummary>
-                            <supportUrl>https://docs.confluent.io/current/</supportUrl>
-                            <supportLogo>logos/confluent.png</supportLogo>
-
-                            <ownerUsername>confluentinc</ownerUsername>
-                            <ownerType>organization</ownerType>
-                            <ownerName>Confluent, Inc.</ownerName>
-                            <ownerUrl>https://confluent.io/</ownerUrl>
-                            <ownerLogo>logos/confluent.png</ownerLogo>
-
-                            <dockerNamespace>confluentinc</dockerNamespace>
-                            <dockerName>cp-kafka-connect</dockerName>
-                            <dockerTag>${project.version}</dockerTag>
-
-                            <componentTypes>
-                                <componentType>sink</componentType>
-                                <componentType>source</componentType>
-                            </componentTypes>
-
-                            <tags>
-                                <tag>jdbc</tag>
-                                <tag>database</tag>
-                                <tag>dbms</tag>
-                                <tag>rdbms</tag>
-                                <tag>sql</tag>
-                                <tag>mysql</tag>
-                                <tag>postgresql</tag>
-                                <tag>oracle</tag>
-                                <tag>sql server</tag>
-                                <tag>db2</tag>
-                                <tag>sybase</tag>
-                                <tag>vertica</tag>
-                                <tag>sap hana</tag>
-                                <tag>derby</tag>
-                                <tag>sqlite</tag>
-                            </tags>
-
-                            <confluentControlCenterIntegration>true</confluentControlCenterIntegration>
+                            <fileSets>
+                                <fileSet>
+                                    <directory>${project.basedir}</directory>
+                                    <includes>
+                                        <include>/target/jacoco.exec</include>
+                                        <include>/target/jacoco-it.exec</include>
+                                    </includes>
+                                </fileSet>
+                            </fileSets>
+                            <destFile>${project.basedir}/target/jacoco-aggregate.exec</destFile>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>check</id>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <rule>
+                                    <element>BUNDLE</element>
+                                    <limits>
+                                        <limit>
+                                            <counter>INSTRUCTION</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>${instruction.coverage.threshold}</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>BRANCH</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>${branch.coverage.threshold}</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>COMPLEXITY</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>${complexity.coverage.threshold}</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>${line.coverage.threshold}</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>METHOD</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>${method.coverage.threshold}</minimum>
+                                        </limit>
+                                        <limit>
+                                            <counter>CLASS</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>${class.coverage.threshold}</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                            </rules>
+                            <dataFile>${project.basedir}/target/jacoco-aggregate.exec</dataFile>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                        <configuration>
+                            <dataFile>${project.basedir}/target/jacoco-aggregate.exec</dataFile>
                         </configuration>
                     </execution>
                 </executions>
@@ -210,11 +308,12 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>2.5.1</version>
                 <inherited>true</inherited>
                 <configuration>
-                    <source>1.7</source>
-                    <target>1.7</target>
+                    <compilerArgs>
+                        <arg>-Xlint:all</arg>
+                        <arg>-Werror</arg>
+                    </compilerArgs>
                 </configuration>
             </plugin>
             <plugin>
@@ -284,8 +383,35 @@
                 </executions>
             </plugin>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <!--normal integration tests should not run the memory-restricted tests -->
+                        <id>integration-test</id>
+                        <configuration>
+                            <excludes>
+                                <exclude>**/*OOM*.java</exclude>
+                            </excludes>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>integration-test-memory-restricted</id>
+                        <goals>
+                            <goal>integration-test</goal>
+                        </goals>
+                        <configuration>
+                            <!-- out-of-memory tests should have a restricted heap size-->
+                            <argLine>@{argLine} -Djava.awt.headless=true -Xmx128M</argLine>
+                            <includes>
+                                <include>**/*OOM*.java</include>
+                            </includes>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <artifactId>maven-assembly-plugin</artifactId>
-                <version>2.5.3</version>
                 <configuration>
                     <descriptors>
                         <descriptor>src/assembly/development.xml</descriptor>

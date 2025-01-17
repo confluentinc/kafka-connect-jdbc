@@ -16,6 +16,13 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.TableDefinition;
+import io.confluent.connect.jdbc.util.TableId;
+import java.sql.Types;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.TimeZone;
 import org.apache.kafka.connect.data.Date;
@@ -27,6 +34,8 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.easymock.Mock;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.math.BigDecimal;
@@ -36,18 +45,36 @@ import java.sql.SQLException;
 import java.text.ParseException;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.dialect.GenericDatabaseDialect;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class PreparedStatementBinderTest {
+
+  private DatabaseDialect dialect;
+
+  @Before
+  public void beforeEach() {
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSinkConfig.CONNECTION_URL, "jdbc:bogus:something");
+    props.put(JdbcSinkConfig.CONNECTION_USER, "sa");
+    props.put(JdbcSinkConfig.CONNECTION_PASSWORD, "password");
+    JdbcSinkConfig config = new JdbcSinkConfig(props);
+    dialect = new GenericDatabaseDialect(config);
+  }
 
   @Test
   public void bindRecordInsert() throws SQLException, ParseException {
@@ -94,14 +121,65 @@ public class PreparedStatementBinderTest {
     FieldsMetadata fieldsMetadata = FieldsMetadata.extract("people", pkMode, pkFields, Collections.<String>emptySet(), schemaPair);
 
     PreparedStatement statement = mock(PreparedStatement.class);
+    TableId tabId = new TableId("ORCL", "ADMIN", "people");
+    List<ColumnDefinition> colDefs = new ArrayList<>();
+    for (int i = 0; i < 14; i++) {
+      colDefs.add(mock(ColumnDefinition.class));
+    }
+    when(colDefs.get(0).type()).thenReturn(Types.NVARCHAR);
+    when(colDefs.get(0).id()).thenReturn(new ColumnId(tabId, "firstName"));
+    when(colDefs.get(0).isPrimaryKey()).thenReturn(false);
+    when(colDefs.get(1).type()).thenReturn(Types.NVARCHAR);
+    when(colDefs.get(1).id()).thenReturn(new ColumnId(tabId, "lastName"));
+    when(colDefs.get(1).isPrimaryKey()).thenReturn(false);
+    when(colDefs.get(2).type()).thenReturn(Types.NUMERIC);
+    when(colDefs.get(2).id()).thenReturn(new ColumnId(tabId, "age"));
+    when(colDefs.get(2).isPrimaryKey()).thenReturn(false);
+    when(colDefs.get(3).type()).thenReturn(Types.NUMERIC);
+    when(colDefs.get(3).id()).thenReturn(new ColumnId(tabId, "bool"));
+    when(colDefs.get(3).isPrimaryKey()).thenReturn(false);
+    when(colDefs.get(4).type()).thenReturn(Types.NUMERIC);
+    when(colDefs.get(4).id()).thenReturn(new ColumnId(tabId, "short"));
+    when(colDefs.get(4).isPrimaryKey()).thenReturn(false);
+    when(colDefs.get(5).type()).thenReturn(Types.NUMERIC);
+    when(colDefs.get(5).id()).thenReturn(new ColumnId(tabId, "byte"));
+    when(colDefs.get(5).isPrimaryKey()).thenReturn(false);
+    when(colDefs.get(6).type()).thenReturn(Types.NUMERIC);
+    when(colDefs.get(6).id()).thenReturn(new ColumnId(tabId, "long"));
+    when(colDefs.get(6).isPrimaryKey()).thenReturn(true);
+    // BINARY_FLOAT = 100
+    when(colDefs.get(7).type()).thenReturn(100);
+    when(colDefs.get(7).id()).thenReturn(new ColumnId(tabId, "float"));
+    when(colDefs.get(7).isPrimaryKey()).thenReturn(false);
+    // BINARY_DOUBLE = 101
+    when(colDefs.get(8).type()).thenReturn(101);
+    when(colDefs.get(8).id()).thenReturn(new ColumnId(tabId, "double"));
+    when(colDefs.get(8).isPrimaryKey()).thenReturn(false);
+    when(colDefs.get(9).type()).thenReturn(Types.BLOB);
+    when(colDefs.get(9).id()).thenReturn(new ColumnId(tabId, "bytes"));
+    when(colDefs.get(9).isPrimaryKey()).thenReturn(false);
+    when(colDefs.get(10).type()).thenReturn(Types.NUMERIC);
+    when(colDefs.get(10).id()).thenReturn(new ColumnId(tabId, "decimal"));
+    when(colDefs.get(10).isPrimaryKey()).thenReturn(false);
+    when(colDefs.get(11).type()).thenReturn(Types.DATE);
+    when(colDefs.get(11).id()).thenReturn(new ColumnId(tabId, "date"));
+    when(colDefs.get(11).isPrimaryKey()).thenReturn(false);
+    when(colDefs.get(12).type()).thenReturn(Types.DATE);
+    when(colDefs.get(12).id()).thenReturn(new ColumnId(tabId, "time"));
+    when(colDefs.get(12).isPrimaryKey()).thenReturn(false);
+    when(colDefs.get(13).type()).thenReturn(Types.TIMESTAMP);
+    when(colDefs.get(13).id()).thenReturn(new ColumnId(tabId, "timestamp"));
+    when(colDefs.get(13).isPrimaryKey()).thenReturn(false);
+    TableDefinition tabDef = new TableDefinition(tabId, colDefs);
 
     PreparedStatementBinder binder = new PreparedStatementBinder(
+        dialect,
         statement,
         pkMode,
         schemaPair,
         fieldsMetadata,
-        JdbcSinkConfig.InsertMode.INSERT,
-        TimeZone.getTimeZone("UTC")
+        tabDef,
+        JdbcSinkConfig.InsertMode.INSERT
     );
 
     binder.bindRecord(new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));
@@ -120,7 +198,7 @@ public class PreparedStatementBinderTest {
     verify(statement, times(1)).setDouble(index++, valueStruct.getFloat64("double"));
     verify(statement, times(1)).setBytes(index++, valueStruct.getBytes("bytes"));
     verify(statement, times(1)).setBigDecimal(index++, (BigDecimal) valueStruct.get("decimal"));
-    Calendar utcCalendar = DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone("UTC"));
+    Calendar utcCalendar = DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone(ZoneOffset.UTC));
     verify(
         statement,
         times(1)
@@ -139,161 +217,104 @@ public class PreparedStatementBinderTest {
 
     @Test
     public void bindRecordUpsertMode() throws SQLException, ParseException {
-        Schema valueSchema = SchemaBuilder.struct().name("com.example.Person")
-                .field("firstName", Schema.STRING_SCHEMA)
-                .field("long", Schema.INT64_SCHEMA)
-                .build();
+      Schema valueSchema = SchemaBuilder.struct().name("com.example.Person")
+              .field("firstName", Schema.STRING_SCHEMA)
+              .field("long", Schema.INT64_SCHEMA)
+              .build();
 
-        Struct valueStruct = new Struct(valueSchema)
-                .put("firstName", "Alex")
-                .put("long", (long) 12425436);
+      Struct valueStruct = new Struct(valueSchema)
+              .put("firstName", "Alex")
+              .put("long", (long) 12425436);
 
-        SchemaPair schemaPair = new SchemaPair(null, valueSchema);
+      SchemaPair schemaPair = new SchemaPair(null, valueSchema);
 
-        JdbcSinkConfig.PrimaryKeyMode pkMode = JdbcSinkConfig.PrimaryKeyMode.RECORD_VALUE;
+      JdbcSinkConfig.PrimaryKeyMode pkMode = JdbcSinkConfig.PrimaryKeyMode.RECORD_VALUE;
 
-        List<String> pkFields = Collections.singletonList("long");
+      List<String> pkFields = Collections.singletonList("long");
 
-        FieldsMetadata fieldsMetadata = FieldsMetadata.extract("people", pkMode, pkFields, Collections.<String>emptySet(), schemaPair);
+      FieldsMetadata fieldsMetadata = FieldsMetadata.extract("people", pkMode, pkFields, Collections.<String>emptySet(), schemaPair);
 
-        PreparedStatement statement = mock(PreparedStatement.class);
+      PreparedStatement statement = mock(PreparedStatement.class);
+      TableId tabId = new TableId("ORCL", "ADMIN", "people");
+      List<ColumnDefinition> colDefs = new ArrayList<>();
+      for (int i = 0; i < 2; i++) {
+        colDefs.add(mock(ColumnDefinition.class));
+      }
+      when(colDefs.get(0).type()).thenReturn(Types.NVARCHAR);
+      when(colDefs.get(0).id()).thenReturn(new ColumnId(tabId, "firstName"));
+      when(colDefs.get(0).isPrimaryKey()).thenReturn(false);
+      when(colDefs.get(1).type()).thenReturn(Types.NUMERIC);
+      when(colDefs.get(1).id()).thenReturn(new ColumnId(tabId, "long"));
+      when(colDefs.get(1).isPrimaryKey()).thenReturn(true);
+      TableDefinition tabDef = new TableDefinition(tabId, colDefs);
 
-        PreparedStatementBinder binder = new PreparedStatementBinder(
-                statement,
-                pkMode,
-                schemaPair,
-                fieldsMetadata, JdbcSinkConfig.InsertMode.UPSERT,
-                TimeZone.getTimeZone("UTC")
-        );
+      PreparedStatementBinder binder = new PreparedStatementBinder(
+              dialect,
+              statement,
+              pkMode,
+              schemaPair,
+              fieldsMetadata, tabDef, JdbcSinkConfig.InsertMode.UPSERT
+      );
 
-        binder.bindRecord(new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));
+      binder.bindRecord(new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));
 
-        int index = 1;
-        // key field first
-        verify(statement, times(1)).setLong(index++, valueStruct.getInt64("long"));
-        // rest in order of schema def
-        verify(statement, times(1)).setString(index++, valueStruct.getString("firstName"));
+      int index = 1;
+      // key field first
+      verify(statement, times(1)).setLong(index++, valueStruct.getInt64("long"));
+      // rest in order of schema def
+      verify(statement, times(1)).setString(index++, valueStruct.getString("firstName"));
     }
 
     @Test
     public void bindRecordUpdateMode() throws SQLException, ParseException {
-        Schema valueSchema = SchemaBuilder.struct().name("com.example.Person")
-                .field("firstName", Schema.STRING_SCHEMA)
-                .field("long", Schema.INT64_SCHEMA)
-                .build();
+      Schema valueSchema = SchemaBuilder.struct().name("com.example.Person")
+              .field("firstName", Schema.STRING_SCHEMA)
+              .field("long", Schema.INT64_SCHEMA)
+              .build();
 
-        Struct valueStruct = new Struct(valueSchema)
-                .put("firstName", "Alex")
-                .put("long", (long) 12425436);
+      Struct valueStruct = new Struct(valueSchema)
+              .put("firstName", "Alex")
+              .put("long", (long) 12425436);
 
-        SchemaPair schemaPair = new SchemaPair(null, valueSchema);
+      SchemaPair schemaPair = new SchemaPair(null, valueSchema);
 
-        JdbcSinkConfig.PrimaryKeyMode pkMode = JdbcSinkConfig.PrimaryKeyMode.RECORD_VALUE;
+      JdbcSinkConfig.PrimaryKeyMode pkMode = JdbcSinkConfig.PrimaryKeyMode.RECORD_VALUE;
 
-        List<String> pkFields = Collections.singletonList("long");
+      List<String> pkFields = Collections.singletonList("long");
 
-        FieldsMetadata fieldsMetadata = FieldsMetadata.extract("people", pkMode, pkFields,
-                Collections.<String>emptySet(), schemaPair);
+      FieldsMetadata fieldsMetadata = FieldsMetadata.extract("people", pkMode, pkFields,
+              Collections.<String>emptySet(), schemaPair);
 
-        PreparedStatement statement = mock(PreparedStatement.class);
+      PreparedStatement statement = mock(PreparedStatement.class);
+      TableId tabId = new TableId("ORCL", "ADMIN", "people");
+      List<ColumnDefinition> colDefs = new ArrayList<>();
+      for (int i = 0; i < 2; i++) {
+        colDefs.add(mock(ColumnDefinition.class));
+      }
+      when(colDefs.get(0).type()).thenReturn(Types.NVARCHAR);
+      when(colDefs.get(0).id()).thenReturn(new ColumnId(tabId, "firstName"));
+      when(colDefs.get(0).isPrimaryKey()).thenReturn(false);
+      when(colDefs.get(1).type()).thenReturn(Types.NUMERIC);
+      when(colDefs.get(1).id()).thenReturn(new ColumnId(tabId, "long"));
+      when(colDefs.get(1).isPrimaryKey()).thenReturn(true);
+      TableDefinition tabDef = new TableDefinition(tabId, colDefs);
 
-        PreparedStatementBinder binder = new PreparedStatementBinder(
-                statement,
-                pkMode,
-                schemaPair,
-                fieldsMetadata, JdbcSinkConfig.InsertMode.UPDATE,
-                TimeZone.getTimeZone("UTC")
-        );
+      PreparedStatementBinder binder = new PreparedStatementBinder(
+              dialect,
+              statement,
+              pkMode,
+              schemaPair,
+              fieldsMetadata, tabDef, JdbcSinkConfig.InsertMode.UPDATE
+      );
 
-        binder.bindRecord(new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));
+      binder.bindRecord(new SinkRecord("topic", 0, null, null, valueSchema, valueStruct, 0));
 
-        int index = 1;
+      int index = 1;
 
-        // non key first
-        verify(statement, times(1)).setString(index++, valueStruct.getString("firstName"));
-        // last the keys
-        verify(statement, times(1)).setLong(index++, valueStruct.getInt64("long"));
+      // non key first
+      verify(statement, times(1)).setString(index++, valueStruct.getString("firstName"));
+      // last the keys
+      verify(statement, times(1)).setLong(index++, valueStruct.getInt64("long"));
     }
-
-
-
-    @Test
-  public void bindFieldPrimitiveValues() throws SQLException {
-    int index = ThreadLocalRandom.current().nextInt();
-    verifyBindField(++index, Schema.INT8_SCHEMA, (byte) 42).setByte(index, (byte) 42);
-    verifyBindField(++index, Schema.INT16_SCHEMA, (short) 42).setShort(index, (short) 42);
-    verifyBindField(++index, Schema.INT32_SCHEMA, 42).setInt(index, 42);
-    verifyBindField(++index, Schema.INT64_SCHEMA, 42L).setLong(index, 42L);
-    verifyBindField(++index, Schema.BOOLEAN_SCHEMA, false).setBoolean(index, false);
-    verifyBindField(++index, Schema.BOOLEAN_SCHEMA, true).setBoolean(index, true);
-    verifyBindField(++index, Schema.FLOAT32_SCHEMA, -42f).setFloat(index, -42f);
-    verifyBindField(++index, Schema.FLOAT64_SCHEMA, 42d).setDouble(index, 42d);
-    verifyBindField(++index, Schema.BYTES_SCHEMA, new byte[]{42}).setBytes(index, new byte[]{42});
-    verifyBindField(++index, Schema.BYTES_SCHEMA, ByteBuffer.wrap(new byte[]{42})).setBytes(index, new byte[]{42});
-    verifyBindField(++index, Schema.STRING_SCHEMA, "yep").setString(index, "yep");
-    verifyBindField(++index, Decimal.schema(0), new BigDecimal("1.5").setScale(0, BigDecimal.ROUND_HALF_EVEN)).setBigDecimal(index, new BigDecimal(2));
-    verifyBindField(++index, Date.SCHEMA, new java.util.Date(0)).setDate(index, new java.sql.Date(0), DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone("UTC")));
-    verifyBindField(++index, Time.SCHEMA, new java.util.Date(1000)).setTime(index, new java.sql.Time(1000), DateTimeUtils.getTimeZoneCalendar(
-        TimeZone.getTimeZone("UTC")));
-    verifyBindField(++index, Timestamp.SCHEMA, new java.util.Date(100)).setTimestamp(index, new java.sql.Timestamp(100), DateTimeUtils.getTimeZoneCalendar(
-        TimeZone.getTimeZone("UTC")));
-  }
-
-  @Test
-  public void bindFieldNull() throws SQLException {
-    final List<Schema> nullableTypes = Arrays.asList(
-        Schema.INT8_SCHEMA,
-        Schema.INT16_SCHEMA,
-        Schema.INT32_SCHEMA,
-        Schema.INT64_SCHEMA,
-        Schema.FLOAT32_SCHEMA,
-        Schema.FLOAT64_SCHEMA,
-        Schema.BOOLEAN_SCHEMA,
-        Schema.BYTES_SCHEMA,
-        Schema.STRING_SCHEMA,
-        Decimal.schema(0),
-        Date.SCHEMA,
-        Time.SCHEMA,
-        Timestamp.SCHEMA
-    );
-    int index = 0;
-    for (Schema schema : nullableTypes) {
-      verifyBindField(++index, schema, null).setObject(index, null);
-    }
-  }
-
-  @Test(expected = ConnectException.class)
-  public void bindFieldStructUnsupported() throws SQLException {
-    Schema structSchema = SchemaBuilder.struct().field("test", Schema.BOOLEAN_SCHEMA).build();
-    PreparedStatementBinder binder =
-        new PreparedStatementBinder(null, null, null, null, null, TimeZone.getTimeZone("UTC"));
-    binder.bindField(mock(PreparedStatement.class), 1, structSchema, new Struct(structSchema));
-  }
-
-  @Test(expected = ConnectException.class)
-  public void bindFieldArrayUnsupported() throws SQLException {
-    Schema arraySchema = SchemaBuilder.array(Schema.INT8_SCHEMA);
-    PreparedStatementBinder binder = new PreparedStatementBinder(
-        null, null, null, null, null,
-        TimeZone.getTimeZone("UTC")
-    );
-    binder.bindField(mock(PreparedStatement.class), 1, arraySchema, Collections.emptyList());
-  }
-
-  @Test(expected = ConnectException.class)
-  public void bindFieldMapUnsupported() throws SQLException {
-    Schema mapSchema = SchemaBuilder.map(Schema.INT8_SCHEMA, Schema.INT8_SCHEMA);
-    PreparedStatementBinder binder =
-        new PreparedStatementBinder(null, null, null, null, null, TimeZone.getTimeZone("UTC"));
-    binder.bindField(mock(PreparedStatement.class), 1, mapSchema, Collections.emptyMap());
-  }
-
-  private PreparedStatement verifyBindField(int index, Schema schema, Object value) throws SQLException {
-    PreparedStatement statement = mock(PreparedStatement.class);
-    PreparedStatementBinder binder =
-        new PreparedStatementBinder(null, null, null, null, null, TimeZone.getTimeZone("UTC"));
-    binder.bindField(statement, index, schema, value);
-    return verify(statement, times(1));
-  }
 
 }

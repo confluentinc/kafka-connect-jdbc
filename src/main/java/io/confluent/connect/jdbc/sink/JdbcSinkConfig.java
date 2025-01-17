@@ -16,10 +16,7 @@
 
 package io.confluent.connect.jdbc.sink;
 
-import org.apache.kafka.common.config.AbstractConfig;
-import org.apache.kafka.common.config.ConfigDef;
-import org.apache.kafka.common.config.ConfigException;
-
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -29,9 +26,16 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TimeZone;
 
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
+import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
+import io.confluent.connect.jdbc.util.EnumRecommender;
+import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.StringUtils;
 import io.confluent.connect.jdbc.util.TimeZoneValidator;
 
+import org.apache.kafka.common.config.AbstractConfig;
+import org.apache.kafka.common.config.ConfigDef;
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 
 public class JdbcSinkConfig extends AbstractConfig {
@@ -58,7 +62,7 @@ public class JdbcSinkConfig extends AbstractConfig {
       )
   );
 
-  public static final String CONNECTION_URL = "connection.url";
+  public static final String CONNECTION_URL = JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG;
   private static final String CONNECTION_URL_DOC =
       "JDBC connection URL.\n"
           + "For example: ``jdbc:oracle:thin:@localhost:1521:orclpdb1``, "
@@ -67,11 +71,12 @@ public class JdbcSinkConfig extends AbstractConfig {
           + "databaseName=db_name``";
   private static final String CONNECTION_URL_DISPLAY = "JDBC URL";
 
-  public static final String CONNECTION_USER = "connection.user";
+  public static final String CONNECTION_USER = JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG;
   private static final String CONNECTION_USER_DOC = "JDBC connection user.";
   private static final String CONNECTION_USER_DISPLAY = "JDBC User";
 
-  public static final String CONNECTION_PASSWORD = "connection.password";
+  public static final String CONNECTION_PASSWORD =
+      JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG;
   private static final String CONNECTION_PASSWORD_DOC = "JDBC connection password.";
   private static final String CONNECTION_PASSWORD_DISPLAY = "JDBC Password";
 
@@ -182,6 +187,16 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String DDL_GROUP = "DDL Support";
   private static final String RETRIES_GROUP = "Retries";
 
+  public static final String DIALECT_NAME_CONFIG = "dialect.name";
+  private static final String DIALECT_NAME_DISPLAY = "Database Dialect";
+  public static final String DIALECT_NAME_DEFAULT = "";
+  private static final String DIALECT_NAME_DOC =
+      "The name of the database dialect that should be used for this connector. By default this "
+      + "is empty, and the connector automatically determines the dialect based upon the "
+      + "JDBC connection URL. Use this if you want to override that behavior and use a "
+      + "specific dialect. All properly-packaged dialects in the JDBC connector plugin "
+      + "can be used.";
+
   public static final String DB_TIMEZONE_CONFIG = "db.timezone";
   public static final String DB_TIMEZONE_DEFAULT = "UTC";
   private static final String DB_TIMEZONE_CONFIG_DOC =
@@ -189,55 +204,135 @@ public class JdbcSinkConfig extends AbstractConfig {
           + "inserting time-based values. Defaults to UTC.";
   private static final String DB_TIMEZONE_CONFIG_DISPLAY = "DB Time Zone";
 
+  public static final String QUOTE_SQL_IDENTIFIERS_CONFIG =
+      JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_CONFIG;
+  public static final String QUOTE_SQL_IDENTIFIERS_DEFAULT =
+      JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_DEFAULT;
+  public static final String QUOTE_SQL_IDENTIFIERS_DOC =
+      JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_DOC;
+  private static final String QUOTE_SQL_IDENTIFIERS_DISPLAY =
+      JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_DISPLAY;
+
+  private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
+      EnumRecommender.in(QuoteMethod.values());
+
   public static final ConfigDef CONFIG_DEF = new ConfigDef()
-      // Connection
-      .define(CONNECTION_URL, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE,
-              ConfigDef.Importance.HIGH, CONNECTION_URL_DOC,
-              CONNECTION_GROUP, 1, ConfigDef.Width.LONG, CONNECTION_URL_DISPLAY)
-      .define(CONNECTION_USER, ConfigDef.Type.STRING, null,
-              ConfigDef.Importance.HIGH, CONNECTION_USER_DOC,
-              CONNECTION_GROUP, 2, ConfigDef.Width.MEDIUM, CONNECTION_USER_DISPLAY)
-      .define(CONNECTION_PASSWORD, ConfigDef.Type.PASSWORD, null,
-              ConfigDef.Importance.HIGH, CONNECTION_PASSWORD_DOC,
-              CONNECTION_GROUP, 3, ConfigDef.Width.MEDIUM, CONNECTION_PASSWORD_DISPLAY)
-      // Writes
-      .define(INSERT_MODE, ConfigDef.Type.STRING, INSERT_MODE_DEFAULT,
-              EnumValidator.in(InsertMode.values()),
-              ConfigDef.Importance.HIGH, INSERT_MODE_DOC,
-              WRITES_GROUP, 1, ConfigDef.Width.MEDIUM, INSERT_MODE_DISPLAY)
-      .define(BATCH_SIZE, ConfigDef.Type.INT, BATCH_SIZE_DEFAULT, NON_NEGATIVE_INT_VALIDATOR,
-              ConfigDef.Importance.MEDIUM, BATCH_SIZE_DOC,
-              WRITES_GROUP, 2, ConfigDef.Width.SHORT, BATCH_SIZE_DISPLAY)
-      // Data Mapping
-      .define(TABLE_NAME_FORMAT, ConfigDef.Type.STRING, TABLE_NAME_FORMAT_DEFAULT,
-              ConfigDef.Importance.MEDIUM, TABLE_NAME_FORMAT_DOC,
-              DATAMAPPING_GROUP, 1, ConfigDef.Width.LONG, TABLE_NAME_FORMAT_DISPLAY)
-      .define(PK_MODE, ConfigDef.Type.STRING, PK_MODE_DEFAULT,
-              EnumValidator.in(PrimaryKeyMode.values()),
-              ConfigDef.Importance.HIGH, PK_MODE_DOC,
-              DATAMAPPING_GROUP, 2, ConfigDef.Width.MEDIUM, PK_MODE_DISPLAY)
-      .define(PK_FIELDS, ConfigDef.Type.LIST, PK_FIELDS_DEFAULT,
-              ConfigDef.Importance.MEDIUM, PK_FIELDS_DOC,
-              DATAMAPPING_GROUP, 3, ConfigDef.Width.LONG, PK_FIELDS_DISPLAY)
-      .define(FIELDS_WHITELIST, ConfigDef.Type.LIST, FIELDS_WHITELIST_DEFAULT,
-              ConfigDef.Importance.MEDIUM, FIELDS_WHITELIST_DOC,
-              DATAMAPPING_GROUP, 4, ConfigDef.Width.LONG, FIELDS_WHITELIST_DISPLAY)
-      // DDL
-      .define(AUTO_CREATE, ConfigDef.Type.BOOLEAN, AUTO_CREATE_DEFAULT,
-              ConfigDef.Importance.MEDIUM, AUTO_CREATE_DOC,
-              DDL_GROUP, 1, ConfigDef.Width.SHORT, AUTO_CREATE_DISPLAY)
-      .define(AUTO_EVOLVE, ConfigDef.Type.BOOLEAN, AUTO_EVOLVE_DEFAULT,
-              ConfigDef.Importance.MEDIUM, AUTO_EVOLVE_DOC,
-              DDL_GROUP, 2, ConfigDef.Width.SHORT, AUTO_EVOLVE_DISPLAY)
-      // Retries
-      .define(MAX_RETRIES, ConfigDef.Type.INT, MAX_RETRIES_DEFAULT, NON_NEGATIVE_INT_VALIDATOR,
-              ConfigDef.Importance.MEDIUM, MAX_RETRIES_DOC,
-              RETRIES_GROUP, 1, ConfigDef.Width.SHORT, MAX_RETRIES_DISPLAY)
-      .define(RETRY_BACKOFF_MS, ConfigDef.Type.INT, RETRY_BACKOFF_MS_DEFAULT,
-              NON_NEGATIVE_INT_VALIDATOR,
-              ConfigDef.Importance.MEDIUM, RETRY_BACKOFF_MS_DOC,
-              RETRIES_GROUP, 2, ConfigDef.Width.SHORT, RETRY_BACKOFF_MS_DISPLAY)
-       .define(
+        // Connection
+        .define(
+            CONNECTION_URL,
+            ConfigDef.Type.STRING,
+            ConfigDef.NO_DEFAULT_VALUE,
+            ConfigDef.Importance.HIGH,
+            CONNECTION_URL_DOC,
+            CONNECTION_GROUP,
+            1,
+            ConfigDef.Width.LONG,
+            CONNECTION_URL_DISPLAY
+        )
+        .define(
+            CONNECTION_USER,
+            ConfigDef.Type.STRING,
+            null,
+            ConfigDef.Importance.HIGH,
+            CONNECTION_USER_DOC,
+            CONNECTION_GROUP,
+            2,
+            ConfigDef.Width.MEDIUM,
+            CONNECTION_USER_DISPLAY
+        )
+        .define(
+            CONNECTION_PASSWORD,
+            ConfigDef.Type.PASSWORD,
+            null,
+            ConfigDef.Importance.HIGH,
+            CONNECTION_PASSWORD_DOC,
+            CONNECTION_GROUP,
+            3,
+            ConfigDef.Width.MEDIUM,
+            CONNECTION_PASSWORD_DISPLAY
+        )
+        .define(
+            DIALECT_NAME_CONFIG,
+            ConfigDef.Type.STRING,
+            DIALECT_NAME_DEFAULT,
+            DatabaseDialectRecommender.INSTANCE,
+            ConfigDef.Importance.LOW,
+            DIALECT_NAME_DOC,
+            CONNECTION_GROUP,
+            4,
+            ConfigDef.Width.LONG,
+            DIALECT_NAME_DISPLAY,
+            DatabaseDialectRecommender.INSTANCE
+        )
+        // Writes
+        .define(
+            INSERT_MODE,
+            ConfigDef.Type.STRING,
+            INSERT_MODE_DEFAULT,
+            EnumValidator.in(InsertMode.values()),
+            ConfigDef.Importance.HIGH,
+            INSERT_MODE_DOC,
+            WRITES_GROUP,
+            1,
+            ConfigDef.Width.MEDIUM,
+            INSERT_MODE_DISPLAY
+        )
+        .define(
+            BATCH_SIZE,
+            ConfigDef.Type.INT,
+            BATCH_SIZE_DEFAULT,
+            NON_NEGATIVE_INT_VALIDATOR,
+            ConfigDef.Importance.MEDIUM,
+            BATCH_SIZE_DOC, WRITES_GROUP,
+            2,
+            ConfigDef.Width.SHORT,
+            BATCH_SIZE_DISPLAY
+        )
+        // Data Mapping
+        .define(
+            TABLE_NAME_FORMAT,
+            ConfigDef.Type.STRING,
+            TABLE_NAME_FORMAT_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            TABLE_NAME_FORMAT_DOC,
+            DATAMAPPING_GROUP,
+            1,
+            ConfigDef.Width.LONG,
+            TABLE_NAME_FORMAT_DISPLAY
+        )
+        .define(
+            PK_MODE,
+            ConfigDef.Type.STRING,
+            PK_MODE_DEFAULT,
+            EnumValidator.in(PrimaryKeyMode.values()),
+            ConfigDef.Importance.HIGH,
+            PK_MODE_DOC,
+            DATAMAPPING_GROUP,
+            2,
+            ConfigDef.Width.MEDIUM,
+            PK_MODE_DISPLAY
+        )
+        .define(
+            PK_FIELDS,
+            ConfigDef.Type.LIST,
+            PK_FIELDS_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            PK_FIELDS_DOC,
+            DATAMAPPING_GROUP,
+            3,
+            ConfigDef.Width.LONG, PK_FIELDS_DISPLAY
+        )
+        .define(
+            FIELDS_WHITELIST,
+            ConfigDef.Type.LIST,
+            FIELDS_WHITELIST_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            FIELDS_WHITELIST_DOC,
+            DATAMAPPING_GROUP,
+            4,
+            ConfigDef.Width.LONG,
+            FIELDS_WHITELIST_DISPLAY
+        ).define(
           DB_TIMEZONE_CONFIG,
           ConfigDef.Type.STRING,
           DB_TIMEZONE_DEFAULT,
@@ -248,8 +343,64 @@ public class JdbcSinkConfig extends AbstractConfig {
           5,
           ConfigDef.Width.MEDIUM,
           DB_TIMEZONE_CONFIG_DISPLAY
+        )
+        // DDL
+        .define(
+            AUTO_CREATE,
+            ConfigDef.Type.BOOLEAN,
+            AUTO_CREATE_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            AUTO_CREATE_DOC, DDL_GROUP,
+            1,
+            ConfigDef.Width.SHORT,
+            AUTO_CREATE_DISPLAY
+        )
+        .define(
+            AUTO_EVOLVE,
+            ConfigDef.Type.BOOLEAN,
+            AUTO_EVOLVE_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            AUTO_EVOLVE_DOC, DDL_GROUP,
+            2,
+            ConfigDef.Width.SHORT,
+            AUTO_EVOLVE_DISPLAY
+        ).define(
+            QUOTE_SQL_IDENTIFIERS_CONFIG,
+            ConfigDef.Type.STRING,
+            QUOTE_SQL_IDENTIFIERS_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            QUOTE_SQL_IDENTIFIERS_DOC,
+            DDL_GROUP,
+            3,
+            ConfigDef.Width.MEDIUM,
+            QUOTE_SQL_IDENTIFIERS_DISPLAY,
+            QUOTE_METHOD_RECOMMENDER
+        )
+        // Retries
+        .define(
+            MAX_RETRIES,
+            ConfigDef.Type.INT,
+            MAX_RETRIES_DEFAULT,
+            NON_NEGATIVE_INT_VALIDATOR,
+            ConfigDef.Importance.MEDIUM,
+            MAX_RETRIES_DOC,
+            RETRIES_GROUP,
+            1,
+            ConfigDef.Width.SHORT,
+            MAX_RETRIES_DISPLAY
+        )
+        .define(
+            RETRY_BACKOFF_MS,
+            ConfigDef.Type.INT,
+            RETRY_BACKOFF_MS_DEFAULT,
+            NON_NEGATIVE_INT_VALIDATOR,
+            ConfigDef.Importance.MEDIUM,
+            RETRY_BACKOFF_MS_DOC,
+            RETRIES_GROUP,
+            2,
+            ConfigDef.Width.SHORT,
+            RETRY_BACKOFF_MS_DISPLAY
         );
-
 
   public final String connectionUrl;
   public final String connectionUser;
@@ -264,7 +415,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final PrimaryKeyMode pkMode;
   public final List<String> pkFields;
   public final Set<String> fieldsWhitelist;
-
+  public final String dialectName;
   public final TimeZone timeZone;
 
   public JdbcSinkConfig(Map<?, ?> props) {
@@ -281,9 +432,10 @@ public class JdbcSinkConfig extends AbstractConfig {
     insertMode = InsertMode.valueOf(getString(INSERT_MODE).toUpperCase());
     pkMode = PrimaryKeyMode.valueOf(getString(PK_MODE).toUpperCase());
     pkFields = getList(PK_FIELDS);
+    dialectName = getString(DIALECT_NAME_CONFIG);
     fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
     String dbTimeZone = getString(DB_TIMEZONE_CONFIG);
-    timeZone = TimeZone.getTimeZone(dbTimeZone);
+    timeZone = TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
   }
 
   private String getPasswordValue(String key) {

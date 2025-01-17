@@ -16,6 +16,24 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import static org.easymock.EasyMock.expectLastCall;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.time.ZoneOffset;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
+import java.util.TimeZone;
+
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -29,23 +47,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.IOException;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.TimeZone;
-
-import static org.easymock.EasyMock.expectLastCall;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
 import io.confluent.connect.jdbc.util.DateTimeUtils;
-
 
 public class JdbcSinkTaskTest extends EasyMockSupport {
   private final SqliteHelper sqliteHelper = new SqliteHelper(getClass().getSimpleName());
@@ -81,7 +83,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     props.put("pk.mode", "kafka");
     props.put("pk.fields", "kafka_topic,kafka_partition,kafka_offset");
     String timeZoneID = "America/Los_Angeles";
-    final TimeZone timeZone = TimeZone.getTimeZone(timeZoneID);
+    TimeZone timeZone = TimeZone.getTimeZone(timeZoneID);
     props.put("db.timezone", timeZoneID);
 
     JdbcSinkTask task = new JdbcSinkTask();
@@ -197,7 +199,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
                 assertEquals(struct.getFloat64("double"), rs.getDouble("double"), 0.01);
                 java.sql.Timestamp dbTimestamp = rs.getTimestamp(
                     "modified",
-                    DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone("UTC"))
+                    DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone(ZoneOffset.UTC))
                 );
                 assertEquals(((java.util.Date) struct.get("modified")).getTime(), dbTimestamp.getTime());
               }
@@ -216,7 +218,10 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     SinkTaskContext ctx = createMock(SinkTaskContext.class);
 
     mockWriter.write(records);
-    expectLastCall().andThrow(new SQLException()).times(1 + maxRetries);
+    SQLException chainedException = new SQLException("cause 1");
+    chainedException.setNextException(new SQLException("cause 2"));
+    chainedException.setNextException(new SQLException("cause 3"));
+    expectLastCall().andThrow(chainedException).times(1 + maxRetries);
 
     ctx.timeout(retryBackoffMs);
     expectLastCall().times(maxRetries);
@@ -244,12 +249,28 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
       task.put(records);
       fail();
     } catch (RetriableException expected) {
+      assertEquals(SQLException.class, expected.getCause().getClass());
+      int i = 0;
+      for (Throwable t : (SQLException) expected.getCause()) {
+        ++i;
+        StringWriter sw = new StringWriter();
+        t.printStackTrace(new PrintWriter(sw));
+        System.out.println("Chained exception " + i + ": " + sw);
+      }
     }
 
     try {
       task.put(records);
       fail();
     } catch (RetriableException expected) {
+      assertEquals(SQLException.class, expected.getCause().getClass());
+      int i = 0;
+      for (Throwable t : (SQLException) expected.getCause()) {
+        ++i;
+        StringWriter sw = new StringWriter();
+        t.printStackTrace(new PrintWriter(sw));
+        System.out.println("Chained exception " + i + ": " + sw);
+      }
     }
 
     try {
@@ -259,6 +280,13 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
       fail("Non-retriable exception expected");
     } catch (ConnectException expected) {
       assertEquals(SQLException.class, expected.getCause().getClass());
+      int i = 0;
+      for (Throwable t : (SQLException) expected.getCause()) {
+        ++i;
+        StringWriter sw = new StringWriter();
+        t.printStackTrace(new PrintWriter(sw));
+        System.out.println("Chained exception " + i + ": " + sw);
+      }
     }
 
     verifyAll();

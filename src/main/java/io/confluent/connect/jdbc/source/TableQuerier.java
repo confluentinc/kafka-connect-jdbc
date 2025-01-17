@@ -16,15 +16,17 @@
 
 package io.confluent.connect.jdbc.source;
 
-import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.source.SourceRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
-import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.NumericMapping;
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.util.TableId;
 
 /**
  * TableQuerier executes queries against a specific table. Implementations handle different types
@@ -37,27 +39,34 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     QUERY // User-specified query
   }
 
+  private final Logger log = LoggerFactory.getLogger(TableQuerier.class);
+
+  protected final DatabaseDialect dialect;
   protected final QueryMode mode;
-  protected final String schemaPattern;
-  protected final String name;
   protected final String query;
   protected final String topicPrefix;
-  protected final NumericMapping mapNumerics;
+  protected final TableId tableId;
 
   // Mutable state
+
   protected long lastUpdate;
+  protected Connection db;
   protected PreparedStatement stmt;
   protected ResultSet resultSet;
-  protected Schema schema;
+  protected SchemaMapping schemaMapping;
+  private String loggedQueryString;
 
-  public TableQuerier(QueryMode mode, String nameOrQuery, String topicPrefix,
-                      String schemaPattern, NumericMapping mapNumerics) {
+  public TableQuerier(
+      DatabaseDialect dialect,
+      QueryMode mode,
+      String nameOrQuery,
+      String topicPrefix
+  ) {
+    this.dialect = dialect;
     this.mode = mode;
-    this.schemaPattern = schemaPattern;
-    this.name = mode.equals(QueryMode.TABLE) ? nameOrQuery : null;
+    this.tableId = mode.equals(QueryMode.TABLE) ? dialect.parseTableIdentifier(nameOrQuery) : null;
     this.query = mode.equals(QueryMode.QUERY) ? nameOrQuery : null;
     this.topicPrefix = topicPrefix;
-    this.mapNumerics = mapNumerics;
     this.lastUpdate = 0;
   }
 
@@ -81,9 +90,11 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
 
   public void maybeStartQuery(Connection db) throws SQLException {
     if (resultSet == null) {
+      this.db = db;
       stmt = getOrCreatePreparedStatement(db);
       resultSet = executeQuery();
-      schema = DataConverter.convertSchema(name, resultSet.getMetaData(), mapNumerics);
+      String schemaName = tableId != null ? tableId.tableName() : null; // backwards compatible
+      schemaMapping = SchemaMapping.create(schemaName, resultSet.getMetaData(), dialect);
     }
   }
 
@@ -98,10 +109,22 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   public void reset(long now) {
     closeResultSetQuietly();
     closeStatementQuietly();
+    releaseLocksQuietly();
     // TODO: Can we cache this and quickly check that it's identical for the next query
-    // instead of constructing from scratch since it's almost always the same
-    schema = null;
+    //     instead of constructing from scratch since it's almost always the same
+    schemaMapping = null;
     lastUpdate = now;
+  }
+
+  private void releaseLocksQuietly() {
+    if (db != null) {
+      try {
+        db.commit();
+      } catch (SQLException e) {
+        log.warn("Error while committing read transaction, database locks may still be held", e);
+      }
+    }
+    db = null;
   }
 
   private void closeStatementQuietly() {
@@ -126,6 +149,14 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     resultSet = null;
   }
 
+  protected void recordQuery(String query) {
+    if (query != null && !query.equals(loggedQueryString)) {
+      // For usability, log the statement at INFO level only when it changes
+      log.info("Begin using SQL query: {}", query);
+      loggedQueryString = query;
+    }
+  }
+
   @Override
   public int compareTo(TableQuerier other) {
     if (this.lastUpdate < other.lastUpdate) {
@@ -133,7 +164,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     } else if (this.lastUpdate > other.lastUpdate) {
       return 1;
     } else {
-      return this.name.compareTo(other.name);
+      return this.tableId.compareTo(other.tableId);
     }
   }
 }

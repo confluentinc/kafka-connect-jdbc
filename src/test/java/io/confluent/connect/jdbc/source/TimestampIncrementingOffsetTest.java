@@ -21,10 +21,10 @@ import org.junit.Test;
 
 import java.sql.Timestamp;
 
-import io.confluent.connect.jdbc.source.TimestampIncrementingOffset;
-
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 public class TimestampIncrementingOffsetTest {
   private final Timestamp ts = new Timestamp(100L);
@@ -80,6 +80,14 @@ public class TimestampIncrementingOffsetTest {
     assertEquals(zero, incOnly.getTimestampOffset());
     assertEquals(ts, tsInc.getTimestampOffset());
     assertEquals(nanos, nanosOffset.getTimestampOffset());
+  }
+
+  @Test
+  public void testHasTimestampOffset() {
+    assertFalse(unset.hasTimestampOffset());
+    assertFalse(incOnly.hasTimestampOffset());
+    assertTrue(tsOnly.hasTimestampOffset());
+    assertTrue(tsInc.hasTimestampOffset());
   }
 
   @Test

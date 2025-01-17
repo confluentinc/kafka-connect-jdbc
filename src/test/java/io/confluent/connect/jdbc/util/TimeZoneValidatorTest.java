@@ -14,6 +14,8 @@
 
 package io.confluent.connect.jdbc.util;
 
+import java.util.stream.Stream;
+
 import org.apache.kafka.common.config.ConfigException;
 import org.junit.Test;
 
@@ -28,9 +30,8 @@ public class TimeZoneValidatorTest {
         "UTC",
     };
 
-    for (String timeZone: validTimeZones) {
-      TimeZoneValidator.INSTANCE.ensureValid("db.timezone", timeZone);
-    }
+    Stream.of(validTimeZones)
+        .forEach(timeZone -> TimeZoneValidator.INSTANCE.ensureValid("db.timezone", timeZone));
   }
 
   @Test

@@ -16,43 +16,45 @@
 
 package io.confluent.connect.jdbc.source;
 
-import io.confluent.connect.jdbc.util.JdbcUtils;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.time.ZoneId;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TimeZone;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.dialect.DatabaseDialects;
+import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
+import io.confluent.connect.jdbc.util.EnumRecommender;
+import io.confluent.connect.jdbc.util.QuoteMethod;
+import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.util.TimeZoneValidator;
+
+import java.util.regex.Pattern;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Recommender;
 import org.apache.kafka.common.config.ConfigDef.Type;
+import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.ConfigException;
-import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
-
-import java.util.TimeZone;
-
-import io.confluent.connect.jdbc.util.TimeZoneValidator;
-
-
 public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   private static final Logger LOG = LoggerFactory.getLogger(JdbcSourceConnectorConfig.class);
+  private static Pattern INVALID_CHARS = Pattern.compile("[^a-zA-Z0-9._-]");
 
   public static final String CONNECTION_URL_CONFIG = "connection.url";
   private static final String CONNECTION_URL_DOC =
@@ -110,15 +112,16 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "Precision (deprecated)";
 
   private static final String NUMERIC_MAPPING_DOC =
-      "Map NUMERIC values by precision and optionally scale to integral or decimal types. Use "
-      + "``none`` if all NUMERIC columns are to be represented by Connect's DECIMAL logical "
-      + "type. Use ``best_fit`` if NUMERIC columns should be cast to Connect's INT8, INT16, "
-      + "INT32, INT64, or FLOAT64 based upon the column's precision and scale. Or use "
-      + "``precision_only`` to map NUMERIC columns based only on the column's precision "
-      + "assuming that column's scale is 0. The ``none`` option is the default, but may lead "
-      + "to serialization issues with Avro since Connect's DECIMAL type is mapped to its "
-      + "binary representation, and ``best_fit`` will often be preferred since it maps to the"
-      + " most appropriate primitive type.";
+      "Map NUMERIC values by precision and optionally scale to integral or decimal types.\n"
+      + "  * Use ``none`` if all NUMERIC columns are to be represented by Connect's DECIMAL "
+      + "logical type.\n"
+      + "  * Use ``best_fit`` if NUMERIC columns should be cast to Connect's INT8, INT16, "
+      + "INT32, INT64, or FLOAT64 based upon the column's precision and scale.\n"
+      + "  * Use ``precision_only`` to map NUMERIC columns based only on the column's precision "
+      + "assuming that column's scale is 0.\n"
+      + "  * The ``none`` option is the default, but may lead to serialization issues with Avro "
+      + "since Connect's DECIMAL type is mapped to its binary representation, and ``best_fit`` "
+      + "will often be preferred since it maps to the most appropriate primitive type.";
 
   public static final String NUMERIC_MAPPING_DEFAULT = null;
   private static final String NUMERIC_MAPPING_DISPLAY = "Map Numeric Values, Integral "
@@ -127,17 +130,27 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final EnumRecommender NUMERIC_MAPPING_RECOMMENDER =
       EnumRecommender.in(NumericMapping.values());
 
+  public static final String DIALECT_NAME_CONFIG = "dialect.name";
+  private static final String DIALECT_NAME_DISPLAY = "Database Dialect";
+  public static final String DIALECT_NAME_DEFAULT = "";
+  private static final String DIALECT_NAME_DOC =
+      "The name of the database dialect that should be used for this connector. By default this "
+      + "is empty, and the connector automatically determines the dialect based upon the "
+      + "JDBC connection URL. Use this if you want to override that behavior and use a "
+      + "specific dialect. All properly-packaged dialects in the JDBC connector plugin "
+      + "can be used.";
+
   public static final String MODE_CONFIG = "mode";
   private static final String MODE_DOC =
       "The mode for updating a table each time it is polled. Options include:\n"
-      + "  * bulk - perform a bulk load of the entire table each time it is polled\n"
-      + "  * incrementing - use a strictly incrementing column on each table to "
+      + "  * bulk: perform a bulk load of the entire table each time it is polled\n"
+      + "  * incrementing: use a strictly incrementing column on each table to "
       + "detect only new rows. Note that this will not detect modifications or "
       + "deletions of existing rows.\n"
-      + "  * timestamp - use a timestamp (or timestamp-like) column to detect new and modified "
+      + "  * timestamp: use a timestamp (or timestamp-like) column to detect new and modified "
       + "rows. This assumes the column is updated with each write, and that values are "
       + "monotonically incrementing, but not necessarily unique.\n"
-      + "  * timestamp+incrementing - use two columns, a timestamp column that detects new and "
+      + "  * timestamp+incrementing: use two columns, a timestamp column that detects new and "
       + "modified rows and a strictly incrementing column which provides a globally unique ID for "
       + "updates so each row can be assigned a unique stream offset.";
   private static final String MODE_DISPLAY = "Table Loading Mode";
@@ -158,8 +171,10 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public static final String TIMESTAMP_COLUMN_NAME_CONFIG = "timestamp.column.name";
   private static final String TIMESTAMP_COLUMN_NAME_DOC =
-      "The name of the timestamp column to use to detect new or modified rows. This column may "
-      + "not be nullable.";
+      "Comma separated list of one or more timestamp columns to detect new or modified rows using "
+      + "the COALESCE SQL function. Rows whose first non-null timestamp value is greater than the "
+      + "largest previous timestamp value seen will be discovered with each poll. At least one "
+      + "column should not be nullable.";
   public static final String TIMESTAMP_COLUMN_NAME_DEFAULT = "";
   private static final String TIMESTAMP_COLUMN_NAME_DISPLAY = "Timestamp Column Name";
 
@@ -174,24 +189,37 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public static final String TABLE_WHITELIST_CONFIG = "table.whitelist";
   private static final String TABLE_WHITELIST_DOC =
-      "List of tables to include in copying. If specified, table.blacklist may not be set.";
+      "List of tables to include in copying. If specified, ``table.blacklist`` may not be set. "
+      + "Use a comma-separated list to specify multiple tables "
+      + "(for example, ``table.whitelist: \"User, Address, Email\"``).";
   public static final String TABLE_WHITELIST_DEFAULT = "";
   private static final String TABLE_WHITELIST_DISPLAY = "Table Whitelist";
 
   public static final String TABLE_BLACKLIST_CONFIG = "table.blacklist";
   private static final String TABLE_BLACKLIST_DOC =
-      "List of tables to exclude from copying. If specified, table.whitelist may not be set.";
+      "List of tables to exclude from copying. If specified, ``table.whitelist`` may not be set. "
+      + "Use a comma-separated list to specify multiple tables "
+      + "(for example, ``table.blacklist: \"User, Address, Email\"``).";
   public static final String TABLE_BLACKLIST_DEFAULT = "";
   private static final String TABLE_BLACKLIST_DISPLAY = "Table Blacklist";
 
   public static final String SCHEMA_PATTERN_CONFIG = "schema.pattern";
   private static final String SCHEMA_PATTERN_DOC =
-      "Schema pattern to fetch tables metadata from the database:\n"
-      + "  * \"\" retrieves those without a schema,"
-      + "  * null (default) means that the schema name should not be used to narrow the search, "
-      + "all tables "
-      + "metadata would be fetched, regardless their schema.";
+      "Schema pattern to fetch table metadata from the database.\n"
+      + "  * ``\"\"`` retrieves those without a schema.\n"
+      + "  * null (default) indicates that the schema name is not used to narrow the search and "
+      + "that all table metadata is fetched, regardless of the schema.";
   private static final String SCHEMA_PATTERN_DISPLAY = "Schema pattern";
+  public static final String SCHEMA_PATTERN_DEFAULT = null;
+
+  public static final String CATALOG_PATTERN_CONFIG = "catalog.pattern";
+  private static final String CATALOG_PATTERN_DOC =
+      "Catalog pattern to fetch table metadata from the database.\n"
+      + "  * ``\"\"`` retrieves those without a catalog \n"
+      + "  * null (default) indicates that the schema name is not used to narrow the search and "
+        + "that all table metadata is fetched, regardless of the catalog.";
+  private static final String CATALOG_PATTERN_DISPLAY = "Schema pattern";
+  public static final String CATALOG_PATTERN_DEFAULT = null;
 
   public static final String QUERY_CONFIG = "query";
   private static final String QUERY_DOC =
@@ -232,9 +260,19 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String DB_TIMEZONE_CONFIG = "db.timezone";
   public static final String DB_TIMEZONE_DEFAULT = "UTC";
   private static final String DB_TIMEZONE_CONFIG_DOC =
-      "Name of the JDBC timezone that should be used in the connector when "
+      "Name of the JDBC timezone used in the connector when "
           + "querying with time-based criteria. Defaults to UTC.";
   private static final String DB_TIMEZONE_CONFIG_DISPLAY = "DB time zone";
+
+  public static final String QUOTE_SQL_IDENTIFIERS_CONFIG = "quote.sql.identifiers";
+  public static final String QUOTE_SQL_IDENTIFIERS_DEFAULT = QuoteMethod.ALWAYS.name().toString();
+  public static final String QUOTE_SQL_IDENTIFIERS_DOC =
+      "When to quote table names, column names, and other identifiers in SQL statements. "
+      + "For backward compatibility, the default is ``always``.";
+  public static final String QUOTE_SQL_IDENTIFIERS_DISPLAY = "Quote Identifiers";
+
+  private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
+      EnumRecommender.in(QuoteMethod.values());
 
   public static final String DATABASE_GROUP = "Database";
   public static final String MODE_GROUP = "Mode";
@@ -256,14 +294,14 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       "By default, the JDBC connector will only detect tables with type TABLE from the source "
       + "Database. This config allows a command separated list of table types to extract. Options"
       + " include:\n"
-      + "* TABLE\n"
-      + "* VIEW\n"
-      + "* SYSTEM TABLE\n"
-      + "* GLOBAL TEMPORARY\n"
-      + "* LOCAL TEMPORARY\n"
-      + "* ALIAS\n"
-      + "* SYNONYM\n"
-      + "In most cases it only makes sense to have either TABLE or VIEW.";
+      + "  * TABLE\n"
+      + "  * VIEW\n"
+      + "  * SYSTEM TABLE\n"
+      + "  * GLOBAL TEMPORARY\n"
+      + "  * LOCAL TEMPORARY\n"
+      + "  * ALIAS\n"
+      + "  * SYNONYM\n"
+      + "  In most cases it only makes sense to have either TABLE or VIEW.";
   private static final String TABLE_TYPE_DISPLAY = "Table Types";
 
   public static ConfigDef baseConfigDef() {
@@ -350,10 +388,20 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         TABLE_BLACKLIST_DISPLAY,
         TABLE_RECOMMENDER
     ).define(
+        CATALOG_PATTERN_CONFIG,
+        Type.STRING,
+        CATALOG_PATTERN_DEFAULT,
+        Importance.MEDIUM,
+        CATALOG_PATTERN_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        CATALOG_PATTERN_DISPLAY
+    ).define(
         SCHEMA_PATTERN_CONFIG,
         Type.STRING,
-        null,
-        Importance.MEDIUM,
+        SCHEMA_PATTERN_DEFAULT,
+        Importance.HIGH,
         SCHEMA_PATTERN_DOC,
         DATABASE_GROUP,
         ++orderInGroup,
@@ -380,7 +428,19 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.SHORT,
         NUMERIC_MAPPING_DISPLAY,
-        NUMERIC_MAPPING_RECOMMENDER);
+        NUMERIC_MAPPING_RECOMMENDER
+    ).define(
+        DIALECT_NAME_CONFIG,
+        Type.STRING,
+        DIALECT_NAME_DEFAULT,
+        DatabaseDialectRecommender.INSTANCE,
+        Importance.LOW,
+        DIALECT_NAME_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        DIALECT_NAME_DISPLAY,
+        DatabaseDialectRecommender.INSTANCE);
   }
 
   private static final void addModeOptions(ConfigDef config) {
@@ -420,7 +480,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         MODE_DEPENDENTS_RECOMMENDER
     ).define(
         TIMESTAMP_COLUMN_NAME_CONFIG,
-        Type.STRING,
+        Type.LIST,
         TIMESTAMP_COLUMN_NAME_DEFAULT,
         Importance.MEDIUM,
         TIMESTAMP_COLUMN_NAME_DOC,
@@ -449,7 +509,18 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         MODE_GROUP,
         ++orderInGroup,
         Width.SHORT,
-        QUERY_DISPLAY);
+        QUERY_DISPLAY
+    ).define(
+        QUOTE_SQL_IDENTIFIERS_CONFIG,
+        Type.STRING,
+        QUOTE_SQL_IDENTIFIERS_DEFAULT,
+        Importance.MEDIUM,
+        QUOTE_SQL_IDENTIFIERS_DOC,
+        MODE_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        QUOTE_SQL_IDENTIFIERS_DISPLAY,
+        QUOTE_METHOD_RECOMMENDER);
   }
 
   private static final void addConnectorOptions(ConfigDef config) {
@@ -497,6 +568,28 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     ).define(
         TOPIC_PREFIX_CONFIG,
         Type.STRING,
+        "",
+        new Validator() {
+          @Override
+          public void ensureValid(final String name, final Object value) {
+            if (value == null) {
+              throw new ConfigException(name, value, "Topic prefix must not be null.");
+            }
+
+            String trimmed = ((String) value).trim();
+
+            if (trimmed.length() > 249) {
+              throw new ConfigException(name, value,
+                  "Topic prefix length must not exceed max topic name length, 249 chars");
+            }
+
+            if (INVALID_CHARS.matcher(trimmed).find()) {
+              throw new ConfigException(name, value,
+                  "Topic prefix must not contain any character other than "
+                      + "ASCII alphanumerics, '.', '_' and '-'.");
+            }
+          }
+        },
         Importance.HIGH,
         TOPIC_PREFIX_DOC,
         CONNECTOR_GROUP,
@@ -528,7 +621,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public static final ConfigDef CONFIG_DEF = baseConfigDef();
 
-  public JdbcSourceConnectorConfig(Map<String, String> props) {
+  public JdbcSourceConnectorConfig(Map<String, ?> props) {
     super(CONFIG_DEF, props);
     String mode = getString(JdbcSourceConnectorConfig.MODE_CONFIG);
     if (mode.equals(JdbcSourceConnectorConfig.MODE_UNSPECIFIED)) {
@@ -536,23 +629,29 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     }
   }
 
+  public String topicPrefix() {
+    return getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG).trim();
+  }
+
   private static class TableRecommender implements Recommender {
 
+    @SuppressWarnings("unchecked")
     @Override
     public List<Object> validValues(String name, Map<String, Object> config) {
       String dbUrl = (String) config.get(CONNECTION_URL_CONFIG);
-      String dbUser = (String) config.get(CONNECTION_USER_CONFIG);
-      Password dbPassword = (Password) config.get(CONNECTION_PASSWORD_CONFIG);
-      String schemaPattern = (String) config.get(JdbcSourceTaskConfig.SCHEMA_PATTERN_CONFIG);
-      Set<String> tableTypes = new HashSet<>(
-          (List<String>) config.get(JdbcSourceTaskConfig.TABLE_TYPE_CONFIG)
-      );
       if (dbUrl == null) {
         throw new ConfigException(CONNECTION_URL_CONFIG + " cannot be null.");
       }
-      String dbPasswordStr = dbPassword == null ? null : dbPassword.value();
-      try (Connection db = DriverManager.getConnection(dbUrl, dbUser, dbPasswordStr)) {
-        return new LinkedList<Object>(JdbcUtils.getTables(db, schemaPattern, tableTypes));
+      // Create the dialect to get the tables ...
+      AbstractConfig jdbcConfig = new AbstractConfig(CONFIG_DEF, config);
+      DatabaseDialect dialect = DatabaseDialects.findBestFor(dbUrl, jdbcConfig);
+      try (Connection db = dialect.getConnection()) {
+        List<Object> result = new LinkedList<>();
+        for (TableId id : dialect.tableIds(db)) {
+          // Just add the unqualified table name
+          result.add(id.tableName());
+        }
+        return result;
       } catch (SQLException e) {
         throw new ConnectException("Couldn't open connection to " + dbUrl, e);
       }
@@ -689,59 +788,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     }
   }
 
-  //Porting from JdbcSinkConfig and extending to implement Recommender interface too.
-  //TODO: Should factor out to common class.
-  private static class EnumRecommender implements ConfigDef.Validator, ConfigDef.Recommender {
-    private final List<String> canonicalValues;
-    private final Set<String> validValues;
-
-    private EnumRecommender(List<String> canonicalValues, Set<String> validValues) {
-      this.canonicalValues = canonicalValues;
-      this.validValues = validValues;
-    }
-
-    public static <E> EnumRecommender in(E... enumerators) {
-      final List<String> canonicalValues = new ArrayList<>(enumerators.length);
-      final Set<String> validValues = new HashSet<>(enumerators.length * 2);
-      for (E e : enumerators) {
-        canonicalValues.add(e.toString().toLowerCase());
-        validValues.add(e.toString().toUpperCase(Locale.ROOT));
-        validValues.add(e.toString().toLowerCase(Locale.ROOT));
-      }
-      return new EnumRecommender(canonicalValues, validValues);
-    }
-
-    @Override
-    public void ensureValid(String key, Object value) {
-      // calling toString on itself because IDE complains if the Object is passed.
-      if (value != null && !validValues.contains(value.toString())) {
-        throw new ConfigException(key, value, "Invalid enumerator");
-      }
-    }
-
-    @Override
-    public String toString() {
-      return canonicalValues.toString();
-    }
-
-    @Override
-    public List<Object> validValues(String name, Map<String, Object> connectorConfigs) {
-      return new ArrayList<Object>(canonicalValues);
-    }
-
-    @Override
-    public boolean visible(String name, Map<String, Object> connectorConfigs) {
-      return true;
-    }
-  }
-
   protected JdbcSourceConnectorConfig(ConfigDef subclassConfigDef, Map<String, String> props) {
     super(subclassConfigDef, props);
   }
 
+  public NumericMapping numericMapping() {
+    return NumericMapping.get(this);
+  }
+
   public TimeZone timeZone() {
     String dbTimeZone = getString(JdbcSourceTaskConfig.DB_TIMEZONE_CONFIG);
-    return TimeZone.getTimeZone(dbTimeZone);
+    return TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
   }
 
   public static void main(String[] args) {

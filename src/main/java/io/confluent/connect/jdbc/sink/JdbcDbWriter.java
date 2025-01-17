@@ -25,47 +25,51 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
-import io.confluent.connect.jdbc.sink.dialect.DbDialect;
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
+import io.confluent.connect.jdbc.util.TableId;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class JdbcDbWriter {
+  private static final Logger log = LoggerFactory.getLogger(JdbcDbWriter.class);
 
   private final JdbcSinkConfig config;
-  private final DbDialect dbDialect;
+  private final DatabaseDialect dbDialect;
   private final DbStructure dbStructure;
   final CachedConnectionProvider cachedConnectionProvider;
 
-  JdbcDbWriter(final JdbcSinkConfig config, DbDialect dbDialect, DbStructure dbStructure) {
+  JdbcDbWriter(final JdbcSinkConfig config, DatabaseDialect dbDialect, DbStructure dbStructure) {
     this.config = config;
     this.dbDialect = dbDialect;
     this.dbStructure = dbStructure;
 
-    this.cachedConnectionProvider = new CachedConnectionProvider(
-        config.connectionUrl,
-        config.connectionUser,
-        config.connectionPassword
-    ) {
+    this.cachedConnectionProvider = new CachedConnectionProvider(this.dbDialect) {
       @Override
       protected void onConnect(Connection connection) throws SQLException {
+        log.info("JdbcDbWriter Connected");
         connection.setAutoCommit(false);
       }
     };
   }
 
   void write(final Collection<SinkRecord> records) throws SQLException {
-    final Connection connection = cachedConnectionProvider.getValidConnection();
+    final Connection connection = cachedConnectionProvider.getConnection();
 
-    final Map<String, BufferedRecords> bufferByTable = new HashMap<>();
+    final Map<TableId, BufferedRecords> bufferByTable = new HashMap<>();
     for (SinkRecord record : records) {
-      final String table = destinationTable(record.topic());
-      BufferedRecords buffer = bufferByTable.get(table);
+      final TableId tableId = destinationTable(record.topic());
+      BufferedRecords buffer = bufferByTable.get(tableId);
       if (buffer == null) {
-        buffer = new BufferedRecords(config, table, dbDialect, dbStructure, connection);
-        bufferByTable.put(table, buffer);
+        buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
+        bufferByTable.put(tableId, buffer);
       }
       buffer.add(record);
     }
-    for (BufferedRecords buffer : bufferByTable.values()) {
+    for (Map.Entry<TableId, BufferedRecords> entry : bufferByTable.entrySet()) {
+      TableId tableId = entry.getKey();
+      BufferedRecords buffer = entry.getValue();
+      log.debug("Flushing records in JDBC Writer for table ID: {}", tableId);
       buffer.flush();
       buffer.close();
     }
@@ -73,10 +77,10 @@ public class JdbcDbWriter {
   }
 
   void closeQuietly() {
-    cachedConnectionProvider.closeQuietly();
+    cachedConnectionProvider.close();
   }
 
-  String destinationTable(String topic) {
+  TableId destinationTable(String topic) {
     final String tableName = config.tableNameFormat.replace("${topic}", topic);
     if (tableName.isEmpty()) {
       throw new ConnectException(String.format(
@@ -85,6 +89,6 @@ public class JdbcDbWriter {
           config.tableNameFormat
       ));
     }
-    return tableName;
+    return dbDialect.parseTableIdentifier(tableName);
   }
 }

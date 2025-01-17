@@ -29,30 +29,35 @@ import java.sql.SQLException;
 import java.util.Collection;
 import java.util.Map;
 
-import io.confluent.connect.jdbc.sink.dialect.DbDialect;
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.util.Version;
 
 public class JdbcSinkTask extends SinkTask {
   private static final Logger log = LoggerFactory.getLogger(JdbcSinkTask.class);
 
+  DatabaseDialect dialect;
   JdbcSinkConfig config;
   JdbcDbWriter writer;
   int remainingRetries;
 
   @Override
   public void start(final Map<String, String> props) {
-    log.info("Starting task");
+    log.info("Starting JDBC Sink task");
     config = new JdbcSinkConfig(props);
     initWriter();
     remainingRetries = config.maxRetries;
   }
 
   void initWriter() {
-    final DbDialect dbDialect = DbDialect.fromConnectionString(config.connectionUrl)
-        .withTimeZone(config.timeZone);
-    final DbStructure dbStructure = new DbStructure(dbDialect);
-    log.info("Initializing writer using SQL dialect: {}", dbDialect.getClass().getSimpleName());
-    writer = new JdbcDbWriter(config, dbDialect, dbStructure);
+    if (config.dialectName != null && !config.dialectName.trim().isEmpty()) {
+      dialect = DatabaseDialects.create(config.dialectName, config);
+    } else {
+      dialect = DatabaseDialects.findBestFor(config.connectionUrl, config);
+    }
+    final DbStructure dbStructure = new DbStructure(dialect);
+    log.info("Initializing writer using SQL dialect: {}", dialect.getClass().getSimpleName());
+    writer = new JdbcDbWriter(config, dialect, dbStructure);
   }
 
   @Override
@@ -62,7 +67,7 @@ public class JdbcSinkTask extends SinkTask {
     }
     final SinkRecord first = records.iterator().next();
     final int recordsCount = records.size();
-    log.trace(
+    log.debug(
         "Received {} records. First record kafka coordinates:({}-{}-{}). Writing them to the "
         + "database...",
         recordsCount, first.topic(), first.kafkaPartition(), first.kafkaOffset()
@@ -76,18 +81,31 @@ public class JdbcSinkTask extends SinkTask {
           remainingRetries,
           sqle
       );
-      String sqleAllMessages = "";
+      String sqleAllMessages = "Exception chain:" + System.lineSeparator();
+      int totalExceptions = 0;
       for (Throwable e : sqle) {
         sqleAllMessages += e + System.lineSeparator();
+        totalExceptions++;
       }
+      SQLException sqlAllMessagesException = new SQLException(sqleAllMessages);
+      sqlAllMessagesException.setNextException(sqle);
       if (remainingRetries == 0) {
-        throw new ConnectException(new SQLException(sqleAllMessages));
+        log.error(
+            "Failing task after exhausting retries; "
+              + "encountered {} exceptions on last write attempt. "
+              + "For complete details on each exception, please enable DEBUG logging.",
+            totalExceptions);
+        int exceptionCount = 1;
+        for (Throwable e : sqle) {
+          log.debug("Exception {}:", exceptionCount++, e);
+        }
+        throw new ConnectException(sqlAllMessagesException);
       } else {
         writer.closeQuietly();
         initWriter();
         remainingRetries--;
         context.timeout(config.retryBackoffMs);
-        throw new RetriableException(new SQLException(sqleAllMessages));
+        throw new RetriableException(sqlAllMessagesException);
       }
     }
     remainingRetries = config.maxRetries;
@@ -100,7 +118,19 @@ public class JdbcSinkTask extends SinkTask {
 
   public void stop() {
     log.info("Stopping task");
-    writer.closeQuietly();
+    try {
+      writer.closeQuietly();
+    } finally {
+      try {
+        if (dialect != null) {
+          dialect.close();
+        }
+      } catch (Throwable t) {
+        log.warn("Error while closing the {} dialect: ", dialect.name(), t);
+      } finally {
+        dialect = null;
+      }
+    }
   }
 
   @Override

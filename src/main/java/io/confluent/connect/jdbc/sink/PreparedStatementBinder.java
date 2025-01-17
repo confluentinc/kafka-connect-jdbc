@@ -16,51 +16,71 @@
 
 package io.confluent.connect.jdbc.sink;
 
-import org.apache.kafka.connect.data.Date;
-import org.apache.kafka.connect.data.Decimal;
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.TableDefinition;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
-import org.apache.kafka.connect.data.Time;
-import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
 
-import java.math.BigDecimal;
-import java.nio.ByteBuffer;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.util.TimeZone;
 
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.dialect.DatabaseDialect.StatementBinder;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
-import io.confluent.connect.jdbc.util.DateTimeUtils;
 
-public class PreparedStatementBinder {
+public class PreparedStatementBinder implements StatementBinder {
 
   private final JdbcSinkConfig.PrimaryKeyMode pkMode;
   private final PreparedStatement statement;
   private final SchemaPair schemaPair;
   private final FieldsMetadata fieldsMetadata;
   private final JdbcSinkConfig.InsertMode insertMode;
-  private final TimeZone timeZone;
+  private final DatabaseDialect dialect;
+  private final TableDefinition tabDef;
 
+  @Deprecated
   public PreparedStatementBinder(
+      DatabaseDialect dialect,
       PreparedStatement statement,
       JdbcSinkConfig.PrimaryKeyMode pkMode,
       SchemaPair schemaPair,
       FieldsMetadata fieldsMetadata,
-      JdbcSinkConfig.InsertMode insertMode,
-      TimeZone timeZone
+      JdbcSinkConfig.InsertMode insertMode
   ) {
+    this(
+        dialect,
+        statement,
+        pkMode,
+        schemaPair,
+        fieldsMetadata,
+        null,
+        insertMode
+    );
+  }
+
+  public PreparedStatementBinder(
+      DatabaseDialect dialect,
+      PreparedStatement statement,
+      JdbcSinkConfig.PrimaryKeyMode pkMode,
+      SchemaPair schemaPair,
+      FieldsMetadata fieldsMetadata,
+      TableDefinition tabDef,
+      JdbcSinkConfig.InsertMode insertMode
+  ) {
+    this.dialect = dialect;
     this.pkMode = pkMode;
     this.statement = statement;
     this.schemaPair = schemaPair;
     this.fieldsMetadata = fieldsMetadata;
     this.insertMode = insertMode;
-    this.timeZone = timeZone;
+    this.tabDef = tabDef;
   }
 
+  @Override
   public void bindRecord(SinkRecord record) throws SQLException {
     final Struct valueStruct = (Struct) record.value();
 
@@ -88,7 +108,7 @@ public class PreparedStatementBinder {
     statement.addBatch();
   }
 
-  private int bindKeyFields(SinkRecord record, int index) throws SQLException {
+  protected int bindKeyFields(SinkRecord record, int index) throws SQLException {
     switch (pkMode) {
       case NONE:
         if (!fieldsMetadata.keyFieldNames.isEmpty()) {
@@ -98,20 +118,24 @@ public class PreparedStatementBinder {
 
       case KAFKA: {
         assert fieldsMetadata.keyFieldNames.size() == 3;
-        bindField(index++, Schema.STRING_SCHEMA, record.topic());
-        bindField(index++, Schema.INT32_SCHEMA, record.kafkaPartition());
-        bindField(index++, Schema.INT64_SCHEMA, record.kafkaOffset());
+        bindField(index++, Schema.STRING_SCHEMA, record.topic(),
+            JdbcSinkConfig.DEFAULT_KAFKA_PK_NAMES.get(0));
+        bindField(index++, Schema.INT32_SCHEMA, record.kafkaPartition(),
+            JdbcSinkConfig.DEFAULT_KAFKA_PK_NAMES.get(1));
+        bindField(index++, Schema.INT64_SCHEMA, record.kafkaOffset(),
+            JdbcSinkConfig.DEFAULT_KAFKA_PK_NAMES.get(2));
       }
       break;
 
       case RECORD_KEY: {
         if (schemaPair.keySchema.type().isPrimitive()) {
           assert fieldsMetadata.keyFieldNames.size() == 1;
-          bindField(index++, schemaPair.keySchema, record.key());
+          bindField(index++, schemaPair.keySchema, record.key(),
+              fieldsMetadata.keyFieldNames.iterator().next());
         } else {
           for (String fieldName : fieldsMetadata.keyFieldNames) {
             final Field field = schemaPair.keySchema.field(fieldName);
-            bindField(index++, field.schema(), ((Struct) record.key()).get(field));
+            bindField(index++, field.schema(), ((Struct) record.key()).get(field), fieldName);
           }
         }
       }
@@ -120,7 +144,7 @@ public class PreparedStatementBinder {
       case RECORD_VALUE: {
         for (String fieldName : fieldsMetadata.keyFieldNames) {
           final Field field = schemaPair.valueSchema.field(fieldName);
-          bindField(index++, field.schema(), ((Struct) record.value()).get(field));
+          bindField(index++, field.schema(), ((Struct) record.value()).get(field), fieldName);
         }
       }
       break;
@@ -131,113 +155,27 @@ public class PreparedStatementBinder {
     return index;
   }
 
-  private int bindNonKeyFields(
+  protected int bindNonKeyFields(
       SinkRecord record,
       Struct valueStruct,
       int index
   ) throws SQLException {
     for (final String fieldName : fieldsMetadata.nonKeyFieldNames) {
       final Field field = record.valueSchema().field(fieldName);
-      bindField(index++, field.schema(), valueStruct.get(field));
+      bindField(index++, field.schema(), valueStruct.get(field), fieldName);
     }
     return index;
   }
 
-  void bindField(int index, Schema schema, Object value) throws SQLException {
-    bindField(statement, index, schema, value);
+  @Deprecated
+  protected void bindField(int index, Schema schema, Object value)
+      throws SQLException {
+    dialect.bindField(statement, index, schema, value);
   }
 
-  void bindField(
-      PreparedStatement statement,
-      int index,
-      Schema schema,
-      Object value
-  ) throws SQLException {
-    if (value == null) {
-      statement.setObject(index, null);
-    } else {
-      final boolean bound = maybeBindLogical(statement, index, schema, value);
-      if (!bound) {
-        switch (schema.type()) {
-          case INT8:
-            statement.setByte(index, (Byte) value);
-            break;
-          case INT16:
-            statement.setShort(index, (Short) value);
-            break;
-          case INT32:
-            statement.setInt(index, (Integer) value);
-            break;
-          case INT64:
-            statement.setLong(index, (Long) value);
-            break;
-          case FLOAT32:
-            statement.setFloat(index, (Float) value);
-            break;
-          case FLOAT64:
-            statement.setDouble(index, (Double) value);
-            break;
-          case BOOLEAN:
-            statement.setBoolean(index, (Boolean) value);
-            break;
-          case STRING:
-            statement.setString(index, (String) value);
-            break;
-          case BYTES:
-            final byte[] bytes;
-            if (value instanceof ByteBuffer) {
-              final ByteBuffer buffer = ((ByteBuffer) value).slice();
-              bytes = new byte[buffer.remaining()];
-              buffer.get(bytes);
-            } else {
-              bytes = (byte[]) value;
-            }
-            statement.setBytes(index, bytes);
-            break;
-          default:
-            throw new ConnectException("Unsupported source data type: " + schema.type());
-        }
-      }
-    }
+  protected void bindField(int index, Schema schema, Object value, String fieldName)
+      throws SQLException {
+    ColumnDefinition colDef = tabDef == null ? null : tabDef.definitionForColumn(fieldName);
+    dialect.bindField(statement, index, schema, value, colDef);
   }
-
-  boolean maybeBindLogical(
-      PreparedStatement statement,
-      int index,
-      Schema schema,
-      Object value
-  ) throws SQLException {
-    if (schema.name() != null) {
-      switch (schema.name()) {
-        case Date.LOGICAL_NAME:
-          statement.setDate(
-              index,
-              new java.sql.Date(((java.util.Date) value).getTime()),
-              DateTimeUtils.getTimeZoneCalendar(timeZone)
-          );
-          return true;
-        case Decimal.LOGICAL_NAME:
-          statement.setBigDecimal(index, (BigDecimal) value);
-          return true;
-        case Time.LOGICAL_NAME:
-          statement.setTime(
-              index,
-              new java.sql.Time(((java.util.Date) value).getTime()),
-              DateTimeUtils.getTimeZoneCalendar(timeZone)
-          );
-          return true;
-        case Timestamp.LOGICAL_NAME:
-          statement.setTimestamp(
-              index,
-              new java.sql.Timestamp(((java.util.Date) value).getTime()),
-              DateTimeUtils.getTimeZoneCalendar(timeZone)
-          );
-          return true;
-        default:
-          return false;
-      }
-    }
-    return false;
-  }
-
 }

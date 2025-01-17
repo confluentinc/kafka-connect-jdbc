@@ -59,8 +59,8 @@
         <derby.version>10.12.1.1</derby.version>
         <commons-io.version>2.4</commons-io.version>
         <kafka.connect.maven.plugin.version>0.11.1</kafka.connect.maven.plugin.version>
-        <sqlite-jdbc.version>3.25.2</sqlite-jdbc.version>
-        <postgresql.version>42.2.10.jre7</postgresql.version>
+        <sqlite-jdbc.version>3.41.2.2</sqlite-jdbc.version>
+        <postgresql.version>42.4.4</postgresql.version>
         <licenses.name>Apache License 2.0</licenses.name>
         <licenses.version>${project.version}</licenses.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

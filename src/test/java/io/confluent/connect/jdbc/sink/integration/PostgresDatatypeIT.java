@@ -287,6 +287,59 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     }
   }
 
+  @Test
+  public void testTableCreatedAfterManualDeletion() throws Exception {
+    props.put(JdbcSinkConfig.AUTO_CREATE, "true");
+    props.put(DLQ_TOPIC_NAME_CONFIG, DLQ_TOPIC_NAME);
+    props.put(DLQ_TOPIC_REPLICATION_FACTOR_CONFIG, "1");
+    props.put(MAX_RETRIES, "0");
+    connect.configureConnector("jdbc-sink-connector", props);
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+
+    final Schema schema = SchemaBuilder.struct().name("com.example.Person")
+            .field("firstname", Schema.STRING_SCHEMA)
+            .field("lastname", Schema.STRING_SCHEMA)
+            .build();
+    final Struct firstStruct = new Struct(schema)
+            .put("firstname", "Christina")
+            .put("lastname", "Brams");
+    final Struct secondStruct = new Struct(schema)
+            .put("firstname", "Jerry")
+            .put("lastname", "Mcguire");
+
+    produceRecord(schema, firstStruct);
+
+    waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 1, 1,
+            TimeUnit.MINUTES.toMillis(2));
+
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
+      try (Statement s = c.createStatement()) {
+        try (ResultSet rs = s.executeQuery("SELECT * FROM " + tableName)) {
+          assertTrue(rs.next());
+          assertEquals(firstStruct.getString("firstname"), rs.getString("firstname"));
+          assertEquals(firstStruct.getString("lastname"), rs.getString("lastname"));
+        }
+      }
+    }
+
+    deleteTable();
+
+    produceRecord(schema, secondStruct);
+
+    waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 2, 1,
+            TimeUnit.MINUTES.toMillis(2));
+
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
+      try (Statement s = c.createStatement()) {
+        try (ResultSet rs = s.executeQuery("SELECT * FROM " + tableName)) {
+          assertTrue(rs.next());
+          assertEquals(secondStruct.getString("firstname"), rs.getString("firstname"));
+          assertEquals(secondStruct.getString("lastname"), rs.getString("lastname"));
+        }
+      }
+    }
+  }
+
   private void assertJDBCArray(ResultSet rs, String fieldName, Struct struct) throws SQLException {
     Array array = rs.getArray(fieldName);
     assertNotNull(array);
@@ -338,6 +391,17 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
         LOG.info("Executing statement: {}", sql);
         s.execute(sql);
         c.commit();
+      }
+    }
+  }
+
+  private void deleteTable() throws SQLException {
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
+      try (Statement s = c.createStatement()) {
+        String sql = String.format("DROP TABLE %s", tableName);
+        LOG.info("Executing statement: {}", sql);
+        s.execute("DROP TABLE " + tableName);
+        LOG.info("Dropped table");
       }
     }
   }

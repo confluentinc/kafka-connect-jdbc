@@ -87,6 +87,13 @@ public class JdbcSinkConfigTest {
   }
 
   @Test
+  public void shouldCreateConfigWithPartitionedTableOnly() {
+    props.put("table.types", "partitioned table");
+    createConfig();
+    assertTableTypes(TableType.PARTITIONED_TABLE);
+  }
+
+  @Test
   public void shouldCreateConfigWithViewAndTable() {
     props.put("table.types", "view,table");
     createConfig();

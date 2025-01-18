@@ -168,10 +168,13 @@ public class DatabaseDialects {
   }
 
   static JdbcUrlInfo extractJdbcUrlInfo(final String url) {
+    LOG.info("Validating JDBC URL.");
     Matcher matcher = PROTOCOL_PATTERN.matcher(url);
     if (matcher.matches()) {
+      LOG.info("Validated JDBC URL.");
       return new JdbcUrlDetails(matcher.group(1), matcher.group(2), url);
     }
+    LOG.error("Not a valid JDBC URL: " + url);
     throw new ConnectException("Not a valid JDBC URL: " + url);
   }
 

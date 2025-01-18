@@ -26,7 +26,7 @@
     <groupId>io.confluent</groupId>
     <artifactId>kafka-connect-jdbc</artifactId>
     <packaging>jar</packaging>
-    <version>10.5.10-SNAPSHOT</version>
+    <version>10.6.6-SNAPSHOT</version>
     <name>kafka-connect-jdbc</name>
     <organization>
         <name>Confluent, Inc.</name>
@@ -49,7 +49,7 @@
         <connection>scm:git:git://github.com/confluentinc/kafka-connect-jdbc.git</connection>
         <developerConnection>scm:git:git@github.com:confluentinc/kafka-connect-jdbc.git</developerConnection>
         <url>https://github.com/confluentinc/kafka-connect-jdbc</url>
-        <tag>10.5.x</tag>
+        <tag>HEAD</tag>
     </scm>
 
     <properties>
@@ -67,7 +67,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.package.home>target/${project.artifactId}-${project.version}-package</project.package.home>
         <maven.release.plugin.version>2.5.3</maven.release.plugin.version>
-        <testcontainers.version>1.16.2</testcontainers.version>
+        <testcontainers.version>1.17.3</testcontainers.version>
 	<jacoco.plugin.version>0.8.11</jacoco.plugin.version>
         <instruction.coverage.threshold>0.78</instruction.coverage.threshold>
         <branch.coverage.threshold>0.67</branch.coverage.threshold>
@@ -258,6 +258,12 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>oracle-xe</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
             <version>${testcontainers.version}</version>
             <scope>test</scope>
         </dependency>

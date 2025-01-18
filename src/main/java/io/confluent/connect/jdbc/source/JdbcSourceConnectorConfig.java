@@ -15,8 +15,6 @@
 
 package io.confluent.connect.jdbc.source;
 
-import java.sql.Connection;
-import java.sql.SQLException;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -25,15 +23,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TimeZone;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import io.confluent.connect.jdbc.dialect.DatabaseDialect;
-import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
 import io.confluent.connect.jdbc.util.EnumRecommender;
 import io.confluent.connect.jdbc.util.QuoteMethod;
-import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.TimeZoneValidator;
 
 import java.util.regex.Pattern;
@@ -46,7 +40,6 @@ import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.Time;
-import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,7 +48,9 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final Logger LOG = LoggerFactory.getLogger(JdbcSourceConnectorConfig.class);
   private static Pattern INVALID_CHARS = Pattern.compile("[^a-zA-Z0-9._-]");
 
-  public static final String CONNECTION_URL_CONFIG = "connection.url";
+  public static final String CONNECTION_PREFIX = "connection.";
+
+  public static final String CONNECTION_URL_CONFIG = CONNECTION_PREFIX + "url";
   private static final String CONNECTION_URL_DOC =
       "JDBC connection URL.\n"
           + "For example: ``jdbc:oracle:thin:@localhost:1521:orclpdb1``, "
@@ -63,26 +58,27 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
           + "``jdbc:sqlserver://localhost;instance=SQLEXPRESS;"
           + "databaseName=db_name``";
   private static final String CONNECTION_URL_DISPLAY = "JDBC URL";
+  private static final String CONNECTION_URL_DEFAULT = "";
 
-  public static final String CONNECTION_USER_CONFIG = "connection.user";
+  public static final String CONNECTION_USER_CONFIG = CONNECTION_PREFIX + "user";
   private static final String CONNECTION_USER_DOC = "JDBC connection user.";
   private static final String CONNECTION_USER_DISPLAY = "JDBC User";
 
-  public static final String CONNECTION_PASSWORD_CONFIG = "connection.password";
+  public static final String CONNECTION_PASSWORD_CONFIG = CONNECTION_PREFIX + "password";
   private static final String CONNECTION_PASSWORD_DOC = "JDBC connection password.";
   private static final String CONNECTION_PASSWORD_DISPLAY = "JDBC Password";
 
-  public static final String CONNECTION_ATTEMPTS_CONFIG = "connection.attempts";
-  private static final String CONNECTION_ATTEMPTS_DOC
+  public static final String CONNECTION_ATTEMPTS_CONFIG = CONNECTION_PREFIX + "attempts";
+  public static final String CONNECTION_ATTEMPTS_DOC
       = "Maximum number of attempts to retrieve a valid JDBC connection. "
           + "Must be a positive integer.";
-  private static final String CONNECTION_ATTEMPTS_DISPLAY = "JDBC connection attempts";
+  public static final String CONNECTION_ATTEMPTS_DISPLAY = "JDBC connection attempts";
   public static final int CONNECTION_ATTEMPTS_DEFAULT = 3;
 
-  public static final String CONNECTION_BACKOFF_CONFIG = "connection.backoff.ms";
-  private static final String CONNECTION_BACKOFF_DOC
+  public static final String CONNECTION_BACKOFF_CONFIG = CONNECTION_PREFIX + "backoff.ms";
+  public static final String CONNECTION_BACKOFF_DOC
       = "Backoff time in milliseconds between connection attempts.";
-  private static final String CONNECTION_BACKOFF_DISPLAY
+  public static final String CONNECTION_BACKOFF_DISPLAY
       = "JDBC connection backoff in milliseconds";
   public static final long CONNECTION_BACKOFF_DEFAULT = 10000L;
 
@@ -296,13 +292,6 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String MODE_GROUP = "Mode";
   public static final String CONNECTOR_GROUP = "Connector";
 
-  // We want the table recommender to only cache values for a short period of time so that the
-  // blacklist and whitelist config properties can use a single query.
-  private static final Recommender TABLE_RECOMMENDER = new CachingRecommender(
-      new TableRecommender(),
-      Time.SYSTEM,
-      TimeUnit.SECONDS.toMillis(5)
-  );
   private static final Recommender MODE_DEPENDENTS_RECOMMENDER =  new ModeDependentsRecommender();
 
 
@@ -335,6 +324,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     config.define(
         CONNECTION_URL_CONFIG,
         Type.STRING,
+        CONNECTION_URL_DEFAULT,
         Importance.HIGH,
         CONNECTION_URL_DOC,
         DATABASE_GROUP,
@@ -392,8 +382,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         DATABASE_GROUP,
         ++orderInGroup,
         Width.LONG,
-        TABLE_WHITELIST_DISPLAY,
-        TABLE_RECOMMENDER
+        TABLE_WHITELIST_DISPLAY
     ).define(
         TABLE_BLACKLIST_CONFIG,
         Type.LIST,
@@ -403,8 +392,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         DATABASE_GROUP,
         ++orderInGroup,
         Width.LONG,
-        TABLE_BLACKLIST_DISPLAY,
-        TABLE_RECOMMENDER
+        TABLE_BLACKLIST_DISPLAY
     ).define(
         CATALOG_PATTERN_CONFIG,
         Type.STRING,
@@ -667,44 +655,10 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public JdbcSourceConnectorConfig(Map<String, ?> props) {
     super(CONFIG_DEF, props);
-    String mode = getString(JdbcSourceConnectorConfig.MODE_CONFIG);
-    if (mode.equals(JdbcSourceConnectorConfig.MODE_UNSPECIFIED)) {
-      throw new ConfigException("Query mode must be specified");
-    }
   }
 
   public String topicPrefix() {
     return getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG).trim();
-  }
-
-  private static class TableRecommender implements Recommender {
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public List<Object> validValues(String name, Map<String, Object> config) {
-      String dbUrl = (String) config.get(CONNECTION_URL_CONFIG);
-      if (dbUrl == null) {
-        throw new ConfigException(CONNECTION_URL_CONFIG + " cannot be null.");
-      }
-      // Create the dialect to get the tables ...
-      AbstractConfig jdbcConfig = new AbstractConfig(CONFIG_DEF, config);
-      DatabaseDialect dialect = DatabaseDialects.findBestFor(dbUrl, jdbcConfig);
-      try (Connection db = dialect.getConnection()) {
-        List<Object> result = new LinkedList<>();
-        for (TableId id : dialect.tableIds(db)) {
-          // Just add the unqualified table name
-          result.add(id.tableName());
-        }
-        return result;
-      } catch (SQLException e) {
-        throw new ConnectException("Couldn't open connection to " + dbUrl, e);
-      }
-    }
-
-    @Override
-    public boolean visible(String name, Map<String, Object> config) {
-      return true;
-    }
   }
 
   /**

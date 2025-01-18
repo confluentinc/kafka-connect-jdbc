@@ -98,6 +98,8 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
       resultSet = executeQuery();
       String schemaName = tableId != null ? tableId.tableName() : null; // backwards compatible
       schemaMapping = SchemaMapping.create(schemaName, resultSet.getMetaData(), dialect);
+    } else {
+      log.trace("Current ResultSet {} isn't null. Continuing to seek.", resultSet.hashCode());
     }
   }
 
@@ -112,19 +114,19 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   public void reset(long now, boolean resetOffset) {
     closeResultSetQuietly();
     closeStatementQuietly();
-    releaseLocksQuietly();
+    commitQuietly();
     // TODO: Can we cache this and quickly check that it's identical for the next query
     //     instead of constructing from scratch since it's almost always the same
     schemaMapping = null;
     lastUpdate = now;
   }
 
-  private void releaseLocksQuietly() {
+  private void commitQuietly() {
     if (db != null) {
       try {
         db.commit();
       } catch (SQLException e) {
-        log.warn("Error while committing read transaction, database locks may still be held", e);
+        log.warn("Error while committing read transaction", e);
       }
     }
     db = null;

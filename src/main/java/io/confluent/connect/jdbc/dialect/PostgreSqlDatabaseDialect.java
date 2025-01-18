@@ -23,8 +23,10 @@ import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
+import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 import org.apache.kafka.common.config.AbstractConfig;
+import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -41,7 +43,10 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * A {@link DatabaseDialect} for PostgreSQL.
@@ -69,6 +74,18 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
   static final String JSON_TYPE_NAME = "json";
   static final String JSONB_TYPE_NAME = "jsonb";
+  static final String UUID_TYPE_NAME = "uuid";
+
+  /**
+   * Define the PG datatypes that require casting upon insert/update statements.
+   */
+  private static final Set<String> CAST_TYPES = Collections.unmodifiableSet(
+      Utils.mkSet(
+          JSON_TYPE_NAME,
+          JSONB_TYPE_NAME,
+          UUID_TYPE_NAME
+      )
+  );
 
   /**
    * Create a new dialect instance with the given connector configuration.
@@ -200,6 +217,18 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           );
           return fieldName;
         }
+
+        if (UUID.class.getName().equals(columnDefn.classNameForType())) {
+          builder.field(
+                  fieldName,
+                  columnDefn.isOptional()
+                          ?
+                          Schema.OPTIONAL_STRING_SCHEMA :
+                          Schema.STRING_SCHEMA
+          );
+          return fieldName;
+        }
+
         break;
       }
       default:
@@ -235,6 +264,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       }
       case Types.OTHER: {
         if (isJsonType(columnDefn)) {
+          return rs -> rs.getString(col);
+        }
+
+        if (UUID.class.getName().equals(columnDefn.classNameForType())) {
           return rs -> rs.getString(col);
         }
         break;
@@ -293,10 +326,60 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   @Override
+  public String buildInsertStatement(
+      TableId table,
+      Collection<ColumnId> keyColumns,
+      Collection<ColumnId> nonKeyColumns,
+      TableDefinition definition
+  ) {
+    ExpressionBuilder builder = expressionBuilder();
+    builder.append("INSERT INTO ");
+    builder.append(table);
+    builder.append(" (");
+    builder.appendList()
+           .delimitedBy(",")
+           .transformedBy(ExpressionBuilder.columnNames())
+           .of(keyColumns, nonKeyColumns);
+    builder.append(") VALUES (");
+    builder.appendList()
+           .delimitedBy(",")
+           .transformedBy(this.columnValueVariables(definition))
+           .of(keyColumns, nonKeyColumns);
+    builder.append(")");
+    return builder.toString();
+  }
+
+  @Override
+  public String buildUpdateStatement(
+      TableId table,
+      Collection<ColumnId> keyColumns,
+      Collection<ColumnId> nonKeyColumns,
+      TableDefinition definition
+  ) {
+    ExpressionBuilder builder = expressionBuilder();
+    builder.append("UPDATE ");
+    builder.append(table);
+    builder.append(" SET ");
+    builder.appendList()
+           .delimitedBy(", ")
+           .transformedBy(this.columnNamesWithValueVariables(definition))
+           .of(nonKeyColumns);
+    if (!keyColumns.isEmpty()) {
+      builder.append(" WHERE ");
+      builder.appendList()
+             .delimitedBy(" AND ")
+             .transformedBy(ExpressionBuilder.columnNamesWith(" = ?"))
+             .of(keyColumns);
+    }
+    return builder.toString();
+  }
+
+  @Override
   public String buildUpsertQueryStatement(
       TableId table,
       Collection<ColumnId> keyColumns,
-      Collection<ColumnId> nonKeyColumns
+      Collection<ColumnId> nonKeyColumns,
+      TableDefinition definition
   ) {
     final Transform<ColumnId> transform = (builder, col) -> {
       builder.appendColumnName(col.name())
@@ -313,7 +396,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
            .transformedBy(ExpressionBuilder.columnNames())
            .of(keyColumns, nonKeyColumns);
     builder.append(") VALUES (");
-    builder.appendMultiple(",", "?", keyColumns.size() + nonKeyColumns.size());
+    builder.appendList()
+           .delimitedBy(",")
+           .transformedBy(this.columnValueVariables(definition))
+           .of(keyColumns, nonKeyColumns);
     builder.append(") ON CONFLICT (");
     builder.appendList()
            .delimitedBy(",")
@@ -344,6 +430,65 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     } else {
       super.formatColumnValue(builder, schemaName, schemaParameters, type, value);
     }
+  }
+
+  /**
+   * Return the transform that produces an assignment expression each with the name of one of the
+   * columns and the prepared statement variable. PostgreSQL may require the variable to have a
+   * type suffix, such as {@code ?::uuid}.
+   *
+   * @param defn the table definition; may be null if unknown
+   * @return the transform that produces the assignment expression for use within a prepared
+   *         statement; never null
+   */
+  protected Transform<ColumnId> columnNamesWithValueVariables(TableDefinition defn) {
+    return (builder, columnId) -> {
+      builder.appendColumnName(columnId.name());
+      builder.append(" = ?");
+      builder.append(valueTypeCast(defn, columnId));
+    };
+  }
+
+  /**
+   * Return the transform that produces a prepared statement variable for each of the columns.
+   * PostgreSQL may require the variable to have a type suffix, such as {@code ?::uuid}.
+   *
+   * @param defn the table definition; may be null if unknown
+   * @return the transform that produces the variable expression for each column; never null
+   */
+  protected Transform<ColumnId> columnValueVariables(TableDefinition defn) {
+    return (builder, columnId) -> {
+      builder.append("?");
+      builder.append(valueTypeCast(defn, columnId));
+    };
+  }
+
+  /**
+   * Return the typecast expression that can be used as a suffix for a value variable of the
+   * given column in the defined table.
+   *
+   * <p>This method returns a blank string except for those column types that require casting
+   * when set with literal values. For example, a column of type {@code uuid} must be cast when
+   * being bound with with a {@code varchar} literal, since a UUID value cannot be bound directly.
+   *
+   * @param tableDefn the table definition; may be null if unknown
+   * @param columnId  the column within the table; may not be null
+   * @return the cast expression, or an empty string; never null
+   */
+  protected String valueTypeCast(TableDefinition tableDefn, ColumnId columnId) {
+    if (tableDefn != null) {
+      ColumnDefinition defn = tableDefn.definitionForColumn(columnId.name());
+      if (defn != null) {
+        String typeName = defn.typeName(); // database-specific
+        if (typeName != null) {
+          typeName = typeName.toLowerCase();
+          if (CAST_TYPES.contains(typeName)) {
+            return "::" + typeName;
+          }
+        }
+      }
+    }
+    return "";
   }
 
   @Override

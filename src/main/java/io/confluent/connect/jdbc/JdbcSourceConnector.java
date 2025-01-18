@@ -126,7 +126,9 @@ public class JdbcSourceConnector extends SourceConnector {
         blacklistSet,
         Time.SYSTEM
     );
-    tableMonitorThread.start();
+    if (query.isEmpty()) {
+      tableMonitorThread.start();
+    }
   }
 
   protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {

@@ -65,6 +65,10 @@ public class EmbeddedDerby {
     // some reason), but it's easier to just always do this
     new EmbeddedDriver();
     // And initialize by creating a connection
+    connect();
+  }
+
+  public void connect() {
     try {
       conn = DriverManager.getConnection(getUrl());
     } catch (SQLException e) {

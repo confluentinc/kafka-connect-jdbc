@@ -23,13 +23,16 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.easymock.EasyMock;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.testcontainers.shaded.com.google.common.collect.ImmutableList;
 
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Types;
 import java.util.Arrays;
 import java.util.Collection;
@@ -37,6 +40,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
@@ -55,10 +59,15 @@ import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.TableType;
 
+import static org.easymock.EasyMock.expect;
+import static org.easymock.EasyMock.replay;
+import static org.easymock.EasyMock.verify;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseDialect> {
@@ -294,6 +303,60 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
   }
 
   @Test
+  public void testApplyDdlStatementsCommits() throws Exception {
+    Connection conn = EasyMock.createMock(Connection.class);
+    Statement statement = EasyMock.createNiceMock(Statement.class);
+    expect(conn.createStatement()).andReturn(statement);
+    conn.commit();
+    expect(statement.executeUpdate("SQL things here")).andReturn(0);
+
+    replay(conn, statement);
+    dialect.applyDdlStatements(conn, ImmutableList.of("SQL things here"));
+    verify(conn, statement);
+  }
+
+  @Test
+  public void testApplyDdlStatementsRollbackOnCommitFail() throws Exception {
+    Connection conn = EasyMock.createMock(Connection.class);
+    Statement statement = EasyMock.createNiceMock(Statement.class);
+    expect(conn.createStatement()).andReturn(statement);
+    conn.commit();
+    EasyMock.expectLastCall().andThrow(new SQLException("Ooops!"));
+    conn.rollback();
+
+    expect(statement.executeUpdate("SQL things here")).andReturn(0);
+
+    replay(conn, statement);
+    Throwable thrown = assertThrows(SQLException.class, () -> {
+      dialect.applyDdlStatements(conn, ImmutableList.of("SQL things here"));
+    });
+    verify(conn, statement);
+    assertEquals("Ooops!", thrown.getMessage());
+  }
+
+  @Test
+  public void testApplyDdlStatementsCommitAndRollbackBothFail() throws Exception {
+    Connection conn = EasyMock.createMock(Connection.class);
+    Statement statement = EasyMock.createNiceMock(Statement.class);
+    expect(conn.createStatement()).andReturn(statement);
+    conn.commit();
+    EasyMock.expectLastCall().andThrow(new SQLException("Ooops!"));
+    conn.rollback();
+    EasyMock.expectLastCall().andThrow(new SQLException("Double Ooops!"));
+
+    expect(statement.executeUpdate("SQL things here")).andReturn(0);
+
+    replay(conn, statement);
+    Throwable thrown = assertThrows(SQLException.class, () -> {
+      dialect.applyDdlStatements(conn, ImmutableList.of("SQL things here"));
+    });
+    verify(conn, statement);
+    assertEquals("Ooops!", thrown.getMessage());
+    assertEquals(1, thrown.getSuppressed().length);
+    assertEquals("Double Ooops!", thrown.getSuppressed()[0].getMessage());
+  }
+
+  @Test
   public void testDescribeTableOnEmptyDb() throws SQLException {
     TableId someTable = new TableId(null, "APP", "some_table");
     TableDefinition defn = dialect.describeTable(db.getConnection(), someTable);
@@ -512,5 +575,39 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
         + "Password=****&"
         + "other=value"
     );
+  }
+
+  @Test
+  public void shouldAddExtraProperties() {
+    // When adding extra properties with the 'connection.' prefix
+    connProps.put("connection.oracle.something", "somethingValue");
+    connProps.put("connection.oracle.else", "elseValue");
+    connProps.put("connection.foo", "bar");
+    // and some other extra properties not prefixed with 'connection.'
+    connProps.put("foo2", "bar2");
+    config = new JdbcSourceConnectorConfig(connProps);
+    dialect = createDialect(config);
+    // and the dialect computes the connection properties
+    Properties props = new Properties();
+    Properties modified = dialect.addConnectionProperties(props);
+    // then the resulting properties
+    // should be the same properties object as what was passed in
+    assertSame(props, modified);
+    // should include props that began with 'connection.' but without prefix
+    assertEquals("somethingValue", modified.get("oracle.something"));
+    assertEquals("elseValue", modified.get("oracle.else"));
+    assertEquals("bar", modified.get("foo"));
+    // should not include any 'connection.*' properties defined by the connector
+    assertFalse(modified.containsKey("url"));
+    assertFalse(modified.containsKey("password"));
+    assertFalse(modified.containsKey("connection.url"));
+    assertFalse(modified.containsKey("connection.password"));
+    // should not include the prefixed props
+    assertFalse(modified.containsKey("connection.oracle.something"));
+    assertFalse(modified.containsKey("connection.oracle.else"));
+    assertFalse(modified.containsKey("connection.foo"));
+    // should not include props not prefixed with 'connection.'
+    assertFalse(modified.containsKey("foo2"));
+    assertFalse(modified.containsKey("connection.foo2"));
   }
 }

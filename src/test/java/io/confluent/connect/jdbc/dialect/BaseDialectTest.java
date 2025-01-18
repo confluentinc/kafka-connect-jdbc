@@ -365,7 +365,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
   }
 
   protected void verifyDataTypeMapping(String expected, Schema schema) {
-    SinkRecordField field = new SinkRecordField(schema, schema.name(),schema.isOptional());
+    SinkRecordField field = new SinkRecordField(schema, schema.name(), schema.isOptional());
     assertEquals(expected, dialect.getSqlType(field));
   }
 
@@ -480,7 +480,12 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     );
     int index = 0;
     for (Schema schema : nullableTypes) {
-      verifyBindField(++index, schema, null).setObject(index, null);
+      final Integer sqlType = dialect.getSqlTypeForSchema(schema);
+      if (sqlType == null) {
+        verifyBindField(++index, schema, null).setObject(index, null);
+      } else {
+        verifyBindField(++index, schema, null).setNull(index, sqlType);
+      }
     }
   }
 

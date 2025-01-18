@@ -41,9 +41,9 @@ public class GenericDatabaseDialectTypeTest extends BaseDialectTypeTest<GenericD
             // integers - non optional
             // Parameter range 5-8
             {Schema.Type.INT64, LONG, JdbcSourceConnectorConfig.NumericMapping.PRECISION_ONLY, NOT_NULLABLE, Types.NUMERIC, 18, 0 },
-            {Schema.Type.INT32, INT, JdbcSourceConnectorConfig.NumericMapping.PRECISION_ONLY, NOT_NULLABLE, Types.NUMERIC, 8, 0,},
-            {Schema.Type.INT16, SHORT, JdbcSourceConnectorConfig.NumericMapping.PRECISION_ONLY, NOT_NULLABLE, Types.NUMERIC, 3, 0,},
-            {Schema.Type.INT8, BYTE, JdbcSourceConnectorConfig.NumericMapping.PRECISION_ONLY, NOT_NULLABLE, Types.NUMERIC, 1, 0,},
+            {Schema.Type.INT32, INT, JdbcSourceConnectorConfig.NumericMapping.PRECISION_ONLY, NOT_NULLABLE, Types.NUMERIC, 8, 0 },
+            {Schema.Type.INT16, SHORT, JdbcSourceConnectorConfig.NumericMapping.PRECISION_ONLY, NOT_NULLABLE, Types.NUMERIC, 3, 0 },
+            {Schema.Type.INT8, BYTE, JdbcSourceConnectorConfig.NumericMapping.PRECISION_ONLY, NOT_NULLABLE, Types.NUMERIC, 1, 0 },
 
             // integers - optional
             // Parameter range 9-12
@@ -91,6 +91,7 @@ public class GenericDatabaseDialectTypeTest extends BaseDialectTypeTest<GenericD
             {Schema.Type.FLOAT64, DOUBLE, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NULLABLE, Types.NUMERIC, 18, 127 },
             {Schema.Type.FLOAT64, DOUBLE, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NULLABLE, Types.NUMERIC, 8, 1 },
             {Schema.Type.BYTES, BIG_DECIMAL, JdbcSourceConnectorConfig.NumericMapping.BEST_FIT, NULLABLE, Types.NUMERIC, 19, 1 },
+
             }
     );
   }

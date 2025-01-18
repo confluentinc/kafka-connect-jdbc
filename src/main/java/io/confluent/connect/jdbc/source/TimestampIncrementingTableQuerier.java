@@ -148,7 +148,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     
     String queryString = builder.toString();
     recordQuery(queryString);
-    log.debug("{} prepared SQL query: {}", this, queryString);
+    log.trace("{} prepared SQL query: {}", this, queryString);
     stmt = dialect.createPreparedStatement(db, queryString);
   }
 
@@ -162,12 +162,15 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
       ResultSetMetaData metadata = resultSet.getMetaData();
       dialect.validateSpecificColumnTypes(metadata, timestampColumns);
       schemaMapping = SchemaMapping.create(schemaName, metadata, dialect);
+    } else {
+      log.trace("Current ResultSet {} isn't null. Continuing to seek.", resultSet.hashCode());
     }
 
     // This is called everytime during poll() before extracting records,
     // to ensure that the previous run succeeded, allowing us to move the committedOffset forward.
     // This action is a no-op for the first poll()
     this.committedOffset = this.offset;
+    log.trace("Set the committed offset: {}", committedOffset.getTimestampOffset());
   }
 
   private void findDefaultAutoIncrementingColumn(Connection db) throws SQLException {

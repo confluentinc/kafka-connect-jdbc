@@ -124,6 +124,8 @@ public class JdbcSourceConnectorTest {
     // Close with stopping will be invoked when the connector is stopped
     mockCachedConnectionProvider.close(true);
     PowerMock.expectLastCall().atLeastOnce();
+    mockCachedConnectionProvider.close();
+    PowerMock.expectLastCall().anyTimes();
 
     PowerMock.replayAll();
 

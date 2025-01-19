@@ -39,7 +39,7 @@ blocks:
           commands:
             - pip install confluent-release-tools -q
             - . sem-pint
-            - - sudo apt-get --assume-yes install libncurses5
+            - sudo apt-get --assume-yes install libncurses5
             - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 -Ddependency.check.skip=true --batch-mode --no-transfer-progress clean verify install dependency:analyze validate
             - . cve-scan
             - . cache-maven store

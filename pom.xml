@@ -20,13 +20,13 @@
     <parent>
         <groupId>io.confluent</groupId>
         <artifactId>common</artifactId>
-        <version>6.0.0</version>
+        <version>7.0.12</version>
     </parent>
 
     <groupId>io.confluent</groupId>
     <artifactId>kafka-connect-jdbc</artifactId>
     <packaging>jar</packaging>
-    <version>10.6.6-SNAPSHOT</version>
+    <version>10.7.13-SNAPSHOT</version>
     <name>kafka-connect-jdbc</name>
     <organization>
         <name>Confluent, Inc.</name>
@@ -49,7 +49,7 @@
         <connection>scm:git:git://github.com/confluentinc/kafka-connect-jdbc.git</connection>
         <developerConnection>scm:git:git@github.com:confluentinc/kafka-connect-jdbc.git</developerConnection>
         <url>https://github.com/confluentinc/kafka-connect-jdbc</url>
-        <tag>HEAD</tag>
+        <tag>10.7.x</tag>
     </scm>
 
     <properties>
@@ -75,8 +75,10 @@
         <class.coverage.threshold>0.91</class.coverage.threshold>
         <complexity.coverage.threshold>0.65</complexity.coverage.threshold>
         <line.coverage.threshold>0.80</line.coverage.threshold>
+        <maven-surefire-plugin.version>3.0.0-M7</maven-surefire-plugin.version>
+        <maven-failsafe-plugin.version>3.0.0-M7</maven-failsafe-plugin.version>
+        <dependency.check.skip>true</dependency.check.skip>
     </properties>
-
     <repositories>
         <repository>
             <id>confluent</id>
@@ -117,15 +119,66 @@
             <version>${postgresql.version}</version>
             <scope>runtime</scope>
         </dependency>
+        <!-- Add all packages imported by ojdbc8-production explicitly to pom when bumping up driver version -->
+	<!-- Do not use ojdbc8-production directly to avoid .pom file in final package -->
+        <!-- See https://www.oracle.com/database/technologies/maven-central-guide.html -->
         <dependency>
-            <!--
-            Include all of the production JARs without observability fixes.
-            See https://www.oracle.com/database/technologies/maven-central-guide.html
-            -->
             <groupId>com.oracle.database.jdbc</groupId>
-            <artifactId>ojdbc8-production</artifactId>
+            <artifactId>ojdbc8</artifactId>
             <version>${oracle.jdbc.driver.version}</version>
-            <type>pom</type>
+        </dependency>
+        <dependency>
+            <groupId>com.oracle.database.jdbc</groupId>
+            <artifactId>ucp</artifactId>
+            <version>${oracle.jdbc.driver.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.oracle.database.security</groupId>
+            <artifactId>oraclepki</artifactId>
+            <version>${oracle.jdbc.driver.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.oracle.database.security</groupId>
+            <artifactId>osdt_cert</artifactId>
+            <version>${oracle.jdbc.driver.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.oracle.database.security</groupId>
+            <artifactId>osdt_core</artifactId>
+            <version>${oracle.jdbc.driver.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.oracle.database.ha</groupId>
+            <artifactId>simplefan</artifactId>
+            <version>${oracle.jdbc.driver.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.oracle.database.ha</groupId>
+            <artifactId>ons</artifactId>
+            <version>${oracle.jdbc.driver.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.oracle.database.nls</groupId>
+            <artifactId>orai18n</artifactId>
+            <version>${oracle.jdbc.driver.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.oracle.database.xml</groupId>
+            <artifactId>xdb</artifactId>
+            <version>${oracle.jdbc.driver.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.oracle.database.xml</groupId>
+            <artifactId>xmlparserv2</artifactId>
+            <version>${oracle.jdbc.driver.version}</version>
             <scope>runtime</scope>
         </dependency>
         <dependency>
@@ -143,6 +196,14 @@
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
+            <version>${junit.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <version>${junit.jupiter.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -192,7 +253,7 @@
         <dependency>
             <groupId>io.zonky.test</groupId>
             <artifactId>embedded-postgres</artifactId>
-            <version>1.2.6</version>
+            <version>2.0.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -461,6 +522,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
+                <version>${maven-surefire-plugin.version}</version>
                 <configuration>
                     <trimStackTrace>false</trimStackTrace>
                 </configuration>
@@ -468,6 +530,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
+                <version>${maven-failsafe-plugin.version}</version>
                 <executions>
                     <execution>
                         <!--normal integration tests should not run the memory-restricted tests -->

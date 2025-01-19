@@ -16,6 +16,7 @@
 package io.confluent.connect.jdbc.sink;
 
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -57,6 +58,11 @@ public class JdbcSinkConfig extends AbstractConfig {
     KAFKA,
     RECORD_KEY,
     RECORD_VALUE;
+  }
+
+  public enum DateTimezone {
+    DB_TIMEZONE,
+    UTC
   }
 
   public static final List<String> DEFAULT_KAFKA_PK_NAMES = Collections.unmodifiableList(
@@ -215,6 +221,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String WRITES_GROUP = "Writes";
   private static final String DATAMAPPING_GROUP = "Data Mapping";
   private static final String DDL_GROUP = "DDL Support";
+  private static final String DML_GROUP = "DML Support";
   private static final String RETRIES_GROUP = "Retries";
 
   public static final String DIALECT_NAME_CONFIG = "dialect.name";
@@ -233,6 +240,14 @@ public class JdbcSinkConfig extends AbstractConfig {
       "Name of the JDBC timezone that should be used in the connector when "
       + "inserting time-based values. Defaults to UTC.";
   private static final String DB_TIMEZONE_CONFIG_DISPLAY = "DB Time Zone";
+
+  public static final String DATE_TIMEZONE_CONFIG = "date.timezone";
+  public static final String DATE_TIMEZONE_DEFAULT = DateTimezone.DB_TIMEZONE.toString();
+  private static final String DATE_TIMEZONE_CONFIG_DISPLAY = "Time Zone used for Date";
+  private static final String DATE_TIMEZONE_CONFIG_DOC = "Name of the JDBC timezone that should be "
+      + "used in the connector when inserting DATE type values. Defaults to DB_TIMEZONE that uses "
+      + "the timezone set for db.timzeone configuration (to maintain backward compatibility). It "
+      + "is recommended to set this to UTC to avoid conversion for DATE type values.";
 
   public static final String QUOTE_SQL_IDENTIFIERS_CONFIG =
       JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_CONFIG;
@@ -260,8 +275,18 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
 
+  private static final EnumRecommender DATE_TIMEZONE_RECOMMENDER =
+      EnumRecommender.in(DateTimezone.values());
+
   private static final EnumRecommender TABLE_TYPES_RECOMMENDER =
       EnumRecommender.in(TableType.values());
+  public static final String MSSQL_USE_MERGE_HOLDLOCK = "mssql.use.merge.holdlock";
+  private static final String MSSQL_USE_MERGE_HOLDLOCK_DEFAULT = "true";
+  private static final String MSSQL_USE_MERGE_HOLDLOCK_DOC =
+      "Whether to use HOLDLOCK when performing a MERGE INTO upsert statement. "
+      + "Note that it is only applicable to SQL Server.";
+  private static final String MSSQL_USE_MERGE_HOLDLOCK_DISPLAY =
+      "SQL Server - Use HOLDLOCK in MERGE";
 
   public static final ConfigDef CONFIG_DEF = new ConfigDef()
         // Connection
@@ -438,6 +463,19 @@ public class JdbcSinkConfig extends AbstractConfig {
           ConfigDef.Width.MEDIUM,
           DB_TIMEZONE_CONFIG_DISPLAY
         )
+        .define(
+            DATE_TIMEZONE_CONFIG,
+            ConfigDef.Type.STRING,
+            DATE_TIMEZONE_DEFAULT,
+            EnumValidator.in(DateTimezone.values()),
+            ConfigDef.Importance.LOW,
+            DATE_TIMEZONE_CONFIG_DOC,
+            DATAMAPPING_GROUP,
+            6,
+            ConfigDef.Width.MEDIUM,
+            DATE_TIMEZONE_CONFIG_DISPLAY,
+            DATE_TIMEZONE_RECOMMENDER
+        )
         // DDL
         .define(
             AUTO_CREATE,
@@ -469,6 +507,18 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Width.MEDIUM,
             QUOTE_SQL_IDENTIFIERS_DISPLAY,
             QUOTE_METHOD_RECOMMENDER
+        )
+        // DML
+        .define(
+            MSSQL_USE_MERGE_HOLDLOCK,
+            ConfigDef.Type.BOOLEAN,
+            MSSQL_USE_MERGE_HOLDLOCK_DEFAULT,
+            ConfigDef.Importance.LOW,
+            MSSQL_USE_MERGE_HOLDLOCK_DOC,
+            DML_GROUP,
+            1,
+            ConfigDef.Width.MEDIUM,
+            MSSQL_USE_MERGE_HOLDLOCK_DISPLAY
         )
         // Retries
         .define(
@@ -521,7 +571,9 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final Set<String> fieldsWhitelist;
   public final String dialectName;
   public final TimeZone timeZone;
+  public final TimeZone dateTimeZone;
   public final EnumSet<TableType> tableTypes;
+  public final boolean useHoldlockInMerge;
 
   public final boolean trimSensitiveLogsEnabled;
 
@@ -547,6 +599,11 @@ public class JdbcSinkConfig extends AbstractConfig {
     fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
     String dbTimeZone = getString(DB_TIMEZONE_CONFIG);
     timeZone = TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
+    DateTimezone dateTimezoneConfig =
+        DateTimezone.valueOf(getString(DATE_TIMEZONE_CONFIG).toUpperCase());
+    dateTimeZone = dateTimezoneConfig.equals(DateTimezone.UTC)
+        ? TimeZone.getTimeZone(ZoneOffset.UTC) : timeZone;
+    useHoldlockInMerge = getBoolean(MSSQL_USE_MERGE_HOLDLOCK);
     trimSensitiveLogsEnabled = getBoolean(TRIM_SENSITIVE_LOG_ENABLED);
     if (deleteEnabled && pkMode != PrimaryKeyMode.RECORD_KEY) {
       throw new ConfigException(

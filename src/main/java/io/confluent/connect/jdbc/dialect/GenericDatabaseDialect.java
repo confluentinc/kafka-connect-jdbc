@@ -18,6 +18,7 @@ package io.confluent.connect.jdbc.dialect;
 import java.time.ZoneOffset;
 import java.util.TimeZone;
 
+import org.apache.kafka.common.Configurable;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
@@ -89,8 +90,11 @@ import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
+import io.confluent.connect.jdbc.util.JdbcCredentials;
+import io.confluent.connect.jdbc.util.JdbcCredentialsProvider;
 import io.confluent.connect.jdbc.util.JdbcDriverInfo;
 import io.confluent.connect.jdbc.util.QuoteMethod;
+import io.confluent.connect.jdbc.util.StringUtils;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.TableType;
@@ -113,6 +117,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   private static final int MAX_INTEGER_TYPE_PRECISION = 18;
 
   private static final String PRECISION_FIELD = "connect.decimal.precision";
+
+  private final JdbcCredentialsProvider jdbcCredentialsProvider;
 
   /**
    * The provider for {@link GenericDatabaseDialect}.
@@ -149,13 +155,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   protected final Set<String> tableTypes;
   protected final String jdbcUrl;
   protected final DatabaseDialectProvider.JdbcUrlInfo jdbcUrlInfo;
-  private final QuoteMethod quoteSqlIdentifiers;
+  protected final QuoteMethod quoteSqlIdentifiers;
   private final IdentifierRules defaultIdentifierRules;
   private final AtomicReference<IdentifierRules> identifierRules = new AtomicReference<>();
   private final Queue<Connection> connections = new ConcurrentLinkedQueue<>();
   private volatile JdbcDriverInfo jdbcDriverInfo;
   private final int batchMaxRows;
   private final TimeZone timeZone;
+  private final TimeZone dateTimeZone;
   private final JdbcSourceConnectorConfig.TimestampGranularity tsGranularity;
 
   /**
@@ -182,6 +189,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     this.defaultIdentifierRules = defaultIdentifierRules;
     this.jdbcUrl = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
     this.jdbcUrlInfo = DatabaseDialects.extractJdbcUrlInfo(jdbcUrl);
+    this.jdbcCredentialsProvider = getJdbcCredentialsProvider(config);
+
     if (config instanceof JdbcSinkConfig) {
       JdbcSinkConfig sinkConfig = (JdbcSinkConfig) config;
       catalogPattern = JdbcSourceTaskConfig.CATALOG_PATTERN_DEFAULT;
@@ -206,12 +215,17 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       batchMaxRows = 0;
     }
 
+    // https://github.com/confluentinc/kafka-connect-jdbc/pull/1398
+    // dateTimeZone is used for handling DATE conversion and should be equal to UTC for
+    // both source and sink connector but due to the bug in Sink connector we can't change the
+    // behaviour without potentially breaking existing customer's pipeline. So this change is
+    // controlled using the db.timezone.date config in sink connector.
     if (config instanceof JdbcSourceConnectorConfig) {
       timeZone = ((JdbcSourceConnectorConfig) config).timeZone();
-    } else if (config instanceof JdbcSinkConfig) {
-      timeZone = ((JdbcSinkConfig) config).timeZone;
+      dateTimeZone = TimeZone.getTimeZone(ZoneOffset.UTC);
     } else {
-      timeZone = TimeZone.getTimeZone(ZoneOffset.UTC);
+      timeZone = ((JdbcSinkConfig) config).timeZone;
+      dateTimeZone = ((JdbcSinkConfig) config).dateTimeZone;
     }
 
     if (config instanceof JdbcSourceConnectorConfig) {
@@ -232,15 +246,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
   @Override
   public Connection getConnection() throws SQLException {
-    // These config names are the same for both source and sink configs ...
-    String username = config.getString(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG);
-    Password dbPassword = config.getPassword(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG);
+    JdbcCredentials jdbcCredentials = jdbcCredentialsProvider.getJdbcCredentials();
+
     Properties properties = new Properties();
-    if (username != null) {
-      properties.setProperty("user", username);
+    if (jdbcCredentials.getUsername() != null) {
+      properties.setProperty("user", jdbcCredentials.getUsername());
     }
-    if (dbPassword != null) {
-      properties.setProperty("password", dbPassword.value());
+    if (jdbcCredentials.getPassword() != null) {
+      properties.setProperty("password", jdbcCredentials.getPassword());
     }
     properties = addConnectionProperties(properties);
     // Timeout is 40 seconds to be as long as possible for customer to have a long connection
@@ -609,6 +622,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           Connection connection,
           TransactionIsolationMode transactionIsolationMode
   ) {
+    log.info("Setting connection isolation mode to: {}", transactionIsolationMode.name());
     if (transactionIsolationMode
             == TransactionIsolationMode.DEFAULT) {
       return;
@@ -1409,7 +1423,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       // Date is day + month + year
       case Types.DATE: {
         return rs -> rs.getDate(col,
-            DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone(ZoneOffset.UTC)));
+            DateTimeUtils.getTimeZoneCalendar(dateTimeZone));
       }
 
       // Time is a time of day -- hour, minute, seconds, nanoseconds
@@ -1731,7 +1745,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           statement.setDate(
               index,
               new java.sql.Date(((java.util.Date) value).getTime()),
-              DateTimeUtils.getTimeZoneCalendar(timeZone)
+              DateTimeUtils.getTimeZoneCalendar(dateTimeZone)
           );
           return true;
         case Decimal.LOGICAL_NAME:
@@ -1896,7 +1910,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           builder.append(value);
           return;
         case Date.LOGICAL_NAME:
-          builder.appendStringQuoted(DateTimeUtils.formatDate((java.util.Date) value, timeZone));
+          builder.appendStringQuoted(
+              DateTimeUtils.formatDate((java.util.Date) value, dateTimeZone));
           return;
         case Time.LOGICAL_NAME:
           builder.appendStringQuoted(DateTimeUtils.formatTime((java.util.Date) value, timeZone));
@@ -1962,6 +1977,51 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   protected String sanitizedUrl(String url) {
     // Only replace standard URL-type properties ...
     return url.replaceAll("(?i)([?&]([^=&]*)password([^=&]*)=)[^&]*", "$1****");
+  }
+
+  /**
+   * This is a common method to get an instance of configured JdbcCredentialsProvider class
+   * @param config Source or sink connector config
+   * @return an instance of configured JdbcCredentialsProvider class
+   */
+  @SuppressWarnings("unchecked")
+  protected JdbcCredentialsProvider getJdbcCredentialsProvider(AbstractConfig config) {
+    // All the config key variables referred in this method are same in both source and sink
+    // connector. Using source connector config keys here but method should work for sink
+    // connector as well.
+    String username = config.getString(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG);
+    Password dbPassword = config.getPassword(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG);
+
+    try {
+      JdbcCredentialsProvider provider = ((Class<? extends JdbcCredentialsProvider>)
+          config.getClass(JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG)
+      ).newInstance();
+
+      if (provider instanceof Configurable) {
+        Map<String, Object> configs = config.originalsWithPrefix(
+            JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX
+        );
+        configs.remove(
+            JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG.substring(
+                JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX.length()
+            )
+        );
+
+        if (StringUtils.isNotBlank(username)) {
+          configs.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, username);
+        }
+        if (dbPassword != null && StringUtils.isNotBlank(dbPassword.value())) {
+          configs.put(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, dbPassword.value());
+        }
+
+        ((Configurable) provider).configure(configs);
+      }
+
+      return provider;
+    } catch (ClassCastException | IllegalAccessException | InstantiationException e) {
+      throw new ConnectException(
+          "Invalid class for: " + JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG, e);
+    }
   }
 
   @Override

@@ -83,6 +83,7 @@ public class TableMonitorThread extends Thread {
     while (shutdownLatch.getCount() > 0) {
       try {
         if (updateTables()) {
+          log.info("Task Reconfiguration has been invoked.");
           context.requestTaskReconfiguration();
         }
       } catch (Exception e) {
@@ -110,6 +111,7 @@ public class TableMonitorThread extends Thread {
     awaitTablesReady(startupMs);
     List<TableId> tablesSnapshot = tables.get();
     if (tablesSnapshot == null) {
+      log.info("No Tables snapshot available");
       return null;
     }
 
@@ -120,7 +122,7 @@ public class TableMonitorThread extends Thread {
         .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
     if (tablesSnapshot.isEmpty()) {
-      log.debug(
+      log.info(
           "Based on the supplied filtering rules, there are no matching tables to read from"
       );
     } else {
@@ -208,6 +210,9 @@ public class TableMonitorThread extends Thread {
     }
 
     List<TableId> priorTablesSnapshot = tables.getAndSet(filteredTables);
+    if (!Objects.equals(priorTablesSnapshot, filteredTables)) {
+      log.info("Filtered tables size: {}", filteredTables);
+    }
     synchronized (tables) {
       tables.notifyAll();
     }

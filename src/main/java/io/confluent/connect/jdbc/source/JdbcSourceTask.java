@@ -199,9 +199,14 @@ public class JdbcSourceTask extends SourceTask {
     TimeZone timeZone = config.timeZone();
     String suffix = config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG).trim();
 
+    if (queryMode.equals(TableQuerier.QueryMode.TABLE)) {
+      validateColumnsExist(mode, incrementingColumn, timestampColumns, tables.get(0));
+    }
+
     for (String tableOrQuery : tablesOrQuery) {
       final List<Map<String, String>> tablePartitionsToCheck;
       final Map<String, String> partition;
+      log.trace("Task executing in {} mode",queryMode);
       switch (queryMode) {
         case TABLE:
           if (validateNonNulls) {
@@ -314,6 +319,49 @@ public class JdbcSourceTask extends SourceTask {
     maxRetriesPerQuerier = config.getInt(JdbcSourceConnectorConfig.QUERY_RETRIES_CONFIG);
   }
 
+  private void validateColumnsExist(
+      String mode, String incrementingColumn, List<String> timestampColumns, String table) {
+    try {
+      final Connection conn = cachedConnectionProvider.getConnection();
+      boolean autoCommit = conn.getAutoCommit();
+      try {
+        log.info("Validating columns exist for table");
+        conn.setAutoCommit(true);
+        Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, table, null);
+        Set<String> columnNames = defnsById.keySet().stream().map(ColumnId::name)
+            .map(String::toLowerCase).collect(Collectors.toSet());
+
+        if ((mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)
+            || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING))
+            && !incrementingColumn.isEmpty()
+            && !columnNames.contains(incrementingColumn.toLowerCase(Locale.getDefault()))) {
+          throw new ConfigException("Incrementing column: " + incrementingColumn
+              + " does not exist.");
+        }
+
+        if ((mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)
+            || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING))
+            && !timestampColumns.isEmpty()) {
+
+          Set<String> missingTsColumns = timestampColumns.stream()
+              .filter(tsColumn -> !columnNames.contains(tsColumn.toLowerCase(Locale.getDefault())))
+              .collect(Collectors.toSet());
+
+          if (!missingTsColumns.isEmpty()) {
+            throw new ConfigException("Timestamp columns: "
+                + String.join(", ", missingTsColumns)
+                + " do not exist.");
+          }
+        }
+      } finally {
+        conn.setAutoCommit(autoCommit);
+      }
+    } catch (SQLException e) {
+      throw new ConnectException("Failed trying to validate that columns used for offsets exist",
+          e);
+    }
+  }
+
   protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
     return new CachedConnectionProvider(dialect, maxConnAttempts, retryBackoff) {
       @Override
@@ -339,8 +387,10 @@ public class JdbcSourceTask extends SourceTask {
           Map<String, Object> partitionOffset,
           TimeZone timezone) {
     if (!(partitionOffset == null)) {
+      log.info("Partition offset for '{}' is not null. Using existing offset.", tableOrQuery);
       return partitionOffset;
     } else {
+      log.info("Partition offset for '{}' is null. Computing initial offset.", tableOrQuery);
       Map<String, Object> initialPartitionOffset = null;
       // no offsets found
       Long timestampInitial = config.getLong(JdbcSourceConnectorConfig.TIMESTAMP_INITIAL_CONFIG);
@@ -530,6 +580,7 @@ public class JdbcSourceTask extends SourceTask {
       String incrementingColumn,
       List<String> timestampColumns
   ) {
+    log.info("Validating non-nullable fields for table: {}", table);
     try {
       Set<String> lowercaseTsColumns = new HashSet<>();
       for (String timestampColumn: timestampColumns) {
@@ -571,9 +622,8 @@ public class JdbcSourceTask extends SourceTask {
            || incrementalMode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING))
           && !atLeastOneTimestampNotOptional) {
         throw new ConnectException("Cannot make incremental queries using timestamp columns "
-                                   + timestampColumns + " on " + table + " because all of these "
-                                   + "columns "
-                                   + "nullable.");
+                                   + String.join(",", timestampColumns) + " on " + table
+                                   + " because all of these columns are nullable.");
       }
     } catch (SQLException e) {
       throw new ConnectException("Failed trying to validate that columns used for offsets are NOT"

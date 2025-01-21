@@ -16,6 +16,7 @@
 package io.confluent.connect.jdbc.sink;
 
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -33,13 +34,19 @@ import io.confluent.connect.jdbc.util.ConfigUtils;
 import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
 import io.confluent.connect.jdbc.util.DeleteEnabledRecommender;
 import io.confluent.connect.jdbc.util.EnumRecommender;
+import io.confluent.connect.jdbc.util.JdbcCredentialsProvider;
+import io.confluent.connect.jdbc.util.JdbcCredentialsProviderValidator;
 import io.confluent.connect.jdbc.util.PrimaryKeyModeRecommender;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.StringUtils;
 import io.confluent.connect.jdbc.util.TableType;
 import io.confluent.connect.jdbc.util.TimeZoneValidator;
+import org.apache.kafka.common.Configurable;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
+import org.apache.kafka.common.config.ConfigDef.Importance;
+import org.apache.kafka.common.config.ConfigDef.Type;
+import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
 
@@ -57,6 +64,11 @@ public class JdbcSinkConfig extends AbstractConfig {
     KAFKA,
     RECORD_KEY,
     RECORD_VALUE;
+  }
+
+  public enum DateTimezone {
+    DB_TIMEZONE,
+    UTC
   }
 
   public static final List<String> DEFAULT_KAFKA_PK_NAMES = Collections.unmodifiableList(
@@ -235,6 +247,14 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "inserting time-based values. Defaults to UTC.";
   private static final String DB_TIMEZONE_CONFIG_DISPLAY = "DB Time Zone";
 
+  public static final String DATE_TIMEZONE_CONFIG = "date.timezone";
+  public static final String DATE_TIMEZONE_DEFAULT = DateTimezone.DB_TIMEZONE.toString();
+  private static final String DATE_TIMEZONE_CONFIG_DISPLAY = "Time Zone used for Date";
+  private static final String DATE_TIMEZONE_CONFIG_DOC = "Name of the JDBC timezone that should be "
+      + "used in the connector when inserting DATE type values. Defaults to DB_TIMEZONE that uses "
+      + "the timezone set for db.timzeone configuration (to maintain backward compatibility). It "
+      + "is recommended to set this to UTC to avoid conversion for DATE type values.";
+
   public static final String QUOTE_SQL_IDENTIFIERS_CONFIG =
       JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_CONFIG;
   public static final String QUOTE_SQL_IDENTIFIERS_DEFAULT =
@@ -261,6 +281,9 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
 
+  private static final EnumRecommender DATE_TIMEZONE_RECOMMENDER =
+      EnumRecommender.in(DateTimezone.values());
+
   private static final EnumRecommender TABLE_TYPES_RECOMMENDER =
       EnumRecommender.in(TableType.values());
   public static final String MSSQL_USE_MERGE_HOLDLOCK = "mssql.use.merge.holdlock";
@@ -270,6 +293,24 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "Note that it is only applicable to SQL Server.";
   private static final String MSSQL_USE_MERGE_HOLDLOCK_DISPLAY =
       "SQL Server - Use HOLDLOCK in MERGE";
+
+  /**
+   * The properties that begin with this prefix will be used to configure a class, specified by
+   * {@code jdbc.credentials.provider.class} if it implements {@link Configurable}.
+   */
+  public static final String CREDENTIALS_PROVIDER_CONFIG_PREFIX =
+      JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX;
+  public static final String CREDENTIALS_PROVIDER_CLASS_CONFIG =
+      JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG;
+  public static final Class<? extends JdbcCredentialsProvider> CREDENTIALS_PROVIDER_CLASS_DEFAULT =
+      JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_DEFAULT;
+
+  public static final String CREDENTIALS_PROVIDER_CLASS_DISPLAY =
+      JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_DISPLAY;
+
+  public static final String CREDENTIALS_PROVIDER_CLASS_DOC =
+      JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_DOC;
+
 
   public static final ConfigDef CONFIG_DEF = new ConfigDef()
         // Connection
@@ -305,8 +346,18 @@ public class JdbcSinkConfig extends AbstractConfig {
             3,
             ConfigDef.Width.MEDIUM,
             CONNECTION_PASSWORD_DISPLAY
-        )
-        .define(
+        ).define(
+            CREDENTIALS_PROVIDER_CLASS_CONFIG,
+            Type.CLASS,
+            CREDENTIALS_PROVIDER_CLASS_DEFAULT,
+            new JdbcCredentialsProviderValidator(),
+            Importance.LOW,
+            CREDENTIALS_PROVIDER_CLASS_DOC,
+            CONNECTION_GROUP,
+            4,
+            Width.LONG,
+            CREDENTIALS_PROVIDER_CLASS_DISPLAY
+      ).define(
             DIALECT_NAME_CONFIG,
             ConfigDef.Type.STRING,
             DIALECT_NAME_DEFAULT,
@@ -314,7 +365,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Importance.LOW,
             DIALECT_NAME_DOC,
             CONNECTION_GROUP,
-            4,
+            5,
             ConfigDef.Width.LONG,
             DIALECT_NAME_DISPLAY,
             DatabaseDialectRecommender.INSTANCE
@@ -327,7 +378,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Importance.LOW,
             CONNECTION_ATTEMPTS_DOC,
             CONNECTION_GROUP,
-            5,
+            6,
             ConfigDef.Width.SHORT,
             CONNECTION_ATTEMPTS_DISPLAY
         ).define(
@@ -337,7 +388,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Importance.LOW,
             CONNECTION_BACKOFF_DOC,
             CONNECTION_GROUP,
-            6,
+            7,
             ConfigDef.Width.SHORT,
             CONNECTION_BACKOFF_DISPLAY
         )
@@ -446,6 +497,19 @@ public class JdbcSinkConfig extends AbstractConfig {
           ConfigDef.Width.MEDIUM,
           DB_TIMEZONE_CONFIG_DISPLAY
         )
+        .define(
+            DATE_TIMEZONE_CONFIG,
+            ConfigDef.Type.STRING,
+            DATE_TIMEZONE_DEFAULT,
+            EnumValidator.in(DateTimezone.values()),
+            ConfigDef.Importance.LOW,
+            DATE_TIMEZONE_CONFIG_DOC,
+            DATAMAPPING_GROUP,
+            6,
+            ConfigDef.Width.MEDIUM,
+            DATE_TIMEZONE_CONFIG_DISPLAY,
+            DATE_TIMEZONE_RECOMMENDER
+        )
         // DDL
         .define(
             AUTO_CREATE,
@@ -541,6 +605,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final Set<String> fieldsWhitelist;
   public final String dialectName;
   public final TimeZone timeZone;
+  public final TimeZone dateTimeZone;
   public final EnumSet<TableType> tableTypes;
   public final boolean useHoldlockInMerge;
 
@@ -568,6 +633,10 @@ public class JdbcSinkConfig extends AbstractConfig {
     fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
     String dbTimeZone = getString(DB_TIMEZONE_CONFIG);
     timeZone = TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
+    DateTimezone dateTimezoneConfig =
+        DateTimezone.valueOf(getString(DATE_TIMEZONE_CONFIG).toUpperCase());
+    dateTimeZone = dateTimezoneConfig.equals(DateTimezone.UTC)
+        ? TimeZone.getTimeZone(ZoneOffset.UTC) : timeZone;
     useHoldlockInMerge = getBoolean(MSSQL_USE_MERGE_HOLDLOCK);
     trimSensitiveLogsEnabled = getBoolean(TRIM_SENSITIVE_LOG_ENABLED);
     if (deleteEnabled && pkMode != PrimaryKeyMode.RECORD_KEY) {

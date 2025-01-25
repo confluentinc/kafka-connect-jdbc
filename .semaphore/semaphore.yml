@@ -37,7 +37,6 @@ blocks:
       jobs:
         - name: Test
           commands:
-            - sudo apt-get --assume-yes install libncurses5
             - . sem-pint
             - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 --batch-mode --no-transfer-progress clean verify install dependency:analyze validate
             - export TRIVY_DISABLE_VEX_NOTICE=true

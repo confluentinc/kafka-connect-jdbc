@@ -192,6 +192,21 @@
             <version>${jtds.driver.version}</version>
             <scope>runtime</scope>
         </dependency>
+        <!-- Amazon Redshift JDBC Driver -->
+        <dependency>
+            <groupId>com.amazon.redshift</groupId>
+            <artifactId>redshift-jdbc42</artifactId> <!-- Use jdbc41 for Java 7 -->
+            <version>2.1.0.9</version> <!-- Check latest version -->
+            <scope>runtime</scope>
+        </dependency>
+         <!-- required by Redshift JDBC -->
+        <!-- https://docs.aws.amazon.com/redshift/latest/mgmt/jdbc20-download-driver.html -->
+        <dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-java-sdk</artifactId>
+            <version>1.12.626</version> <!-- Use latest version -->
+            <scope>runtime</scope>
+        </dependency>
 
         <dependency>
             <groupId>junit</groupId>
@@ -231,6 +246,12 @@
             <groupId>commons-io</groupId>
             <artifactId>commons-io</artifactId>
             <version>${commons-io.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- added to satisfy failure due to missing class >> class org.mockito.internal.creation.cglib.ClassImposterizer$3 -->
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -512,6 +533,7 @@
                                 <tag>sap hana</tag>
                                 <tag>derby</tag>
                                 <tag>sqlite</tag>
+                                <tag>redshift</tag>
                             </tags>
 
                             <confluentControlCenterIntegration>true</confluentControlCenterIntegration>

@@ -70,39 +70,49 @@ public class RedshiftDatabaseDialect extends PostgreSqlDatabaseDialect {
       Collection<ColumnId> nonKeyColumns,
       TableDefinition definition
   ) {
+    // generates a transformation for the ON clause with col names...
     final Transform<ColumnId> transform = (builder, col) -> {
-      builder.appendColumnName(col.name())
-             .append("=EXCLUDED.")
-             .appendColumnName(col.name());
+      builder.append(table)
+              .append(".")
+              .appendColumnName(col.name())
+              .append("=source.")
+              .appendColumnName(col.name());
     };
 
+    // Using the documentation here..
+    // https://docs.aws.amazon.com/redshift/latest/dg/merge-examples.html
     ExpressionBuilder builder = expressionBuilder();
-    builder.append("INSERT INTO ");
+    builder.append(" MERGE INTO ");
     builder.append(table);
-    builder.append(" (");
+    builder.append(" USING ( SELECT");
     builder.appendList()
-           .delimitedBy(",")
-           .transformedBy(ExpressionBuilder.columnNames())
-           .of(keyColumns, nonKeyColumns);
-    builder.append(") VALUES (");
+            .delimitedBy(", ").transformedBy(ExpressionBuilder.columnNamesWithPrefix("? "))
+            .of(keyColumns, nonKeyColumns);
+    builder.append(") AS source ON (");
     builder.appendList()
-           .delimitedBy(",")
-           .transformedBy(this.columnValueVariables(definition))
-           .of(keyColumns, nonKeyColumns);
-    builder.append(") ON CONFLICT (");
-    builder.appendList()
-           .delimitedBy(",")
-           .transformedBy(ExpressionBuilder.columnNames())
-           .of(keyColumns);
-    if (nonKeyColumns.isEmpty()) {
-      builder.append(") DO NOTHING");
-    } else {
-      builder.append(") DO UPDATE SET ");
+            .delimitedBy(" AND ")
+            .transformedBy(transform)
+            .of(keyColumns);
+    builder.append(")");
+
+    if (nonKeyColumns != null && !nonKeyColumns.isEmpty()) {
+      builder.append(" WHEN MATCHED THEN UPDATE SET ");
       builder.appendList()
               .delimitedBy(",")
               .transformedBy(transform)
               .of(nonKeyColumns);
     }
+
+    builder.append(" WHEN NOT MATCHED THEN INSERT (");
+    builder.appendList()
+            .delimitedBy(",")
+            .of(nonKeyColumns, keyColumns);
+    builder.append(") VALUES (");
+    builder.appendList()
+            .delimitedBy(",")
+            .transformedBy(ExpressionBuilder.columnNamesWithPrefix("source."))
+            .of(nonKeyColumns, keyColumns);
+    builder.append(")");
     return builder.toString();
   }
 }

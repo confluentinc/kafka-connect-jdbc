@@ -82,13 +82,14 @@ public class RedshiftDatabaseDialect extends PostgreSqlDatabaseDialect {
     // Using the documentation here..
     // https://docs.aws.amazon.com/redshift/latest/dg/merge-examples.html
     ExpressionBuilder builder = expressionBuilder();
-    builder.append(" MERGE INTO ");
+    builder.append("MERGE INTO ");
     builder.append(table);
-    builder.append(" USING ( SELECT");
+    builder.append(" USING (SELECT ");
     builder.appendList()
-            .delimitedBy(", ").transformedBy(ExpressionBuilder.columnNamesWithPrefix("? "))
+            .delimitedBy(", ")
+            .transformedBy(ExpressionBuilder.columnNamesWithPrefix("? "))
             .of(keyColumns, nonKeyColumns);
-    builder.append(") AS source ON (");
+    builder.append(") AS source ON(");
     builder.appendList()
             .delimitedBy(" AND ")
             .transformedBy(transform)
@@ -103,11 +104,11 @@ public class RedshiftDatabaseDialect extends PostgreSqlDatabaseDialect {
               .of(nonKeyColumns);
     }
 
-    builder.append(" WHEN NOT MATCHED THEN INSERT (");
+    builder.append(" WHEN NOT MATCHED THEN INSERT(");
     builder.appendList()
             .delimitedBy(",")
             .of(nonKeyColumns, keyColumns);
-    builder.append(") VALUES (");
+    builder.append(") VALUES(");
     builder.appendList()
             .delimitedBy(",")
             .transformedBy(ExpressionBuilder.columnNamesWithPrefix("source."))

@@ -462,7 +462,14 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
     assertEquals(expectedMaxLength, actualMaxLength);
   }
-
+ 
+  @Test
+  public void bindFieldStringValueWithNulls() throws SQLException {
+    int index = ThreadLocalRandom.current().nextInt();
+    verifyBindField(++index, Schema.STRING_SCHEMA, "y\u0000ep\u0000\u0000").setString(index, "yep");
+    verifyBindField(++index, Schema.STRING_SCHEMA, null).setObject(index, null);
+  }
+ 
   @Test
   public void shouldGracefullyHandleErrorWhenComputingMaxTableNameLength() throws Exception {
     Statement statement = mock(Statement.class);

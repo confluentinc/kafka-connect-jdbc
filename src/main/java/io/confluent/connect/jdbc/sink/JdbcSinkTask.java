@@ -55,6 +55,7 @@ public class JdbcSinkTask extends SinkTask {
     shouldTrimSensitiveLogs = config.trimSensitiveLogsEnabled;
     try {
       reporter = context.errantRecordReporter();
+      log.info("Errant Reporter Fetched Successfully");
     } catch (NoSuchMethodError | NoClassDefFoundError e) {
       // Will occur in Connect runtimes earlier than 2.6
       reporter = null;
@@ -81,14 +82,17 @@ public class JdbcSinkTask extends SinkTask {
     }
     final SinkRecord first = records.iterator().next();
     final int recordsCount = records.size();
-    log.debug(
+    log.info(
         "Received {} records. First record kafka coordinates:({}-{}-{}). Writing them to the "
         + "database...",
         recordsCount, first.topic(), first.kafkaPartition(), first.kafkaOffset()
     );
     try {
       if (reporter != null) {
+        log.info("Sending first record to dlq");
         reporter.report(first, null);
+      } else {
+        log.info("No errant record reporter configured");
       }
       writer.write(records);
       log.info("Successfully wrote {} records.", recordsCount);

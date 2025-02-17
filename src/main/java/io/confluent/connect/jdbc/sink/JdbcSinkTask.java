@@ -87,6 +87,9 @@ public class JdbcSinkTask extends SinkTask {
         recordsCount, first.topic(), first.kafkaPartition(), first.kafkaOffset()
     );
     try {
+      if (reporter != null) {
+        reporter.report(first, null);
+      }
       writer.write(records);
       log.info("Successfully wrote {} records.", recordsCount);
     } catch (TableAlterOrCreateException tace) {

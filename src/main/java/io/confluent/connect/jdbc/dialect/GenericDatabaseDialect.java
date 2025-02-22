@@ -1628,7 +1628,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       PrimaryKeyMode pkMode,
       SchemaPair schemaPair,
       FieldsMetadata fieldsMetadata,
-      InsertMode insertMode
+      InsertMode insertMode,
+      boolean replaceNullWithDefault
   ) {
     return new PreparedStatementBinder(
         this,
@@ -1636,7 +1637,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         pkMode,
         schemaPair,
         fieldsMetadata,
-        insertMode
+        insertMode,
+        replaceNullWithDefault
     );
   }
 

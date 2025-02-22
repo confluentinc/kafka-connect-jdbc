@@ -522,11 +522,12 @@ public interface DatabaseDialect extends ConnectionProvider {
 
   /**
    * Create a component that can bind record values into the supplied prepared statement.
-   * @param statement      the prepared statement
-   * @param pkMode         the primary key mode; may not be null
-   * @param schemaPair     the key and value schemas; may not be null
-   * @param fieldsMetadata the field metadata; may not be null
-   * @param insertMode     the insert mode; may not be null
+   * @param statement               the prepared statement
+   * @param pkMode                  the primary key mode; may not be null
+   * @param schemaPair              the key and value schemas; may not be null
+   * @param fieldsMetadata          the field metadata; may not be null
+   * @param insertMode              the insert mode; may not be null
+   * @param replaceNullWithDefault  whether replace null with default; may not be null
    * @return the statement binder; may not be null
    * @see #bindField(PreparedStatement, int, Schema, Object)
    */
@@ -546,12 +547,13 @@ public interface DatabaseDialect extends ConnectionProvider {
    * tableDefinition. This overloading method is introduced to deprecate the other overloaded
    * method eventually.
    *
-   * @param statement      the prepared statement
-   * @param pkMode         the primary key mode; may not be null
-   * @param schemaPair     the key and value schemas; may not be null
-   * @param fieldsMetadata the field metadata; may not be null
-   * @param tableDefinition the table definition; may be null
-   * @param insertMode     the insert mode; may not be null
+   * @param statement               the prepared statement
+   * @param pkMode                  the primary key mode; may not be null
+   * @param schemaPair              the key and value schemas; may not be null
+   * @param fieldsMetadata          the field metadata; may not be null
+   * @param tableDefinition         the table definition; may be null
+   * @param insertMode              the insert mode; may not be null
+   * @param replaceNullWithDefault  whether replace null with default; may not be null
    * @return the statement binder; may not be null
    * @see #bindField(PreparedStatement, int, Schema, Object)
    */

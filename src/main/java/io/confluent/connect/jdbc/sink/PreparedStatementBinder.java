@@ -175,11 +175,10 @@ public class PreparedStatementBinder implements StatementBinder {
   ) throws SQLException {
     for (final String fieldName : fieldsMetadata.nonKeyFieldNames) {
       final Field field = record.valueSchema().field(fieldName);
-      if (this.replaceNullWithDefault) {
-        bindField(index++, field.schema(), valueStruct.get(field), fieldName);
-      } else {
-        bindField(index++, field.schema(), valueStruct.getWithoutDefault(field.name()), fieldName);
-      }
+      Object objectValue = this.replaceNullWithDefault
+              ? valueStruct.get(field)
+              : valueStruct.getWithoutDefault(field.name());
+      bindField(index++, field.schema(), objectValue, fieldName);
     }
     return index;
   }

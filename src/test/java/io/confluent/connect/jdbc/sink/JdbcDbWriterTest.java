@@ -48,6 +48,7 @@ import io.confluent.connect.jdbc.util.TableId;
 import static junit.framework.TestCase.assertTrue;
 import static org.junit.Assert.*;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -137,7 +138,7 @@ public class JdbcDbWriterTest {
     PreparedStatement mockStatement = mock(PreparedStatement.class);
     when(dialect.parseTableIdentifier(any())).thenReturn(mock(TableId.class));
     when(dialect.createPreparedStatement(any(), any())).thenReturn(mockStatement);
-    when(dialect.statementBinder(any(), any(), any(), any(), any(), any()))
+    when(dialect.statementBinder(any(), any(), any(), any(), any(), any(), eq(true)))
         .thenReturn(mock(PreparedStatementBinder.class));
     when(mockStatement.executeBatch()).thenReturn(new int[3]);
 

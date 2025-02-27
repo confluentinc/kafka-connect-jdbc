@@ -80,7 +80,7 @@ public class DateTimeUtils {
   private static Long convertToEpochMicros(Timestamp t) {
     Long epochMillis = TimeUnit.SECONDS.toMicros(t.getTime() / MILLISECONDS_PER_SECOND);
     Long nanosInSecond = TimeUnit.MICROSECONDS.toMicros(t.getNanos());
-    Long microsInSecond = nanosInSecond/1000;
+    Long microsInSecond = nanosInSecond / 1000;
     return epochMillis + microsInSecond;
   }
 

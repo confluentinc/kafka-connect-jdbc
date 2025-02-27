@@ -966,8 +966,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         (timestamp, tz) -> (Timestamp) timestamp),
 
     MICROS_LONG(optional -> optional ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA,
-     (timestamp, tz) -> DateTimeUtils.toEpochMicros(timestamp),
-     (epochMicros, tz) -> DateTimeUtils.toTimestamp((Long) epochMicros)),
+        (timestamp, tz) -> DateTimeUtils.toEpochMicros(timestamp),
+        (epochMicros, tz) -> DateTimeUtils.toTimestamp((Long) epochMicros)),
 
     NANOS_LONG(optional -> optional ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA,
         (timestamp, tz) -> DateTimeUtils.toEpochNanos(timestamp),

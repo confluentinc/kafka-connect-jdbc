@@ -32,6 +32,8 @@ import java.util.concurrent.TimeUnit;
 public class DateTimeUtils {
 
   static final long MILLISECONDS_PER_SECOND = TimeUnit.SECONDS.toMillis(1);
+  static final long MICROSECONDS_PER_MILLISECOND = TimeUnit.MILLISECONDS.toMicros(1);
+  static final long MICROSECONDS_PER_SECOND = TimeUnit.SECONDS.toMicros(1);
   static final long NANOSECONDS_PER_MILLISECOND = TimeUnit.MILLISECONDS.toNanos(1);
   static final long NANOSECONDS_PER_SECOND = TimeUnit.SECONDS.toNanos(1);
   static final DateTimeFormatter ISO_DATE_TIME_NANOS_FORMAT =
@@ -79,8 +81,7 @@ public class DateTimeUtils {
 
   private static Long convertToEpochMicros(Timestamp t) {
     Long epochMillis = TimeUnit.SECONDS.toMicros(t.getTime() / MILLISECONDS_PER_SECOND);
-    Long nanosInSecond = TimeUnit.MICROSECONDS.toMicros(t.getNanos());
-    Long microsInSecond = nanosInSecond / 1000;
+    Long microsInSecond = TimeUnit.MICROSECONDS.toMicros(t.getNanos() / MILLISECONDS_PER_SECOND);
     return epochMillis + microsInSecond;
   }
 
@@ -139,6 +140,24 @@ public class DateTimeUtils {
         .map(Timestamp::toInstant)
         .map(t -> t.atZone(tz.toZoneId()))
         .map(t -> t.format(ISO_DATE_TIME_NANOS_FORMAT))
+        .orElse(null);
+  }
+
+  /**
+   * Get {@link Timestamp} from epoch with micro precision
+   *
+   * @param micros epoch micro in long
+   * @return the equivalent java sql Timestamp
+   */
+  public static Timestamp toMicrosTimestamp(Long micros) {
+    return Optional.ofNullable(micros)
+        .map(
+            n -> {
+              Timestamp ts = new Timestamp(micros / MICROSECONDS_PER_MILLISECOND);
+              ts.setNanos(
+                  (int) ((micros % MICROSECONDS_PER_SECOND) * MICROSECONDS_PER_MILLISECOND));
+              return ts;
+            })
         .orElse(null);
   }
 

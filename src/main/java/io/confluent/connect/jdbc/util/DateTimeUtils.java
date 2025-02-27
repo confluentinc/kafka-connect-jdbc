@@ -77,6 +77,25 @@ public class DateTimeUtils {
     }).format(date);
   }
 
+  private static Long convertToEpochMicros(Timestamp t) {
+    Long epochMillis = TimeUnit.SECONDS.toMicros(t.getTime() / MILLISECONDS_PER_SECOND);
+    Long nanosInSecond = TimeUnit.MICROSECONDS.toMicros(t.getNanos());
+    Long microsInSecond = nanosInSecond / 1000;
+    return epochMillis + microsInSecond;
+  }
+
+  /**
+   * Get the number of microseconds past epoch of the given {@link Timestamp}.
+   *
+   * @param timestamp the Java timestamp value
+   * @return the epoch nanoseconds
+   */
+  public static Long toEpochMicros(Timestamp timestamp) {
+    return Optional.ofNullable(timestamp)
+            .map(DateTimeUtils::convertToEpochMicros)
+            .orElse(null);
+  }
+
   private static Long convertToEpochNanos(Timestamp t) {
     Long epochMillis = TimeUnit.SECONDS.toNanos(t.getTime() / MILLISECONDS_PER_SECOND);
     Long nanosInSecond = TimeUnit.NANOSECONDS.toNanos(t.getNanos());

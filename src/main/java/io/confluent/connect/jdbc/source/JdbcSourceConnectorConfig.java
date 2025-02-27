@@ -210,6 +210,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       "Define the granularity of the Timestamp column. Options include: \n"
           + "  * connect_logical (default): represents timestamp values using Kafka Connect's "
           + "built-in representations \n"
+          + "  * micros_long: represents timestamp values as micros since epoch\n"
           + "  * nanos_long: represents timestamp values as nanos since epoch\n"
           + "  * nanos_string: represents timestamp values as nanos since epoch in string\n"
           + "  * nanos_iso_datetime_string: uses iso format 'yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'\n";
@@ -963,6 +964,10 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         : org.apache.kafka.connect.data.Timestamp.builder().build(),
         (timestamp, tz) -> timestamp,
         (timestamp, tz) -> (Timestamp) timestamp),
+
+    MICROS_LONG(optional -> optional ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA,
+        (timestamp, tz) -> DateTimeUtils.toEpochMicros(timestamp),
+        (epochMicros, tz) -> DateTimeUtils.toTimestamp((Long) epochMicros)),
 
     NANOS_LONG(optional -> optional ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA,
         (timestamp, tz) -> DateTimeUtils.toEpochNanos(timestamp),

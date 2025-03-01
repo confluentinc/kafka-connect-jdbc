@@ -150,6 +150,13 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "to be ``record_key``.";
   private static final String DELETE_ENABLED_DISPLAY = "Enable deletes";
 
+  public static final String REPLACE_NULL_WITH_DEFAULT = "replace.null.with.default";
+  private static final String REPLACE_NULL_WITH_DEFAULT_DEFAULT = "true";
+  private static final String REPLACE_NULL_WITH_DEFAULT_DOC =
+      "Whether to replace ``null`` value with default value";
+  private static final String REPLACE_NULL_WITH_DEFAULT_DISPLAY = "Replace null value with "
+      + "default value";
+
   public static final String AUTO_CREATE = "auto.create";
   private static final String AUTO_CREATE_DEFAULT = "false";
   private static final String AUTO_CREATE_DOC =
@@ -439,6 +446,17 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Width.MEDIUM,
             TABLE_TYPES_DISPLAY
         )
+        .define(
+            REPLACE_NULL_WITH_DEFAULT,
+            ConfigDef.Type.BOOLEAN,
+            REPLACE_NULL_WITH_DEFAULT_DEFAULT,
+            ConfigDef.Importance.LOW,
+            REPLACE_NULL_WITH_DEFAULT_DOC,
+            WRITES_GROUP,
+            5,
+            ConfigDef.Width.MEDIUM,
+            REPLACE_NULL_WITH_DEFAULT_DISPLAY
+        )
         // Data Mapping
         .define(
             TABLE_NAME_FORMAT,
@@ -595,6 +613,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final String tableNameFormat;
   public final int batchSize;
   public final boolean deleteEnabled;
+  public final boolean replaceNullWithDefault;
   public final int maxRetries;
   public final int retryBackoffMs;
   public final boolean autoCreate;
@@ -622,6 +641,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     tableNameFormat = getString(TABLE_NAME_FORMAT).trim();
     batchSize = getInt(BATCH_SIZE);
     deleteEnabled = getBoolean(DELETE_ENABLED);
+    replaceNullWithDefault = getBoolean(REPLACE_NULL_WITH_DEFAULT);
     maxRetries = getInt(MAX_RETRIES);
     retryBackoffMs = getInt(RETRY_BACKOFF_MS);
     autoCreate = getBoolean(AUTO_CREATE);

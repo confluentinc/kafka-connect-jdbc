@@ -43,6 +43,7 @@ import static java.util.Objects.isNull;
 import static java.util.Objects.nonNull;
 
 public class BufferedRecords {
+
   private static final Logger log = LoggerFactory.getLogger(BufferedRecords.class);
 
   private final TableId tableId;
@@ -61,6 +62,7 @@ public class BufferedRecords {
   private StatementBinder updateStatementBinder;
   private StatementBinder deleteStatementBinder;
   private boolean deletesInBatch = false;
+  private BatchPKCompaction batchPKCompaction = null;
 
   public BufferedRecords(
       JdbcSinkConfig config,
@@ -178,7 +180,17 @@ public class BufferedRecords {
       return new ArrayList<>();
     }
     log.debug("Flushing {} buffered records", records.size());
-    for (SinkRecord record : records) {
+
+    List<SinkRecord> batch = records;
+    if (config.batchPkCompactionEnabled) {
+      if (batchPKCompaction == null) {
+        batchPKCompaction = new BatchPKCompaction(config.pkMode, fieldsMetadata,
+            new SchemaPair(keySchema, valueSchema));
+      }
+      batch = batchPKCompaction.applyCompaction(records);
+    }
+
+    for (SinkRecord record : batch) {
       if (isNull(record.value()) && nonNull(deleteStatementBinder)) {
         deleteStatementBinder.bindRecord(record);
       } else {

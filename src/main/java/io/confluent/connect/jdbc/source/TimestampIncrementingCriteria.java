@@ -197,9 +197,7 @@ public class TimestampIncrementingCriteria {
   ) {
     Timestamp extractedTimestamp = null;
     if (hasTimestampColumns()) {
-      System.out.println("Timestamp in Record :" + record);
       extractedTimestamp = extractOffsetTimestamp(schema, record, timestampGranularity);
-      System.out.println("Extracted timestamp: " + extractedTimestamp);
       assert previousOffset == null || (previousOffset.getTimestampOffset() != null
                                         && previousOffset.getTimestampOffset().compareTo(
           extractedTimestamp) <= 0

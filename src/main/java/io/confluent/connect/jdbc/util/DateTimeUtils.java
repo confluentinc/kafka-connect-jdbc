@@ -36,6 +36,7 @@ public class DateTimeUtils {
   static final long MICROSECONDS_PER_SECOND = TimeUnit.SECONDS.toMicros(1);
   static final long NANOSECONDS_PER_MILLISECOND = TimeUnit.MILLISECONDS.toNanos(1);
   static final long NANOSECONDS_PER_SECOND = TimeUnit.SECONDS.toNanos(1);
+  static final long NANOSECONDS_PER_MICROSECOND = TimeUnit.MICROSECONDS.toNanos(1);
   static final DateTimeFormatter ISO_DATE_TIME_NANOS_FORMAT =
       DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS");
 
@@ -81,8 +82,8 @@ public class DateTimeUtils {
 
   private static Long convertToEpochMicros(Timestamp t) {
     Long epochMillis = TimeUnit.SECONDS.toMicros(t.getTime() / MILLISECONDS_PER_SECOND);
-    Long microsInSecond = TimeUnit.MICROSECONDS.toMicros(t.getNanos() / MILLISECONDS_PER_SECOND);
-    return epochMillis + microsInSecond;
+    Long microsComponent = t.getNanos() / NANOSECONDS_PER_MICROSECOND;
+    return epochMillis + microsComponent;
   }
 
   /**
@@ -152,7 +153,7 @@ public class DateTimeUtils {
   public static Timestamp toMicrosTimestamp(Long micros) {
     return Optional.ofNullable(micros)
         .map(
-            n -> {
+            m -> {
               Timestamp ts = new Timestamp(micros / MICROSECONDS_PER_MILLISECOND);
               ts.setNanos(
                   (int) ((micros % MICROSECONDS_PER_SECOND) * MICROSECONDS_PER_MILLISECOND));

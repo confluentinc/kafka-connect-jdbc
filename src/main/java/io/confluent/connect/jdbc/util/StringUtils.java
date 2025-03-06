@@ -15,6 +15,8 @@
 
 package io.confluent.connect.jdbc.util;
 
+import static org.apache.kafka.common.utils.Utils.isBlank;
+
 import org.apache.kafka.connect.data.Schema;
 
 /**
@@ -71,5 +73,9 @@ public class StringUtils {
       default:
         return schema.type().getName();
     }
+  }
+
+  public static boolean isNotBlank(String string) {
+    return !isBlank(string);
   }
 }

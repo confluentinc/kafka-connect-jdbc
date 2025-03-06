@@ -2,6 +2,8 @@ package io.confluent.connect.jdbc.source.integration;
 
 import ch.vorburger.mariadb4j.DBConfigurationBuilder;
 import ch.vorburger.mariadb4j.junit.MariaDB4jRule;
+import io.zonky.test.db.postgres.junit.EmbeddedPostgresRules;
+import io.zonky.test.db.postgres.junit.SingleInstancePostgresRule;
 import org.apache.kafka.connect.runtime.AbstractStatus;
 import org.apache.kafka.connect.runtime.AbstractStatus.State;
 import org.apache.kafka.connect.runtime.ConnectorConfig;
@@ -42,9 +44,7 @@ public class PauseResumeIT {
   private static Logger log = LoggerFactory.getLogger(PauseResumeIT.class);
 
   @Rule
-  public MariaDB4jRule dbRule = new MariaDB4jRule(
-      DBConfigurationBuilder.newBuilder().setPort(0).build(),
-      "testdb", null);
+  public SingleInstancePostgresRule dbRule = EmbeddedPostgresRules.singleInstance();
 
   EmbeddedConnectCluster connect;
   Map<String, String> props;
@@ -52,10 +52,12 @@ public class PauseResumeIT {
   @Before
   public void before() throws Exception {
     props = new HashMap<>();
+    String jdbcURL = String
+        .format("jdbc:postgresql://localhost:%s/postgres", dbRule.getEmbeddedPostgres().getPort());
     props.put(ConnectorConfig.CONNECTOR_CLASS_CONFIG, JdbcSourceConnector.class.getName());
     props.put(TASKS_MAX_CONFIG, "1");
-    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, dbRule.getURL());
-    props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "root");
+    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, jdbcURL);
+    props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "postgres");
     props.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_INCREMENTING);
     props.put(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG, "id");
     props.put(JdbcSourceConnectorConfig.POLL_INTERVAL_MS_CONFIG, Long.toString(POLLING_INTERVAL_MS));
@@ -82,8 +84,7 @@ public class PauseResumeIT {
   @Test
   public void testPauseResume() throws Exception {
     try (Connection conn = getConnection(); Statement stmt = conn.createStatement()) {
-      stmt.executeUpdate(
-          "CREATE TABLE accounts(id INTEGER AUTO_INCREMENT NOT NULL, name VARCHAR(255), PRIMARY KEY (id))" );
+      stmt.executeUpdate("CREATE TABLE test_table ( c1 text, id SERIAL PRIMARY KEY )");
     }
 
     connect.configureConnector(CONNECTOR_NAME, props);
@@ -130,6 +131,8 @@ public class PauseResumeIT {
   }
 
   private Connection getConnection() throws SQLException {
-    return DriverManager.getConnection(dbRule.getURL(), "root", "");
+    String jdbcURL = String
+        .format("jdbc:postgresql://localhost:%s/postgres", dbRule.getEmbeddedPostgres().getPort());
+    return DriverManager.getConnection(jdbcURL, "postgres", "");
   }
 }

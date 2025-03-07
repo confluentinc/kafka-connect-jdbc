@@ -32,8 +32,11 @@ import java.util.concurrent.TimeUnit;
 public class DateTimeUtils {
 
   static final long MILLISECONDS_PER_SECOND = TimeUnit.SECONDS.toMillis(1);
+  static final long MICROSECONDS_PER_MILLISECOND = TimeUnit.MILLISECONDS.toMicros(1);
+  static final long MICROSECONDS_PER_SECOND = TimeUnit.SECONDS.toMicros(1);
   static final long NANOSECONDS_PER_MILLISECOND = TimeUnit.MILLISECONDS.toNanos(1);
   static final long NANOSECONDS_PER_SECOND = TimeUnit.SECONDS.toNanos(1);
+  static final long NANOSECONDS_PER_MICROSECOND = TimeUnit.MICROSECONDS.toNanos(1);
   static final DateTimeFormatter ISO_DATE_TIME_NANOS_FORMAT =
       DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS");
 
@@ -75,6 +78,24 @@ public class DateTimeUtils {
       sdf.setTimeZone(aTimeZone);
       return sdf;
     }).format(date);
+  }
+
+  private static Long convertToEpochMicros(Timestamp t) {
+    Long epochMillis = TimeUnit.SECONDS.toMicros(t.getTime() / MILLISECONDS_PER_SECOND);
+    Long microsComponent = t.getNanos() / NANOSECONDS_PER_MICROSECOND;
+    return epochMillis + microsComponent;
+  }
+
+  /**
+   * Get the number of microseconds past epoch of the given {@link Timestamp}.
+   *
+   * @param timestamp the Java timestamp value
+   * @return the epoch nanoseconds
+   */
+  public static Long toEpochMicros(Timestamp timestamp) {
+    return Optional.ofNullable(timestamp)
+            .map(DateTimeUtils::convertToEpochMicros)
+            .orElse(null);
   }
 
   private static Long convertToEpochNanos(Timestamp t) {
@@ -120,6 +141,24 @@ public class DateTimeUtils {
         .map(Timestamp::toInstant)
         .map(t -> t.atZone(tz.toZoneId()))
         .map(t -> t.format(ISO_DATE_TIME_NANOS_FORMAT))
+        .orElse(null);
+  }
+
+  /**
+   * Get {@link Timestamp} from epoch with micro precision
+   *
+   * @param micros epoch micro in long
+   * @return the equivalent java sql Timestamp
+   */
+  public static Timestamp toMicrosTimestamp(Long micros) {
+    return Optional.ofNullable(micros)
+        .map(
+            m -> {
+              Timestamp ts = new Timestamp(micros / MICROSECONDS_PER_MILLISECOND);
+              ts.setNanos(
+                  (int) ((micros % MICROSECONDS_PER_SECOND) * MICROSECONDS_PER_MILLISECOND));
+              return ts;
+            })
         .orElse(null);
   }
 

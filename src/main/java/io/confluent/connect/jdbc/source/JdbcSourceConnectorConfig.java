@@ -210,6 +210,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       "Define the granularity of the Timestamp column. Options include: \n"
           + "  * connect_logical (default): represents timestamp values using Kafka Connect's "
           + "built-in representations \n"
+          + "  * micros_long: represents timestamp values as micros since epoch\n"
           + "  * nanos_long: represents timestamp values as nanos since epoch\n"
           + "  * nanos_string: represents timestamp values as nanos since epoch in string\n"
           + "  * nanos_iso_datetime_string: uses iso format 'yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'\n";
@@ -318,7 +319,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public static final String QUERY_SUFFIX_CONFIG = "query.suffix";
   public static final String QUERY_SUFFIX_DEFAULT = "";
-  public static final String QUERY_SUFFIX_DOC = 
+  public static final String QUERY_SUFFIX_DOC =
       "Suffix to append at the end of the generated query.";
   public static final String QUERY_SUFFIX_DISPLAY = "Query suffix";
 
@@ -963,6 +964,29 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         : org.apache.kafka.connect.data.Timestamp.builder().build(),
         (timestamp, tz) -> timestamp,
         (timestamp, tz) -> (Timestamp) timestamp),
+
+    MICROS_LONG(optional -> optional ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA,
+        (timestamp, tz) -> DateTimeUtils.toEpochMicros(timestamp),
+        (epochMicros, tz) -> DateTimeUtils.toMicrosTimestamp((Long) epochMicros)),
+
+    MICROS_STRING(optional -> optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA,
+        (timestamp, tz) -> DateTimeUtils.toEpochMicrosString(timestamp),
+        (epochMicrosString, tz) -> {
+          try {
+            return DateTimeUtils.toMicrosTimestamp((String) epochMicrosString);
+          } catch (NumberFormatException e) {
+            throw new ConnectException(
+                "Invalid value for timestamp column with micros-string granularity: "
+                    + epochMicrosString
+                    + e.getMessage());
+          }
+        }),
+
+    MICROS_ISO_DATETIME_STRING(optional -> optional
+        ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA,
+        DateTimeUtils::toIsoDateMicrosTimeString,
+        (toIsoDateMicrosTimeString, tz) ->
+            DateTimeUtils.toTimestampFromIsoDateMicrosTime((String) toIsoDateMicrosTimeString, tz)),
 
     NANOS_LONG(optional -> optional ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA,
         (timestamp, tz) -> DateTimeUtils.toEpochNanos(timestamp),

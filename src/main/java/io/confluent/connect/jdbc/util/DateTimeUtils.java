@@ -155,8 +155,8 @@ public class DateTimeUtils {
         .map(
             m -> {
               Timestamp ts = new Timestamp(micros / MICROSECONDS_PER_MILLISECOND);
-              long remainderMicros = micros % MICROSECONDS_PER_MILLISECOND;
-              ts.setNanos((int)(remainderMicros * NANOSECONDS_PER_MICROSECOND));
+              ts.setNanos(
+                  (int) ((micros % MICROSECONDS_PER_SECOND) * MICROSECONDS_PER_MILLISECOND));
               return ts;
             })
         .orElse(null);

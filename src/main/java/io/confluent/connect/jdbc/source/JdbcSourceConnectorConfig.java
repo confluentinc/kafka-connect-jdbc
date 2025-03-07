@@ -211,6 +211,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
           + "  * connect_logical (default): represents timestamp values using Kafka Connect's "
           + "built-in representations \n"
           + "  * micros_long: represents timestamp values as micros since epoch\n"
+          + "  * micros_string: represents timestamp values as micros since epoch in string\n"
+          + "  * micros_iso_datetime_string: uses iso format 'yyyy-MM-dd'T'HH:mm:ss.SSSSSS'\n"
           + "  * nanos_long: represents timestamp values as nanos since epoch\n"
           + "  * nanos_string: represents timestamp values as nanos since epoch in string\n"
           + "  * nanos_iso_datetime_string: uses iso format 'yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'\n";

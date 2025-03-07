@@ -242,6 +242,19 @@ public class TimestampIncrementingCriteriaTest {
   }
 
   @Test
+  public void extractWithTsColumnIsoDateMicrosTimeString() throws Exception {
+    schema = SchemaBuilder.struct()
+              .field(TS1_COLUMN.name(), SchemaBuilder.STRING_SCHEMA)
+              .field(TS2_COLUMN.name(), SchemaBuilder.STRING_SCHEMA)
+              .build();
+    record = new Struct(schema)
+              .put(TS1_COLUMN.name(), DateTimeUtils.toIsoDateMicrosTimeString(TS1, utcTimeZone))
+              .put(TS2_COLUMN.name(), DateTimeUtils.toIsoDateMicrosTimeString(TS2, utcTimeZone));
+    assertExtractedOffset(-1, TS1, schema, record,
+     TimestampGranularity.MICROS_ISO_DATETIME_STRING);
+  }
+
+  @Test
   public void extractWithTsColumnIsoDateTimeString() throws Exception {
     schema = SchemaBuilder.struct()
         .field(TS1_COLUMN.name(), SchemaBuilder.STRING_SCHEMA)
@@ -305,6 +318,19 @@ public class TimestampIncrementingCriteriaTest {
         .put(TS2_COLUMN.name(), null);
     assertExtractedOffset(-1, TS0, schema, record,
         TimestampGranularity.NANOS_STRING);
+  }
+
+  @Test
+  public void extractWithTsColumnIsoDateMicrosTimeStringNull() throws Exception {
+    schema = SchemaBuilder.struct()
+              .field(TS1_COLUMN.name(), SchemaBuilder.OPTIONAL_STRING_SCHEMA)
+              .field(TS2_COLUMN.name(), SchemaBuilder.OPTIONAL_STRING_SCHEMA)
+              .build();
+    record = new Struct(schema)
+              .put(TS1_COLUMN.name(), null)
+              .put(TS2_COLUMN.name(), null);
+    assertExtractedOffset(-1, TS0, schema, record,
+     TimestampGranularity.MICROS_ISO_DATETIME_STRING);
   }
 
   @Test

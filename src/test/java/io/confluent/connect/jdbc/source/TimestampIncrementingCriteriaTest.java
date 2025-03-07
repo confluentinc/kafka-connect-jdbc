@@ -223,8 +223,8 @@ public class TimestampIncrementingCriteriaTest {
             .build();
     record =
         new Struct(schema)
-            .put(TS1_COLUMN.name(), String.valueOf(DateTimeUtils.toEpochNanos(TS1)))
-            .put(TS2_COLUMN.name(), String.valueOf(DateTimeUtils.toEpochNanos(TS2)));
+            .put(TS1_COLUMN.name(), String.valueOf(DateTimeUtils.toEpochMicros(TS1)))
+            .put(TS2_COLUMN.name(), String.valueOf(DateTimeUtils.toEpochMicros(TS2)));
     assertExtractedOffset(-1, TS1, schema, record, TimestampGranularity.MICROS_STRING);
   }
 

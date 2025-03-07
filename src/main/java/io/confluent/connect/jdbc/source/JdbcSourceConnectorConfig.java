@@ -319,7 +319,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public static final String QUERY_SUFFIX_CONFIG = "query.suffix";
   public static final String QUERY_SUFFIX_DEFAULT = "";
-  public static final String QUERY_SUFFIX_DOC = 
+  public static final String QUERY_SUFFIX_DOC =
       "Suffix to append at the end of the generated query.";
   public static final String QUERY_SUFFIX_DISPLAY = "Query suffix";
 
@@ -968,6 +968,25 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     MICROS_LONG(optional -> optional ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA,
         (timestamp, tz) -> DateTimeUtils.toEpochMicros(timestamp),
         (epochMicros, tz) -> DateTimeUtils.toMicrosTimestamp((Long) epochMicros)),
+
+    MICROS_STRING(optional -> optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA,
+        (timestamp, tz) -> DateTimeUtils.toEpochMicrosString(timestamp),
+        (epochMicrosString, tz) -> {
+          try {
+            return DateTimeUtils.toMicrosTimestamp((String) epochMicrosString);
+          } catch (NumberFormatException e) {
+            throw new ConnectException(
+                "Invalid value for timestamp column with micros-string granularity: "
+                    + epochMicrosString
+                    + e.getMessage());
+          }
+        }),
+
+    MICROS_ISO_DATETIME_STRING(optional -> optional
+        ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA,
+        DateTimeUtils::toIsoDateMicrosTimeString,
+        (toIsoDateMicrosTimeString, tz) ->
+            DateTimeUtils.toTimestampFromIsoDateMicrosTime((String) toIsoDateMicrosTimeString, tz)),
 
     NANOS_LONG(optional -> optional ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA,
         (timestamp, tz) -> DateTimeUtils.toEpochNanos(timestamp),

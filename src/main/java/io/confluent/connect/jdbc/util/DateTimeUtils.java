@@ -37,6 +37,8 @@ public class DateTimeUtils {
   static final long NANOSECONDS_PER_MILLISECOND = TimeUnit.MILLISECONDS.toNanos(1);
   static final long NANOSECONDS_PER_SECOND = TimeUnit.SECONDS.toNanos(1);
   static final long NANOSECONDS_PER_MICROSECOND = TimeUnit.MICROSECONDS.toNanos(1);
+  static final DateTimeFormatter ISO_DATE_TIME_MICROS_FORMAT =
+      DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSS");
   static final DateTimeFormatter ISO_DATE_TIME_NANOS_FORMAT =
       DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS");
 
@@ -51,6 +53,9 @@ public class DateTimeUtils {
 
   private static final ThreadLocal<Map<TimeZone, SimpleDateFormat>> TIMEZONE_TIMESTAMP_FORMATS =
       ThreadLocal.withInitial(HashMap::new);
+
+  private DateTimeUtils() {
+  }
 
   public static Calendar getTimeZoneCalendar(final TimeZone timeZone) {
     return TIMEZONE_CALENDARS.get().computeIfAbsent(timeZone, GregorianCalendar::new);
@@ -117,6 +122,19 @@ public class DateTimeUtils {
   }
 
   /**
+   * Get the number of microseconds past epoch of the given {@link Timestamp}.
+   *
+   * @param timestamp the Java timestamp value
+   * @return the epoch microseconds string
+   */
+  public static String toEpochMicrosString(Timestamp timestamp) {
+    return Optional.ofNullable(timestamp)
+            .map(DateTimeUtils::convertToEpochMicros)
+            .map(String::valueOf)
+            .orElse(null);
+  }
+
+  /**
    * Get the number of nanoseconds past epoch of the given {@link Timestamp}.
    *
    * @param timestamp the Java timestamp value
@@ -126,6 +144,21 @@ public class DateTimeUtils {
     return Optional.ofNullable(timestamp)
         .map(DateTimeUtils::convertToEpochNanos)
         .map(String::valueOf)
+        .orElse(null);
+  }
+
+  /**
+   * Get the iso date-time string with micro precision for the given {@link Timestamp}.
+   *
+   * @param timestamp the Java timestamp value
+   * @param tz the timezone of the source database
+   * @return the string iso date time
+   */
+  public static String toIsoDateMicrosTimeString(Timestamp timestamp, TimeZone tz) {
+    return Optional.ofNullable(timestamp)
+        .map(Timestamp::toInstant)
+        .map(t -> t.atZone(tz.toZoneId()))
+        .map(t -> t.format(ISO_DATE_TIME_MICROS_FORMAT))
         .orElse(null);
   }
 
@@ -160,6 +193,19 @@ public class DateTimeUtils {
               return ts;
             })
         .orElse(null);
+  }
+
+  /**
+   * Get {@link Timestamp} from epoch with micros precision
+   *
+   * @param micros epoch micros in string
+   * @return the equivalent java sql Timestamp
+   */
+  public static Timestamp toMicrosTimestamp(String micros) throws NumberFormatException {
+    return Optional.ofNullable(micros)
+            .map(Long::parseLong)
+            .map(DateTimeUtils::toMicrosTimestamp)
+            .orElse(null);
   }
 
   /**
@@ -198,6 +244,22 @@ public class DateTimeUtils {
    * @param tz the timezone of the source database
    * @return the equivalent java sql Timestamp
    */
+  public static Timestamp toTimestampFromIsoDateMicrosTime(String isoDT, TimeZone tz) {
+    return Optional.ofNullable(isoDT)
+        .map(i -> LocalDateTime.parse(isoDT, ISO_DATE_TIME_MICROS_FORMAT))
+        .map(t -> t.atZone(tz.toZoneId()))
+        .map(ChronoZonedDateTime::toInstant)
+        .map(Timestamp::from)
+        .orElse(null);
+  }
+
+  /**
+   * Get {@link Timestamp} from epoch with nano precision
+   *
+   * @param isoDT iso dateTime format "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS"
+   * @param tz the timezone of the source database
+   * @return the equivalent java sql Timestamp
+   */
   public static Timestamp toTimestampFromIsoDateTime(String isoDT, TimeZone tz) {
     return Optional.ofNullable(isoDT)
         .map(i -> LocalDateTime.parse(isoDT, ISO_DATE_TIME_NANOS_FORMAT))
@@ -205,8 +267,5 @@ public class DateTimeUtils {
         .map(ChronoZonedDateTime::toInstant)
         .map(Timestamp::from)
         .orElse(null);
-  }
-
-  private DateTimeUtils() {
   }
 }

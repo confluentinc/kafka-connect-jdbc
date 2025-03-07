@@ -75,7 +75,7 @@ public class JdbcSourceTask extends SourceTask {
   int maxRetriesPerQuerier;
 
   public JdbcSourceTask() {
-    this.time = new SystemTime();
+    this.time = Time.SYSTEM;
   }
 
   public JdbcSourceTask(Time time) {

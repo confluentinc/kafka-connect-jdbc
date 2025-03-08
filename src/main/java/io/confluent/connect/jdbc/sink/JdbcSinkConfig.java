@@ -301,6 +301,16 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String MSSQL_USE_MERGE_HOLDLOCK_DISPLAY =
       "SQL Server - Use HOLDLOCK in MERGE";
 
+  public static final String MSSQL_INSERT_PRIMARY_KEYS = "mssql.insert.primary.keys";
+  private static final String MSSQL_INSERT_PRIMARY_KEYS_DEFAULT = "true";
+  private static final String MSSQL_INSERT_PRIMARY_KEYS_DOC =
+          "This is only implemented for SQL Server: If false the primary key(s) "
+      + "will only be used for UPDATE but not for INSERT. This also applies to MERGE(mode=upsert)."
+      + "Background: SQL Server datbases reject inserting values into a auto-incremental columns "
+      + "of type IDENTITY.";
+  private static final String MSSQL_INSERT_PRIMARY_KEYS_DISPLAY =
+          "SQL Server - Whether to insert primary keys in INSERT or MERGE scenario";
+
   /**
    * The properties that begin with this prefix will be used to configure a class, specified by
    * {@code jdbc.credentials.provider.class} if it implements {@link Configurable}.
@@ -317,7 +327,6 @@ public class JdbcSinkConfig extends AbstractConfig {
 
   public static final String CREDENTIALS_PROVIDER_CLASS_DOC =
       JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_DOC;
-
 
   public static final ConfigDef CONFIG_DEF = new ConfigDef()
         // Connection
@@ -516,6 +525,17 @@ public class JdbcSinkConfig extends AbstractConfig {
           DB_TIMEZONE_CONFIG_DISPLAY
         )
         .define(
+                MSSQL_INSERT_PRIMARY_KEYS,
+          ConfigDef.Type.BOOLEAN,
+                MSSQL_INSERT_PRIMARY_KEYS_DEFAULT,
+          ConfigDef.Importance.LOW,
+                MSSQL_INSERT_PRIMARY_KEYS_DOC,
+          DATAMAPPING_GROUP,
+          6,
+          ConfigDef.Width.MEDIUM,
+                MSSQL_INSERT_PRIMARY_KEYS_DISPLAY
+        )
+        .define(
             DATE_TIMEZONE_CONFIG,
             ConfigDef.Type.STRING,
             DATE_TIMEZONE_DEFAULT,
@@ -523,11 +543,12 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Importance.LOW,
             DATE_TIMEZONE_CONFIG_DOC,
             DATAMAPPING_GROUP,
-            6,
+            7,
             ConfigDef.Width.MEDIUM,
             DATE_TIMEZONE_CONFIG_DISPLAY,
             DATE_TIMEZONE_RECOMMENDER
         )
+  
         // DDL
         .define(
             AUTO_CREATE,
@@ -630,6 +651,8 @@ public class JdbcSinkConfig extends AbstractConfig {
 
   public final boolean trimSensitiveLogsEnabled;
 
+  public final boolean insertPrimaryKeys;
+
   public JdbcSinkConfig(Map<?, ?> props) {
     super(CONFIG_DEF, props);
     connectorName = ConfigUtils.connectorName(props);
@@ -649,6 +672,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     insertMode = InsertMode.valueOf(getString(INSERT_MODE).toUpperCase());
     pkMode = PrimaryKeyMode.valueOf(getString(PK_MODE).toUpperCase());
     pkFields = getList(PK_FIELDS);
+    insertPrimaryKeys = getBoolean(MSSQL_INSERT_PRIMARY_KEYS);
     dialectName = getString(DIALECT_NAME_CONFIG);
     fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
     String dbTimeZone = getString(DB_TIMEZONE_CONFIG);

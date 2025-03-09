@@ -39,6 +39,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -83,6 +85,8 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     assertColumnConverter(Types.OTHER, PostgreSqlDatabaseDialect.JSON_TYPE_NAME, Schema.STRING_SCHEMA, String.class);
     assertColumnConverter(Types.OTHER, PostgreSqlDatabaseDialect.JSONB_TYPE_NAME, Schema.STRING_SCHEMA, String.class);
     assertColumnConverter(Types.OTHER, PostgreSqlDatabaseDialect.UUID_TYPE_NAME, Schema.STRING_SCHEMA, UUID.class);
+    assertColumnConverter(Types.OTHER, PostgreSqlDatabaseDialect.TIMESTAMP_WITHOUT_TIMEZONE, Schema.STRING_SCHEMA, LocalDateTime.class);
+    assertColumnConverter(Types.OTHER, PostgreSqlDatabaseDialect.TIMESTAMP_WITH_TIMEZONE, Schema.STRING_SCHEMA, OffsetDateTime.class);
   }
 
   @Test
@@ -221,16 +225,20 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     builder.withColumn("id2").type("int", JDBCType.INTEGER, Integer.class);
     builder.withColumn("columnA").type("varchar", JDBCType.VARCHAR, Integer.class);
     builder.withColumn("uuidColumn").type("uuid", JDBCType.OTHER, UUID.class);
+    builder.withColumn("timestamptzColumn").type("timestamptz", JDBCType.OTHER, OffsetDateTime.class);
+    builder.withColumn("timestampColumn").type("timestamp", JDBCType.OTHER, LocalDateTime.class);
     builder.withColumn("dateColumn").type("date", JDBCType.DATE, java.sql.Date.class);
     tableDefn = builder.build();
     List<ColumnId> nonPkColumns = new ArrayList<>();
     nonPkColumns.add(new ColumnId(tableId, "columnA"));
     nonPkColumns.add(new ColumnId(tableId, "uuidColumn"));
+    nonPkColumns.add(new ColumnId(tableId, "timestamptzColumn"));
+    nonPkColumns.add(new ColumnId(tableId, "timestampColumn"));
     nonPkColumns.add(new ColumnId(tableId, "dateColumn"));
     assertEquals(
         "INSERT INTO myTable (" +
-        "id1,id2,columnA,uuidColumn,dateColumn" +
-        ") VALUES (?,?,?,?::uuid,?)",
+        "id1,id2,columnA,uuidColumn,timestamptzColumn,timestampColumn,dateColumn" +
+        ") VALUES (?,?,?,?::uuid,?::timestamptz,?::timestamp,?)",
         dialect.buildInsertStatement(tableId, pkColumns, nonPkColumns, tableDefn)
     );
   }
@@ -270,19 +278,25 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     builder.withColumn("id2").type("int", JDBCType.INTEGER, Integer.class);
     builder.withColumn("columnA").type("varchar", JDBCType.VARCHAR, Integer.class);
     builder.withColumn("uuidColumn").type("uuid", JDBCType.OTHER, UUID.class);
+    builder.withColumn("timestamptzColumn").type("timestamptz", JDBCType.OTHER, OffsetDateTime.class);
+    builder.withColumn("timestampColumn").type("timestamp", JDBCType.OTHER, LocalDateTime.class);
     builder.withColumn("dateColumn").type("date", JDBCType.DATE, java.sql.Date.class);
     tableDefn = builder.build();
     List<ColumnId> nonPkColumns = new ArrayList<>();
     nonPkColumns.add(new ColumnId(tableId, "columnA"));
     nonPkColumns.add(new ColumnId(tableId, "uuidColumn"));
+    nonPkColumns.add(new ColumnId(tableId, "timestamptzColumn"));
+    nonPkColumns.add(new ColumnId(tableId, "timestampColumn"));
     nonPkColumns.add(new ColumnId(tableId, "dateColumn"));
     assertEquals(
         "INSERT INTO myTable (" +
-        "id1,id2,columnA,uuidColumn,dateColumn" +
-        ") VALUES (?,?,?,?::uuid,?) ON CONFLICT (id1," +
+        "id1,id2,columnA,uuidColumn,timestamptzColumn,timestampColumn,dateColumn" +
+        ") VALUES (?,?,?,?::uuid,?::timestamptz,?::timestamp,?) ON CONFLICT (id1," +
         "id2) DO UPDATE SET " +
         "columnA=EXCLUDED.columnA," +
         "uuidColumn=EXCLUDED.uuidColumn," +
+        "timestamptzColumn=EXCLUDED.timestamptzColumn," +
+        "timestampColumn=EXCLUDED.timestampColumn," +
         "dateColumn=EXCLUDED.dateColumn",
         dialect.buildUpsertQueryStatement(tableId, pkColumns, nonPkColumns, tableDefn)
     );
@@ -295,14 +309,20 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     builder.withColumn("id2").type("int", JDBCType.INTEGER, Integer.class);
     builder.withColumn("columnA").type("varchar", JDBCType.VARCHAR, Integer.class);
     builder.withColumn("uuidColumn").type("uuid", JDBCType.OTHER, UUID.class);
+    builder.withColumn("timestamptzColumn").type("timestamptz", JDBCType.OTHER, OffsetDateTime.class);
+    builder.withColumn("timestampColumn").type("timestamp", JDBCType.OTHER, LocalDateTime.class);
     builder.withColumn("dateColumn").type("date", JDBCType.DATE, java.sql.Date.class);
     TableDefinition tableDefn = builder.build();
     ColumnId uuidColumn = tableDefn.definitionForColumn("uuidColumn").id();
+    ColumnId timestamptzColumn = tableDefn.definitionForColumn("timestamptzColumn").id();
+    ColumnId timestampColumn = tableDefn.definitionForColumn("timestampColumn").id();
     ColumnId dateColumn = tableDefn.definitionForColumn("dateColumn").id();
     assertEquals("", dialect.valueTypeCast(tableDefn, columnPK1));
     assertEquals("", dialect.valueTypeCast(tableDefn, columnPK2));
     assertEquals("", dialect.valueTypeCast(tableDefn, columnA));
     assertEquals("::uuid", dialect.valueTypeCast(tableDefn, uuidColumn));
+    assertEquals("::timestamptz", dialect.valueTypeCast(tableDefn, timestamptzColumn));
+    assertEquals("::timestamp", dialect.valueTypeCast(tableDefn, timestampColumn));
     assertEquals("", dialect.valueTypeCast(tableDefn, dateColumn));
   }
 

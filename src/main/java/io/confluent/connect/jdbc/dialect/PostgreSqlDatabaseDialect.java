@@ -44,12 +44,18 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+
+import static java.time.format.DateTimeFormatter.ISO_DATE_TIME;
+import static java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
 /**
  * A {@link DatabaseDialect} for PostgreSQL.
@@ -78,6 +84,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   static final String JSON_TYPE_NAME = "json";
   static final String JSONB_TYPE_NAME = "jsonb";
   static final String UUID_TYPE_NAME = "uuid";
+  static final String TIMESTAMP_WITH_TIMEZONE = "timestamptz";
+  static final String TIMESTAMP_WITHOUT_TIMEZONE = "timestamp";
 
   /**
    * Define the PG datatypes that require casting upon insert/update statements.
@@ -86,7 +94,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       Utils.mkSet(
           JSON_TYPE_NAME,
           JSONB_TYPE_NAME,
-          UUID_TYPE_NAME
+          UUID_TYPE_NAME,
+          TIMESTAMP_WITH_TIMEZONE,
+          TIMESTAMP_WITHOUT_TIMEZONE
       )
   );
 
@@ -239,6 +249,28 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           return fieldName;
         }
 
+        if (OffsetDateTime.class.getName().equals(columnDefn.classNameForType())) {
+          builder.field(
+                  fieldName,
+                  columnDefn.isOptional()
+                          ?
+                          Schema.OPTIONAL_STRING_SCHEMA :
+                          Schema.STRING_SCHEMA
+          );
+          return fieldName;
+        }
+
+        if (LocalDate.class.getName().equals(columnDefn.classNameForType())) {
+          builder.field(
+                  fieldName,
+                  columnDefn.isOptional()
+                          ?
+                          Schema.OPTIONAL_STRING_SCHEMA :
+                          Schema.STRING_SCHEMA
+          );
+          return fieldName;
+        }
+
         break;
       }
       default:
@@ -279,6 +311,13 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
         if (UUID.class.getName().equals(columnDefn.classNameForType())) {
           return rs -> rs.getString(col);
+        }
+
+        if (OffsetDateTime.class.getName().equals(columnDefn.classNameForType())) {
+          return rs -> rs.getObject(col, OffsetDateTime.class).format(ISO_OFFSET_DATE_TIME);
+        }
+        if (LocalDateTime.class.getName().equals(columnDefn.classNameForType())) {
+          return rs -> rs.getObject(col, LocalDateTime.class).format(ISO_DATE_TIME);
         }
         break;
       }

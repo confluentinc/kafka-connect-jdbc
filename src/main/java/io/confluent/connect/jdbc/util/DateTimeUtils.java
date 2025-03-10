@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.util;
 
+import java.math.BigInteger;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
@@ -31,6 +32,7 @@ import java.util.concurrent.TimeUnit;
 
 public class DateTimeUtils {
 
+  private static final long NANO_SCALE   = 1L;
   static final long MILLISECONDS_PER_SECOND = TimeUnit.SECONDS.toMillis(1);
   static final long MICROSECONDS_PER_MILLISECOND = TimeUnit.MILLISECONDS.toMicros(1);
   static final long MICROSECONDS_PER_SECOND = TimeUnit.SECONDS.toMicros(1);
@@ -103,10 +105,29 @@ public class DateTimeUtils {
             .orElse(null);
   }
 
-  private static Long convertToEpochNanos(Timestamp t) {
-    Long epochMillis = TimeUnit.SECONDS.toNanos(t.getTime() / MILLISECONDS_PER_SECOND);
-    Long nanosInSecond = TimeUnit.NANOSECONDS.toNanos(t.getNanos());
-    return epochMillis + nanosInSecond;
+  /**
+   * Converts the given duration to nanoseconds using BigInteger to support large values.
+   *
+   * @param duration the duration to convert
+   * @param scale the scale factor to use for conversion
+   * @return the duration in nanoseconds as a BigInteger
+   */
+  public static BigInteger toNanosBigInteger(long duration, long scale) {
+    if (scale == NANO_SCALE) {
+      return BigInteger.valueOf(duration);
+    } else {
+      return BigInteger.valueOf(duration).multiply(BigInteger.valueOf(scale));
+    }
+  }
+
+  private static BigInteger convertToEpochNanos(Timestamp t) {
+    System.out.println("timestamp in convertToEpochNanos: " + t);
+    BigInteger epochMillis =
+     toNanosBigInteger(t.getTime() / MILLISECONDS_PER_SECOND, NANOSECONDS_PER_SECOND);
+    BigInteger nanosInSecond = BigInteger.valueOf(t.getNanos());
+    System.out.println("epochMillis in convertToEpochNanos: " + epochMillis);
+    System.out.println("nanosInSecond in convertToEpochNanos:   " + nanosInSecond);
+    return epochMillis.add(nanosInSecond);
   }
 
   /**
@@ -115,7 +136,7 @@ public class DateTimeUtils {
    * @param timestamp the Java timestamp value
    * @return the epoch nanoseconds
    */
-  public static Long toEpochNanos(Timestamp timestamp) {
+  public static BigInteger toEpochNanos(Timestamp timestamp) {
     return Optional.ofNullable(timestamp)
         .map(DateTimeUtils::convertToEpochNanos)
         .orElse(null);
@@ -227,14 +248,32 @@ public class DateTimeUtils {
   /**
    * Get {@link Timestamp} from epoch with nano precision
    *
+   * @param nanos epoch nanos in BigInteger
+   * @return the equivalent java sql Timestamp
+   */
+  public static Timestamp toTimestamp(BigInteger nanos) {
+    return Optional.ofNullable(nanos)
+            .map(n -> {
+              long millis = n.divide(BigInteger.valueOf(NANOSECONDS_PER_MILLISECOND)).longValue();
+              int nanosPart = n.remainder(BigInteger.valueOf(NANOSECONDS_PER_SECOND)).intValue();
+              Timestamp ts = new Timestamp(millis);
+              ts.setNanos(nanosPart);
+              return ts;
+            })
+            .orElse(null);
+}
+
+  /**
+   * Get {@link Timestamp} from epoch with nano precision
+   *
    * @param nanos epoch nanos in string
    * @return the equivalent java sql Timestamp
    */
   public static Timestamp toTimestamp(String nanos) throws NumberFormatException {
     return Optional.ofNullable(nanos)
-        .map(Long::parseLong)
-        .map(DateTimeUtils::toTimestamp)
-        .orElse(null);
+     .map(BigInteger::new)
+     .map(DateTimeUtils::toTimestamp)
+     .orElse(null);
   }
 
   /**

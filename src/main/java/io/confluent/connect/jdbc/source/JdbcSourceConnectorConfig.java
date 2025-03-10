@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.source;
 
+import java.math.BigInteger;
 import java.sql.Connection;
 import java.sql.Timestamp;
 import java.time.ZoneId;

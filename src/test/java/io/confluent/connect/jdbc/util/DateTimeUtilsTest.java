@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.util;
 
 import org.junit.Test;
 
+import java.math.BigInteger;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -34,13 +35,13 @@ public class DateTimeUtilsTest {
   public void testTimestampToNanosLong() {
     Timestamp timestamp = Timestamp.from(Instant.now());
     timestamp.setNanos(141362049);
-    long nanos = DateTimeUtils.toEpochNanos(timestamp);
+    BigInteger nanos = DateTimeUtils.toEpochNanos(timestamp);
     assertEquals(timestamp, DateTimeUtils.toTimestamp(nanos));
   }
 
   @Test
   public void testTimestampToNanosLongNull() {
-    Long nanos = DateTimeUtils.toEpochNanos(null);
+    BigInteger nanos = DateTimeUtils.toEpochNanos(null);
     assertNull(nanos);
     Timestamp timestamp = DateTimeUtils.toTimestamp((Long) null);
     assertNull(timestamp);

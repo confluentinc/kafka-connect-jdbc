@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.util;
 
+import java.math.BigInteger;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
@@ -141,10 +142,10 @@ public class DateTimeUtils {
    * @return the epoch nanoseconds string
    */
   public static String toEpochNanosString(Timestamp timestamp) {
-    return Optional.ofNullable(timestamp)
-        .map(DateTimeUtils::convertToEpochNanos)
-        .map(String::valueOf)
-        .orElse(null);
+    BigInteger seconds = BigInteger.valueOf(timestamp.getTime() / MILLISECONDS_PER_SECOND);
+    BigInteger nanos = BigInteger.valueOf(timestamp.getNanos());
+    BigInteger totalNanos = seconds.multiply(BigInteger.valueOf(NANOSECONDS_PER_SECOND)).add(nanos);
+    return totalNanos.toString();
   }
 
   /**
@@ -231,10 +232,13 @@ public class DateTimeUtils {
    * @return the equivalent java sql Timestamp
    */
   public static Timestamp toTimestamp(String nanos) throws NumberFormatException {
-    return Optional.ofNullable(nanos)
-        .map(Long::parseLong)
-        .map(DateTimeUtils::toTimestamp)
-        .orElse(null);
+    BigInteger nanoseconds = new BigInteger(nanos);
+    long milliseconds =
+        nanoseconds.divide(BigInteger.valueOf(NANOSECONDS_PER_MILLISECOND)).longValue();
+    int fractionalNanos = nanoseconds.mod(BigInteger.valueOf(NANOSECONDS_PER_SECOND)).intValue();
+    Timestamp timestamp = new Timestamp(milliseconds);
+    timestamp.setNanos(fractionalNanos);
+    return timestamp;
   }
 
   /**

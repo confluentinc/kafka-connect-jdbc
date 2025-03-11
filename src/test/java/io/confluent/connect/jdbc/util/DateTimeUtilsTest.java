@@ -37,7 +37,7 @@ public class DateTimeUtilsTest {
     Timestamp timestamp = Timestamp.from(Instant.now());
     timestamp.setNanos(141362049);
     long nanos = DateTimeUtils.toEpochNanos(timestamp);
-    assertEquals(timestamp, DateTimeUtils.toTimestamp((nanos)));
+    assertEquals(timestamp, DateTimeUtils.toTimestamp(nanos));
   }
 
   @Test

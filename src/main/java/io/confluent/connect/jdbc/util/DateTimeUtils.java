@@ -31,6 +31,7 @@ import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
 public class DateTimeUtils {
+
   static final long MILLISECONDS_PER_SECOND = TimeUnit.SECONDS.toMillis(1);
   static final long MICROSECONDS_PER_MILLISECOND = TimeUnit.MILLISECONDS.toMicros(1);
   static final long MICROSECONDS_PER_SECOND = TimeUnit.SECONDS.toMicros(1);
@@ -102,7 +103,6 @@ public class DateTimeUtils {
             .map(DateTimeUtils::convertToEpochMicros)
             .orElse(null);
   }
-
 
   private static Long convertToEpochNanos(Timestamp t) {
     Long epochMillis = TimeUnit.SECONDS.toNanos(t.getTime() / MILLISECONDS_PER_SECOND);

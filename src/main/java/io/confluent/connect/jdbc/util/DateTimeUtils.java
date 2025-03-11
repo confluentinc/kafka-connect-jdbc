@@ -121,12 +121,9 @@ public class DateTimeUtils {
   }
 
   private static BigInteger convertToEpochNanos(Timestamp t) {
-    System.out.println("timestamp in convertToEpochNanos: " + t);
     BigInteger epochMillis =
-     toNanosBigInteger(t.getTime() / MILLISECONDS_PER_SECOND, NANOSECONDS_PER_SECOND);
+        toNanosBigInteger(t.getTime() / MILLISECONDS_PER_SECOND, NANOSECONDS_PER_SECOND);
     BigInteger nanosInSecond = BigInteger.valueOf(t.getNanos());
-    System.out.println("epochMillis in convertToEpochNanos: " + epochMillis);
-    System.out.println("nanosInSecond in convertToEpochNanos:   " + nanosInSecond);
     return epochMillis.add(nanosInSecond);
   }
 
@@ -261,7 +258,7 @@ public class DateTimeUtils {
               return ts;
             })
             .orElse(null);
-}
+  }
 
   /**
    * Get {@link Timestamp} from epoch with nano precision

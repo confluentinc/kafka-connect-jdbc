@@ -999,7 +999,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         (timestamp, tz) -> DateTimeUtils.toEpochNanosString(timestamp),
         (epochNanosString, tz) -> {
           try {
-            return DateTimeUtils.toTimestamp((String) epochNanosString);
+            return DateTimeUtils.toTimestamp(new BigInteger((String) epochNanosString));
           } catch (NumberFormatException  e) {
             throw new ConnectException(
                 "Invalid value for timestamp column with nanos-string granularity: "

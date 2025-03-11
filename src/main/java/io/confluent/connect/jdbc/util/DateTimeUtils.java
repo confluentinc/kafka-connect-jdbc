@@ -54,9 +54,6 @@ public class DateTimeUtils {
   private static final ThreadLocal<Map<TimeZone, SimpleDateFormat>> TIMEZONE_TIMESTAMP_FORMATS =
       ThreadLocal.withInitial(HashMap::new);
 
-  private DateTimeUtils() {
-  }
-
   public static Calendar getTimeZoneCalendar(final TimeZone timeZone) {
     return TIMEZONE_CALENDARS.get().computeIfAbsent(timeZone, GregorianCalendar::new);
   }
@@ -188,8 +185,8 @@ public class DateTimeUtils {
         .map(
             m -> {
               Timestamp ts = new Timestamp(micros / MICROSECONDS_PER_MILLISECOND);
-              ts.setNanos(
-                  (int) ((micros % MICROSECONDS_PER_SECOND) * MICROSECONDS_PER_MILLISECOND));
+              long remainderMicros = micros % MICROSECONDS_PER_MILLISECOND;
+              ts.setNanos(ts.getNanos() + (int)(remainderMicros * NANOSECONDS_PER_MICROSECOND));
               return ts;
             })
         .orElse(null);
@@ -238,7 +235,7 @@ public class DateTimeUtils {
   }
 
   /**
-   * Get {@link Timestamp} from epoch with nano precision
+   * Get {@link Timestamp} from epoch with micro precision
    *
    * @param isoDT iso dateTime format "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS"
    * @param tz the timezone of the source database

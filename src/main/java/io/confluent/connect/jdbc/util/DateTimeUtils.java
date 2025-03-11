@@ -159,10 +159,10 @@ public class DateTimeUtils {
    * @return the epoch nanoseconds string
    */
   public static String toEpochNanosString(Timestamp timestamp) {
-    return Optional.ofNullable(timestamp)
-        .map(DateTimeUtils::convertToEpochNanos)
-        .map(String::valueOf)
-        .orElse(null);
+    BigInteger seconds = BigInteger.valueOf(timestamp.getTime() / MILLISECONDS_PER_SECOND);
+    BigInteger nanos = BigInteger.valueOf(timestamp.getNanos());
+    BigInteger totalNanos = seconds.multiply(BigInteger.valueOf(NANOSECONDS_PER_SECOND)).add(nanos);
+    return totalNanos.toString();
   }
 
   /**
@@ -245,32 +245,17 @@ public class DateTimeUtils {
   /**
    * Get {@link Timestamp} from epoch with nano precision
    *
-   * @param nanos epoch nanos in BigInteger
-   * @return the equivalent java sql Timestamp
-   */
-  public static Timestamp toTimestamp(BigInteger nanos) {
-    return Optional.ofNullable(nanos)
-            .map(n -> {
-              long millis = n.divide(BigInteger.valueOf(NANOSECONDS_PER_MILLISECOND)).longValue();
-              int nanosPart = n.remainder(BigInteger.valueOf(NANOSECONDS_PER_SECOND)).intValue();
-              Timestamp ts = new Timestamp(millis);
-              ts.setNanos(nanosPart);
-              return ts;
-            })
-            .orElse(null);
-  }
-
-  /**
-   * Get {@link Timestamp} from epoch with nano precision
-   *
    * @param nanos epoch nanos in string
    * @return the equivalent java sql Timestamp
    */
   public static Timestamp toTimestamp(String nanos) throws NumberFormatException {
-    return Optional.ofNullable(nanos)
-     .map(BigInteger::new)
-     .map(DateTimeUtils::toTimestamp)
-     .orElse(null);
+    BigInteger nanoseconds = new BigInteger(nanos);
+    long milliseconds =
+        nanoseconds.divide(BigInteger.valueOf(NANOSECONDS_PER_MILLISECOND)).longValue();
+    int fractionalNanos = nanoseconds.mod(BigInteger.valueOf(NANOSECONDS_PER_SECOND)).intValue();
+    Timestamp timestamp = new Timestamp(milliseconds);
+    timestamp.setNanos(fractionalNanos);
+    return timestamp;
   }
 
   /**

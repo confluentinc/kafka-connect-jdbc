@@ -15,7 +15,6 @@
 
 package io.confluent.connect.jdbc.source;
 
-import java.math.BigInteger;
 import java.sql.Connection;
 import java.sql.Timestamp;
 import java.time.ZoneId;
@@ -999,7 +998,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         (timestamp, tz) -> DateTimeUtils.toEpochNanosString(timestamp),
         (epochNanosString, tz) -> {
           try {
-            return DateTimeUtils.toTimestamp(new BigInteger((String) epochNanosString));
+            return DateTimeUtils.toTimestamp((String) epochNanosString);
           } catch (NumberFormatException  e) {
             throw new ConnectException(
                 "Invalid value for timestamp column with nanos-string granularity: "

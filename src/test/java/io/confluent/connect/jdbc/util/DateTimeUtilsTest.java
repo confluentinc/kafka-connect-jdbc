@@ -18,9 +18,10 @@ package io.confluent.connect.jdbc.util;
 import org.junit.Test;
 
 import java.math.BigInteger;
-import java.sql.Time;
-import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.time.Instant;
+import java.time.Month;
+import java.sql.Timestamp;
 import java.time.ZoneOffset;
 import java.util.TimeZone;
 
@@ -36,7 +37,7 @@ public class DateTimeUtilsTest {
     Timestamp timestamp = Timestamp.from(Instant.now());
     timestamp.setNanos(141362049);
     BigInteger nanos = DateTimeUtils.toEpochNanos(timestamp);
-    assertEquals(timestamp, DateTimeUtils.toTimestamp(nanos));
+    assertEquals(timestamp, DateTimeUtils.toTimestamp(String.valueOf(nanos)));
   }
 
   @Test
@@ -61,6 +62,15 @@ public class DateTimeUtilsTest {
     assertNull(nanos);
     Timestamp timestamp = DateTimeUtils.toTimestamp((String) null);
     assertNull(timestamp);
+  }
+
+  @Test
+  public void testTimestampToNanosStringLargeDate() {
+    LocalDateTime localDateTime =
+     LocalDateTime.of(9999, Month.DECEMBER, 31, 23, 59, 59);
+    Timestamp timestamp = Timestamp.valueOf(localDateTime);
+    String nanos = DateTimeUtils.toEpochNanosString(timestamp);
+    assertEquals(timestamp, DateTimeUtils.toTimestamp(nanos));
   }
 
   @Test

@@ -142,6 +142,9 @@ public class DateTimeUtils {
    * @return the epoch nanoseconds string
    */
   public static String toEpochNanosString(Timestamp timestamp) {
+    if (timestamp == null) {
+      return null;
+    }
     BigInteger seconds = BigInteger.valueOf(timestamp.getTime() / MILLISECONDS_PER_SECOND);
     BigInteger nanos = BigInteger.valueOf(timestamp.getNanos());
     BigInteger totalNanos = seconds.multiply(BigInteger.valueOf(NANOSECONDS_PER_SECOND)).add(nanos);
@@ -231,7 +234,10 @@ public class DateTimeUtils {
    * @param nanos epoch nanos in string
    * @return the equivalent java sql Timestamp
    */
-  public static Timestamp toTimestamp(String nanos) throws NumberFormatException {
+  public static Timestamp toTimestamp(String nanos) {
+    if (nanos == null) {
+      return null;
+    }
     BigInteger nanoseconds = new BigInteger(nanos);
     long milliseconds =
         nanoseconds.divide(BigInteger.valueOf(NANOSECONDS_PER_MILLISECOND)).longValue();

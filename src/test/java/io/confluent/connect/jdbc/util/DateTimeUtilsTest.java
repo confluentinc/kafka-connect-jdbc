@@ -36,13 +36,13 @@ public class DateTimeUtilsTest {
   public void testTimestampToNanosLong() {
     Timestamp timestamp = Timestamp.from(Instant.now());
     timestamp.setNanos(141362049);
-    BigInteger nanos = DateTimeUtils.toEpochNanos(timestamp);
+    Long nanos = DateTimeUtils.toEpochNanos(timestamp);
     assertEquals(timestamp, DateTimeUtils.toTimestamp(String.valueOf(nanos)));
   }
 
   @Test
   public void testTimestampToNanosLongNull() {
-    BigInteger nanos = DateTimeUtils.toEpochNanos(null);
+    Long nanos = DateTimeUtils.toEpochNanos(null);
     assertNull(nanos);
     Timestamp timestamp = DateTimeUtils.toTimestamp((Long) null);
     assertNull(timestamp);

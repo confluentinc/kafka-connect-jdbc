@@ -31,8 +31,6 @@ import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
 public class DateTimeUtils {
-
-  private static final long NANO_SCALE   = 1L;
   static final long MILLISECONDS_PER_SECOND = TimeUnit.SECONDS.toMillis(1);
   static final long MICROSECONDS_PER_MILLISECOND = TimeUnit.MILLISECONDS.toMicros(1);
   static final long MICROSECONDS_PER_SECOND = TimeUnit.SECONDS.toMicros(1);
@@ -105,26 +103,11 @@ public class DateTimeUtils {
             .orElse(null);
   }
 
-  /**
-   * Converts the given duration to nanoseconds using BigInteger to support large values.
-   *
-   * @param duration the duration to convert
-   * @param scale the scale factor to use for conversion
-   * @return the duration in nanoseconds as a BigInteger
-   */
-  public static BigInteger toNanosBigInteger(long duration, long scale) {
-    if (scale == NANO_SCALE) {
-      return BigInteger.valueOf(duration);
-    } else {
-      return BigInteger.valueOf(duration).multiply(BigInteger.valueOf(scale));
-    }
-  }
 
-  private static BigInteger convertToEpochNanos(Timestamp t) {
-    BigInteger epochMillis =
-        toNanosBigInteger(t.getTime() / MILLISECONDS_PER_SECOND, NANOSECONDS_PER_SECOND);
-    BigInteger nanosInSecond = BigInteger.valueOf(t.getNanos());
-    return epochMillis.add(nanosInSecond);
+  private static Long convertToEpochNanos(Timestamp t) {
+    Long epochMillis = TimeUnit.SECONDS.toNanos(t.getTime() / MILLISECONDS_PER_SECOND);
+    Long nanosInSecond = TimeUnit.NANOSECONDS.toNanos(t.getNanos());
+    return epochMillis + nanosInSecond;
   }
 
   /**
@@ -133,7 +116,7 @@ public class DateTimeUtils {
    * @param timestamp the Java timestamp value
    * @return the epoch nanoseconds
    */
-  public static BigInteger toEpochNanos(Timestamp timestamp) {
+  public static Long toEpochNanos(Timestamp timestamp) {
     return Optional.ofNullable(timestamp)
         .map(DateTimeUtils::convertToEpochNanos)
         .orElse(null);

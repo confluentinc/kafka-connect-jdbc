@@ -293,7 +293,7 @@ public class JdbcDbWriterTest {
                 assertEquals(struct.get("the_decimal"), rs.getBigDecimal("the_decimal"));
                 assertEquals(new java.sql.Date(((java.util.Date) struct.get("the_date")).getTime()), rs.getDate("the_date"));
                 assertEquals(new java.sql.Time(((java.util.Date) struct.get("the_time")).getTime()), rs.getTime("the_time"));
-                assertEquals(new java.sql.Timestamp(((java.util.Date) struct.get("the_time")).getTime()), rs.getTimestamp("the_timestamp"));
+                assertEquals(new java.sql.Timestamp(((java.util.Date) struct.get("the_timestamp")).getTime()), rs.getTimestamp("the_timestamp"));
               }
             }
         )

@@ -22,6 +22,7 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.TableId;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 
 import org.junit.Before;
@@ -32,6 +33,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.never;
 
 public class TableQuerierTest {  
   private static final String TABLE_NAME = "name";
@@ -39,6 +41,7 @@ public class TableQuerierTest {
   private static final String SUFFIX = "/* SUFFIX */";   
   private static final Long TIMESTAMP_DELAY = 0l;
   private static final String QUERY = "SELECT * FROM name";
+  private static final int QUERY_TIMEOUT = 10;
 
   DatabaseDialect databaseDialectMock;
   
@@ -71,7 +74,8 @@ public class TableQuerierTest {
                                                     TIMESTAMP_DELAY,
                                                     null,
                                                     SUFFIX,
-                                                    JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL
+                                                    JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL,
+                                                    JdbcSourceConnectorConfig.QUERY_TIMEOUT_S_DEFAULT
                                                 );
       
     querier.createPreparedStatement(connectionMock);
@@ -92,7 +96,8 @@ public class TableQuerierTest {
                                                     TIMESTAMP_DELAY, 
                                                     null, 
                                                     SUFFIX,
-                                                    JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL
+                                                    JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL,
+                                                    JdbcSourceConnectorConfig.QUERY_TIMEOUT_S_DEFAULT
                                                 );
       
     querier.createPreparedStatement(connectionMock);
@@ -107,7 +112,8 @@ public class TableQuerierTest {
                                    QueryMode.TABLE, 
                                    TABLE_NAME, 
                                    null, 
-                                   SUFFIX
+                                   SUFFIX,
+                                   JdbcSourceConnectorConfig.QUERY_TIMEOUT_S_DEFAULT
                                );
       
     querier.createPreparedStatement(connectionMock);
@@ -122,7 +128,8 @@ public class TableQuerierTest {
                                    QueryMode.QUERY,
                                    QUERY, 
                                    null, 
-                                   SUFFIX
+                                   SUFFIX,
+                                   JdbcSourceConnectorConfig.QUERY_TIMEOUT_S_DEFAULT
                                );
       
     querier.createPreparedStatement(connectionMock);
@@ -137,11 +144,104 @@ public class TableQuerierTest {
                                    QueryMode.QUERY, 
                                    QUERY, 
                                    null, 
-                                   "" /* default value */
+                                   "" /* default value */,
+                                   JdbcSourceConnectorConfig.QUERY_TIMEOUT_S_DEFAULT
                                );
       
     querier.createPreparedStatement(connectionMock);
 
     verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM name"));
-  }  
+  }
+  
+  @Test
+  public void testTimestampIncrementingTableQuerierWithQueryTimeout() throws SQLException {
+    PreparedStatement stmtMock = mock(PreparedStatement.class);
+	when(databaseDialectMock.createPreparedStatement(Matchers.eq(connectionMock), Matchers.any(String.class)))
+	  .thenReturn(stmtMock);
+	
+    TimestampIncrementingTableQuerier querier = new TimestampIncrementingTableQuerier(
+                                                    databaseDialectMock, 
+                                                    QueryMode.TABLE, 
+                                                    TABLE_NAME, 
+                                                    null, 
+                                                    null,
+                                                    INCREMENTING_COLUMN_NAME, 
+                                                    null,
+                                                    TIMESTAMP_DELAY,
+                                                    null,
+                                                    SUFFIX,
+                                                    JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL,
+                                                    QUERY_TIMEOUT
+                                                );
+      
+    querier.getOrCreatePreparedStatement(connectionMock);
+
+    verify(stmtMock, times(1)).setQueryTimeout(Matchers.eq(QUERY_TIMEOUT));
+  }
+  
+  @Test
+  public void testTimestampIncrementingTableQuerierWithoutQueryTimeout() throws SQLException {
+	PreparedStatement stmtMock = mock(PreparedStatement.class);
+	when(databaseDialectMock.createPreparedStatement(Matchers.eq(connectionMock), Matchers.any(String.class)))
+      .thenReturn(stmtMock);
+	
+	TimestampIncrementingTableQuerier querier = new TimestampIncrementingTableQuerier(
+                                                    databaseDialectMock, 
+										            QueryMode.QUERY, 
+										            QUERY, 
+										            null, 
+										            null, 
+										            INCREMENTING_COLUMN_NAME, 
+										            null, 
+										            TIMESTAMP_DELAY, 
+										            null, 
+										            SUFFIX,
+										            JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL,
+										            JdbcSourceConnectorConfig.QUERY_TIMEOUT_S_DEFAULT
+												);
+      
+    querier.getOrCreatePreparedStatement(connectionMock);
+
+    verify(stmtMock, never()).setQueryTimeout(Matchers.anyInt());
+  }
+  
+  @Test
+  public void testBulkTableQuerierWithQueryTimeout() throws SQLException {
+    PreparedStatement stmtMock = mock(PreparedStatement.class);
+	when(databaseDialectMock.createPreparedStatement(Matchers.eq(connectionMock), Matchers.any(String.class)))
+	  .thenReturn(stmtMock);
+	
+	BulkTableQuerier querier = new BulkTableQuerier(
+						           databaseDialectMock, 
+						           QueryMode.QUERY,
+						           QUERY, 
+						           null, 
+						           SUFFIX,
+						           QUERY_TIMEOUT
+							   );
+      
+    querier.getOrCreatePreparedStatement(connectionMock);
+
+    verify(stmtMock, times(1)).setQueryTimeout(Matchers.eq(QUERY_TIMEOUT));
+  }
+  
+  @Test
+  public void testBulkTableQuerierWithoutQueryTimeout() throws SQLException {
+	PreparedStatement stmtMock = mock(PreparedStatement.class);
+	when(databaseDialectMock.createPreparedStatement(Matchers.eq(connectionMock), Matchers.any(String.class)))
+      .thenReturn(stmtMock);
+	
+	BulkTableQuerier querier = new BulkTableQuerier(
+						           databaseDialectMock,
+						           QueryMode.TABLE, 
+						           TABLE_NAME, 
+						           null, 
+						           SUFFIX,
+						           JdbcSourceConnectorConfig.QUERY_TIMEOUT_S_DEFAULT
+							   );
+      
+    querier.getOrCreatePreparedStatement(connectionMock);
+
+    verify(stmtMock, never()).setQueryTimeout(Matchers.anyInt());
+  }
 }

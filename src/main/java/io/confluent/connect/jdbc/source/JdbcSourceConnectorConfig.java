@@ -387,6 +387,13 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
                   + "  * SERIALIZABLE\n"
                   + "  * SQL_SERVER_SNAPSHOT\n";
   private static final String TRANSACTION_ISOLATION_MODE_DISPLAY = "Transaction Isolation Mode";
+  
+  public static final String QUERY_TIMEOUT_S_CONFIG = "query.timeout";
+  public static final int QUERY_TIMEOUT_S_DEFAULT = 0;
+  public static final String QUERY_TIMEOUT_S_DOC = 
+      "Query timeout in seconds."
+      + "For backward compatibility, the default is 0. 0 means there is no timeout";
+  private static final String QUERY_TIMEOUT_S_DISPLAY = "Query timeout (s)";
 
   private static final EnumRecommender TRANSACTION_ISOLATION_MODE_RECOMMENDER =
           EnumRecommender.in(TransactionIsolationMode.values());
@@ -704,6 +711,16 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.MEDIUM,
         QUERY_RETRIES_DISPLAY
+    ).define(
+        QUERY_TIMEOUT_S_CONFIG,
+        Type.INT,
+        QUERY_TIMEOUT_S_DEFAULT,
+        Importance.LOW,
+        QUERY_TIMEOUT_S_DOC,
+        MODE_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        QUERY_TIMEOUT_S_DISPLAY
     );
   }
 

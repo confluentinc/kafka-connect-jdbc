@@ -242,9 +242,17 @@ public class DateTimeUtils {
    */
   public static Timestamp toTimestamp(String nanos) {
     return Optional.ofNullable(nanos)
-            .map(Long::parseLong)
-            .map(DateTimeUtils::toTimestamp)
-            .orElse(null);
+        .map(BigInteger::new)
+        .map(
+            n -> {
+              long milliseconds =
+                  n.divide(BigInteger.valueOf(NANOSECONDS_PER_MILLISECOND)).longValue();
+              int nanoseconds = n.mod(BigInteger.valueOf(NANOSECONDS_PER_SECOND)).intValue();
+              Timestamp ts = new Timestamp(milliseconds);
+              ts.setNanos(nanoseconds);
+              return ts;
+            })
+        .orElse(null);
   }
 
   /**

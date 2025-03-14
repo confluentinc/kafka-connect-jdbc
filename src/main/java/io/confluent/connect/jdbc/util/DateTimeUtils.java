@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.util;
 
+import java.math.BigInteger;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
@@ -88,6 +89,15 @@ public class DateTimeUtils {
     return epochMillis + microsComponent;
   }
 
+  private static String convertToEpochNanosBigInt(Timestamp t) {
+    BigInteger seconds = BigInteger.valueOf(t.getTime() / MILLISECONDS_PER_SECOND);
+    BigInteger nanos = BigInteger.valueOf(t.getNanos());
+    BigInteger totalNanos = seconds.multiply(BigInteger.valueOf(NANOSECONDS_PER_SECOND)).add(nanos);
+    return totalNanos.toString();
+  }
+
+
+
   /**
    * Get the number of microseconds past epoch of the given {@link Timestamp}.
    *
@@ -139,9 +149,9 @@ public class DateTimeUtils {
    */
   public static String toEpochNanosString(Timestamp timestamp) {
     return Optional.ofNullable(timestamp)
-        .map(DateTimeUtils::convertToEpochNanos)
-        .map(String::valueOf)
-        .orElse(null);
+            .map(DateTimeUtils::convertToEpochNanosBigInt)
+            .map(String::valueOf)
+            .orElse(null);
   }
 
   /**
@@ -227,11 +237,11 @@ public class DateTimeUtils {
    * @param nanos epoch nanos in string
    * @return the equivalent java sql Timestamp
    */
-  public static Timestamp toTimestamp(String nanos) throws NumberFormatException {
+  public static Timestamp toTimestamp(String nanos) {
     return Optional.ofNullable(nanos)
-        .map(Long::parseLong)
-        .map(DateTimeUtils::toTimestamp)
-        .orElse(null);
+            .map(Long::parseLong)
+            .map(DateTimeUtils::toTimestamp)
+            .orElse(null);
   }
 
   /**

@@ -237,7 +237,7 @@ public class DateTimeUtils {
   /**
    * Get {@link Timestamp} from epoch with micro precision
    *
-   * @param isoDT iso dateTime format "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS"
+   * @param isoDT iso dateTime format "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
    * @param tz the timezone of the source database
    * @return the equivalent java sql Timestamp
    */
@@ -264,5 +264,7 @@ public class DateTimeUtils {
         .map(ChronoZonedDateTime::toInstant)
         .map(Timestamp::from)
         .orElse(null);
+  }
+  private DateTimeUtils() {
   }
 }

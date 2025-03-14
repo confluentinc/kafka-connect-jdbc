@@ -92,6 +92,15 @@ public class DateTimeUtils {
     return epochMillis + microsComponent;
   }
 
+  private static String convertToEpochNanosBigInt(Timestamp t) {
+    BigInteger seconds = BigInteger.valueOf(t.getTime() / MILLISECONDS_PER_SECOND);
+    BigInteger nanos = BigInteger.valueOf(t.getNanos());
+    BigInteger totalNanos = seconds.multiply(BigInteger.valueOf(NANOSECONDS_PER_SECOND)).add(nanos);
+    return totalNanos.toString();
+  }
+
+
+
   /**
    * Get the number of microseconds past epoch of the given {@link Timestamp}.
    *
@@ -142,13 +151,10 @@ public class DateTimeUtils {
    * @return the epoch nanoseconds string
    */
   public static String toEpochNanosString(Timestamp timestamp) {
-    if (timestamp == null) {
-      return null;
-    }
-    BigInteger seconds = BigInteger.valueOf(timestamp.getTime() / MILLISECONDS_PER_SECOND);
-    BigInteger nanos = BigInteger.valueOf(timestamp.getNanos());
-    BigInteger totalNanos = seconds.multiply(BigInteger.valueOf(NANOSECONDS_PER_SECOND)).add(nanos);
-    return totalNanos.toString();
+    return Optional.ofNullable(timestamp)
+            .map(DateTimeUtils::convertToEpochNanosBigInt)
+            .map(String::valueOf)
+            .orElse(null);
   }
 
   /**
@@ -235,16 +241,10 @@ public class DateTimeUtils {
    * @return the equivalent java sql Timestamp
    */
   public static Timestamp toTimestamp(String nanos) {
-    if (nanos == null) {
-      return null;
-    }
-    BigInteger nanoseconds = new BigInteger(nanos);
-    long milliseconds =
-        nanoseconds.divide(BigInteger.valueOf(NANOSECONDS_PER_MILLISECOND)).longValue();
-    int fractionalNanos = nanoseconds.mod(BigInteger.valueOf(NANOSECONDS_PER_SECOND)).intValue();
-    Timestamp timestamp = new Timestamp(milliseconds);
-    timestamp.setNanos(fractionalNanos);
-    return timestamp;
+    return Optional.ofNullable(nanos)
+            .map(Long::parseLong)
+            .map(DateTimeUtils::toTimestamp)
+            .orElse(null);
   }
 
   /**

@@ -1113,14 +1113,15 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       }
 
       case Types.NUMERIC:
+      case Types.DECIMAL: {
+        glog.debug("Converting {} with precision: '{}' and scale: '{}' using 'numeric.mapping': {}",
+                columnDefn.typeName(), precision, scale, mapNumerics);
         if (mapNumerics == NumericMapping.PRECISION_ONLY) {
-          glog.debug("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
           if (scale == 0 && precision <= MAX_INTEGER_TYPE_PRECISION) { // integer
             builder.field(fieldName, integerSchema(optional, precision));
             break;
           }
         } else if (mapNumerics == NumericMapping.BEST_FIT) {
-          glog.debug("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
           if (precision <= MAX_INTEGER_TYPE_PRECISION) { // fits in primitive data types.
             if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
               builder.field(fieldName, integerSchema(optional, precision));
@@ -1132,7 +1133,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
             }
           }
         } else if (mapNumerics == NumericMapping.BEST_FIT_EAGER_DOUBLE) {
-          glog.debug("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
           if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
             if (precision <= MAX_INTEGER_TYPE_PRECISION) { // fits in primitive data types.
               builder.field(fieldName, integerSchema(optional, precision));
@@ -1144,10 +1144,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
             break;
           }
         }
-        // fallthrough
 
-      case Types.DECIMAL: {
-        glog.debug("DECIMAL with precision: '{}' and scale: '{}'", precision, scale);
         scale = decimalScale(columnDefn);
         SchemaBuilder fieldBuilder = Decimal.builder(scale);
         fieldBuilder.parameter(PRECISION_FIELD, Integer.toString(precision));
@@ -1338,68 +1335,38 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       }
 
       case Types.NUMERIC:
+      case Types.DECIMAL:
+        int precision = defn.precision();
+        int scale = defn.scale();
+        glog.trace("{} with precision: '{}' and scale: '{}'", mapping.columnDefn().typeName(),
+                precision, scale);
+
         if (mapNumerics == NumericMapping.PRECISION_ONLY) {
-          int precision = defn.precision();
-          int scale = defn.scale();
-          glog.trace("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
           if (scale == 0 && precision <= MAX_INTEGER_TYPE_PRECISION) { // integer
-            if (precision > 9) {
-              return rs -> rs.getLong(col);
-            } else if (precision > 4) {
-              return rs -> rs.getInt(col);
-            } else if (precision > 2) {
-              return rs -> rs.getShort(col);
-            } else {
-              return rs -> rs.getByte(col);
-            }
+            return getColumnConverter(col, precision);
           }
         } else if (mapNumerics == NumericMapping.BEST_FIT) {
-          int precision = defn.precision();
-          int scale = defn.scale();
-          glog.trace("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
           if (precision <= MAX_INTEGER_TYPE_PRECISION) { // fits in primitive data types.
             if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
-              if (precision > 9) {
-                return rs -> rs.getLong(col);
-              } else if (precision > 4) {
-                return rs -> rs.getInt(col);
-              } else if (precision > 2) {
-                return rs -> rs.getShort(col);
-              } else {
-                return rs -> rs.getByte(col);
-              }
+              return getColumnConverter(col, precision);
             } else if (scale > 0) { // floating point - use double in all cases
               return rs -> rs.getDouble(col);
             }
           }
         } else if (mapNumerics == NumericMapping.BEST_FIT_EAGER_DOUBLE) {
-          int precision = defn.precision();
-          int scale = defn.scale();
-          glog.trace("NUMERIC with precision: '{}' and scale: '{}'", precision, scale);
           if (scale < 1 && scale >= NUMERIC_TYPE_SCALE_LOW) { // integer
             if (precision <= MAX_INTEGER_TYPE_PRECISION) { // fits in primitive data types.
-              if (precision > 9) {
-                return rs -> rs.getLong(col);
-              } else if (precision > 4) {
-                return rs -> rs.getInt(col);
-              } else if (precision > 2) {
-                return rs -> rs.getShort(col);
-              } else {
-                return rs -> rs.getByte(col);
-              }
+              return getColumnConverter(col, precision);
             }
           } else if (scale > 0) { // floating point - use double in all cases
             return rs -> rs.getDouble(col);
           }
         }
-        // fallthrough
 
-      case Types.DECIMAL: {
-        final int precision = defn.precision();
-        glog.debug("DECIMAL with precision: '{}' and scale: '{}'", precision, defn.scale());
-        final int scale = decimalScale(defn);
-        return rs -> rs.getBigDecimal(col, scale);
-      }
+        final int decimalScale = decimalScale(defn);
+        glog.debug("{} cast scale from '{}' to '{}'", mapping.columnDefn().typeName(),
+                scale, decimalScale);
+        return rs -> rs.getBigDecimal(col, decimalScale);
 
       case Types.CHAR:
       case Types.VARCHAR:
@@ -1528,6 +1495,18 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       }
     }
     return null;
+  }
+
+  private ColumnConverter getColumnConverter(int col, int precision) {
+    if (precision > 9) {
+      return rs -> rs.getLong(col);
+    } else if (precision > 4) {
+      return rs -> rs.getInt(col);
+    } else if (precision > 2) {
+      return rs -> rs.getShort(col);
+    } else {
+      return rs -> rs.getByte(col);
+    }
   }
 
   protected int decimalScale(ColumnDefinition defn) {

@@ -26,7 +26,6 @@ import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 import org.apache.kafka.common.config.AbstractConfig;
-import org.apache.kafka.common.utils.Utils;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -46,6 +45,7 @@ import java.sql.Types;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -82,11 +82,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * Define the PG datatypes that require casting upon insert/update statements.
    */
   private static final Set<String> CAST_TYPES = Collections.unmodifiableSet(
-      Utils.mkSet(
+      new HashSet<>(Arrays.asList(
           JSON_TYPE_NAME,
           JSONB_TYPE_NAME,
           UUID_TYPE_NAME
-      )
+      ))
   );
 
   /**

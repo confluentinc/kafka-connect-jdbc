@@ -99,8 +99,6 @@ public class DateTimeUtils {
     return totalNanos.toString();
   }
 
-
-
   /**
    * Get the number of microseconds past epoch of the given {@link Timestamp}.
    *

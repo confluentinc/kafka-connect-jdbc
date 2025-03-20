@@ -18,7 +18,6 @@ package io.confluent.connect.jdbc.source;
 import java.sql.SQLNonTransientException;
 import java.util.TimeZone;
 import org.apache.kafka.common.config.ConfigException;
-import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -75,7 +74,7 @@ public class JdbcSourceTask extends SourceTask {
   int maxRetriesPerQuerier;
 
   public JdbcSourceTask() {
-    this.time = new SystemTime();
+    this.time = Time.SYSTEM;
   }
 
   public JdbcSourceTask(Time time) {
@@ -97,9 +96,19 @@ public class JdbcSourceTask extends SourceTask {
     }
 
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
+    Boolean tablesFetched = config.getBoolean(JdbcSourceTaskConfig.TABLES_FETCHED);
     String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
 
     if ((tables.isEmpty() && query.isEmpty())) {
+      // We are still waiting for the tables call to complete.
+      // Start task but do nothing.
+      if (!tablesFetched) {
+        taskThreadId.set(Thread.currentThread().getId());
+        log.info("Started JDBC source task. Waiting for DB tables to be fetched.");
+        return;
+      }
+
+      // Tables call has completed, but we didn't get any table assigned to this task
       throw new ConfigException("Task is being killed because"
               + " it was not assigned a table nor a query to execute."
               + " If run in table mode please make sure that the tables"
@@ -187,9 +196,14 @@ public class JdbcSourceTask extends SourceTask {
     TimeZone timeZone = config.timeZone();
     String suffix = config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG).trim();
 
+    if (queryMode.equals(TableQuerier.QueryMode.TABLE)) {
+      validateColumnsExist(mode, incrementingColumn, timestampColumns, tables.get(0));
+    }
+
     for (String tableOrQuery : tablesOrQuery) {
       final List<Map<String, String>> tablePartitionsToCheck;
       final Map<String, String> partition;
+      log.trace("Task executing in {} mode",queryMode);
       switch (queryMode) {
         case TABLE:
           if (validateNonNulls) {
@@ -299,6 +313,49 @@ public class JdbcSourceTask extends SourceTask {
     maxRetriesPerQuerier = config.getInt(JdbcSourceConnectorConfig.QUERY_RETRIES_CONFIG);
   }
 
+  private void validateColumnsExist(
+      String mode, String incrementingColumn, List<String> timestampColumns, String table) {
+    try {
+      final Connection conn = cachedConnectionProvider.getConnection();
+      boolean autoCommit = conn.getAutoCommit();
+      try {
+        log.info("Validating columns exist for table");
+        conn.setAutoCommit(true);
+        Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, table, null);
+        Set<String> columnNames = defnsById.keySet().stream().map(ColumnId::name)
+            .map(String::toLowerCase).collect(Collectors.toSet());
+
+        if ((mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)
+            || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING))
+            && !incrementingColumn.isEmpty()
+            && !columnNames.contains(incrementingColumn.toLowerCase(Locale.getDefault()))) {
+          throw new ConfigException("Incrementing column: " + incrementingColumn
+              + " does not exist.");
+        }
+
+        if ((mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)
+            || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING))
+            && !timestampColumns.isEmpty()) {
+
+          Set<String> missingTsColumns = timestampColumns.stream()
+              .filter(tsColumn -> !columnNames.contains(tsColumn.toLowerCase(Locale.getDefault())))
+              .collect(Collectors.toSet());
+
+          if (!missingTsColumns.isEmpty()) {
+            throw new ConfigException("Timestamp columns: "
+                + String.join(", ", missingTsColumns)
+                + " do not exist.");
+          }
+        }
+      } finally {
+        conn.setAutoCommit(autoCommit);
+      }
+    } catch (SQLException e) {
+      throw new ConnectException("Failed trying to validate that columns used for offsets exist",
+          e);
+    }
+  }
+
   protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
     return new CachedConnectionProvider(dialect, maxConnAttempts, retryBackoff) {
       @Override
@@ -324,8 +381,10 @@ public class JdbcSourceTask extends SourceTask {
           Map<String, Object> partitionOffset,
           TimeZone timezone) {
     if (!(partitionOffset == null)) {
+      log.info("Partition offset for '{}' is not null. Using existing offset.", tableOrQuery);
       return partitionOffset;
     } else {
+      log.info("Partition offset for '{}' is null. Computing initial offset.", tableOrQuery);
       Map<String, Object> initialPartitionOffset = null;
       // no offsets found
       Long timestampInitial = config.getLong(JdbcSourceConnectorConfig.TIMESTAMP_INITIAL_CONFIG);
@@ -388,6 +447,18 @@ public class JdbcSourceTask extends SourceTask {
   @Override
   public List<SourceRecord> poll() throws InterruptedException {
     log.trace("Polling for new data");
+
+    // If the call to get tables has not completed we will not do anything.
+    // This is only valid in table mode.
+    Boolean tablesFetched = config.getBoolean(JdbcSourceTaskConfig.TABLES_FETCHED);
+    String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
+    if (query.isEmpty() && !tablesFetched) {
+      final long sleepMs = config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
+      log.trace("Waiting for tables to be fetched from the database. No records will be polled. "
+          + "Waiting {} ms to poll", sleepMs);
+      time.sleep(sleepMs);
+      return null;
+    }
 
     Map<TableQuerier, Integer> consecutiveEmptyResults = tableQueue.stream().collect(
         Collectors.toMap(Function.identity(), (q) -> 0));
@@ -503,6 +574,7 @@ public class JdbcSourceTask extends SourceTask {
       String incrementingColumn,
       List<String> timestampColumns
   ) {
+    log.info("Validating non-nullable fields for table: {}", table);
     try {
       Set<String> lowercaseTsColumns = new HashSet<>();
       for (String timestampColumn: timestampColumns) {
@@ -544,9 +616,8 @@ public class JdbcSourceTask extends SourceTask {
            || incrementalMode.equals(JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING))
           && !atLeastOneTimestampNotOptional) {
         throw new ConnectException("Cannot make incremental queries using timestamp columns "
-                                   + timestampColumns + " on " + table + " because all of these "
-                                   + "columns "
-                                   + "nullable.");
+                                   + String.join(",", timestampColumns) + " on " + table
+                                   + " because all of these columns are nullable.");
       }
     } catch (SQLException e) {
       throw new ConnectException("Failed trying to validate that columns used for offsets are NOT"

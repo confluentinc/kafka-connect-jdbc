@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -133,7 +134,8 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       SchemaPair schemaPair,
       FieldsMetadata fieldsMetadata,
       TableDefinition tableDefinition,
-      InsertMode insertMode
+      InsertMode insertMode,
+      boolean replaceNullWithDefault
   ) {
     return new PreparedStatementBinder(
         this,
@@ -142,7 +144,8 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
         schemaPair,
         fieldsMetadata,
         tableDefinition,
-        insertMode
+        insertMode,
+        replaceNullWithDefault
     );
   }
 
@@ -408,7 +411,10 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     ExpressionBuilder builder = expressionBuilder();
     builder.append("merge into ");
     builder.append(table);
-    builder.append(" with (HOLDLOCK) AS target using (select ");
+    if (((JdbcSinkConfig) this.config).useHoldlockInMerge) {
+      builder.append(" with (HOLDLOCK)");
+    }
+    builder.append(" AS target using (select ");
     builder.appendList()
            .delimitedBy(", ")
            .transformedBy(ExpressionBuilder.columnNamesWithPrefix("? AS "))

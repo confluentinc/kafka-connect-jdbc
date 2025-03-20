@@ -61,7 +61,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
       log.debug("Could not establish connection with database.", sqle);
       throw new ConnectException(sqle);
     }
-    log.debug("Database connection established.");
+    log.info("Database connection established.");
     return connection;
   }
 

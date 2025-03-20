@@ -94,6 +94,7 @@ public class JdbcSourceTaskTestBase {
     Map<String, String> props = new HashMap<>();
     props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, db.getUrl());
     props.put(JdbcSourceTaskConfig.TABLES_CONFIG, SINGLE_TABLE_NAME);
+    props.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
     props.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
     props.put(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG, TOPIC_PREFIX);
     if (completeMapping) {
@@ -116,6 +117,7 @@ public class JdbcSourceTaskTestBase {
     Map<String, String> props = new HashMap<>();
     props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, db.getUrl());
     props.put(JdbcSourceTaskConfig.TABLES_CONFIG, SINGLE_TABLE_NAME + "," + SECOND_TABLE_NAME);
+    props.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
     props.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
     props.put(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG, TOPIC_PREFIX);
     return props;

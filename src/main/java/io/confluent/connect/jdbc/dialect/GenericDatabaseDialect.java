@@ -149,13 +149,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   protected final Set<String> tableTypes;
   protected final String jdbcUrl;
   protected final DatabaseDialectProvider.JdbcUrlInfo jdbcUrlInfo;
-  private final QuoteMethod quoteSqlIdentifiers;
+  protected final QuoteMethod quoteSqlIdentifiers;
   private final IdentifierRules defaultIdentifierRules;
   private final AtomicReference<IdentifierRules> identifierRules = new AtomicReference<>();
   private final Queue<Connection> connections = new ConcurrentLinkedQueue<>();
   private volatile JdbcDriverInfo jdbcDriverInfo;
   private final int batchMaxRows;
   private final TimeZone timeZone;
+  private final TimeZone dateTimeZone;
   private final JdbcSourceConnectorConfig.TimestampGranularity tsGranularity;
 
   /**
@@ -206,12 +207,17 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       batchMaxRows = 0;
     }
 
+    // https://github.com/confluentinc/kafka-connect-jdbc/pull/1398
+    // dateTimeZone is used for handling DATE conversion and should be equal to UTC for
+    // both source and sink connector but due to the bug in Sink connector we can't change the
+    // behaviour without potentially breaking existing customer's pipeline. So this change is
+    // controlled using the db.timezone.date config in sink connector.
     if (config instanceof JdbcSourceConnectorConfig) {
       timeZone = ((JdbcSourceConnectorConfig) config).timeZone();
-    } else if (config instanceof JdbcSinkConfig) {
-      timeZone = ((JdbcSinkConfig) config).timeZone;
+      dateTimeZone = TimeZone.getTimeZone(ZoneOffset.UTC);
     } else {
-      timeZone = TimeZone.getTimeZone(ZoneOffset.UTC);
+      timeZone = ((JdbcSinkConfig) config).timeZone;
+      dateTimeZone = ((JdbcSinkConfig) config).dateTimeZone;
     }
 
     if (config instanceof JdbcSourceConnectorConfig) {
@@ -609,6 +615,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           Connection connection,
           TransactionIsolationMode transactionIsolationMode
   ) {
+    log.info("Setting connection isolation mode to: {}", transactionIsolationMode.name());
     if (transactionIsolationMode
             == TransactionIsolationMode.DEFAULT) {
       return;
@@ -1409,7 +1416,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       // Date is day + month + year
       case Types.DATE: {
         return rs -> rs.getDate(col,
-            DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone(ZoneOffset.UTC)));
+            DateTimeUtils.getTimeZoneCalendar(dateTimeZone));
       }
 
       // Time is a time of day -- hour, minute, seconds, nanoseconds
@@ -1621,7 +1628,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       PrimaryKeyMode pkMode,
       SchemaPair schemaPair,
       FieldsMetadata fieldsMetadata,
-      InsertMode insertMode
+      InsertMode insertMode,
+      boolean replaceNullWithDefault
   ) {
     return new PreparedStatementBinder(
         this,
@@ -1629,7 +1637,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         pkMode,
         schemaPair,
         fieldsMetadata,
-        insertMode
+        insertMode,
+        replaceNullWithDefault
     );
   }
 
@@ -1731,7 +1740,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           statement.setDate(
               index,
               new java.sql.Date(((java.util.Date) value).getTime()),
-              DateTimeUtils.getTimeZoneCalendar(timeZone)
+              DateTimeUtils.getTimeZoneCalendar(dateTimeZone)
           );
           return true;
         case Decimal.LOGICAL_NAME:
@@ -1896,7 +1905,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           builder.append(value);
           return;
         case Date.LOGICAL_NAME:
-          builder.appendStringQuoted(DateTimeUtils.formatDate((java.util.Date) value, timeZone));
+          builder.appendStringQuoted(
+              DateTimeUtils.formatDate((java.util.Date) value, dateTimeZone));
           return;
         case Time.LOGICAL_NAME:
           builder.appendStringQuoted(DateTimeUtils.formatTime((java.util.Date) value, timeZone));

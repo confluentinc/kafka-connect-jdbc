@@ -61,6 +61,7 @@ public class PostgresOOMIT extends BaseOOMIntegrationTest {
   public void testTableLocksWithStreamingReads() throws InterruptedException, SQLException {
     createTestTable();
     props.put(JdbcSourceTaskConfig.TABLES_CONFIG, "test_table");
+    props.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
     startTask();
     assertNoLocksOpen(task);
     assertTrue(task.poll().size() > 0);

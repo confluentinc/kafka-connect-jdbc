@@ -150,9 +150,9 @@ public class DateTimeUtils {
    */
   public static String toEpochNanosString(Timestamp timestamp) {
     return Optional.ofNullable(timestamp)
-            .map(DateTimeUtils::convertToEpochNanosBigInt)
-            .map(String::valueOf)
-            .orElse(null);
+        .map(DateTimeUtils::convertToEpochNanosBigInt)
+        .map(String::valueOf)
+        .orElse(null);
   }
 
   /**
@@ -235,12 +235,11 @@ public class DateTimeUtils {
   /**
    * Get {@link Timestamp} from epoch with nano precision
    *
-   * @param nanos epoch nanos in string
+   * @param nanos epoch nanos BigInteger
    * @return the equivalent java sql Timestamp
    */
-  public static Timestamp toTimestamp(String nanos) {
+  public static Timestamp toTimestamp(BigInteger nanos) {
     return Optional.ofNullable(nanos)
-        .map(BigInteger::new)
         .map(
             n -> {
               long milliseconds =
@@ -251,6 +250,19 @@ public class DateTimeUtils {
               return ts;
             })
         .orElse(null);
+  }
+
+  /**
+   * Get {@link Timestamp} from epoch with nano precision
+   *
+   * @param nanos epoch nanos in string
+   * @return the equivalent java sql Timestamp
+   */
+  public static Timestamp toTimestamp(String nanos) {
+    return Optional.ofNullable(nanos)
+            .map(BigInteger::new)
+            .map(DateTimeUtils::toTimestamp)
+            .orElse(null);
   }
 
   /**

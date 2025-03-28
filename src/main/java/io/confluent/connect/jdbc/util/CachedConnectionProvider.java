@@ -56,12 +56,13 @@ public class CachedConnectionProvider implements ConnectionProvider {
         log.info("The database connection is invalid. Reconnecting...");
         close();
         newConnection();
+      } else {
+        log.debug("Using existing database connection.");
       }
     } catch (SQLException sqle) {
       log.debug("Could not establish connection with database.", sqle);
       throw new ConnectException(sqle);
     }
-    log.debug("Database connection established.");
     return connection;
   }
 
@@ -82,6 +83,7 @@ public class CachedConnectionProvider implements ConnectionProvider {
         ++count;
         log.debug("Attempting to open connection #{} to {}", count, provider);
         connection = provider.getConnection();
+        log.info("Database connection established.");
         onConnect(connection);
         return;
       } catch (SQLException sqle) {

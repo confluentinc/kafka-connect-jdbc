@@ -16,6 +16,7 @@
 package io.confluent.connect.jdbc.dialect;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
@@ -306,7 +307,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         case Time.LOGICAL_NAME:
           return "TIME";
         case Timestamp.LOGICAL_NAME:
-          return "TIMESTAMP";
+          return "TIMESTAMP(6)";
         default:
           // fall through to normal types
       }
@@ -318,6 +319,17 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       case INT32:
         return "INT";
       case INT64:
+        log.info(
+            "Int64 - Timestamp Field Whitelist in PostgreSqlDatabaseDialect getSqlType: {}",
+            config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST));
+        log.info(
+            "Field Schema Name in PostgreSqlDatabaseDialect getSqlType: {}", field.schemaName());
+        log.info("Field Name in PostgreSqlDatabaseDialect getSqlType: {}", field.name());
+        if (config
+            .getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST)
+            .contains(field.name())) {
+          return "TIMESTAMP";
+        }
         return "BIGINT";
       case FLOAT32:
         return "REAL";
@@ -326,6 +338,17 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "BOOLEAN";
       case STRING:
+        log.info(
+         "String - Timestamp Field Whitelist in PostgreSqlDatabaseDialect getSqlType: {}",
+         config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST));
+        log.info(
+         "Field Schema Name in PostgreSqlDatabaseDialect getSqlType: {}", field.schemaName());
+        log.info("Field Name in PostgreSqlDatabaseDialect getSqlType: {}", field.name());
+        if (config
+             .getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST)
+             .contains(field.name())) {
+          return "TIMESTAMP";
+        }
         return "TEXT";
       case BYTES:
         return "BYTEA";
@@ -349,6 +372,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       TableDefinition definition
   ) {
     ExpressionBuilder builder = expressionBuilder();
+    log.info("Executing the buildInsertStatement method");
     builder.append("INSERT INTO ");
     builder.append(table);
     builder.append(" (");
@@ -362,6 +386,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
            .transformedBy(this.columnValueVariables(definition))
            .of(keyColumns, nonKeyColumns);
     builder.append(")");
+    log.info("Returning the insert statement: {}", builder.toString());
     return builder.toString();
   }
 

@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -113,6 +114,17 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
       case INT32:
         return "INT";
       case INT64:
+        log.info(
+         "Int64 - Timestamp Field Whitelist in PostgreSqlDatabaseDialect getSqlType: {}",
+         config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST));
+        log.info(
+         "Field Schema Name in PostgreSqlDatabaseDialect getSqlType: {}", field.schemaName());
+        log.info("Field Name in PostgreSqlDatabaseDialect getSqlType: {}", field.name());
+        if (config
+             .getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST)
+             .contains(field.name())) {
+          return "TIMESTAMP";
+        }
         return "BIGINT";
       case FLOAT32:
         return "FLOAT";
@@ -121,6 +133,17 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "TINYINT";
       case STRING:
+        log.info(
+         "String - Timestamp Field Whitelist in PostgreSqlDatabaseDialect getSqlType: {}",
+         config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST));
+        log.info(
+         "Field Schema Name in PostgreSqlDatabaseDialect getSqlType: {}", field.schemaName());
+        log.info("Field Name in PostgreSqlDatabaseDialect getSqlType: {}", field.name());
+        if (config
+             .getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST)
+             .contains(field.name())) {
+          return "TIMESTAMP";
+        }
         return "TEXT";
       case BYTES:
         return "VARBINARY(1024)";

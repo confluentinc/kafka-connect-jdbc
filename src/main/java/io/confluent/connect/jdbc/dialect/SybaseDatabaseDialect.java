@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig.PrimaryKeyMode;
 import io.confluent.connect.jdbc.sink.PreparedStatementBinder;
@@ -118,6 +119,9 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
       case INT32:
         return "int";
       case INT64:
+        if (config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
+          return "TIMESTAMP";
+        }
         return "bigint";
       case FLOAT32:
         return "real";
@@ -130,7 +134,9 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
           return "bit";
         }
       case STRING:
-        if (field.isPrimaryKey()) {
+        if (config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
+          return "TIMESTAMP";
+        } else if (field.isPrimaryKey()) {
           // Could always use 'text', except columns of type 'text', 'image' and 'unitext'
           // cannot be used in indexes. Also, 2600 is the max allowable size of an index,
           // so use something smaller if multiple columns are to be used in the index.

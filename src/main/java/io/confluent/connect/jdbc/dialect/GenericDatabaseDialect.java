@@ -1709,17 +1709,21 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         log.info("Schema type INT64");
         log.info("Schema Type value :" + schema.type());
         log.info("Schema Name value :" + schema.name());
-        log.info("Timestamp Field White List value: {}",
+        log.info(
+            "Timestamp Field White List value: {}",
             config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(schema.name()));
         if (config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(schema.name())) {
           log.info("Entered into the Timestamp Conversion Block");
-          if (config.getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG).equals("microseconds")) {
+          if (config
+              .getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG)
+              .equals("microseconds")) {
             Timestamp ts = DateTimeUtils.formatSinkMicrosTimestamp((Long) value);
             log.info("Timestamp Value : " + ts);
             statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
             log.info("Statement Value : " + statement);
-          }
-          else if (config.getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG).equals("nanoseconds")) {
+          } else if (config
+              .getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG)
+              .equals("nanoseconds")) {
             Timestamp ts = DateTimeUtils.formatSinkNanosTimestamp((Long) value);
             log.info("Timestamp Value : " + ts);
             statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
@@ -1742,24 +1746,28 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         log.info("Schema type STRING");
         log.info("Schema Type value :" + schema.type());
         log.info("Schema Name value :" + schema.name());
-        log.info("Timestamp Field White List value: {}",
-         config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(schema.name()));
+        log.info(
+            "Timestamp Field White List value: {}",
+            config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(schema.name()));
         if (config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(schema.name())) {
           log.info("Entered into the Timestamp Conversion Block");
-          if (config.getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG).equals("microseconds")) {
+          if (config
+              .getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG)
+              .equals("microseconds")) {
             Timestamp ts = DateTimeUtils.formatSinkMicrosTimestamp((String) value);
             log.info("Timestamp Value : " + ts);
             statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
             log.info("Statement Value : " + statement);
-          }
-          else if (config.getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG).equals("nanoseconds")) {
+          } else if (config
+              .getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG)
+              .equals("nanoseconds")) {
             Timestamp ts = DateTimeUtils.formatSinkNanosTimestamp((String) value);
             log.info("Timestamp Value : " + ts);
             statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
             log.info("Statement Value : " + statement);
           }
         } else {
-          statement.setLong(index, (Long) value);
+          statement.setString(index, (String) value);
         }
         break;
       case BYTES:

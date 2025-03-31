@@ -278,11 +278,11 @@ public class JdbcSinkConfig extends AbstractConfig {
   public static final String TIMESTAMP_PRECISION_MODE_CONFIG = "timestamp.precision.mode";
   public static final String TIMESTAMP_PRECISION_MODE_DEFAULT = "microseconds";
   private static final String TIMESTAMP_PRECISION_MODE_CONFIG_DISPLAY =
-   "Sink Timestamp Precision mode";
+      "Sink Timestamp Precision mode";
   private static final String TIMESTAMP_PRECISION_MODE_CONFIG_DOC =
-   "Convert the Timestamp with precision. If set to microseconds, "
-    + "the timestamp will be converted to microsecond precision. If set to "
-    + "nanoseconds the timestamp will be converted to nanoseconds precision.";
+      "Convert the Timestamp with precision. If set to microseconds, "
+          + "the timestamp will be converted to microsecond precision. If set to "
+          + "nanoseconds the timestamp will be converted to nanoseconds precision.";
 
   public static final String QUOTE_SQL_IDENTIFIERS_CONFIG =
       JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_CONFIG;
@@ -313,7 +313,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final EnumRecommender DATE_TIMEZONE_RECOMMENDER =
       EnumRecommender.in(DateTimezone.values());
   private static final EnumRecommender TIMESTAMP_PRECISION_MODE_RECOMMENDER =
-   EnumRecommender.in(DateTimezone.values());
+      EnumRecommender.in(TimestampPrecisionMode.values());
   private static final EnumRecommender TABLE_TYPES_RECOMMENDER =
       EnumRecommender.in(TableType.values());
   public static final String MSSQL_USE_MERGE_HOLDLOCK = "mssql.use.merge.holdlock";
@@ -554,7 +554,7 @@ public class JdbcSinkConfig extends AbstractConfig {
               TIMESTAMP_PRECISION_MODE_CONFIG,
               ConfigDef.Type.STRING,
               TIMESTAMP_PRECISION_MODE_DEFAULT,
-              EnumValidator.in(DateTimezone.values()),
+              EnumValidator.in(TimestampPrecisionMode.values()),
               ConfigDef.Importance.LOW,
               TIMESTAMP_PRECISION_MODE_CONFIG_DOC,
               DATAMAPPING_GROUP,
@@ -690,7 +690,8 @@ public class JdbcSinkConfig extends AbstractConfig {
         DateTimezone.valueOf(getString(DATE_TIMEZONE_CONFIG).toUpperCase());
     dateTimeZone = dateTimezoneConfig.equals(DateTimezone.UTC)
         ? TimeZone.getTimeZone(ZoneOffset.UTC) : timeZone;
-    timestampPrecisionMode = TimestampPrecisionMode.valueOf(getString(TIMESTAMP_PRECISION_MODE_CONFIG).toUpperCase());
+    timestampPrecisionMode =
+        TimestampPrecisionMode.valueOf(getString(TIMESTAMP_PRECISION_MODE_CONFIG).toUpperCase());
     useHoldlockInMerge = getBoolean(MSSQL_USE_MERGE_HOLDLOCK);
     trimSensitiveLogsEnabled = getBoolean(TRIM_SENSITIVE_LOG_ENABLED);
     if (deleteEnabled && pkMode != PrimaryKeyMode.RECORD_KEY) {

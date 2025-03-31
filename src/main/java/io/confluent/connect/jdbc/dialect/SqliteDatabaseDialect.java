@@ -87,15 +87,7 @@ public class SqliteDatabaseDialect extends GenericDatabaseDialect {
       case INT16:
       case INT32:
       case INT64:
-        log.info(
-         "Int64 - Timestamp Field Whitelist in PostgreSqlDatabaseDialect getSqlType: {}",
-         config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST));
-        log.info(
-         "Field Schema Name in PostgreSqlDatabaseDialect getSqlType: {}", field.schemaName());
-        log.info("Field Name in PostgreSqlDatabaseDialect getSqlType: {}", field.name());
-        if (config
-             .getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST)
-             .contains(field.name())) {
+        if (config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
           return "TIMESTAMP";
         }
         return "INTEGER";
@@ -103,15 +95,7 @@ public class SqliteDatabaseDialect extends GenericDatabaseDialect {
       case FLOAT64:
         return "REAL";
       case STRING:
-        log.info(
-         "String - Timestamp Field Whitelist in PostgreSqlDatabaseDialect getSqlType: {}",
-         config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST));
-        log.info(
-         "Field Schema Name in PostgreSqlDatabaseDialect getSqlType: {}", field.schemaName());
-        log.info("Field Name in PostgreSqlDatabaseDialect getSqlType: {}", field.name());
-        if (config
-             .getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST)
-             .contains(field.name())) {
+        if (config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
           return "TIMESTAMP";
         }
         return "TEXT";

@@ -71,6 +71,11 @@ public class JdbcSinkConfig extends AbstractConfig {
     UTC
   }
 
+  public enum TimestampPrecisionMode {
+    MICROSECONDS,
+    NANOSECONDS
+  }
+
   public static final List<String> DEFAULT_KAFKA_PK_NAMES = Collections.unmodifiableList(
       Arrays.asList(
           "__connect_topic",
@@ -262,6 +267,23 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "the timezone set for db.timzeone configuration (to maintain backward compatibility). It "
       + "is recommended to set this to UTC to avoid conversion for DATE type values.";
 
+  public static final String TIMESTAMP_FIELDS_WHITELIST = "timestamp.fields.whitelist";
+  private static final String TIMESTAMP_FIELDS_WHITELIST_DEFAULT = "";
+  private static final String TIMESTAMP_FIELDS_WHITELIST_DOC =
+      "List of comma-separated record value timestamp field names. If empty, "
+       + "no fields from the record value are utilized, otherwise used to  "
+       + "filter to the desired fields";
+  private static final String TIMESTAMP_FIELDS_WHITELIST_DISPLAY = "Timestamp Fields Whitelist";
+
+  public static final String TIMESTAMP_PRECISION_MODE_CONFIG = "timestamp.precision.mode";
+  public static final String TIMESTAMP_PRECISION_MODE_DEFAULT = "microseconds";
+  private static final String TIMESTAMP_PRECISION_MODE_CONFIG_DISPLAY =
+      "Sink Timestamp Precision mode";
+  private static final String TIMESTAMP_PRECISION_MODE_CONFIG_DOC =
+      "Convert the Timestamp with precision. If set to microseconds, "
+          + "the timestamp will be converted to microsecond precision. If set to "
+          + "nanoseconds the timestamp will be converted to nanoseconds precision.";
+
   public static final String QUOTE_SQL_IDENTIFIERS_CONFIG =
       JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_CONFIG;
   public static final String QUOTE_SQL_IDENTIFIERS_DEFAULT =
@@ -290,7 +312,8 @@ public class JdbcSinkConfig extends AbstractConfig {
 
   private static final EnumRecommender DATE_TIMEZONE_RECOMMENDER =
       EnumRecommender.in(DateTimezone.values());
-
+  private static final EnumRecommender TIMESTAMP_PRECISION_MODE_RECOMMENDER =
+      EnumRecommender.in(TimestampPrecisionMode.values());
   private static final EnumRecommender TABLE_TYPES_RECOMMENDER =
       EnumRecommender.in(TableType.values());
   public static final String MSSQL_USE_MERGE_HOLDLOCK = "mssql.use.merge.holdlock";
@@ -318,291 +341,298 @@ public class JdbcSinkConfig extends AbstractConfig {
   public static final String CREDENTIALS_PROVIDER_CLASS_DOC =
       JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_DOC;
 
-
-  public static final ConfigDef CONFIG_DEF = new ConfigDef()
-        // Connection
-        .define(
-            CONNECTION_URL,
-            ConfigDef.Type.STRING,
-            ConfigDef.NO_DEFAULT_VALUE,
-            ConfigDef.Importance.HIGH,
-            CONNECTION_URL_DOC,
-            CONNECTION_GROUP,
-            1,
-            ConfigDef.Width.LONG,
-            CONNECTION_URL_DISPLAY
-        )
-        .define(
-            CONNECTION_USER,
-            ConfigDef.Type.STRING,
-            null,
-            ConfigDef.Importance.HIGH,
-            CONNECTION_USER_DOC,
-            CONNECTION_GROUP,
-            2,
-            ConfigDef.Width.MEDIUM,
-            CONNECTION_USER_DISPLAY
-        )
-        .define(
-            CONNECTION_PASSWORD,
-            ConfigDef.Type.PASSWORD,
-            null,
-            ConfigDef.Importance.HIGH,
-            CONNECTION_PASSWORD_DOC,
-            CONNECTION_GROUP,
-            3,
-            ConfigDef.Width.MEDIUM,
-            CONNECTION_PASSWORD_DISPLAY
-        ).define(
-            CREDENTIALS_PROVIDER_CLASS_CONFIG,
-            Type.CLASS,
-            CREDENTIALS_PROVIDER_CLASS_DEFAULT,
-            new JdbcCredentialsProviderValidator(),
-            Importance.LOW,
-            CREDENTIALS_PROVIDER_CLASS_DOC,
-            CONNECTION_GROUP,
-            4,
-            Width.LONG,
-            CREDENTIALS_PROVIDER_CLASS_DISPLAY
-      ).define(
-            DIALECT_NAME_CONFIG,
-            ConfigDef.Type.STRING,
-            DIALECT_NAME_DEFAULT,
-            DatabaseDialectRecommender.INSTANCE,
-            ConfigDef.Importance.LOW,
-            DIALECT_NAME_DOC,
-            CONNECTION_GROUP,
-            5,
-            ConfigDef.Width.LONG,
-            DIALECT_NAME_DISPLAY,
-            DatabaseDialectRecommender.INSTANCE
-        )
-        .define(
-            CONNECTION_ATTEMPTS,
-            ConfigDef.Type.INT,
-            CONNECTION_ATTEMPTS_DEFAULT,
-            ConfigDef.Range.atLeast(1),
-            ConfigDef.Importance.LOW,
-            CONNECTION_ATTEMPTS_DOC,
-            CONNECTION_GROUP,
-            6,
-            ConfigDef.Width.SHORT,
-            CONNECTION_ATTEMPTS_DISPLAY
-        ).define(
-            CONNECTION_BACKOFF,
-            ConfigDef.Type.LONG,
-            CONNECTION_BACKOFF_DEFAULT,
-            ConfigDef.Importance.LOW,
-            CONNECTION_BACKOFF_DOC,
-            CONNECTION_GROUP,
-            7,
-            ConfigDef.Width.SHORT,
-            CONNECTION_BACKOFF_DISPLAY
-        )
-        // Writes
-        .define(
-            INSERT_MODE,
-            ConfigDef.Type.STRING,
-            INSERT_MODE_DEFAULT,
-            EnumValidator.in(InsertMode.values()),
-            ConfigDef.Importance.HIGH,
-            INSERT_MODE_DOC,
-            WRITES_GROUP,
-            1,
-            ConfigDef.Width.MEDIUM,
-            INSERT_MODE_DISPLAY
-        )
-        .define(
-            BATCH_SIZE,
-            ConfigDef.Type.INT,
-            BATCH_SIZE_DEFAULT,
-            NON_NEGATIVE_INT_VALIDATOR,
-            ConfigDef.Importance.MEDIUM,
-            BATCH_SIZE_DOC, WRITES_GROUP,
-            2,
-            ConfigDef.Width.SHORT,
-            BATCH_SIZE_DISPLAY
-        )
-        .define(
-            DELETE_ENABLED,
-            ConfigDef.Type.BOOLEAN,
-            DELETE_ENABLED_DEFAULT,
-            ConfigDef.Importance.MEDIUM,
-            DELETE_ENABLED_DOC, WRITES_GROUP,
-            3,
-            ConfigDef.Width.SHORT,
-            DELETE_ENABLED_DISPLAY,
-            DeleteEnabledRecommender.INSTANCE
-        )
-        .define(
-            TABLE_TYPES_CONFIG,
-            ConfigDef.Type.LIST,
-            TABLE_TYPES_DEFAULT,
-            TABLE_TYPES_RECOMMENDER,
-            ConfigDef.Importance.LOW,
-            TABLE_TYPES_DOC,
-            WRITES_GROUP,
-            4,
-            ConfigDef.Width.MEDIUM,
-            TABLE_TYPES_DISPLAY
-        )
-        .define(
-            REPLACE_NULL_WITH_DEFAULT,
-            ConfigDef.Type.BOOLEAN,
-            REPLACE_NULL_WITH_DEFAULT_DEFAULT,
-            ConfigDef.Importance.LOW,
-            REPLACE_NULL_WITH_DEFAULT_DOC,
-            WRITES_GROUP,
-            5,
-            ConfigDef.Width.MEDIUM,
-            REPLACE_NULL_WITH_DEFAULT_DISPLAY
-        )
-        // Data Mapping
-        .define(
-            TABLE_NAME_FORMAT,
-            ConfigDef.Type.STRING,
-            TABLE_NAME_FORMAT_DEFAULT,
-            new ConfigDef.NonEmptyString(),
-            ConfigDef.Importance.MEDIUM,
-            TABLE_NAME_FORMAT_DOC,
-            DATAMAPPING_GROUP,
-            1,
-            ConfigDef.Width.LONG,
-            TABLE_NAME_FORMAT_DISPLAY
-        )
-        .define(
-            PK_MODE,
-            ConfigDef.Type.STRING,
-            PK_MODE_DEFAULT,
-            EnumValidator.in(PrimaryKeyMode.values()),
-            ConfigDef.Importance.HIGH,
-            PK_MODE_DOC,
-            DATAMAPPING_GROUP,
-            2,
-            ConfigDef.Width.MEDIUM,
-            PK_MODE_DISPLAY,
-            PrimaryKeyModeRecommender.INSTANCE
-        )
-        .define(
-            PK_FIELDS,
-            ConfigDef.Type.LIST,
-            PK_FIELDS_DEFAULT,
-            ConfigDef.Importance.MEDIUM,
-            PK_FIELDS_DOC,
-            DATAMAPPING_GROUP,
-            3,
-            ConfigDef.Width.LONG, PK_FIELDS_DISPLAY
-        )
-        .define(
-            FIELDS_WHITELIST,
-            ConfigDef.Type.LIST,
-            FIELDS_WHITELIST_DEFAULT,
-            ConfigDef.Importance.MEDIUM,
-            FIELDS_WHITELIST_DOC,
-            DATAMAPPING_GROUP,
-            4,
-            ConfigDef.Width.LONG,
-            FIELDS_WHITELIST_DISPLAY
-        ).define(
-          DB_TIMEZONE_CONFIG,
-          ConfigDef.Type.STRING,
-          DB_TIMEZONE_DEFAULT,
-          TimeZoneValidator.INSTANCE,
-          ConfigDef.Importance.MEDIUM,
-          DB_TIMEZONE_CONFIG_DOC,
-          DATAMAPPING_GROUP,
-          5,
-          ConfigDef.Width.MEDIUM,
-          DB_TIMEZONE_CONFIG_DISPLAY
-        )
-        .define(
-            DATE_TIMEZONE_CONFIG,
-            ConfigDef.Type.STRING,
-            DATE_TIMEZONE_DEFAULT,
-            EnumValidator.in(DateTimezone.values()),
-            ConfigDef.Importance.LOW,
-            DATE_TIMEZONE_CONFIG_DOC,
-            DATAMAPPING_GROUP,
-            6,
-            ConfigDef.Width.MEDIUM,
-            DATE_TIMEZONE_CONFIG_DISPLAY,
-            DATE_TIMEZONE_RECOMMENDER
-        )
-        // DDL
-        .define(
-            AUTO_CREATE,
-            ConfigDef.Type.BOOLEAN,
-            AUTO_CREATE_DEFAULT,
-            ConfigDef.Importance.MEDIUM,
-            AUTO_CREATE_DOC, DDL_GROUP,
-            1,
-            ConfigDef.Width.SHORT,
-            AUTO_CREATE_DISPLAY
-        )
-        .define(
-            AUTO_EVOLVE,
-            ConfigDef.Type.BOOLEAN,
-            AUTO_EVOLVE_DEFAULT,
-            ConfigDef.Importance.MEDIUM,
-            AUTO_EVOLVE_DOC, DDL_GROUP,
-            2,
-            ConfigDef.Width.SHORT,
-            AUTO_EVOLVE_DISPLAY
-        ).define(
-            QUOTE_SQL_IDENTIFIERS_CONFIG,
-            ConfigDef.Type.STRING,
-            QUOTE_SQL_IDENTIFIERS_DEFAULT,
-            ConfigDef.Importance.MEDIUM,
-            QUOTE_SQL_IDENTIFIERS_DOC,
-            DDL_GROUP,
-            3,
-            ConfigDef.Width.MEDIUM,
-            QUOTE_SQL_IDENTIFIERS_DISPLAY,
-            QUOTE_METHOD_RECOMMENDER
-        )
-        // DML
-        .define(
-            MSSQL_USE_MERGE_HOLDLOCK,
-            ConfigDef.Type.BOOLEAN,
-            MSSQL_USE_MERGE_HOLDLOCK_DEFAULT,
-            ConfigDef.Importance.LOW,
-            MSSQL_USE_MERGE_HOLDLOCK_DOC,
-            DML_GROUP,
-            1,
-            ConfigDef.Width.MEDIUM,
-            MSSQL_USE_MERGE_HOLDLOCK_DISPLAY
-        )
-        // Retries
-        .define(
-            MAX_RETRIES,
-            ConfigDef.Type.INT,
-            MAX_RETRIES_DEFAULT,
-            NON_NEGATIVE_INT_VALIDATOR,
-            ConfigDef.Importance.MEDIUM,
-            MAX_RETRIES_DOC,
-            RETRIES_GROUP,
-            1,
-            ConfigDef.Width.SHORT,
-            MAX_RETRIES_DISPLAY
-        )
-        .define(
-            RETRY_BACKOFF_MS,
-            ConfigDef.Type.INT,
-            RETRY_BACKOFF_MS_DEFAULT,
-            NON_NEGATIVE_INT_VALIDATOR,
-            ConfigDef.Importance.MEDIUM,
-            RETRY_BACKOFF_MS_DOC,
-            RETRIES_GROUP,
-            2,
-            ConfigDef.Width.SHORT,
-            RETRY_BACKOFF_MS_DISPLAY
-        )
-        .defineInternal(
-            TRIM_SENSITIVE_LOG_ENABLED,
-            ConfigDef.Type.BOOLEAN,
-            TRIM_SENSITIVE_LOG_ENABLED_DEFAULT,
-            ConfigDef.Importance.LOW
-        );
+  public static final ConfigDef CONFIG_DEF =
+      new ConfigDef()
+          // Connection
+          .define(
+              CONNECTION_URL,
+              ConfigDef.Type.STRING,
+              ConfigDef.NO_DEFAULT_VALUE,
+              ConfigDef.Importance.HIGH,
+              CONNECTION_URL_DOC,
+              CONNECTION_GROUP,
+              1,
+              ConfigDef.Width.LONG,
+              CONNECTION_URL_DISPLAY)
+          .define(
+              CONNECTION_USER,
+              ConfigDef.Type.STRING,
+              null,
+              ConfigDef.Importance.HIGH,
+              CONNECTION_USER_DOC,
+              CONNECTION_GROUP,
+              2,
+              ConfigDef.Width.MEDIUM,
+              CONNECTION_USER_DISPLAY)
+          .define(
+              CONNECTION_PASSWORD,
+              ConfigDef.Type.PASSWORD,
+              null,
+              ConfigDef.Importance.HIGH,
+              CONNECTION_PASSWORD_DOC,
+              CONNECTION_GROUP,
+              3,
+              ConfigDef.Width.MEDIUM,
+              CONNECTION_PASSWORD_DISPLAY)
+          .define(
+              CREDENTIALS_PROVIDER_CLASS_CONFIG,
+              Type.CLASS,
+              CREDENTIALS_PROVIDER_CLASS_DEFAULT,
+              new JdbcCredentialsProviderValidator(),
+              Importance.LOW,
+              CREDENTIALS_PROVIDER_CLASS_DOC,
+              CONNECTION_GROUP,
+              4,
+              Width.LONG,
+              CREDENTIALS_PROVIDER_CLASS_DISPLAY)
+          .define(
+              DIALECT_NAME_CONFIG,
+              ConfigDef.Type.STRING,
+              DIALECT_NAME_DEFAULT,
+              DatabaseDialectRecommender.INSTANCE,
+              ConfigDef.Importance.LOW,
+              DIALECT_NAME_DOC,
+              CONNECTION_GROUP,
+              5,
+              ConfigDef.Width.LONG,
+              DIALECT_NAME_DISPLAY,
+              DatabaseDialectRecommender.INSTANCE)
+          .define(
+              CONNECTION_ATTEMPTS,
+              ConfigDef.Type.INT,
+              CONNECTION_ATTEMPTS_DEFAULT,
+              ConfigDef.Range.atLeast(1),
+              ConfigDef.Importance.LOW,
+              CONNECTION_ATTEMPTS_DOC,
+              CONNECTION_GROUP,
+              6,
+              ConfigDef.Width.SHORT,
+              CONNECTION_ATTEMPTS_DISPLAY)
+          .define(
+              CONNECTION_BACKOFF,
+              ConfigDef.Type.LONG,
+              CONNECTION_BACKOFF_DEFAULT,
+              ConfigDef.Importance.LOW,
+              CONNECTION_BACKOFF_DOC,
+              CONNECTION_GROUP,
+              7,
+              ConfigDef.Width.SHORT,
+              CONNECTION_BACKOFF_DISPLAY)
+          // Writes
+          .define(
+              INSERT_MODE,
+              ConfigDef.Type.STRING,
+              INSERT_MODE_DEFAULT,
+              EnumValidator.in(InsertMode.values()),
+              ConfigDef.Importance.HIGH,
+              INSERT_MODE_DOC,
+              WRITES_GROUP,
+              1,
+              ConfigDef.Width.MEDIUM,
+              INSERT_MODE_DISPLAY)
+          .define(
+              BATCH_SIZE,
+              ConfigDef.Type.INT,
+              BATCH_SIZE_DEFAULT,
+              NON_NEGATIVE_INT_VALIDATOR,
+              ConfigDef.Importance.MEDIUM,
+              BATCH_SIZE_DOC,
+              WRITES_GROUP,
+              2,
+              ConfigDef.Width.SHORT,
+              BATCH_SIZE_DISPLAY)
+          .define(
+              DELETE_ENABLED,
+              ConfigDef.Type.BOOLEAN,
+              DELETE_ENABLED_DEFAULT,
+              ConfigDef.Importance.MEDIUM,
+              DELETE_ENABLED_DOC,
+              WRITES_GROUP,
+              3,
+              ConfigDef.Width.SHORT,
+              DELETE_ENABLED_DISPLAY,
+              DeleteEnabledRecommender.INSTANCE)
+          .define(
+              TABLE_TYPES_CONFIG,
+              ConfigDef.Type.LIST,
+              TABLE_TYPES_DEFAULT,
+              TABLE_TYPES_RECOMMENDER,
+              ConfigDef.Importance.LOW,
+              TABLE_TYPES_DOC,
+              WRITES_GROUP,
+              4,
+              ConfigDef.Width.MEDIUM,
+              TABLE_TYPES_DISPLAY)
+          .define(
+              REPLACE_NULL_WITH_DEFAULT,
+              ConfigDef.Type.BOOLEAN,
+              REPLACE_NULL_WITH_DEFAULT_DEFAULT,
+              ConfigDef.Importance.LOW,
+              REPLACE_NULL_WITH_DEFAULT_DOC,
+              WRITES_GROUP,
+              5,
+              ConfigDef.Width.MEDIUM,
+              REPLACE_NULL_WITH_DEFAULT_DISPLAY)
+          // Data Mapping
+          .define(
+              TABLE_NAME_FORMAT,
+              ConfigDef.Type.STRING,
+              TABLE_NAME_FORMAT_DEFAULT,
+              new ConfigDef.NonEmptyString(),
+              ConfigDef.Importance.MEDIUM,
+              TABLE_NAME_FORMAT_DOC,
+              DATAMAPPING_GROUP,
+              1,
+              ConfigDef.Width.LONG,
+              TABLE_NAME_FORMAT_DISPLAY)
+          .define(
+              PK_MODE,
+              ConfigDef.Type.STRING,
+              PK_MODE_DEFAULT,
+              EnumValidator.in(PrimaryKeyMode.values()),
+              ConfigDef.Importance.HIGH,
+              PK_MODE_DOC,
+              DATAMAPPING_GROUP,
+              2,
+              ConfigDef.Width.MEDIUM,
+              PK_MODE_DISPLAY,
+              PrimaryKeyModeRecommender.INSTANCE)
+          .define(
+              PK_FIELDS,
+              ConfigDef.Type.LIST,
+              PK_FIELDS_DEFAULT,
+              ConfigDef.Importance.MEDIUM,
+              PK_FIELDS_DOC,
+              DATAMAPPING_GROUP,
+              3,
+              ConfigDef.Width.LONG,
+              PK_FIELDS_DISPLAY)
+          .define(
+              FIELDS_WHITELIST,
+              ConfigDef.Type.LIST,
+              FIELDS_WHITELIST_DEFAULT,
+              ConfigDef.Importance.MEDIUM,
+              FIELDS_WHITELIST_DOC,
+              DATAMAPPING_GROUP,
+              4,
+              ConfigDef.Width.LONG,
+              FIELDS_WHITELIST_DISPLAY)
+          .define(
+              DB_TIMEZONE_CONFIG,
+              ConfigDef.Type.STRING,
+              DB_TIMEZONE_DEFAULT,
+              TimeZoneValidator.INSTANCE,
+              ConfigDef.Importance.MEDIUM,
+              DB_TIMEZONE_CONFIG_DOC,
+              DATAMAPPING_GROUP,
+              5,
+              ConfigDef.Width.MEDIUM,
+              DB_TIMEZONE_CONFIG_DISPLAY)
+          .define(
+              DATE_TIMEZONE_CONFIG,
+              ConfigDef.Type.STRING,
+              DATE_TIMEZONE_DEFAULT,
+              EnumValidator.in(DateTimezone.values()),
+              ConfigDef.Importance.LOW,
+              DATE_TIMEZONE_CONFIG_DOC,
+              DATAMAPPING_GROUP,
+              6,
+              ConfigDef.Width.MEDIUM,
+              DATE_TIMEZONE_CONFIG_DISPLAY,
+              DATE_TIMEZONE_RECOMMENDER)
+          .define(
+              TIMESTAMP_FIELDS_WHITELIST,
+              ConfigDef.Type.LIST,
+              TIMESTAMP_FIELDS_WHITELIST_DEFAULT,
+              ConfigDef.Importance.MEDIUM,
+              TIMESTAMP_FIELDS_WHITELIST_DOC,
+              DATAMAPPING_GROUP,
+          7,
+              ConfigDef.Width.MEDIUM,
+              TIMESTAMP_FIELDS_WHITELIST_DISPLAY)
+          .define(
+              TIMESTAMP_PRECISION_MODE_CONFIG,
+              ConfigDef.Type.STRING,
+              TIMESTAMP_PRECISION_MODE_DEFAULT,
+              EnumValidator.in(TimestampPrecisionMode.values()),
+              ConfigDef.Importance.LOW,
+              TIMESTAMP_PRECISION_MODE_CONFIG_DOC,
+              DATAMAPPING_GROUP,
+              8,
+              ConfigDef.Width.MEDIUM,
+              TIMESTAMP_PRECISION_MODE_CONFIG_DISPLAY,
+              TIMESTAMP_PRECISION_MODE_RECOMMENDER)
+          // DDL
+          .define(
+              AUTO_CREATE,
+              ConfigDef.Type.BOOLEAN,
+              AUTO_CREATE_DEFAULT,
+              ConfigDef.Importance.MEDIUM,
+              AUTO_CREATE_DOC,
+              DDL_GROUP,
+              1,
+              ConfigDef.Width.SHORT,
+              AUTO_CREATE_DISPLAY)
+          .define(
+              AUTO_EVOLVE,
+              ConfigDef.Type.BOOLEAN,
+              AUTO_EVOLVE_DEFAULT,
+              ConfigDef.Importance.MEDIUM,
+              AUTO_EVOLVE_DOC,
+              DDL_GROUP,
+              2,
+              ConfigDef.Width.SHORT,
+              AUTO_EVOLVE_DISPLAY)
+          .define(
+              QUOTE_SQL_IDENTIFIERS_CONFIG,
+              ConfigDef.Type.STRING,
+              QUOTE_SQL_IDENTIFIERS_DEFAULT,
+              ConfigDef.Importance.MEDIUM,
+              QUOTE_SQL_IDENTIFIERS_DOC,
+              DDL_GROUP,
+              3,
+              ConfigDef.Width.MEDIUM,
+              QUOTE_SQL_IDENTIFIERS_DISPLAY,
+              QUOTE_METHOD_RECOMMENDER)
+          // DML
+          .define(
+              MSSQL_USE_MERGE_HOLDLOCK,
+              ConfigDef.Type.BOOLEAN,
+              MSSQL_USE_MERGE_HOLDLOCK_DEFAULT,
+              ConfigDef.Importance.LOW,
+              MSSQL_USE_MERGE_HOLDLOCK_DOC,
+              DML_GROUP,
+              1,
+              ConfigDef.Width.MEDIUM,
+              MSSQL_USE_MERGE_HOLDLOCK_DISPLAY)
+          // Retries
+          .define(
+              MAX_RETRIES,
+              ConfigDef.Type.INT,
+              MAX_RETRIES_DEFAULT,
+              NON_NEGATIVE_INT_VALIDATOR,
+              ConfigDef.Importance.MEDIUM,
+              MAX_RETRIES_DOC,
+              RETRIES_GROUP,
+              1,
+              ConfigDef.Width.SHORT,
+              MAX_RETRIES_DISPLAY)
+          .define(
+              RETRY_BACKOFF_MS,
+              ConfigDef.Type.INT,
+              RETRY_BACKOFF_MS_DEFAULT,
+              NON_NEGATIVE_INT_VALIDATOR,
+              ConfigDef.Importance.MEDIUM,
+              RETRY_BACKOFF_MS_DOC,
+              RETRIES_GROUP,
+              2,
+              ConfigDef.Width.SHORT,
+              RETRY_BACKOFF_MS_DISPLAY)
+          .defineInternal(
+              TRIM_SENSITIVE_LOG_ENABLED,
+              ConfigDef.Type.BOOLEAN,
+              TRIM_SENSITIVE_LOG_ENABLED_DEFAULT,
+              ConfigDef.Importance.LOW);
 
   public final String connectorName;
   public final String connectionUrl;
@@ -622,9 +652,11 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final PrimaryKeyMode pkMode;
   public final List<String> pkFields;
   public final Set<String> fieldsWhitelist;
+  public final Set<String> timestampFieldsWhitelist;
   public final String dialectName;
   public final TimeZone timeZone;
   public final TimeZone dateTimeZone;
+  public final TimestampPrecisionMode timestampPrecisionMode;
   public final EnumSet<TableType> tableTypes;
   public final boolean useHoldlockInMerge;
 
@@ -644,6 +676,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     replaceNullWithDefault = getBoolean(REPLACE_NULL_WITH_DEFAULT);
     maxRetries = getInt(MAX_RETRIES);
     retryBackoffMs = getInt(RETRY_BACKOFF_MS);
+    timestampFieldsWhitelist = new HashSet<>(getList(TIMESTAMP_FIELDS_WHITELIST));
     autoCreate = getBoolean(AUTO_CREATE);
     autoEvolve = getBoolean(AUTO_EVOLVE);
     insertMode = InsertMode.valueOf(getString(INSERT_MODE).toUpperCase());
@@ -657,6 +690,8 @@ public class JdbcSinkConfig extends AbstractConfig {
         DateTimezone.valueOf(getString(DATE_TIMEZONE_CONFIG).toUpperCase());
     dateTimeZone = dateTimezoneConfig.equals(DateTimezone.UTC)
         ? TimeZone.getTimeZone(ZoneOffset.UTC) : timeZone;
+    timestampPrecisionMode =
+        TimestampPrecisionMode.valueOf(getString(TIMESTAMP_PRECISION_MODE_CONFIG).toUpperCase());
     useHoldlockInMerge = getBoolean(MSSQL_USE_MERGE_HOLDLOCK);
     trimSensitiveLogsEnabled = getBoolean(TRIM_SENSITIVE_LOG_ENABLED);
     if (deleteEnabled && pkMode != PrimaryKeyMode.RECORD_KEY) {

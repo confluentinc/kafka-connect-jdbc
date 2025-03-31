@@ -377,9 +377,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       Connection db,
       String query
   ) throws SQLException {
-    glog.trace("Creating a PreparedStatement '{}'", query);
+    log.info("Creating a PreparedStatement '{}'", query);
     PreparedStatement stmt = db.prepareStatement(query);
+    log.info("Created PreparedStatement '{}'", stmt);
     initializePreparedStatement(stmt);
+    log.info("Prepared Statement after initialize Prepared Statement '{}'", stmt);
     return stmt;
   }
 
@@ -1704,7 +1706,32 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         statement.setInt(index, (Integer) value);
         break;
       case INT64:
-        statement.setLong(index, (Long) value);
+        log.info("Schema type INT64");
+        log.info("Schema Type value :" + schema.type());
+        log.info("Schema Name value :" + schema.name());
+        log.info(
+            "Timestamp Field White List value: {}",
+            config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(schema.name()));
+        if (config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(schema.name())) {
+          log.info("Entered into the Timestamp Conversion Block");
+          if (config
+              .getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG)
+              .equals("microseconds")) {
+            Timestamp ts = DateTimeUtils.formatSinkMicrosTimestamp((Long) value);
+            log.info("Timestamp Value : " + ts);
+            statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
+            log.info("Statement Value : " + statement);
+          } else if (config
+              .getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG)
+              .equals("nanoseconds")) {
+            Timestamp ts = DateTimeUtils.formatSinkNanosTimestamp((Long) value);
+            log.info("Timestamp Value : " + ts);
+            statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
+            log.info("Statement Value : " + statement);
+          }
+        } else {
+          statement.setLong(index, (Long) value);
+        }
         break;
       case FLOAT32:
         statement.setFloat(index, (Float) value);
@@ -1716,7 +1743,32 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         statement.setBoolean(index, (Boolean) value);
         break;
       case STRING:
-        statement.setString(index, (String) value);
+        log.info("Schema type STRING");
+        log.info("Schema Type value :" + schema.type());
+        log.info("Schema Name value :" + schema.name());
+        log.info(
+            "Timestamp Field White List value: {}",
+            config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(schema.name()));
+        if (config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(schema.name())) {
+          log.info("Entered into the Timestamp Conversion Block");
+          if (config
+              .getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG)
+              .equals("microseconds")) {
+            Timestamp ts = DateTimeUtils.formatSinkMicrosTimestamp((String) value);
+            log.info("Timestamp Value : " + ts);
+            statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
+            log.info("Statement Value : " + statement);
+          } else if (config
+              .getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG)
+              .equals("nanoseconds")) {
+            Timestamp ts = DateTimeUtils.formatSinkNanosTimestamp((String) value);
+            log.info("Timestamp Value : " + ts);
+            statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
+            log.info("Statement Value : " + statement);
+          }
+        } else {
+          statement.setString(index, (String) value);
+        }
         break;
       case BYTES:
         final byte[] bytes;
@@ -1741,9 +1793,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       Schema schema,
       Object value
   ) throws SQLException {
+    log.info("Entered the maybeBindLogical");
     if (schema.name() != null) {
       switch (schema.name()) {
         case Date.LOGICAL_NAME:
+          log.info("Schema type Date Logical Name");
           statement.setDate(
               index,
               new java.sql.Date(((java.util.Date) value).getTime()),
@@ -1751,9 +1805,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           );
           return true;
         case Decimal.LOGICAL_NAME:
+          log.info("Schema type Decimal Logical Name");
           statement.setBigDecimal(index, (BigDecimal) value);
           return true;
         case Time.LOGICAL_NAME:
+          log.info("Schema type Time Logical Name");
           statement.setTime(
               index,
               new java.sql.Time(((java.util.Date) value).getTime()),
@@ -1761,6 +1817,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           );
           return true;
         case org.apache.kafka.connect.data.Timestamp.LOGICAL_NAME:
+          log.info("Schema type Timestamp Logical Name");
           statement.setTimestamp(
               index,
               new java.sql.Timestamp(((java.util.Date) value).getTime()),
@@ -1875,9 +1932,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       ExpressionBuilder builder,
       SinkRecordField f
   ) {
+    log.info("Sink Record Field : " + f.name());
     builder.appendColumnName(f.name());
     builder.append(" ");
     String sqlType = getSqlType(f);
+    log.info("SQL Type : " + sqlType);
     builder.append(sqlType);
     if (f.defaultValue() != null) {
       builder.append(" DEFAULT ");
@@ -1935,7 +1994,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       case INT64:
       case FLOAT32:
       case FLOAT64:
-        // no escaping required
         builder.append(value);
         break;
       case BOOLEAN:

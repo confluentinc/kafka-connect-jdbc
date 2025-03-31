@@ -247,6 +247,9 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       case INT32:
         return "NUMBER(10,0)";
       case INT64:
+        if (config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
+          return "TIMESTAMP";
+        }
         return "NUMBER(19,0)";
       case FLOAT32:
         return "BINARY_FLOAT";
@@ -255,6 +258,9 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "NUMBER(1,0)";
       case STRING:
+        if (config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
+          return "TIMESTAMP";
+        }
         return "VARCHAR2(4000)";
       case BYTES:
         return "BLOB";

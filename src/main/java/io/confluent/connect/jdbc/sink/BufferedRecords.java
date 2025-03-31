@@ -79,6 +79,7 @@ public class BufferedRecords {
 
   public List<SinkRecord> add(SinkRecord record) throws SQLException, TableAlterOrCreateException {
     recordValidator.validate(record);
+    log.info("Adding records to Database table");
     final List<SinkRecord> flushed = new ArrayList<>();
 
     boolean schemaChanged = false;
@@ -119,15 +120,17 @@ public class BufferedRecords {
           config.fieldsWhitelist,
           schemaPair
       );
+      log.info("Pre-checking the create or Amend if Necessary");
       dbStructure.createOrAmendIfNecessary(
           config,
           connection,
           tableId,
           fieldsMetadata
       );
+      log.info("Before the insert SQL");
       final String insertSql = getInsertSql();
       final String deleteSql = getDeleteSql();
-      log.debug(
+      log.info(
           "{} sql: {} deleteSql: {} meta: {}",
           config.insertMode,
           insertSql,
@@ -179,12 +182,16 @@ public class BufferedRecords {
     }
     log.debug("Flushing {} buffered records", records.size());
     for (SinkRecord record : records) {
+      log.info("SinkRecord in delete statement binder: {}", record);
       if (isNull(record.value()) && nonNull(deleteStatementBinder)) {
         deleteStatementBinder.bindRecord(record);
       } else {
+        log.info("SinkRecord in update statement binder: {}", record);
         updateStatementBinder.bindRecord(record);
+        log.info("SinkRecord in after update statement binder: {}", record);
       }
     }
+    log.info("Executing the updates");
     executeUpdates();
     executeDeletes();
 
@@ -195,7 +202,9 @@ public class BufferedRecords {
   }
 
   private void executeUpdates() throws SQLException {
+    log.info("Update prepared Statement in executeUpdates is : { }" + updatePreparedStatement);
     int[] batchStatus = updatePreparedStatement.executeBatch();
+    updatePreparedStatement.executeUpdate();
     for (int updateCount : batchStatus) {
       if (updateCount == Statement.EXECUTE_FAILED) {
         throw new BatchUpdateException(
@@ -235,6 +244,7 @@ public class BufferedRecords {
   private String getInsertSql() throws SQLException {
     switch (config.insertMode) {
       case INSERT:
+        log.info("Inserting records to Database table");
         return dbDialect.buildInsertStatement(
             tableId,
             asColumns(fieldsMetadata.keyFieldNames),

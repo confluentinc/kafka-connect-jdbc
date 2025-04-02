@@ -1667,6 +1667,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     } else {
       boolean bound = maybeBindLogical(statement, index, schema, value);
       if (!bound) {
+        System.out.println("Value in Bindfield" + value + "Schema in Bindfield: " + schema);
         bound = maybeBindPrimitive(statement, index, schema, value);
       }
       if (!bound) {
@@ -1693,6 +1694,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       Schema schema,
       Object value
   ) throws SQLException {
+    System.out.println(
+        "Value in maybeBindPrimitive" + value + "Schema in maybeBindPrimitive: " + schema);
     switch (schema.type()) {
       case INT8:
         statement.setByte(index, (Byte) value);
@@ -1706,19 +1709,25 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       case INT64:
         if (config instanceof JdbcSinkConfig
             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(schema.name())) {
+          System.out.println("Entered here");
           if (config
               .getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG)
               .equals("microseconds")) {
             Timestamp ts = DateTimeUtils.formatSinkMicrosTimestamp((Long) value);
             statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
+            break;
           } else if (config
               .getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG)
               .equals("nanoseconds")) {
             Timestamp ts = DateTimeUtils.formatSinkNanosTimestamp((Long) value);
             statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
+            break;
           }
         } else {
+          System.out.println("value: " + value);
+          System.out.println("Index: " + index);
           statement.setLong(index, (Long) value);
+          break;
         }
         break;
       case FLOAT32:
@@ -1738,14 +1747,17 @@ public class GenericDatabaseDialect implements DatabaseDialect {
               .equals("microseconds")) {
             Timestamp ts = DateTimeUtils.formatSinkMicrosTimestamp((String) value);
             statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
+            break;
           } else if (config
               .getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG)
               .equals("nanoseconds")) {
             Timestamp ts = DateTimeUtils.formatSinkNanosTimestamp((String) value);
             statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
+            break;
           }
         } else {
           statement.setString(index, (String) value);
+          break;
         }
         break;
       case BYTES:

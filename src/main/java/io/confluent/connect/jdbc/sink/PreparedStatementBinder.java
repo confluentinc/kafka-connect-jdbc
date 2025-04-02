@@ -199,6 +199,8 @@ public class PreparedStatementBinder implements StatementBinder {
     Schema schemaWithName = SchemaBuilder.type(schema.type())
                              .name(fieldName)
                              .build();
+    System.out.println(
+        "Value in Bindfield in PreparedStatementBinder" + value + "Schema in Bindfield: " + schema);
     dialect.bindField(statement, index, schemaWithName, value, colDef);
   }
 }

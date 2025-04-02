@@ -354,7 +354,8 @@ public class JdbcSinkConfig extends AbstractConfig {
             1,
             ConfigDef.Width.LONG,
             CONNECTION_URL_DISPLAY
-        ).define(
+        )
+        .define(
             CONNECTION_USER,
             ConfigDef.Type.STRING,
             null,
@@ -364,7 +365,8 @@ public class JdbcSinkConfig extends AbstractConfig {
             2,
             ConfigDef.Width.MEDIUM,
             CONNECTION_USER_DISPLAY
-        ).define(
+        )
+        .define(
             CONNECTION_PASSWORD,
             ConfigDef.Type.PASSWORD,
             null,
@@ -385,7 +387,8 @@ public class JdbcSinkConfig extends AbstractConfig {
             4,
             Width.LONG,
             CREDENTIALS_PROVIDER_CLASS_DISPLAY
-        ).define(
+        )
+        .define(
             DIALECT_NAME_CONFIG,
             ConfigDef.Type.STRING,
             DIALECT_NAME_DEFAULT,
@@ -397,7 +400,8 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Width.LONG,
             DIALECT_NAME_DISPLAY,
             DatabaseDialectRecommender.INSTANCE
-        ).define(
+        )
+        .define(
             CONNECTION_ATTEMPTS,
             ConfigDef.Type.INT,
             CONNECTION_ATTEMPTS_DEFAULT,
@@ -582,7 +586,8 @@ public class JdbcSinkConfig extends AbstractConfig {
             1,
             ConfigDef.Width.SHORT,
             AUTO_CREATE_DISPLAY
-        ).define(
+        )
+        .define(
             AUTO_EVOLVE,
             ConfigDef.Type.BOOLEAN,
             AUTO_EVOLVE_DEFAULT,
@@ -591,8 +596,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             2,
             ConfigDef.Width.SHORT,
             AUTO_EVOLVE_DISPLAY
-        )
-        .define(
+        ).define(
             QUOTE_SQL_IDENTIFIERS_CONFIG,
             ConfigDef.Type.STRING,
             QUOTE_SQL_IDENTIFIERS_DEFAULT,

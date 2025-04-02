@@ -625,8 +625,6 @@ public interface DatabaseDialect extends ConnectionProvider {
       Object value,
       ColumnDefinition colDef
   ) throws SQLException {
-    System.out.println(
-        "Value in Bindfield in DatabaseDialect: " + value + "Schema in Bindfield: " + schema);
     bindField(statement, index, schema, value);
   }
 

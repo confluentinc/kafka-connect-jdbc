@@ -354,8 +354,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             1,
             ConfigDef.Width.LONG,
             CONNECTION_URL_DISPLAY
-        )
-        .define(
+        ).define(
             CONNECTION_USER,
             ConfigDef.Type.STRING,
             null,
@@ -365,8 +364,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             2,
             ConfigDef.Width.MEDIUM,
             CONNECTION_USER_DISPLAY
-        )
-        .define(
+        ).define(
             CONNECTION_PASSWORD,
             ConfigDef.Type.PASSWORD,
             null,
@@ -376,8 +374,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             3,
             ConfigDef.Width.MEDIUM,
             CONNECTION_PASSWORD_DISPLAY
-        )
-        .define(
+        ).define(
             CREDENTIALS_PROVIDER_CLASS_CONFIG,
             Type.CLASS,
             CREDENTIALS_PROVIDER_CLASS_DEFAULT,
@@ -388,8 +385,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             4,
             Width.LONG,
             CREDENTIALS_PROVIDER_CLASS_DISPLAY
-        )
-        .define(
+        ).define(
             DIALECT_NAME_CONFIG,
             ConfigDef.Type.STRING,
             DIALECT_NAME_DEFAULT,
@@ -401,8 +397,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Width.LONG,
             DIALECT_NAME_DISPLAY,
             DatabaseDialectRecommender.INSTANCE
-        )
-        .define(
+        ).define(
             CONNECTION_ATTEMPTS,
             ConfigDef.Type.INT,
             CONNECTION_ATTEMPTS_DEFAULT,
@@ -413,8 +408,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             6,
             ConfigDef.Width.SHORT,
             CONNECTION_ATTEMPTS_DISPLAY
-        )
-        .define(
+        ).define(
             CONNECTION_BACKOFF,
             ConfigDef.Type.LONG,
             CONNECTION_BACKOFF_DEFAULT,
@@ -444,8 +438,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             BATCH_SIZE_DEFAULT,
             NON_NEGATIVE_INT_VALIDATOR,
             ConfigDef.Importance.MEDIUM,
-            BATCH_SIZE_DOC,
-            WRITES_GROUP,
+            BATCH_SIZE_DOC, WRITES_GROUP,
             2,
             ConfigDef.Width.SHORT,
             BATCH_SIZE_DISPLAY
@@ -455,8 +448,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Type.BOOLEAN,
             DELETE_ENABLED_DEFAULT,
             ConfigDef.Importance.MEDIUM,
-            DELETE_ENABLED_DOC,
-            WRITES_GROUP,
+            DELETE_ENABLED_DOC, WRITES_GROUP,
             3,
             ConfigDef.Width.SHORT,
             DELETE_ENABLED_DISPLAY,
@@ -519,8 +511,7 @@ public class JdbcSinkConfig extends AbstractConfig {
             PK_FIELDS_DOC,
             DATAMAPPING_GROUP,
             3,
-            ConfigDef.Width.LONG,
-            PK_FIELDS_DISPLAY
+            ConfigDef.Width.LONG, PK_FIELDS_DISPLAY
         )
         .define(
             FIELDS_WHITELIST,
@@ -532,18 +523,17 @@ public class JdbcSinkConfig extends AbstractConfig {
             4,
             ConfigDef.Width.LONG,
             FIELDS_WHITELIST_DISPLAY
-        )
-        .define(
-            DB_TIMEZONE_CONFIG,
-            ConfigDef.Type.STRING,
-            DB_TIMEZONE_DEFAULT,
-            TimeZoneValidator.INSTANCE,
-            ConfigDef.Importance.MEDIUM,
-            DB_TIMEZONE_CONFIG_DOC,
-            DATAMAPPING_GROUP,
-            5,
-            ConfigDef.Width.MEDIUM,
-            DB_TIMEZONE_CONFIG_DISPLAY
+        ).define(
+          DB_TIMEZONE_CONFIG,
+          ConfigDef.Type.STRING,
+          DB_TIMEZONE_DEFAULT,
+          TimeZoneValidator.INSTANCE,
+          ConfigDef.Importance.MEDIUM,
+          DB_TIMEZONE_CONFIG_DOC,
+          DATAMAPPING_GROUP,
+          5,
+          ConfigDef.Width.MEDIUM,
+          DB_TIMEZONE_CONFIG_DISPLAY
         )
         .define(
             DATE_TIMEZONE_CONFIG,
@@ -588,19 +578,16 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Type.BOOLEAN,
             AUTO_CREATE_DEFAULT,
             ConfigDef.Importance.MEDIUM,
-            AUTO_CREATE_DOC,
-            DDL_GROUP,
+            AUTO_CREATE_DOC, DDL_GROUP,
             1,
             ConfigDef.Width.SHORT,
             AUTO_CREATE_DISPLAY
-        )
-        .define(
+        ).define(
             AUTO_EVOLVE,
             ConfigDef.Type.BOOLEAN,
             AUTO_EVOLVE_DEFAULT,
             ConfigDef.Importance.MEDIUM,
-            AUTO_EVOLVE_DOC,
-            DDL_GROUP,
+            AUTO_EVOLVE_DOC, DDL_GROUP,
             2,
             ConfigDef.Width.SHORT,
             AUTO_EVOLVE_DISPLAY

@@ -16,6 +16,7 @@
 package io.confluent.connect.jdbc.dialect;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
@@ -306,7 +307,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         case Time.LOGICAL_NAME:
           return "TIME";
         case Timestamp.LOGICAL_NAME:
-          return "TIMESTAMP";
+          return "TIMESTAMP(6)";
         default:
           // fall through to normal types
       }
@@ -318,6 +319,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       case INT32:
         return "INT";
       case INT64:
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
+          return "TIMESTAMP";
+        }
         return "BIGINT";
       case FLOAT32:
         return "REAL";
@@ -326,6 +331,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "BOOLEAN";
       case STRING:
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
+          return "TIMESTAMP";
+        }
         return "TEXT";
       case BYTES:
         return "BYTEA";

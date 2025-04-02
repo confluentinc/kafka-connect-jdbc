@@ -132,8 +132,7 @@ public class BufferedRecords {
           config.insertMode,
           insertSql,
           deleteSql,
-          fieldsMetadata
-      );
+          fieldsMetadata);
       close();
       updatePreparedStatement = dbDialect.createPreparedStatement(connection, insertSql);
       updateStatementBinder = dbDialect.statementBinder(

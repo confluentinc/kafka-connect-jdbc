@@ -114,7 +114,8 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
       case INT32:
         return "INT";
       case INT64:
-        if (config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
           return "TIMESTAMP";
         }
         return "BIGINT";
@@ -125,7 +126,8 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "TINYINT";
       case STRING:
-        if (config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
           return "TIMESTAMP";
         }
         return "TEXT";

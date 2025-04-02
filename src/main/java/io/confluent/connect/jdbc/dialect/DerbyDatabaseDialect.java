@@ -94,7 +94,8 @@ public class DerbyDatabaseDialect extends GenericDatabaseDialect {
       case INT32:
         return "INTEGER";
       case INT64:
-        if (config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
           return "TIMESTAMP";
         }
         return "BIGINT";
@@ -105,7 +106,8 @@ public class DerbyDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "SMALLINT";
       case STRING:
-        if (config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
           return "TIMESTAMP";
         }
         return "VARCHAR(32672)";

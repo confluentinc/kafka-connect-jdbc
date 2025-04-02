@@ -247,6 +247,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
       }
     }
     SinkRecordField field = new SinkRecordField(schemaBuilder.build(), schemaName,false);
+    System.out.println("Before Going into SqlType");
     String sqlType = dialect.getSqlType(field);
     assertEquals(expectedSqlType, sqlType);
   }

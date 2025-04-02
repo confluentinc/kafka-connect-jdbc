@@ -128,7 +128,7 @@ public class BufferedRecords {
       final String insertSql = getInsertSql();
       final String deleteSql = getDeleteSql();
       log.debug(
-          "{} sql: {} deleteSql: {} meta: {}",
+       "{} sql: {} deleteSql: {} meta: {}",
           config.insertMode,
           insertSql,
           deleteSql,

@@ -71,6 +71,11 @@ public class JdbcSinkConfig extends AbstractConfig {
     UTC
   }
 
+  public enum TimestampPrecisionMode {
+    MICROSECONDS,
+    NANOSECONDS
+  }
+
   public static final List<String> DEFAULT_KAFKA_PK_NAMES = Collections.unmodifiableList(
       Arrays.asList(
           "__connect_topic",
@@ -262,6 +267,23 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "the timezone set for db.timzeone configuration (to maintain backward compatibility). It "
       + "is recommended to set this to UTC to avoid conversion for DATE type values.";
 
+  public static final String TIMESTAMP_FIELDS_WHITELIST = "timestamp.fields.whitelist";
+  private static final String TIMESTAMP_FIELDS_WHITELIST_DEFAULT = "";
+  private static final String TIMESTAMP_FIELDS_WHITELIST_DOC =
+      "List of comma-separated record value timestamp field names. If empty, "
+       + "no fields from the record value are utilized, otherwise used to  "
+       + "filter to the desired fields";
+  private static final String TIMESTAMP_FIELDS_WHITELIST_DISPLAY = "Timestamp Fields Whitelist";
+
+  public static final String TIMESTAMP_PRECISION_MODE_CONFIG = "timestamp.precision.mode";
+  public static final String TIMESTAMP_PRECISION_MODE_DEFAULT = "microseconds";
+  private static final String TIMESTAMP_PRECISION_MODE_CONFIG_DISPLAY =
+      "Sink Timestamp Precision mode";
+  private static final String TIMESTAMP_PRECISION_MODE_CONFIG_DOC =
+      "Convert the Timestamp with precision. If set to microseconds, "
+          + "the timestamp will be converted to microsecond precision. If set to "
+          + "nanoseconds the timestamp will be converted to nanoseconds precision.";
+
   public static final String QUOTE_SQL_IDENTIFIERS_CONFIG =
       JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_CONFIG;
   public static final String QUOTE_SQL_IDENTIFIERS_DEFAULT =
@@ -290,7 +312,8 @@ public class JdbcSinkConfig extends AbstractConfig {
 
   private static final EnumRecommender DATE_TIMEZONE_RECOMMENDER =
       EnumRecommender.in(DateTimezone.values());
-
+  private static final EnumRecommender TIMESTAMP_PRECISION_MODE_RECOMMENDER =
+      EnumRecommender.in(TimestampPrecisionMode.values());
   private static final EnumRecommender TABLE_TYPES_RECOMMENDER =
       EnumRecommender.in(TableType.values());
   public static final String MSSQL_USE_MERGE_HOLDLOCK = "mssql.use.merge.holdlock";
@@ -353,7 +376,8 @@ public class JdbcSinkConfig extends AbstractConfig {
             3,
             ConfigDef.Width.MEDIUM,
             CONNECTION_PASSWORD_DISPLAY
-        ).define(
+        )
+        .define(
             CREDENTIALS_PROVIDER_CLASS_CONFIG,
             Type.CLASS,
             CREDENTIALS_PROVIDER_CLASS_DEFAULT,
@@ -364,7 +388,8 @@ public class JdbcSinkConfig extends AbstractConfig {
             4,
             Width.LONG,
             CREDENTIALS_PROVIDER_CLASS_DISPLAY
-      ).define(
+        )
+        .define(
             DIALECT_NAME_CONFIG,
             ConfigDef.Type.STRING,
             DIALECT_NAME_DEFAULT,
@@ -388,7 +413,8 @@ public class JdbcSinkConfig extends AbstractConfig {
             6,
             ConfigDef.Width.SHORT,
             CONNECTION_ATTEMPTS_DISPLAY
-        ).define(
+        )
+        .define(
             CONNECTION_BACKOFF,
             ConfigDef.Type.LONG,
             CONNECTION_BACKOFF_DEFAULT,
@@ -418,7 +444,8 @@ public class JdbcSinkConfig extends AbstractConfig {
             BATCH_SIZE_DEFAULT,
             NON_NEGATIVE_INT_VALIDATOR,
             ConfigDef.Importance.MEDIUM,
-            BATCH_SIZE_DOC, WRITES_GROUP,
+            BATCH_SIZE_DOC,
+            WRITES_GROUP,
             2,
             ConfigDef.Width.SHORT,
             BATCH_SIZE_DISPLAY
@@ -428,7 +455,8 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Type.BOOLEAN,
             DELETE_ENABLED_DEFAULT,
             ConfigDef.Importance.MEDIUM,
-            DELETE_ENABLED_DOC, WRITES_GROUP,
+            DELETE_ENABLED_DOC,
+            WRITES_GROUP,
             3,
             ConfigDef.Width.SHORT,
             DELETE_ENABLED_DISPLAY,
@@ -491,7 +519,8 @@ public class JdbcSinkConfig extends AbstractConfig {
             PK_FIELDS_DOC,
             DATAMAPPING_GROUP,
             3,
-            ConfigDef.Width.LONG, PK_FIELDS_DISPLAY
+            ConfigDef.Width.LONG,
+            PK_FIELDS_DISPLAY
         )
         .define(
             FIELDS_WHITELIST,
@@ -503,17 +532,18 @@ public class JdbcSinkConfig extends AbstractConfig {
             4,
             ConfigDef.Width.LONG,
             FIELDS_WHITELIST_DISPLAY
-        ).define(
-          DB_TIMEZONE_CONFIG,
-          ConfigDef.Type.STRING,
-          DB_TIMEZONE_DEFAULT,
-          TimeZoneValidator.INSTANCE,
-          ConfigDef.Importance.MEDIUM,
-          DB_TIMEZONE_CONFIG_DOC,
-          DATAMAPPING_GROUP,
-          5,
-          ConfigDef.Width.MEDIUM,
-          DB_TIMEZONE_CONFIG_DISPLAY
+        )
+        .define(
+            DB_TIMEZONE_CONFIG,
+            ConfigDef.Type.STRING,
+            DB_TIMEZONE_DEFAULT,
+            TimeZoneValidator.INSTANCE,
+            ConfigDef.Importance.MEDIUM,
+            DB_TIMEZONE_CONFIG_DOC,
+            DATAMAPPING_GROUP,
+            5,
+            ConfigDef.Width.MEDIUM,
+            DB_TIMEZONE_CONFIG_DISPLAY
         )
         .define(
             DATE_TIMEZONE_CONFIG,
@@ -528,13 +558,38 @@ public class JdbcSinkConfig extends AbstractConfig {
             DATE_TIMEZONE_CONFIG_DISPLAY,
             DATE_TIMEZONE_RECOMMENDER
         )
+        .define(
+            TIMESTAMP_FIELDS_WHITELIST,
+            ConfigDef.Type.LIST,
+            TIMESTAMP_FIELDS_WHITELIST_DEFAULT,
+            ConfigDef.Importance.MEDIUM,
+            TIMESTAMP_FIELDS_WHITELIST_DOC,
+            DATAMAPPING_GROUP,
+            7,
+            ConfigDef.Width.MEDIUM,
+            TIMESTAMP_FIELDS_WHITELIST_DISPLAY
+        )
+        .define(
+            TIMESTAMP_PRECISION_MODE_CONFIG,
+            ConfigDef.Type.STRING,
+            TIMESTAMP_PRECISION_MODE_DEFAULT,
+            EnumValidator.in(TimestampPrecisionMode.values()),
+            ConfigDef.Importance.LOW,
+            TIMESTAMP_PRECISION_MODE_CONFIG_DOC,
+            DATAMAPPING_GROUP,
+            8,
+            ConfigDef.Width.MEDIUM,
+            TIMESTAMP_PRECISION_MODE_CONFIG_DISPLAY,
+            TIMESTAMP_PRECISION_MODE_RECOMMENDER
+        )
         // DDL
         .define(
             AUTO_CREATE,
             ConfigDef.Type.BOOLEAN,
             AUTO_CREATE_DEFAULT,
             ConfigDef.Importance.MEDIUM,
-            AUTO_CREATE_DOC, DDL_GROUP,
+            AUTO_CREATE_DOC,
+            DDL_GROUP,
             1,
             ConfigDef.Width.SHORT,
             AUTO_CREATE_DISPLAY
@@ -544,11 +599,13 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Type.BOOLEAN,
             AUTO_EVOLVE_DEFAULT,
             ConfigDef.Importance.MEDIUM,
-            AUTO_EVOLVE_DOC, DDL_GROUP,
+            AUTO_EVOLVE_DOC,
+            DDL_GROUP,
             2,
             ConfigDef.Width.SHORT,
             AUTO_EVOLVE_DISPLAY
-        ).define(
+        )
+        .define(
             QUOTE_SQL_IDENTIFIERS_CONFIG,
             ConfigDef.Type.STRING,
             QUOTE_SQL_IDENTIFIERS_DEFAULT,
@@ -622,9 +679,11 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final PrimaryKeyMode pkMode;
   public final List<String> pkFields;
   public final Set<String> fieldsWhitelist;
+  public final Set<String> timestampFieldsWhitelist;
   public final String dialectName;
   public final TimeZone timeZone;
   public final TimeZone dateTimeZone;
+  public final TimestampPrecisionMode timestampPrecisionMode;
   public final EnumSet<TableType> tableTypes;
   public final boolean useHoldlockInMerge;
 
@@ -644,6 +703,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     replaceNullWithDefault = getBoolean(REPLACE_NULL_WITH_DEFAULT);
     maxRetries = getInt(MAX_RETRIES);
     retryBackoffMs = getInt(RETRY_BACKOFF_MS);
+    timestampFieldsWhitelist = new HashSet<>(getList(TIMESTAMP_FIELDS_WHITELIST));
     autoCreate = getBoolean(AUTO_CREATE);
     autoEvolve = getBoolean(AUTO_EVOLVE);
     insertMode = InsertMode.valueOf(getString(INSERT_MODE).toUpperCase());
@@ -657,6 +717,8 @@ public class JdbcSinkConfig extends AbstractConfig {
         DateTimezone.valueOf(getString(DATE_TIMEZONE_CONFIG).toUpperCase());
     dateTimeZone = dateTimezoneConfig.equals(DateTimezone.UTC)
         ? TimeZone.getTimeZone(ZoneOffset.UTC) : timeZone;
+    timestampPrecisionMode =
+        TimestampPrecisionMode.valueOf(getString(TIMESTAMP_PRECISION_MODE_CONFIG).toUpperCase());
     useHoldlockInMerge = getBoolean(MSSQL_USE_MERGE_HOLDLOCK);
     trimSensitiveLogsEnabled = getBoolean(TRIM_SENSITIVE_LOG_ENABLED);
     if (deleteEnabled && pkMode != PrimaryKeyMode.RECORD_KEY) {

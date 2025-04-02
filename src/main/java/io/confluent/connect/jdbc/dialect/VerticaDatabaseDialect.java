@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -83,6 +84,9 @@ public class VerticaDatabaseDialect extends GenericDatabaseDialect {
       case INT32:
         return "INT";
       case INT64:
+        if (config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
+          return "TIMESTAMP";
+        }
         return "INT";
       case FLOAT32:
         return "FLOAT";
@@ -91,6 +95,9 @@ public class VerticaDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "BOOLEAN";
       case STRING:
+        if (config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
+          return "TIMESTAMP";
+        }
         return "VARCHAR(1024)";
       case BYTES:
         return "VARBINARY(1024)";

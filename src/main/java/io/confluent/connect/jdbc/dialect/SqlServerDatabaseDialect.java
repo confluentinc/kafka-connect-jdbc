@@ -347,6 +347,10 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       case INT32:
         return "int";
       case INT64:
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
+          return "TIMESTAMP";
+        }
         return "bigint";
       case FLOAT32:
         return "real";
@@ -355,7 +359,10 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "bit";
       case STRING:
-        if (field.isPrimaryKey()) {
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
+          return "TIMESTAMP";
+        } else if (field.isPrimaryKey()) {
           // Should be no more than 900 which is the MSSQL constraint
           return "varchar(900)";
         } else {

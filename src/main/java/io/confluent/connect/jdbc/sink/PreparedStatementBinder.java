@@ -19,6 +19,7 @@ import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
@@ -30,11 +31,14 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialect.StatementBinder;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static java.util.Objects.isNull;
 
 public class PreparedStatementBinder implements StatementBinder {
 
+  private static final Logger log = LoggerFactory.getLogger(PreparedStatementBinder.class);
   private final JdbcSinkConfig.PrimaryKeyMode pkMode;
   private final PreparedStatement statement;
   private final SchemaPair schemaPair;
@@ -192,6 +196,9 @@ public class PreparedStatementBinder implements StatementBinder {
   protected void bindField(int index, Schema schema, Object value, String fieldName)
       throws SQLException {
     ColumnDefinition colDef = tabDef == null ? null : tabDef.definitionForColumn(fieldName);
-    dialect.bindField(statement, index, schema, value, colDef);
+    Schema schemaWithName = SchemaBuilder.type(schema.type())
+                                          .name(schema.name() != null ? schema.name() : fieldName)
+                                           .build();
+    dialect.bindField(statement, index, schemaWithName, value, colDef);
   }
 }

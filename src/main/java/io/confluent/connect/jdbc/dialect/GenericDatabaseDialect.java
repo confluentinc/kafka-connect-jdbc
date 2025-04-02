@@ -377,6 +377,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       Connection db,
       String query
   ) throws SQLException {
+    glog.trace("Creating a PreparedStatement '{}'", query);
     PreparedStatement stmt = db.prepareStatement(query);
     initializePreparedStatement(stmt);
     return stmt;

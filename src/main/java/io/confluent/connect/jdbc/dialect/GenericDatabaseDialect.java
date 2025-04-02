@@ -1704,7 +1704,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         statement.setInt(index, (Integer) value);
         break;
       case INT64:
-        if (config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(schema.name())) {
+        if (config instanceof JdbcSinkConfig
+            && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(schema.name())) {
           if (config
               .getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG)
               .equals("microseconds")) {
@@ -1730,7 +1731,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         statement.setBoolean(index, (Boolean) value);
         break;
       case STRING:
-        if (config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(schema.name())) {
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(schema.name())) {
           if (config
               .getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG)
               .equals("microseconds")) {

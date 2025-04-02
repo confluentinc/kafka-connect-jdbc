@@ -307,7 +307,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         case Time.LOGICAL_NAME:
           return "TIME";
         case Timestamp.LOGICAL_NAME:
-          return "TIMESTAMP(6)";
+          return "TIMESTAMP";
         default:
           // fall through to normal types
       }

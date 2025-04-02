@@ -1665,6 +1665,10 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         statement.setObject(index, null);
       }
     } else {
+      System.out.println("Value in Bindfield for BindLogical"
+                          + value
+                          + "Schema in Bindfield for BindLogical: "
+                          + schema);
       boolean bound = maybeBindLogical(statement, index, schema, value);
       if (!bound) {
         System.out.println("Value in Bindfield" + value + "Schema in Bindfield: " + schema);

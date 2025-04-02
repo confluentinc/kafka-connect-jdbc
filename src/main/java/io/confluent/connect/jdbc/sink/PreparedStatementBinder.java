@@ -197,10 +197,8 @@ public class PreparedStatementBinder implements StatementBinder {
       throws SQLException {
     ColumnDefinition colDef = tabDef == null ? null : tabDef.definitionForColumn(fieldName);
     Schema schemaWithName = SchemaBuilder.type(schema.type())
-                             .name(fieldName)
-                             .build();
-    System.out.println(
-        "Value in Bindfield in PreparedStatementBinder" + value + "Schema in Bindfield: " + schema);
+                                          .name(schema.name() != null ? schema.name() : fieldName)
+                                           .build();
     dialect.bindField(statement, index, schemaWithName, value, colDef);
   }
 }

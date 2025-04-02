@@ -396,6 +396,8 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
   }
 
   protected void verifyCreateThreeColTwoPk(String expected) {
+    JdbcSinkConfig config = mock(JdbcSinkConfig.class);
+    when(config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST)).thenReturn(Collections.emptyList());
     assertEquals(expected, dialect.buildCreateTableStatement(tableId, Arrays.asList(
         new SinkRecordField(Schema.INT32_SCHEMA, "pk1", true),
         new SinkRecordField(Schema.INT32_SCHEMA, "pk2", true),
@@ -404,12 +406,16 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
   }
 
   protected void verifyAlterAddOneCol(String... expected) {
+    JdbcSinkConfig config = mock(JdbcSinkConfig.class);
+    when(config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST)).thenReturn(Collections.emptyList());
     assertArrayEquals(expected, dialect.buildAlterTable(tableId, Arrays.asList(
         new SinkRecordField(Schema.OPTIONAL_INT32_SCHEMA, "newcol1", false)
     )).toArray());
   }
 
   protected void verifyAlterAddTwoCols(String... expected) {
+    JdbcSinkConfig config = mock(JdbcSinkConfig.class);
+    when(config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST)).thenReturn(Collections.emptyList());
     assertArrayEquals(expected, dialect.buildAlterTable(tableId, Arrays.asList(
         new SinkRecordField(Schema.OPTIONAL_INT32_SCHEMA, "newcol1", false),
         new SinkRecordField(SchemaBuilder.int32().defaultValue(42).build(), "newcol2", false)

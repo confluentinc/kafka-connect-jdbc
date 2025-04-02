@@ -58,7 +58,7 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
 
   @Override
   protected SqliteDatabaseDialect createDialect() {
-    return new SqliteDatabaseDialect(sourceConfigWithUrl("jdbc:sqlite://something"));
+    return new SqliteDatabaseDialect(sourceConfigWithUrl("jdbc:sqlite://something", JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST, "" ));
   }
 
 

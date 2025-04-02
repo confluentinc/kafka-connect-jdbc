@@ -341,8 +341,8 @@ public class JdbcSinkConfig extends AbstractConfig {
   public static final String CREDENTIALS_PROVIDER_CLASS_DOC =
       JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_DOC;
 
-  public static final ConfigDef CONFIG_DEF =
-      new ConfigDef()
+
+  public static final ConfigDef CONFIG_DEF = new ConfigDef()
           // Connection
           .define(
               CONNECTION_URL,
@@ -353,7 +353,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               CONNECTION_GROUP,
               1,
               ConfigDef.Width.LONG,
-              CONNECTION_URL_DISPLAY)
+              CONNECTION_URL_DISPLAY
+          )
           .define(
               CONNECTION_USER,
               ConfigDef.Type.STRING,
@@ -363,7 +364,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               CONNECTION_GROUP,
               2,
               ConfigDef.Width.MEDIUM,
-              CONNECTION_USER_DISPLAY)
+              CONNECTION_USER_DISPLAY
+          )
           .define(
               CONNECTION_PASSWORD,
               ConfigDef.Type.PASSWORD,
@@ -373,7 +375,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               CONNECTION_GROUP,
               3,
               ConfigDef.Width.MEDIUM,
-              CONNECTION_PASSWORD_DISPLAY)
+              CONNECTION_PASSWORD_DISPLAY
+          )
           .define(
               CREDENTIALS_PROVIDER_CLASS_CONFIG,
               Type.CLASS,
@@ -384,7 +387,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               CONNECTION_GROUP,
               4,
               Width.LONG,
-              CREDENTIALS_PROVIDER_CLASS_DISPLAY)
+              CREDENTIALS_PROVIDER_CLASS_DISPLAY
+          )
           .define(
               DIALECT_NAME_CONFIG,
               ConfigDef.Type.STRING,
@@ -396,7 +400,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               5,
               ConfigDef.Width.LONG,
               DIALECT_NAME_DISPLAY,
-              DatabaseDialectRecommender.INSTANCE)
+              DatabaseDialectRecommender.INSTANCE
+          )
           .define(
               CONNECTION_ATTEMPTS,
               ConfigDef.Type.INT,
@@ -407,7 +412,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               CONNECTION_GROUP,
               6,
               ConfigDef.Width.SHORT,
-              CONNECTION_ATTEMPTS_DISPLAY)
+              CONNECTION_ATTEMPTS_DISPLAY
+          )
           .define(
               CONNECTION_BACKOFF,
               ConfigDef.Type.LONG,
@@ -417,7 +423,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               CONNECTION_GROUP,
               7,
               ConfigDef.Width.SHORT,
-              CONNECTION_BACKOFF_DISPLAY)
+              CONNECTION_BACKOFF_DISPLAY
+          )
           // Writes
           .define(
               INSERT_MODE,
@@ -429,7 +436,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               WRITES_GROUP,
               1,
               ConfigDef.Width.MEDIUM,
-              INSERT_MODE_DISPLAY)
+              INSERT_MODE_DISPLAY
+          )
           .define(
               BATCH_SIZE,
               ConfigDef.Type.INT,
@@ -440,7 +448,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               WRITES_GROUP,
               2,
               ConfigDef.Width.SHORT,
-              BATCH_SIZE_DISPLAY)
+              BATCH_SIZE_DISPLAY
+          )
           .define(
               DELETE_ENABLED,
               ConfigDef.Type.BOOLEAN,
@@ -451,7 +460,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               3,
               ConfigDef.Width.SHORT,
               DELETE_ENABLED_DISPLAY,
-              DeleteEnabledRecommender.INSTANCE)
+              DeleteEnabledRecommender.INSTANCE
+          )
           .define(
               TABLE_TYPES_CONFIG,
               ConfigDef.Type.LIST,
@@ -462,7 +472,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               WRITES_GROUP,
               4,
               ConfigDef.Width.MEDIUM,
-              TABLE_TYPES_DISPLAY)
+              TABLE_TYPES_DISPLAY
+          )
           .define(
               REPLACE_NULL_WITH_DEFAULT,
               ConfigDef.Type.BOOLEAN,
@@ -472,7 +483,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               WRITES_GROUP,
               5,
               ConfigDef.Width.MEDIUM,
-              REPLACE_NULL_WITH_DEFAULT_DISPLAY)
+              REPLACE_NULL_WITH_DEFAULT_DISPLAY
+          )
           // Data Mapping
           .define(
               TABLE_NAME_FORMAT,
@@ -484,7 +496,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               DATAMAPPING_GROUP,
               1,
               ConfigDef.Width.LONG,
-              TABLE_NAME_FORMAT_DISPLAY)
+              TABLE_NAME_FORMAT_DISPLAY
+          )
           .define(
               PK_MODE,
               ConfigDef.Type.STRING,
@@ -496,7 +509,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               2,
               ConfigDef.Width.MEDIUM,
               PK_MODE_DISPLAY,
-              PrimaryKeyModeRecommender.INSTANCE)
+              PrimaryKeyModeRecommender.INSTANCE
+          )
           .define(
               PK_FIELDS,
               ConfigDef.Type.LIST,
@@ -506,7 +520,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               DATAMAPPING_GROUP,
               3,
               ConfigDef.Width.LONG,
-              PK_FIELDS_DISPLAY)
+              PK_FIELDS_DISPLAY
+          )
           .define(
               FIELDS_WHITELIST,
               ConfigDef.Type.LIST,
@@ -516,7 +531,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               DATAMAPPING_GROUP,
               4,
               ConfigDef.Width.LONG,
-              FIELDS_WHITELIST_DISPLAY)
+              FIELDS_WHITELIST_DISPLAY
+          )
           .define(
               DB_TIMEZONE_CONFIG,
               ConfigDef.Type.STRING,
@@ -527,7 +543,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               DATAMAPPING_GROUP,
               5,
               ConfigDef.Width.MEDIUM,
-              DB_TIMEZONE_CONFIG_DISPLAY)
+              DB_TIMEZONE_CONFIG_DISPLAY
+          )
           .define(
               DATE_TIMEZONE_CONFIG,
               ConfigDef.Type.STRING,
@@ -539,7 +556,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               6,
               ConfigDef.Width.MEDIUM,
               DATE_TIMEZONE_CONFIG_DISPLAY,
-              DATE_TIMEZONE_RECOMMENDER)
+              DATE_TIMEZONE_RECOMMENDER
+          )
           .define(
               TIMESTAMP_FIELDS_WHITELIST,
               ConfigDef.Type.LIST,
@@ -549,7 +567,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               DATAMAPPING_GROUP,
           7,
               ConfigDef.Width.MEDIUM,
-              TIMESTAMP_FIELDS_WHITELIST_DISPLAY)
+              TIMESTAMP_FIELDS_WHITELIST_DISPLAY
+          )
           .define(
               TIMESTAMP_PRECISION_MODE_CONFIG,
               ConfigDef.Type.STRING,
@@ -561,7 +580,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               8,
               ConfigDef.Width.MEDIUM,
               TIMESTAMP_PRECISION_MODE_CONFIG_DISPLAY,
-              TIMESTAMP_PRECISION_MODE_RECOMMENDER)
+              TIMESTAMP_PRECISION_MODE_RECOMMENDER
+          )
           // DDL
           .define(
               AUTO_CREATE,
@@ -572,7 +592,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               DDL_GROUP,
               1,
               ConfigDef.Width.SHORT,
-              AUTO_CREATE_DISPLAY)
+              AUTO_CREATE_DISPLAY
+          )
           .define(
               AUTO_EVOLVE,
               ConfigDef.Type.BOOLEAN,
@@ -582,7 +603,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               DDL_GROUP,
               2,
               ConfigDef.Width.SHORT,
-              AUTO_EVOLVE_DISPLAY)
+              AUTO_EVOLVE_DISPLAY
+          )
           .define(
               QUOTE_SQL_IDENTIFIERS_CONFIG,
               ConfigDef.Type.STRING,
@@ -593,7 +615,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               3,
               ConfigDef.Width.MEDIUM,
               QUOTE_SQL_IDENTIFIERS_DISPLAY,
-              QUOTE_METHOD_RECOMMENDER)
+              QUOTE_METHOD_RECOMMENDER
+          )
           // DML
           .define(
               MSSQL_USE_MERGE_HOLDLOCK,
@@ -604,7 +627,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               DML_GROUP,
               1,
               ConfigDef.Width.MEDIUM,
-              MSSQL_USE_MERGE_HOLDLOCK_DISPLAY)
+              MSSQL_USE_MERGE_HOLDLOCK_DISPLAY
+          )
           // Retries
           .define(
               MAX_RETRIES,
@@ -616,7 +640,8 @@ public class JdbcSinkConfig extends AbstractConfig {
               RETRIES_GROUP,
               1,
               ConfigDef.Width.SHORT,
-              MAX_RETRIES_DISPLAY)
+              MAX_RETRIES_DISPLAY
+          )
           .define(
               RETRY_BACKOFF_MS,
               ConfigDef.Type.INT,
@@ -627,12 +652,14 @@ public class JdbcSinkConfig extends AbstractConfig {
               RETRIES_GROUP,
               2,
               ConfigDef.Width.SHORT,
-              RETRY_BACKOFF_MS_DISPLAY)
+              RETRY_BACKOFF_MS_DISPLAY
+          )
           .defineInternal(
               TRIM_SENSITIVE_LOG_ENABLED,
               ConfigDef.Type.BOOLEAN,
               TRIM_SENSITIVE_LOG_ENABLED_DEFAULT,
-              ConfigDef.Importance.LOW);
+              ConfigDef.Importance.LOW
+          );
 
   public final String connectorName;
   public final String connectionUrl;

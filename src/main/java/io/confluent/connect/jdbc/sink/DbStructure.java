@@ -80,7 +80,6 @@ public class DbStructure {
         }
       }
     }
-    log.info("Going for Amend if necessary operation");
     return amendIfNecessary(config, connection, tableId, fieldsMetadata, config.maxRetries);
   }
 

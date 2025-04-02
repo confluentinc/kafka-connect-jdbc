@@ -70,14 +70,11 @@ public class JdbcDbWriter {
       for (SinkRecord record : records) {
         final TableId tableId = destinationTable(record.topic(), schemaName, catalogName);
         BufferedRecords buffer = bufferByTable.get(tableId);
-        log.info("The table ID for the buffer is: { }" + tableId);
         if (buffer == null) {
           buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
           bufferByTable.put(tableId, buffer);
         }
-        log.info("Adding the record to the buffer: { }" + record);
         buffer.add(record);
-        log.info("The record added in the buffer: { }" + record);
       }
       for (Map.Entry<TableId, BufferedRecords> entry : bufferByTable.entrySet()) {
         TableId tableId = entry.getKey();

@@ -356,7 +356,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       TableDefinition definition
   ) {
     ExpressionBuilder builder = expressionBuilder();
-    log.info("Executing the buildInsertStatement method");
     builder.append("INSERT INTO ");
     builder.append(table);
     builder.append(" (");
@@ -370,7 +369,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
            .transformedBy(this.columnValueVariables(definition))
            .of(keyColumns, nonKeyColumns);
     builder.append(")");
-    log.info("Returning the insert statement: {}", builder.toString());
     return builder.toString();
   }
 

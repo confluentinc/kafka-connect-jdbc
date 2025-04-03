@@ -510,7 +510,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       Schema schema,
       Object value
   ) throws SQLException {
-
     switch (schema.type()) {
       case ARRAY: {
         Class<?> valueClass = value.getClass();

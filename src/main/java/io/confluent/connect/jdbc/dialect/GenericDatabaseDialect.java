@@ -1706,14 +1706,12 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       case INT64:
         if (config instanceof JdbcSinkConfig
             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(schema.name())) {
-          if (config
-              .getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG)
-              .equals("microseconds")) {
+          if (((JdbcSinkConfig) config).timestampPrecisionMode
+              == JdbcSinkConfig.TimestampPrecisionMode.MICROSECONDS) {
             Timestamp ts = DateTimeUtils.formatSinkMicrosTimestamp((Long) value);
             statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
-          } else if (config
-              .getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG)
-              .equals("nanoseconds")) {
+          } else if (((JdbcSinkConfig) config).timestampPrecisionMode
+              == JdbcSinkConfig.TimestampPrecisionMode.NANOSECONDS) {
             Timestamp ts = DateTimeUtils.formatSinkNanosTimestamp((Long) value);
             statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
           }
@@ -1732,15 +1730,13 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         break;
       case STRING:
         if (config instanceof JdbcSinkConfig
-             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(schema.name())) {
-          if (config
-              .getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG)
-              .equals("microseconds")) {
+            && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(schema.name())) {
+          if (((JdbcSinkConfig) config).timestampPrecisionMode
+              == JdbcSinkConfig.TimestampPrecisionMode.MICROSECONDS) {
             Timestamp ts = DateTimeUtils.formatSinkMicrosTimestamp((String) value);
             statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
-          } else if (config
-              .getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG)
-              .equals("nanoseconds")) {
+          } else if (((JdbcSinkConfig) config).timestampPrecisionMode
+              == JdbcSinkConfig.TimestampPrecisionMode.NANOSECONDS) {
             Timestamp ts = DateTimeUtils.formatSinkNanosTimestamp((String) value);
             statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
           }

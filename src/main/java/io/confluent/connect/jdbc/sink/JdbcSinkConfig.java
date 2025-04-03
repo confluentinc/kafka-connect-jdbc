@@ -267,22 +267,25 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "the timezone set for db.timzeone configuration (to maintain backward compatibility). It "
       + "is recommended to set this to UTC to avoid conversion for DATE type values.";
 
-  public static final String TIMESTAMP_FIELDS_WHITELIST = "timestamp.fields.whitelist";
-  private static final String TIMESTAMP_FIELDS_WHITELIST_DEFAULT = "";
-  private static final String TIMESTAMP_FIELDS_WHITELIST_DOC =
-      "List of comma-separated record value timestamp field names. If empty, "
-       + "no fields from the record value are utilized, otherwise used to  "
-       + "filter to the desired fields";
-  private static final String TIMESTAMP_FIELDS_WHITELIST_DISPLAY = "Timestamp Fields Whitelist";
-
   public static final String TIMESTAMP_PRECISION_MODE_CONFIG = "timestamp.precision.mode";
-  public static final String TIMESTAMP_PRECISION_MODE_DEFAULT = "microseconds";
+  public static final String TIMESTAMP_PRECISION_MODE_DEFAULT =
+      TimestampPrecisionMode.MICROSECONDS.toString();
   private static final String TIMESTAMP_PRECISION_MODE_CONFIG_DISPLAY =
       "Sink Timestamp Precision mode";
   private static final String TIMESTAMP_PRECISION_MODE_CONFIG_DOC =
       "Convert the Timestamp with precision. If set to microseconds, "
           + "the timestamp will be converted to microsecond precision. If set to "
           + "nanoseconds the timestamp will be converted to nanoseconds precision.";
+
+  public static final String TIMESTAMP_FIELDS_WHITELIST = "timestamp.conversion.fields";
+  private static final String TIMESTAMP_FIELDS_WHITELIST_DEFAULT = "";
+  private static final String TIMESTAMP_FIELDS_WHITELIST_DOC =
+      "List of comma-separated record value timestamp field names that should be converted to timestamps."
+          + "These fields will be converted based on precision mode specified in "
+          + TIMESTAMP_PRECISION_MODE_CONFIG
+          + "(microseconds or nanoseconds). The timestamp fields included here "
+          + "should be Long or String type and nested fields are not supported.";
+  private static final String TIMESTAMP_FIELDS_WHITELIST_DISPLAY = "Timestamp Fields Whitelist";
 
   public static final String QUOTE_SQL_IDENTIFIERS_CONFIG =
       JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_CONFIG;

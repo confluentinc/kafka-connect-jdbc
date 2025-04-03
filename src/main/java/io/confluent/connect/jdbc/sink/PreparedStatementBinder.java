@@ -186,7 +186,7 @@ public class PreparedStatementBinder implements StatementBinder {
 
   protected Schema buildSchemaWithName(Schema schema, String fieldName) {
     return SchemaBuilder.type(schema.type())
-        .name(fieldName)
+        .name(schema.name() == null ? fieldName : schema.name())
         .build();
   }
 

@@ -1704,7 +1704,22 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         statement.setInt(index, (Integer) value);
         break;
       case INT64:
-        statement.setLong(index, (Long) value);
+        if (config instanceof JdbcSinkConfig
+            && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(schema.name())) {
+          if (config
+              .getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG)
+              .equals("microseconds")) {
+            Timestamp ts = DateTimeUtils.formatSinkMicrosTimestamp((Long) value);
+            statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
+          } else if (config
+              .getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG)
+              .equals("nanoseconds")) {
+            Timestamp ts = DateTimeUtils.formatSinkNanosTimestamp((Long) value);
+            statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
+          }
+        } else {
+          statement.setLong(index, (Long) value);
+        }
         break;
       case FLOAT32:
         statement.setFloat(index, (Float) value);
@@ -1716,7 +1731,22 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         statement.setBoolean(index, (Boolean) value);
         break;
       case STRING:
-        statement.setString(index, (String) value);
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(schema.name())) {
+          if (config
+              .getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG)
+              .equals("microseconds")) {
+            Timestamp ts = DateTimeUtils.formatSinkMicrosTimestamp((String) value);
+            statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
+          } else if (config
+              .getString(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG)
+              .equals("nanoseconds")) {
+            Timestamp ts = DateTimeUtils.formatSinkNanosTimestamp((String) value);
+            statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
+          }
+        } else {
+          statement.setString(index, (String) value);
+        }
         break;
       case BYTES:
         final byte[] bytes;
@@ -1935,7 +1965,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       case INT64:
       case FLOAT32:
       case FLOAT64:
-        // no escaping required
         builder.append(value);
         break;
       case BOOLEAN:

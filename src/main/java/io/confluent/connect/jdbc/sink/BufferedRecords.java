@@ -123,8 +123,7 @@ public class BufferedRecords {
           config,
           connection,
           tableId,
-          fieldsMetadata
-      );
+          fieldsMetadata);
       final String insertSql = getInsertSql();
       final String deleteSql = getDeleteSql();
       log.debug(
@@ -132,8 +131,7 @@ public class BufferedRecords {
           config.insertMode,
           insertSql,
           deleteSql,
-          fieldsMetadata
-      );
+          fieldsMetadata);
       close();
       updatePreparedStatement = dbDialect.createPreparedStatement(connection, insertSql);
       updateStatementBinder = dbDialect.statementBinder(

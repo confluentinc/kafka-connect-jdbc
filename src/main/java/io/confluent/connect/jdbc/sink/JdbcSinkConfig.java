@@ -280,8 +280,8 @@ public class JdbcSinkConfig extends AbstractConfig {
   public static final String TIMESTAMP_FIELDS_WHITELIST = "timestamp.conversion.fields";
   private static final String TIMESTAMP_FIELDS_WHITELIST_DEFAULT = "";
   private static final String TIMESTAMP_FIELDS_WHITELIST_DOC =
-      "List of comma-separated record value timestamp field names that should be converted to timestamps."
-          + "These fields will be converted based on precision mode specified in "
+      "List of comma-separated record value timestamp field names that should be converted "
+          + "to timestamps. These fields will be converted based on precision mode specified in "
           + TIMESTAMP_PRECISION_MODE_CONFIG
           + "(microseconds or nanoseconds). The timestamp fields included here "
           + "should be Long or String type and nested fields are not supported.";

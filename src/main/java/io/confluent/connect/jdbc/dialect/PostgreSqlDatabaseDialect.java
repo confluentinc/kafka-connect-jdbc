@@ -508,7 +508,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       PreparedStatement statement,
       int index,
       Schema schema,
-      Object value
+      Object value,
+      String fieldName
   ) throws SQLException {
     switch (schema.type()) {
       case ARRAY: {
@@ -572,7 +573,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       default:
         break;
     }
-    return super.maybeBindPrimitive(statement, index, schema, value);
+    return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
   }
 
   /**

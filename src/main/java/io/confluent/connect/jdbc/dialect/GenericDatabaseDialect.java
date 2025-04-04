@@ -1655,7 +1655,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       PreparedStatement statement,
       int index,
       Schema schema,
-      Object value
+      Object value,
+      ColumnDefinition colDef,
+      String fieldName
   ) throws SQLException {
     if (value == null) {
       Integer type = getSqlTypeForSchema(schema);
@@ -1667,7 +1669,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     } else {
       boolean bound = maybeBindLogical(statement, index, schema, value);
       if (!bound) {
-        bound = maybeBindPrimitive(statement, index, schema, value);
+        bound = maybeBindPrimitive(statement, index, schema, value, fieldName);
       }
       if (!bound) {
         throw new ConnectException("Unsupported source data type: " + schema.type());
@@ -1691,7 +1693,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       PreparedStatement statement,
       int index,
       Schema schema,
-      Object value
+      Object value,
+      String fieldName
   ) throws SQLException {
     switch (schema.type()) {
       case INT8:
@@ -1705,7 +1708,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         break;
       case INT64:
         if (config instanceof JdbcSinkConfig
-            && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(schema.name())) {
+            && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(fieldName)) {
           if (((JdbcSinkConfig) config).timestampPrecisionMode
               == JdbcSinkConfig.TimestampPrecisionMode.MICROSECONDS) {
             Timestamp ts = DateTimeUtils.formatSinkMicrosTimestamp((Long) value);
@@ -1730,7 +1733,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         break;
       case STRING:
         if (config instanceof JdbcSinkConfig
-            && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(schema.name())) {
+            && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(fieldName)) {
           if (((JdbcSinkConfig) config).timestampPrecisionMode
               == JdbcSinkConfig.TimestampPrecisionMode.MICROSECONDS) {
             Timestamp ts = DateTimeUtils.formatSinkMicrosTimestamp((String) value);

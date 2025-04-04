@@ -155,7 +155,8 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       int index,
       Schema schema,
       Object value,
-      ColumnDefinition colDef
+      ColumnDefinition colDef,
+      String fieldName
   ) throws SQLException {
     if (value == null) {
       Integer type = getSqlTypeForSchema(schema);
@@ -167,7 +168,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     } else {
       boolean bound = maybeBindLogical(statement, index, schema, value);
       if (!bound) {
-        bound = maybeBindPrimitive(statement, index, schema, value, colDef);
+        bound = maybeBindPrimitive(statement, index, schema, value, colDef, fieldName);
       }
       if (!bound) {
         throw new ConnectException("Unsupported source data type: " + schema.type());
@@ -180,10 +181,11 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       int index,
       Schema schema,
       Object value,
-      ColumnDefinition colDef
+      ColumnDefinition colDef,
+      String fieldName
   ) throws SQLException {
     if (colDef == null) {
-      return super.maybeBindPrimitive(statement, index, schema, value);
+      return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
     }
 
     if (schema.type() == Type.STRING) {
@@ -192,11 +194,11 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
         statement.setNString(index, (String) value);
         return true;
       } else {
-        return super.maybeBindPrimitive(statement, index, schema, value);
+        return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
       }
     }
 
-    return super.maybeBindPrimitive(statement, index, schema, value);
+    return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
   }
 
   /**

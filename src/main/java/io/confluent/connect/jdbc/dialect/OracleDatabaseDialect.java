@@ -118,14 +118,15 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       int index,
       Schema schema,
       Object value,
-      ColumnDefinition colDef
+      ColumnDefinition colDef,
+      String fieldName
   ) throws SQLException {
     if (value == null) {
       statement.setObject(index, null);
     } else {
       boolean bound = maybeBindLogical(statement, index, schema, value);
       if (!bound) {
-        bound = maybeBindPrimitive(statement, index, schema, value, colDef);
+        bound = maybeBindPrimitive(statement, index, schema, value, colDef, fieldName);
       }
       if (!bound) {
         throw new ConnectException("Unsupported source data type: " + schema.type());
@@ -138,15 +139,16 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       int index,
       Schema schema,
       Object value,
-      ColumnDefinition colDef
+      ColumnDefinition colDef,
+      String fieldName
   ) throws SQLException {
     if (colDef == null) {
-      return super.maybeBindPrimitive(statement, index, schema, value);
+      return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
     }
 
     switch (schema.type()) {
       case STRING:
-        return maybeBindStringPrimitive(statement, index, schema, value, colDef);
+        return maybeBindStringPrimitive(statement, index, schema, value, colDef, fieldName);
       case BYTES:
         if (colDef.type() != Types.BLOB) {
           break;
@@ -157,7 +159,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
         } else if (value instanceof byte[]) {
           statement.setBlob(index, new ByteArrayInputStream((byte[]) value));
         } else {
-          return super.maybeBindPrimitive(statement, index, schema, value);
+          return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
         }
         return true;
       case FLOAT32:
@@ -175,7 +177,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
         // Keep compiler happy.
     }
 
-    return super.maybeBindPrimitive(statement, index, schema, value);
+    return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
   }
 
   private boolean maybeBindStringPrimitive(
@@ -183,7 +185,8 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
           int index,
           Schema schema,
           Object value,
-          ColumnDefinition colDef
+          ColumnDefinition colDef,
+          String fieldName
   ) throws SQLException {
     switch (colDef.type()) {
       case Types.CLOB:
@@ -218,7 +221,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
         statement.setNString(index, (String) value);
         return true;
       default:
-        return super.maybeBindPrimitive(statement, index, schema, value);
+        return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
     }
   }
 

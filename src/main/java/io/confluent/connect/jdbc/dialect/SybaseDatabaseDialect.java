@@ -181,7 +181,8 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
       int index,
       Schema schema,
       Object value,
-      ColumnDefinition colDef
+      ColumnDefinition colDef,
+      String fieldName
   ) throws SQLException {
     if (value == null) {
       Integer type = getSqlTypeForSchema(schema);
@@ -193,7 +194,7 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
     } else {
       boolean bound = maybeBindLogical(statement, index, schema, value);
       if (!bound) {
-        bound = maybeBindPrimitive(statement, index, schema, value);
+        bound = maybeBindPrimitive(statement, index, schema, value, fieldName);
       }
       if (!bound) {
         throw new ConnectException("Unsupported source data type: " + schema.type());
@@ -205,7 +206,8 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
       PreparedStatement statement,
       int index,
       Schema schema,
-      Object value
+      Object value,
+      String fieldName
   ) throws SQLException {
     // First handle non-standard bindings ...
     switch (schema.type()) {
@@ -218,7 +220,7 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
       default:
         break;
     }
-    return super.maybeBindPrimitive(statement, index, schema, value);
+    return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
   }
 
   @Override

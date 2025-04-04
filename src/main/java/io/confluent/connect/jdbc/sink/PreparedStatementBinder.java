@@ -184,12 +184,6 @@ public class PreparedStatementBinder implements StatementBinder {
     return index;
   }
 
-  protected Schema buildSchemaWithName(Schema schema, String fieldName) {
-    return SchemaBuilder.type(schema.type())
-        .name(schema.name() == null ? fieldName : schema.name())
-        .build();
-  }
-
   @Deprecated
   protected void bindField(int index, Schema schema, Object value)
       throws SQLException {
@@ -199,11 +193,6 @@ public class PreparedStatementBinder implements StatementBinder {
   protected void bindField(int index, Schema schema, Object value, String fieldName)
       throws SQLException {
     ColumnDefinition colDef = tabDef == null ? null : tabDef.definitionForColumn(fieldName);
-    if (JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST.contains(fieldName)) {
-      Schema schemaWithName = buildSchemaWithName(schema, fieldName);
-      dialect.bindField(statement, index, schemaWithName, value, colDef);
-    } else {
-      dialect.bindField(statement, index, schema, value, colDef);
-    }
+    dialect.bindField(statement, index, schema, value, colDef, fieldName);
   }
 }

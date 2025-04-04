@@ -19,6 +19,7 @@ import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
@@ -192,6 +193,6 @@ public class PreparedStatementBinder implements StatementBinder {
   protected void bindField(int index, Schema schema, Object value, String fieldName)
       throws SQLException {
     ColumnDefinition colDef = tabDef == null ? null : tabDef.definitionForColumn(fieldName);
-    dialect.bindField(statement, index, schema, value, colDef);
+    dialect.bindField(statement, index, schema, value, colDef, fieldName);
   }
 }

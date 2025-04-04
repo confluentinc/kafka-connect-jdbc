@@ -1655,7 +1655,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       PreparedStatement statement,
       int index,
       Schema schema,
-      Object value
+      Object value,
+      ColumnDefinition colDef,
+      String fieldName
   ) throws SQLException {
     if (value == null) {
       Integer type = getSqlTypeForSchema(schema);
@@ -1667,7 +1669,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     } else {
       boolean bound = maybeBindLogical(statement, index, schema, value);
       if (!bound) {
-        bound = maybeBindPrimitive(statement, index, schema, value);
+        bound = maybeBindPrimitive(statement, index, schema, value, fieldName);
       }
       if (!bound) {
         throw new ConnectException("Unsupported source data type: " + schema.type());
@@ -1691,7 +1693,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       PreparedStatement statement,
       int index,
       Schema schema,
-      Object value
+      Object value,
+      String fieldName
   ) throws SQLException {
     switch (schema.type()) {
       case INT8:
@@ -1704,7 +1707,20 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         statement.setInt(index, (Integer) value);
         break;
       case INT64:
-        statement.setLong(index, (Long) value);
+        if (config instanceof JdbcSinkConfig
+            && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(fieldName)) {
+          if (((JdbcSinkConfig) config).timestampPrecisionMode
+              == JdbcSinkConfig.TimestampPrecisionMode.MICROSECONDS) {
+            Timestamp ts = DateTimeUtils.formatSinkMicrosTimestamp((Long) value);
+            statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
+          } else if (((JdbcSinkConfig) config).timestampPrecisionMode
+              == JdbcSinkConfig.TimestampPrecisionMode.NANOSECONDS) {
+            Timestamp ts = DateTimeUtils.formatSinkNanosTimestamp((Long) value);
+            statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
+          }
+        } else {
+          statement.setLong(index, (Long) value);
+        }
         break;
       case FLOAT32:
         statement.setFloat(index, (Float) value);
@@ -1716,7 +1732,20 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         statement.setBoolean(index, (Boolean) value);
         break;
       case STRING:
-        statement.setString(index, (String) value);
+        if (config instanceof JdbcSinkConfig
+            && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(fieldName)) {
+          if (((JdbcSinkConfig) config).timestampPrecisionMode
+              == JdbcSinkConfig.TimestampPrecisionMode.MICROSECONDS) {
+            Timestamp ts = DateTimeUtils.formatSinkMicrosTimestamp((String) value);
+            statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
+          } else if (((JdbcSinkConfig) config).timestampPrecisionMode
+              == JdbcSinkConfig.TimestampPrecisionMode.NANOSECONDS) {
+            Timestamp ts = DateTimeUtils.formatSinkNanosTimestamp((String) value);
+            statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
+          }
+        } else {
+          statement.setString(index, (String) value);
+        }
         break;
       case BYTES:
         final byte[] bytes;
@@ -1935,7 +1964,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       case INT64:
       case FLOAT32:
       case FLOAT64:
-        // no escaping required
         builder.append(value);
         break;
       case BOOLEAN:

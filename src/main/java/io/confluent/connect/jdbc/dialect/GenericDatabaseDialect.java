@@ -1657,26 +1657,22 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       Schema schema,
       Object value
   ) throws SQLException {
-    if (value == null) {
-      Integer type = getSqlTypeForSchema(schema);
-      if (type != null) {
-        statement.setNull(index, type);
-      } else {
-        statement.setObject(index, null);
-      }
-    } else {
-      boolean bound = maybeBindLogical(statement, index, schema, value);
-      if (!bound) {
-        bound = maybeBindPrimitive(statement, index, schema, value);
-      }
-      if (!bound) {
-        throw new ConnectException("Unsupported source data type: " + schema.type());
-      }
-    }
+    bindFieldInternal(statement, index, schema, value, null, null);
   }
 
   @Override
   public void bindField(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
+      Object value,
+      ColumnDefinition colDef,
+      String fieldName)
+      throws SQLException {
+    bindFieldInternal(statement, index, schema, value, colDef, fieldName);
+  }
+
+  private void bindFieldInternal(
       PreparedStatement statement,
       int index,
       Schema schema,
@@ -1712,50 +1708,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
    */
   protected Integer getSqlTypeForSchema(Schema schema) {
     return null;
-  }
-
-  protected boolean maybeBindPrimitive(
-      PreparedStatement statement, int index, Schema schema, Object value) throws SQLException {
-    switch (schema.type()) {
-      case INT8:
-        statement.setByte(index, (Byte) value);
-        break;
-      case INT16:
-        statement.setShort(index, (Short) value);
-        break;
-      case INT32:
-        statement.setInt(index, (Integer) value);
-        break;
-      case INT64:
-        statement.setLong(index, (Long) value);
-        break;
-      case FLOAT32:
-        statement.setFloat(index, (Float) value);
-        break;
-      case FLOAT64:
-        statement.setDouble(index, (Double) value);
-        break;
-      case BOOLEAN:
-        statement.setBoolean(index, (Boolean) value);
-        break;
-      case STRING:
-        statement.setString(index, (String) value);
-        break;
-      case BYTES:
-        final byte[] bytes;
-        if (value instanceof ByteBuffer) {
-          final ByteBuffer buffer = ((ByteBuffer) value).slice();
-          bytes = new byte[buffer.remaining()];
-          buffer.get(bytes);
-        } else {
-          bytes = (byte[]) value;
-        }
-        statement.setBytes(index, bytes);
-        break;
-      default:
-        return false;
-    }
-    return true;
   }
 
   protected boolean maybeBindPrimitive(

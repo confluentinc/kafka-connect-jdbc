@@ -121,7 +121,7 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
       case INT64:
         if (config instanceof JdbcSinkConfig
              && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
-          return "TIMESTAMP";
+          return "datetime";
         }
         return "bigint";
       case FLOAT32:
@@ -137,7 +137,7 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
       case STRING:
         if (config instanceof JdbcSinkConfig
              && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
-          return "TIMESTAMP";
+          return "datetime";
         } else if (field.isPrimaryKey()) {
           // Could always use 'text', except columns of type 'text', 'image' and 'unitext'
           // cannot be used in indexes. Also, 2600 is the max allowable size of an index,

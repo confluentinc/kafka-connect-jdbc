@@ -116,7 +116,7 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
       case INT64:
         if (config instanceof JdbcSinkConfig
              && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
-          return "TIMESTAMP";
+          return "TIMESTAMP(6)";
         }
         return "BIGINT";
       case FLOAT32:

@@ -96,7 +96,14 @@ public class Db2DatabaseDialect extends GenericDatabaseDialect {
       case INT64:
         if (config instanceof JdbcSinkConfig
              && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
-          return "TIMESTAMP";
+          if (((JdbcSinkConfig) config).timestampPrecisionMode
+               == JdbcSinkConfig.TimestampPrecisionMode.MICROSECONDS) {
+            return "TIMESTAMP";
+          }
+          if (((JdbcSinkConfig) config).timestampPrecisionMode
+               == JdbcSinkConfig.TimestampPrecisionMode.NANOSECONDS) {
+            return "TIMESTAMP(9)";
+          }
         }
         return "BIGINT";
       case FLOAT32:
@@ -108,7 +115,14 @@ public class Db2DatabaseDialect extends GenericDatabaseDialect {
       case STRING:
         if (config instanceof JdbcSinkConfig
              && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
-          return "TIMESTAMP";
+          if (((JdbcSinkConfig) config).timestampPrecisionMode
+               == JdbcSinkConfig.TimestampPrecisionMode.MICROSECONDS) {
+            return "TIMESTAMP";
+          }
+          if (((JdbcSinkConfig) config).timestampPrecisionMode
+               == JdbcSinkConfig.TimestampPrecisionMode.NANOSECONDS) {
+            return "TIMESTAMP(9)";
+          }
         }
         return "VARCHAR(32672)";
       case BYTES:

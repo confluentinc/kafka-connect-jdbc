@@ -88,7 +88,7 @@ public class DateTimeUtils {
     return Optional.ofNullable(epochMicros)
             .map(micros -> {
               long epochSeconds = micros / MICROSECONDS_PER_SECOND;
-              int nanos = (int) (micros % MICROSECONDS_PER_SECOND) * 1_000;
+              int nanos = (int) ((micros % MICROSECONDS_PER_SECOND) * NANOSECONDS_PER_MICROSECOND);
               return Timestamp.from(Instant.ofEpochSecond(epochSeconds, nanos));
             })
             .orElse(null);

@@ -18,6 +18,7 @@ package io.confluent.connect.jdbc.util;
 import java.math.BigInteger;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.chrono.ChronoZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -81,6 +82,47 @@ public class DateTimeUtils {
       sdf.setTimeZone(aTimeZone);
       return sdf;
     }).format(date);
+  }
+
+  public static Timestamp formatSinkMicrosTimestamp(Long epochMicros) {
+    return Optional.ofNullable(epochMicros)
+            .map(micros -> {
+              long epochSeconds = micros / MICROSECONDS_PER_SECOND;
+              int nanos = (int) ((micros % MICROSECONDS_PER_SECOND) * NANOSECONDS_PER_MICROSECOND);
+              return Timestamp.from(Instant.ofEpochSecond(epochSeconds, nanos));
+            })
+            .orElse(null);
+  }
+
+  public static Timestamp formatSinkMicrosTimestamp(String epochMicros) {
+    return Optional.ofNullable(epochMicros)
+            .map(Long::parseLong)
+            .map(DateTimeUtils::formatSinkMicrosTimestamp)
+            .orElse(null);
+  }
+
+  public static Timestamp formatSinkNanosTimestamp(Long epochNanos) {
+    return Optional.ofNullable(epochNanos)
+            .map(nanos -> {
+              long epochSeconds = nanos / NANOSECONDS_PER_SECOND;
+              int nanosComponent = (int) (nanos % NANOSECONDS_PER_SECOND);
+              return Timestamp.from(Instant.ofEpochSecond(epochSeconds, nanosComponent));
+            })
+            .orElse(null);
+  }
+
+  public static Timestamp formatSinkNanosTimestamp(String epochNanos) {
+    return Optional.ofNullable(epochNanos)
+            .map(BigInteger::new)
+            .map(nanos -> {
+              BigInteger seconds = nanos.divide(BigInteger.valueOf(NANOSECONDS_PER_SECOND));
+              BigInteger nanosComponent = nanos.mod(BigInteger.valueOf(NANOSECONDS_PER_SECOND));
+              return Timestamp.from(Instant.ofEpochSecond(
+               seconds.longValue(),
+               nanosComponent.intValue()
+              ));
+            })
+            .orElse(null);
   }
 
   private static Long convertToEpochMicros(Timestamp t) {

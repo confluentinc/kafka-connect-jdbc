@@ -162,6 +162,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   private volatile JdbcDriverInfo jdbcDriverInfo;
   private final int batchMaxRows;
   private final TimeZone timeZone;
+  private final JdbcSinkConfig.TimestampPrecisionMode timestampPrecisionMode;
+  private final Set<String> timestampfieldswhitelist;
   private final TimeZone dateTimeZone;
   private final JdbcSourceConnectorConfig.TimestampGranularity tsGranularity;
 
@@ -199,6 +201,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       quoteSqlIdentifiers = QuoteMethod.get(
           config.getString(JdbcSinkConfig.QUOTE_SQL_IDENTIFIERS_CONFIG)
       );
+      timestampPrecisionMode = sinkConfig.timestampPrecisionMode;
+      timestampfieldswhitelist = sinkConfig.timestampFieldsWhitelist;
+
     } else {
       catalogPattern = config.getString(JdbcSourceTaskConfig.CATALOG_PATTERN_CONFIG);
       schemaPattern = config.getString(JdbcSourceTaskConfig.SCHEMA_PATTERN_CONFIG);
@@ -206,6 +211,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       quoteSqlIdentifiers = QuoteMethod.get(
           config.getString(JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_CONFIG)
       );
+      timestampPrecisionMode = null;
+      timestampfieldswhitelist = null;
     }
     if (config instanceof JdbcSourceConnectorConfig) {
       mapNumerics = ((JdbcSourceConnectorConfig)config).numericMapping();
@@ -1729,12 +1736,12 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         break;
       case INT64:
         if (config instanceof JdbcSinkConfig
-            && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(fieldName)) {
-          if (((JdbcSinkConfig) config).timestampPrecisionMode
+            && timestampfieldswhitelist.contains(fieldName)) {
+          if (timestampPrecisionMode
               == JdbcSinkConfig.TimestampPrecisionMode.MICROSECONDS) {
             Timestamp ts = DateTimeUtils.formatSinkMicrosTimestamp((Long) value);
             statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
-          } else if (((JdbcSinkConfig) config).timestampPrecisionMode
+          } else if (timestampPrecisionMode
               == JdbcSinkConfig.TimestampPrecisionMode.NANOSECONDS) {
             Timestamp ts = DateTimeUtils.formatSinkNanosTimestamp((Long) value);
             statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
@@ -1754,12 +1761,12 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         break;
       case STRING:
         if (config instanceof JdbcSinkConfig
-            && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(fieldName)) {
-          if (((JdbcSinkConfig) config).timestampPrecisionMode
+            && timestampfieldswhitelist.contains(fieldName)) {
+          if (timestampPrecisionMode
               == JdbcSinkConfig.TimestampPrecisionMode.MICROSECONDS) {
             Timestamp ts = DateTimeUtils.formatSinkMicrosTimestamp((String) value);
             statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));
-          } else if (((JdbcSinkConfig) config).timestampPrecisionMode
+          } else if (timestampPrecisionMode
               == JdbcSinkConfig.TimestampPrecisionMode.NANOSECONDS) {
             Timestamp ts = DateTimeUtils.formatSinkNanosTimestamp((String) value);
             statement.setTimestamp(index, ts, DateTimeUtils.getTimeZoneCalendar(timeZone));

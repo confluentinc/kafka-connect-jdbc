@@ -329,10 +329,10 @@ public class JdbcSourceTask extends SourceTask {
         String tableType = config.getString(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG);
         
         if ("SYNONYM".equals(tableType)) {
-          // Check if the table is a synonym by querying ALL_SYNONYMS
+          // First try to resolve using ALL_SYNONYMS (Oracle-specific)
           try (PreparedStatement stmt = conn.prepareStatement(
-              "SELECT TABLE_OWNER, TABLE_NAME FROM ALL_SYNONYMS WHERE OWNER = ? 
-              AND SYNONYM_NAME = ?")) {
+              "SELECT TABLE_OWNER, TABLE_NAME FROM ALL_SYNONYMS WHERE OWNER = ? AND "
+              + "SYNONYM_NAME = ?")) {
             stmt.setString(1, conn.getMetaData().getUserName().toUpperCase());
             stmt.setString(2, table.toUpperCase());
             ResultSet rs = stmt.executeQuery();
@@ -360,21 +360,29 @@ public class JdbcSourceTask extends SourceTask {
                     "Could not resolve base table for synonym: " + table
                 );
               }
+            } else {
+              throw new ConfigException(
+                  "Table is not a synonym: " + table
+              );
             }
           }
         }
 
-        Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(
-          conn, actualTable, null);
-        Set<String> columnNames = defnsById.keySet().stream().map(ColumnId::name)
-            .map(String::toLowerCase).collect(Collectors.toSet());
+        Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, 
+                                                                    actualTable, null);
+        Set<String> columnNames = defnsById.keySet().stream()
+            .map(ColumnId::name)
+            .map(String::toLowerCase)
+            .collect(Collectors.toSet());
 
         if ((mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)
             || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING))
             && !incrementingColumn.isEmpty()
             && !columnNames.contains(incrementingColumn.toLowerCase(Locale.getDefault()))) {
-          throw new ConfigException("Incrementing column: " + incrementingColumn
-              + " does not exist in table '" + actualTable + "'");
+          throw new ConfigException(
+              "Incrementing column: " + incrementingColumn
+              + " does not exist in table '" + actualTable + "'"
+          );
         }
 
         if ((mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)
@@ -386,17 +394,20 @@ public class JdbcSourceTask extends SourceTask {
               .collect(Collectors.toSet());
 
           if (!missingTsColumns.isEmpty()) {
-            throw new ConfigException("Timestamp columns: "
-                + String.join(", ", missingTsColumns)
-                + " do not exist in table '" + actualTable + "'");
+            throw new ConfigException(
+                "Timestamp columns: " + String.join(", ", missingTsColumns)
+                + " do not exist in table '" + actualTable + "'"
+            );
           }
         }
       } finally {
         conn.setAutoCommit(autoCommit);
       }
     } catch (SQLException e) {
-      throw new ConnectException("Failed trying to validate that columns used for offsets exist",
-          e);
+      throw new ConnectException(
+          "Failed trying to validate that columns used for offsets exist",
+          e
+      );
     }
   }
 

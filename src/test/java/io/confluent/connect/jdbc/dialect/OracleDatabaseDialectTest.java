@@ -320,6 +320,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
   public void shouldBindStringAccordingToColumnDef() throws SQLException {
     int index = ThreadLocalRandom.current().nextInt();
     String value = "random text";
+    String field = "sample";
     Schema schema = Schema.STRING_SCHEMA;
     PreparedStatement stmtVarchar = mock(PreparedStatement.class);
     ColumnDefinition colDefVarchar = mock(ColumnDefinition.class);
@@ -337,16 +338,16 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
     ColumnDefinition colDefClob = mock(ColumnDefinition.class);
     when(colDefClob.type()).thenReturn(Types.CLOB);
 
-    dialect.bindField(stmtVarchar, index, schema, value, colDefVarchar);
+    dialect.bindField(stmtVarchar, index, schema, value, colDefVarchar, field);
     verify(stmtVarchar, times(1)).setString(index, value);
 
-    dialect.bindField(stmtNchar, index, schema, value, colDefNchar);
+    dialect.bindField(stmtNchar, index, schema, value, colDefNchar, field);
     verify(stmtNchar, times(1)).setNString(index, value);
 
-    dialect.bindField(stmtNvarchar, index, schema, value, colDefNvarchar);
+    dialect.bindField(stmtNvarchar, index, schema, value, colDefNvarchar, field);
     verify(stmtNvarchar, times(1)).setNString(index, value);
 
-    dialect.bindField(stmtClob, index, schema, value, colDefClob);
+    dialect.bindField(stmtClob, index, schema, value, colDefClob, field);
     verify(stmtClob, times(1)).setCharacterStream(eq(index), any(StringReader.class), eq((long) value.length()));
   }
 
@@ -360,10 +361,11 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
     when(colDefBlob.type()).thenReturn(Types.BLOB);
     ColumnDefinition colDefBinary = mock(ColumnDefinition.class);
     when(colDefBinary.type()).thenReturn(Types.BINARY);
+    String field = "sample-test";
 
-    dialect.bindField(statement, index, schema, value, colDefBlob);
+    dialect.bindField(statement, index, schema, value, colDefBlob, field);
     verify(statement, times(1)).setBlob(eq(index), any(ByteArrayInputStream.class));
-    dialect.bindField(statement, index, schema, value, colDefBinary);
+    dialect.bindField(statement, index, schema, value, colDefBinary, field);
     verify(statement, times(1)).setBytes(index, value);
   }
 
@@ -407,6 +409,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
           throws SQLException {
     OraclePreparedStatement statement = mock(OraclePreparedStatement.class);
     ColumnDefinition colDef = mock(ColumnDefinition.class);
+    String field = "sample";
     if (schema.name() != null) {
       switch (schema.name()) {
         case Decimal.LOGICAL_NAME:
@@ -469,7 +472,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
       }
     }
 
-    dialect.bindField(statement, index, schema, value, colDef);
+    dialect.bindField(statement, index, schema, value, colDef, field);
     return verify(statement, times(1));
   }
 }

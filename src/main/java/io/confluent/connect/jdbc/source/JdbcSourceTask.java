@@ -27,7 +27,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.DatabaseMetaData;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -550,6 +553,76 @@ public class JdbcSourceTask extends SourceTask {
     } catch (SQLException e) {
       throw new ConnectException("Failed trying to validate that columns used for offsets are NOT"
                                  + " NULL", e);
+    }
+  }
+
+  private void validateColumnsExist(
+      Connection db,
+      String table,
+      String incrementingColumn,
+      List<String> timestampColumns
+  ) throws SQLException {
+    String actualTable = table;
+    String tableType = config.getString(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG);
+    
+    if ("SYNONYM".equals(tableType)) {
+      // Check if the table is a synonym by querying ALL_SYNONYMS
+      try (PreparedStatement stmt = db.prepareStatement(
+          "SELECT TABLE_OWNER, TABLE_NAME FROM ALL_SYNONYMS WHERE OWNER = ? AND SYNONYM_NAME = ?")) {
+        stmt.setString(1, db.getMetaData().getUserName().toUpperCase());
+        stmt.setString(2, table.toUpperCase());
+        ResultSet rs = stmt.executeQuery();
+        if (rs.next()) {
+          actualTable = rs.getString("TABLE_NAME");
+          log.info("Resolved synonym {} to base table {}", table, actualTable);
+        } else {
+          throw new ConfigException(
+              "Could not resolve base table for synonym: " + table
+          );
+        }
+      } catch (SQLException e) {
+        // If ALL_SYNONYMS view is not accessible or doesn't exist, fall back to metadata approach
+        log.debug("Could not query ALL_SYNONYMS, falling back to metadata approach", e);
+        DatabaseMetaData metadata = db.getMetaData();
+        ResultSet tableRs = metadata.getTables(null, null, table, new String[]{"SYNONYM"});
+        if (tableRs.next()) {
+          ResultSet synonymRs = metadata.getColumns(null, null, table, null);
+          if (synonymRs.next()) {
+            actualTable = synonymRs.getString("TABLE_NAME");
+            log.info("Resolved synonym {} to base table {}", table, actualTable);
+          } else {
+            throw new ConfigException(
+                "Could not resolve base table for synonym: " + table
+            );
+          }
+        }
+      }
+    }
+
+    // Get columns from the actual table
+    DatabaseMetaData metadata = db.getMetaData();
+    ResultSet rs = metadata.getColumns(null, null, actualTable, null);
+    Set<String> columns = new HashSet<>();
+    while (rs.next()) {
+      columns.add(rs.getString(4).toLowerCase());
+    }
+
+    if (incrementingColumn != null && !columns.contains(incrementingColumn.toLowerCase())) {
+      throw new ConfigException(
+          JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG,
+          "Column '" + incrementingColumn + "' does not exist in table '" + actualTable + "'"
+      );
+    }
+
+    if (timestampColumns != null) {
+      for (String timestampColumn : timestampColumns) {
+        if (!columns.contains(timestampColumn.toLowerCase())) {
+          throw new ConfigException(
+              JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG,
+              "Column '" + timestampColumn + "' does not exist in table '" + actualTable + "'"
+          );
+        }
+      }
     }
   }
 }

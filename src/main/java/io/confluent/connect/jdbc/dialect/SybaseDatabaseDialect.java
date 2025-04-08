@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig.PrimaryKeyMode;
 import io.confluent.connect.jdbc.sink.PreparedStatementBinder;
@@ -118,6 +119,10 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
       case INT32:
         return "int";
       case INT64:
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_CONVERSION_FIELDS).contains(field.name())) {
+          return "datetime";
+        }
         return "bigint";
       case FLOAT32:
         return "real";
@@ -130,7 +135,10 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
           return "bit";
         }
       case STRING:
-        if (field.isPrimaryKey()) {
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_CONVERSION_FIELDS).contains(field.name())) {
+          return "datetime";
+        } else if (field.isPrimaryKey()) {
           // Could always use 'text', except columns of type 'text', 'image' and 'unitext'
           // cannot be used in indexes. Also, 2600 is the max allowable size of an index,
           // so use something smaller if multiple columns are to be used in the index.
@@ -173,7 +181,8 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
       int index,
       Schema schema,
       Object value,
-      ColumnDefinition colDef
+      ColumnDefinition colDef,
+      String fieldName
   ) throws SQLException {
     if (value == null) {
       Integer type = getSqlTypeForSchema(schema);
@@ -185,7 +194,7 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
     } else {
       boolean bound = maybeBindLogical(statement, index, schema, value);
       if (!bound) {
-        bound = maybeBindPrimitive(statement, index, schema, value);
+        bound = maybeBindPrimitive(statement, index, schema, value, fieldName);
       }
       if (!bound) {
         throw new ConnectException("Unsupported source data type: " + schema.type());
@@ -197,7 +206,8 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
       PreparedStatement statement,
       int index,
       Schema schema,
-      Object value
+      Object value,
+      String fieldName
   ) throws SQLException {
     // First handle non-standard bindings ...
     switch (schema.type()) {
@@ -210,7 +220,7 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
       default:
         break;
     }
-    return super.maybeBindPrimitive(statement, index, schema, value);
+    return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
   }
 
   @Override

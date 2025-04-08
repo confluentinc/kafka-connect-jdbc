@@ -155,7 +155,8 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       int index,
       Schema schema,
       Object value,
-      ColumnDefinition colDef
+      ColumnDefinition colDef,
+      String fieldName
   ) throws SQLException {
     if (value == null) {
       Integer type = getSqlTypeForSchema(schema);
@@ -167,7 +168,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     } else {
       boolean bound = maybeBindLogical(statement, index, schema, value);
       if (!bound) {
-        bound = maybeBindPrimitive(statement, index, schema, value, colDef);
+        bound = maybeBindPrimitive(statement, index, schema, value, colDef, fieldName);
       }
       if (!bound) {
         throw new ConnectException("Unsupported source data type: " + schema.type());
@@ -180,10 +181,11 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       int index,
       Schema schema,
       Object value,
-      ColumnDefinition colDef
+      ColumnDefinition colDef,
+      String fieldName
   ) throws SQLException {
     if (colDef == null) {
-      return super.maybeBindPrimitive(statement, index, schema, value);
+      return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
     }
 
     if (schema.type() == Type.STRING) {
@@ -192,11 +194,11 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
         statement.setNString(index, (String) value);
         return true;
       } else {
-        return super.maybeBindPrimitive(statement, index, schema, value);
+        return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
       }
     }
 
-    return super.maybeBindPrimitive(statement, index, schema, value);
+    return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
   }
 
   /**
@@ -347,6 +349,10 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       case INT32:
         return "int";
       case INT64:
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_CONVERSION_FIELDS).contains(field.name())) {
+          return "datetime2";
+        }
         return "bigint";
       case FLOAT32:
         return "real";
@@ -355,7 +361,10 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "bit";
       case STRING:
-        if (field.isPrimaryKey()) {
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_CONVERSION_FIELDS).contains(field.name())) {
+          return "datetime2";
+        } else if (field.isPrimaryKey()) {
           // Should be no more than 900 which is the MSSQL constraint
           return "varchar(900)";
         } else {

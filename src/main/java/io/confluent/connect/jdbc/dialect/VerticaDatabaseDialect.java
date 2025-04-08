@@ -85,7 +85,7 @@ public class VerticaDatabaseDialect extends GenericDatabaseDialect {
         return "INT";
       case INT64:
         if (config instanceof JdbcSinkConfig
-             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
+             && config.getList(JdbcSinkConfig.TIMESTAMP_CONVERSION_FIELDS).contains(field.name())) {
           return "TIMESTAMP";
         }
         return "INT";
@@ -97,7 +97,7 @@ public class VerticaDatabaseDialect extends GenericDatabaseDialect {
         return "BOOLEAN";
       case STRING:
         if (config instanceof JdbcSinkConfig
-             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
+             && config.getList(JdbcSinkConfig.TIMESTAMP_CONVERSION_FIELDS).contains(field.name())) {
           return "TIMESTAMP";
         }
         return "VARCHAR(1024)";

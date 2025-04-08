@@ -88,7 +88,7 @@ public class SqliteDatabaseDialect extends GenericDatabaseDialect {
       case INT32:
       case INT64:
         if (config instanceof JdbcSinkConfig
-            && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
+            && config.getList(JdbcSinkConfig.TIMESTAMP_CONVERSION_FIELDS).contains(field.name())) {
           return "NUMERIC";
         }
         return "INTEGER";
@@ -97,7 +97,7 @@ public class SqliteDatabaseDialect extends GenericDatabaseDialect {
         return "REAL";
       case STRING:
         if (config instanceof JdbcSinkConfig
-             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
+             && config.getList(JdbcSinkConfig.TIMESTAMP_CONVERSION_FIELDS).contains(field.name())) {
           return "NUMERIC";
         }
         return "TEXT";

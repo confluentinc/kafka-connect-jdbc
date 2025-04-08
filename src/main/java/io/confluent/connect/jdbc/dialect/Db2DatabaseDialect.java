@@ -95,7 +95,7 @@ public class Db2DatabaseDialect extends GenericDatabaseDialect {
         return "INTEGER";
       case INT64:
         if (config instanceof JdbcSinkConfig
-             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
+             && config.getList(JdbcSinkConfig.TIMESTAMP_CONVERSION_FIELDS).contains(field.name())) {
           if (((JdbcSinkConfig) config).timestampPrecisionMode
                == JdbcSinkConfig.TimestampPrecisionMode.MICROSECONDS) {
             return "TIMESTAMP";
@@ -114,7 +114,7 @@ public class Db2DatabaseDialect extends GenericDatabaseDialect {
         return "SMALLINT";
       case STRING:
         if (config instanceof JdbcSinkConfig
-             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
+             && config.getList(JdbcSinkConfig.TIMESTAMP_CONVERSION_FIELDS).contains(field.name())) {
           if (((JdbcSinkConfig) config).timestampPrecisionMode
                == JdbcSinkConfig.TimestampPrecisionMode.MICROSECONDS) {
             return "TIMESTAMP";

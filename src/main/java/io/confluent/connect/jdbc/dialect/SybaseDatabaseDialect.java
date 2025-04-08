@@ -120,7 +120,7 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
         return "int";
       case INT64:
         if (config instanceof JdbcSinkConfig
-             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
+             && config.getList(JdbcSinkConfig.TIMESTAMP_CONVERSION_FIELDS).contains(field.name())) {
           return "datetime";
         }
         return "bigint";
@@ -136,7 +136,7 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
         }
       case STRING:
         if (config instanceof JdbcSinkConfig
-             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_WHITELIST).contains(field.name())) {
+             && config.getList(JdbcSinkConfig.TIMESTAMP_CONVERSION_FIELDS).contains(field.name())) {
           return "datetime";
         } else if (field.isPrimaryKey()) {
           // Could always use 'text', except columns of type 'text', 'image' and 'unitext'

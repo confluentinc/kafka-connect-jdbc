@@ -139,7 +139,7 @@ public class SqliteDatabaseDialect extends GenericDatabaseDialect {
   }
 
   @Override
-  public String resolveSynonym(Connection connection, TableId tableId) throws SQLException {
+  public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
     // SQLite does not support synonyms natively, so we'll throw an exception
     throw new SQLException("SQLite does not support synonyms. Please use views instead.");
   }

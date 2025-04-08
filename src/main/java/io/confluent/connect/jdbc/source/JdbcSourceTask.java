@@ -26,6 +26,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -321,16 +324,65 @@ public class JdbcSourceTask extends SourceTask {
       try {
         log.info("Validating columns exist for table");
         conn.setAutoCommit(true);
-        Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, table, null);
-        Set<String> columnNames = defnsById.keySet().stream().map(ColumnId::name)
-            .map(String::toLowerCase).collect(Collectors.toSet());
+
+        String actualTable = table;
+        String tableType = config.getString(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG);
+        
+        if ("SYNONYM".equals(tableType)) {
+          // First try to resolve using ALL_SYNONYMS (Oracle-specific)
+          try (PreparedStatement stmt = conn.prepareStatement(
+              "SELECT TABLE_OWNER, TABLE_NAME FROM ALL_SYNONYMS WHERE OWNER = ? AND "
+              + "SYNONYM_NAME = ?")) {
+            stmt.setString(1, conn.getMetaData().getUserName().toUpperCase());
+            stmt.setString(2, table.toUpperCase());
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+              actualTable = rs.getString("TABLE_NAME");
+              log.info("Resolved synonym {} to base table {}", table, actualTable);
+            } else {
+              throw new ConfigException(
+                  "Could not resolve base table for synonym: " + table
+              );
+            }
+          } catch (SQLException e) {
+            // ALL_SYNONYMS view is only available for ORACLE. 
+            // metadata approach will be used for other DBs 
+            log.debug("Could not query ALL_SYNONYMS, falling back to metadata approach", e);
+            DatabaseMetaData metadata = conn.getMetaData();
+            ResultSet tableRs = metadata.getTables(null, null, table, new String[]{"SYNONYM"});
+            if (tableRs.next()) {
+              ResultSet synonymRs = metadata.getColumns(null, null, table, null);
+              if (synonymRs.next()) {
+                actualTable = synonymRs.getString("TABLE_NAME");
+                log.info("Resolved synonym {} to base table {}", table, actualTable);
+              } else {
+                throw new ConfigException(
+                    "Could not resolve base table for synonym: " + table
+                );
+              }
+            } else {
+              throw new ConfigException(
+                  "Table is not a synonym: " + table
+              );
+            }
+          }
+        }
+
+        Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, 
+                                                                    actualTable, null);
+        Set<String> columnNames = defnsById.keySet().stream()
+            .map(ColumnId::name)
+            .map(String::toLowerCase)
+            .collect(Collectors.toSet());
 
         if ((mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)
             || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING))
             && !incrementingColumn.isEmpty()
             && !columnNames.contains(incrementingColumn.toLowerCase(Locale.getDefault()))) {
-          throw new ConfigException("Incrementing column: " + incrementingColumn
-              + " does not exist.");
+          throw new ConfigException(
+              "Incrementing column: " + incrementingColumn
+              + " does not exist in table '" + actualTable + "'"
+          );
         }
 
         if ((mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)
@@ -342,17 +394,20 @@ public class JdbcSourceTask extends SourceTask {
               .collect(Collectors.toSet());
 
           if (!missingTsColumns.isEmpty()) {
-            throw new ConfigException("Timestamp columns: "
-                + String.join(", ", missingTsColumns)
-                + " do not exist.");
+            throw new ConfigException(
+                "Timestamp columns: " + String.join(", ", missingTsColumns)
+                + " do not exist in table '" + actualTable + "'"
+            );
           }
         }
       } finally {
         conn.setAutoCommit(autoCommit);
       }
     } catch (SQLException e) {
-      throw new ConnectException("Failed trying to validate that columns used for offsets exist",
-          e);
+      throw new ConnectException(
+          "Failed trying to validate that columns used for offsets exist",
+          e
+      );
     }
   }
 

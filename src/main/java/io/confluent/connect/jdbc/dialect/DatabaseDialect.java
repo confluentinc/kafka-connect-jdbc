@@ -669,4 +669,14 @@ public interface DatabaseDialect extends ConnectionProvider {
      */
     Object convert(ResultSet resultSet) throws SQLException, IOException;
   }
+
+  /**
+   * Resolve a synonym to its base table name.
+   *
+   * @param connection the database connection; may not be null
+   * @param synonymName the name of the synonym to resolve; may not be null
+   * @return the base table name if the synonym exists, null otherwise
+   * @throws SQLException if there is an error accessing the metadata
+   */
+  String resolveSynonym(Connection connection, String synonymName) throws SQLException;
 }

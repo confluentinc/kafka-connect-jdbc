@@ -317,7 +317,11 @@ public class JdbcSourceTask extends SourceTask {
   }
 
   private void validateColumnsExist(
-      String mode, String incrementingColumn, List<String> timestampColumns, String table) {
+      String mode, 
+      String incrementingColumn, 
+      List<String> timestampColumns, 
+      String table
+  ) {
     try {
       final Connection conn = cachedConnectionProvider.getConnection();
       boolean autoCommit = conn.getAutoCommit();
@@ -329,47 +333,20 @@ public class JdbcSourceTask extends SourceTask {
         String tableType = config.getString(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG);
         
         if ("SYNONYM".equals(tableType)) {
-          // First try to resolve using ALL_SYNONYMS (Oracle-specific)
-          try (PreparedStatement stmt = conn.prepareStatement(
-              "SELECT TABLE_OWNER, TABLE_NAME FROM ALL_SYNONYMS WHERE OWNER = ? AND "
-              + "SYNONYM_NAME = ?")) {
-            stmt.setString(1, conn.getMetaData().getUserName().toUpperCase());
-            stmt.setString(2, table.toUpperCase());
-            ResultSet rs = stmt.executeQuery();
-            if (rs.next()) {
-              actualTable = rs.getString("TABLE_NAME");
-              log.info("Resolved synonym {} to base table {}", table, actualTable);
-            } else {
-              throw new ConfigException(
-                  "Could not resolve base table for synonym: " + table
-              );
-            }
-          } catch (SQLException e) {
-            // ALL_SYNONYMS view is only available for ORACLE. 
-            // metadata approach will be used for other DBs 
-            log.debug("Could not query ALL_SYNONYMS, falling back to metadata approach", e);
-            DatabaseMetaData metadata = conn.getMetaData();
-            ResultSet tableRs = metadata.getTables(null, null, table, new String[]{"SYNONYM"});
-            if (tableRs.next()) {
-              ResultSet synonymRs = metadata.getColumns(null, null, table, null);
-              if (synonymRs.next()) {
-                actualTable = synonymRs.getString("TABLE_NAME");
-                log.info("Resolved synonym {} to base table {}", table, actualTable);
-              } else {
-                throw new ConfigException(
-                    "Could not resolve base table for synonym: " + table
-                );
-              }
-            } else {
-              throw new ConfigException(
-                  "Table is not a synonym: " + table
-              );
-            }
+          actualTable = dialect.resolveSynonym(conn, table);
+          if (actualTable == null) {
+            throw new ConfigException(
+                "Could not resolve base table for synonym: " + table
+            );
           }
+          log.info("Resolved synonym {} to base table {}", table, actualTable);
         }
 
-        Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, 
-                                                                    actualTable, null);
+        Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(
+            conn, 
+            actualTable, 
+            null
+        );
         Set<String> columnNames = defnsById.keySet().stream()
             .map(ColumnId::name)
             .map(String::toLowerCase)
@@ -390,7 +367,9 @@ public class JdbcSourceTask extends SourceTask {
             && !timestampColumns.isEmpty()) {
 
           Set<String> missingTsColumns = timestampColumns.stream()
-              .filter(tsColumn -> !columnNames.contains(tsColumn.toLowerCase(Locale.getDefault())))
+              .filter(tsColumn -> !columnNames.contains(
+                  tsColumn.toLowerCase(Locale.getDefault())
+              ))
               .collect(Collectors.toSet());
 
           if (!missingTsColumns.isEmpty()) {

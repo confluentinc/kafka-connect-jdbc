@@ -166,8 +166,8 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
   public String resolveSynonym(Connection connection, TableId tableId) throws SQLException {
     // SAP HANA supports synonyms through the SYNONYMS system view
     try (PreparedStatement stmt = connection.prepareStatement(
-        "SELECT SCHEMA_NAME, TARGET_SCHEMA_NAME, TARGET_OBJECT_NAME " +
-        "FROM SYS.SYNONYMS WHERE SCHEMA_NAME = ? AND SYNONYM_NAME = ?")) {
+        "SELECT SCHEMA_NAME, TARGET_SCHEMA_NAME, TARGET_OBJECT_NAME "
+        + "FROM SYS.SYNONYMS WHERE SCHEMA_NAME = ? AND SYNONYM_NAME = ?")) {
       stmt.setString(1, tableId.schemaName() != null ? 
           tableId.schemaName() : connection.getMetaData().getUserName());
       stmt.setString(2, tableId.tableName());

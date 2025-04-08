@@ -345,7 +345,7 @@ public class JdbcSourceTask extends SourceTask {
               );
             }
           } catch (SQLException e) {
-            // If ALL_SYNONYMS view is available onlt for ORACLE. 
+            // ALL_SYNONYMS view is only available for ORACLE. 
             // metadata approach will be used for other DBs 
             log.debug("Could not query ALL_SYNONYMS, falling back to metadata approach", e);
             DatabaseMetaData metadata = conn.getMetaData();

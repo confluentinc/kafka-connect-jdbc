@@ -21,6 +21,10 @@ import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -156,5 +160,26 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
     builder.append(")");
     builder.append(" WITH PRIMARY KEY");
     return builder.toString();
+  }
+
+  @Override
+  public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
+    // SAP HANA supports synonyms through the SYNONYMS system view
+    try (PreparedStatement stmt = connection.prepareStatement(
+        "SELECT SCHEMA_NAME, TARGET_SCHEMA_NAME, TARGET_OBJECT_NAME "
+        + "FROM SYS.SYNONYMS WHERE SCHEMA_NAME = ? AND SYNONYM_NAME = ?")) {
+      // Use the current schema if not specified
+      String schema = connection.getMetaData().getUserName();
+      stmt.setString(1, schema);
+      stmt.setString(2, synonymName);
+      ResultSet rs = stmt.executeQuery();
+      if (rs.next()) {
+        String targetSchema = rs.getString("TARGET_SCHEMA_NAME");
+        String targetTable = rs.getString("TARGET_OBJECT_NAME");
+        return targetTable;
+      }
+    }
+    // Fall back to generic implementation if SYNONYMS query fails
+    return super.resolveSynonym(connection, synonymName);
   }
 }

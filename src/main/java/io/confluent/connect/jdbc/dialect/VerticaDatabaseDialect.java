@@ -25,6 +25,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.sql.Connection;
+import java.sql.SQLException;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
@@ -109,5 +111,11 @@ public class VerticaDatabaseDialect extends GenericDatabaseDialect {
       queries.addAll(super.buildAlterTable(table, Collections.singleton(field)));
     }
     return queries;
+  }
+
+  @Override
+  public String resolveSynonym(Connection connection, String tableId) throws SQLException {
+    // Vertica does not support synonyms natively,  so we'll throw an exception
+    throw new SQLException("Vertica does not support synonyms. Please use views instead.");
   }
 }

@@ -31,6 +31,7 @@ import org.apache.kafka.connect.data.Timestamp;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Collection;
@@ -348,5 +349,21 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
     builder.appendColumnName(col.name())
            .append("=incoming.")
            .appendColumnName(col.name());
+  }
+
+  @Override
+  public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
+    // Sybase-specific implementation using sys.synonyms
+    try (PreparedStatement stmt = connection.prepareStatement(
+        "SELECT base_object_name FROM sys.synonyms WHERE name = ? AND "
+        + "schema_id = SCHEMA_ID()")) {
+      stmt.setString(1, synonymName);
+      ResultSet rs = stmt.executeQuery();
+      if (rs.next()) {
+        return rs.getString("base_object_name");
+      }
+    }
+    // Fall back to generic implementation if sys.synonyms query fails
+    return super.resolveSynonym(connection, synonymName);
   }
 }

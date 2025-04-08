@@ -112,8 +112,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
     // PostgreSQL-specific implementation using pg_synonym
     try (PreparedStatement stmt = connection.prepareStatement(
-        "SELECT synobjname FROM pg_synonym WHERE synname = ? AND " +
-        "nspname = current_schema()")) {
+        "SELECT synobjname FROM pg_synonym WHERE synname = ? AND "
+        + "nspname = current_schema()")) {
       stmt.setString(1, synonymName);
       ResultSet rs = stmt.executeQuery();
       if (rs.next()) {

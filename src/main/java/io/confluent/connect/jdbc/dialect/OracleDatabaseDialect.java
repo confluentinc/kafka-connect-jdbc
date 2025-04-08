@@ -387,8 +387,8 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
     // Oracle-specific implementation using ALL_SYNONYMS view
     try (PreparedStatement stmt = connection.prepareStatement(
-        "SELECT TABLE_OWNER, TABLE_NAME FROM ALL_SYNONYMS WHERE OWNER = ? AND " +
-        "SYNONYM_NAME = ?")) {
+        "SELECT TABLE_OWNER, TABLE_NAME FROM ALL_SYNONYMS WHERE OWNER = ? AND "
+        + "SYNONYM_NAME = ?")) {
       stmt.setString(1, connection.getMetaData().getUserName().toUpperCase());
       stmt.setString(2, synonymName.toUpperCase());
       ResultSet rs = stmt.executeQuery();

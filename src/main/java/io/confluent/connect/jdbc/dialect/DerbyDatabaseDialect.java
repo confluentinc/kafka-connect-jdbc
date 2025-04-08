@@ -171,8 +171,8 @@ public class DerbyDatabaseDialect extends GenericDatabaseDialect {
   }
 
   @Override
-  public String resolveSynonym(Connection connection, TableId tableId) throws SQLException {
-    // Derby does not support synonyms natively, so we'll throw an exception
+  public String resolveSynonym(Connection connection, String tableId) throws SQLException {
+    // Derby does not support synonyms natively,  so we'll throw an exception
     throw new SQLException("Derby does not support synonyms. Please use views instead.");
   }
 }

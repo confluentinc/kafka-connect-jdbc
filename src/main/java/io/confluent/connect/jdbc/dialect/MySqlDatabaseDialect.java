@@ -172,8 +172,6 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
 
   @Override
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
-    throw new SQLException(
-        "MySQL does not support synonyms. Please use views instead."
-    );
+    throw new SQLException("MySQL does not support synonyms. Please use views instead.");
   }
 }

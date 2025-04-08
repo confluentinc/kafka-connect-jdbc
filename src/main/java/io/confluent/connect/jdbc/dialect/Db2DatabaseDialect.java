@@ -173,19 +173,20 @@ public class Db2DatabaseDialect extends GenericDatabaseDialect {
   }
 
   @Override
-  public String resolveSynonym(Connection connection, TableId tableId) throws SQLException {
+  public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
     // DB2 supports synonyms through the SYSCAT.SYNONYMS catalog view
     try (PreparedStatement stmt = connection.prepareStatement(
         "SELECT TBOWNER, TBNAME FROM SYSCAT.SYNONYMS WHERE SYNSCHEMA = ? AND SYNNAME = ?")) {
-      stmt.setString(1, tableId.schemaName() != null 
-                            ? tableId.schemaName() : connection.getMetaData().getUserName());
-      stmt.setString(2, tableId.tableName());
+      // Use the current schema if not specified
+      String schema = connection.getMetaData().getUserName();
+      stmt.setString(1, schema);
+      stmt.setString(2, synonymName);
       ResultSet rs = stmt.executeQuery();
       if (rs.next()) {
         return rs.getString("TBNAME");
       }
     }
     // Fall back to generic implementation if SYSCAT.SYNONYMS query fails
-    return super.resolveSynonym(connection, tableId);
+    return super.resolveSynonym(connection, synonymName);
   }
 }

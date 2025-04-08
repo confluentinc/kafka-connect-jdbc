@@ -114,8 +114,8 @@ public class VerticaDatabaseDialect extends GenericDatabaseDialect {
   }
 
   @Override
-  public String resolveSynonym(Connection connection, TableId tableId) throws SQLException {
-    // Vertica does not support synonyms natively, so we'll throw an exception
+  public String resolveSynonym(Connection connection, String tableId) throws SQLException {
+    // Vertica does not support synonyms natively,  so we'll throw an exception
     throw new SQLException("Vertica does not support synonyms. Please use views instead.");
   }
 }

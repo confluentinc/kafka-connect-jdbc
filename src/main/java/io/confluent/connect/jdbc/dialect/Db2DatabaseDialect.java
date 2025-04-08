@@ -177,7 +177,8 @@ public class Db2DatabaseDialect extends GenericDatabaseDialect {
     // DB2 supports synonyms through the SYSCAT.SYNONYMS catalog view
     try (PreparedStatement stmt = connection.prepareStatement(
         "SELECT TBOWNER, TBNAME FROM SYSCAT.SYNONYMS WHERE SYNSCHEMA = ? AND SYNNAME = ?")) {
-      stmt.setString(1, tableId.schemaName() != null ? tableId.schemaName() : connection.getMetaData().getUserName());
+      stmt.setString(1, tableId.schemaName() != null 
+                            ? tableId.schemaName() : connection.getMetaData().getUserName());
       stmt.setString(2, tableId.tableName());
       ResultSet rs = stmt.executeQuery();
       if (rs.next()) {

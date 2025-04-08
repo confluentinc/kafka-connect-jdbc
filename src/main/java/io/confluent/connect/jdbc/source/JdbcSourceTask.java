@@ -331,7 +331,8 @@ public class JdbcSourceTask extends SourceTask {
         if ("SYNONYM".equals(tableType)) {
           // Check if the table is a synonym by querying ALL_SYNONYMS
           try (PreparedStatement stmt = conn.prepareStatement(
-              "SELECT TABLE_OWNER, TABLE_NAME FROM ALL_SYNONYMS WHERE OWNER = ? AND SYNONYM_NAME = ?")) {
+              "SELECT TABLE_OWNER, TABLE_NAME FROM ALL_SYNONYMS WHERE OWNER = ? 
+              AND SYNONYM_NAME = ?")) {
             stmt.setString(1, conn.getMetaData().getUserName().toUpperCase());
             stmt.setString(2, table.toUpperCase());
             ResultSet rs = stmt.executeQuery();
@@ -344,7 +345,8 @@ public class JdbcSourceTask extends SourceTask {
               );
             }
           } catch (SQLException e) {
-            // If ALL_SYNONYMS view is not accessible or doesn't exist, fall back to metadata approach
+            // If ALL_SYNONYMS view is available onlt for ORACLE. 
+            // metadata approach will be used for other DBs 
             log.debug("Could not query ALL_SYNONYMS, falling back to metadata approach", e);
             DatabaseMetaData metadata = conn.getMetaData();
             ResultSet tableRs = metadata.getTables(null, null, table, new String[]{"SYNONYM"});
@@ -362,7 +364,8 @@ public class JdbcSourceTask extends SourceTask {
           }
         }
 
-        Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, actualTable, null);
+        Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(
+          conn, actualTable, null);
         Set<String> columnNames = defnsById.keySet().stream().map(ColumnId::name)
             .map(String::toLowerCase).collect(Collectors.toSet());
 

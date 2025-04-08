@@ -501,24 +501,27 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
   public void bindFieldStructUnsupported() throws SQLException {
     Schema structSchema = SchemaBuilder.struct().field("test", Schema.BOOLEAN_SCHEMA).build();
     ColumnDefinition colDef = mock(ColumnDefinition.class);
+    String field = "sample-test";
     when(colDef.type()).thenReturn(Types.BOOLEAN);
-    dialect.bindField(mock(PreparedStatement.class), 1, structSchema, new Struct(structSchema), colDef);
+    dialect.bindField(mock(PreparedStatement.class), 1, structSchema, new Struct(structSchema), colDef, field);
   }
 
   @Test(expected = ConnectException.class)
   public void bindFieldArrayUnsupported() throws SQLException {
     Schema arraySchema = SchemaBuilder.array(Schema.INT8_SCHEMA);
     ColumnDefinition colDef = mock(ColumnDefinition.class);
+    String field = "sample-test";
     when(colDef.type()).thenReturn(Types.ARRAY);
-    dialect.bindField(mock(PreparedStatement.class), 1, arraySchema, Collections.emptyList(), colDef);
+    dialect.bindField(mock(PreparedStatement.class), 1, arraySchema, Collections.emptyList(), colDef, field);
   }
 
   @Test(expected = ConnectException.class)
   public void bindFieldMapUnsupported() throws SQLException {
     Schema mapSchema = SchemaBuilder.map(Schema.INT8_SCHEMA, Schema.INT8_SCHEMA);
     ColumnDefinition colDef = mock(ColumnDefinition.class);
+    String field = "sample-test";
     when(colDef.type()).thenReturn(Types.STRUCT);
-    dialect.bindField(mock(PreparedStatement.class), 1, mapSchema, Collections.emptyMap(), colDef);
+    dialect.bindField(mock(PreparedStatement.class), 1, mapSchema, Collections.emptyMap(), colDef, field);
   }
 
   protected void assertSanitizedUrl(String url, String expectedSanitizedUrl) {
@@ -529,6 +532,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
       throws SQLException {
     PreparedStatement statement = mock(PreparedStatement.class);
     ColumnDefinition colDef = mock(ColumnDefinition.class);
+    String field = "sample-test";
     if (schema.name() != null) {
       switch (schema.name()) {
         case Decimal.LOGICAL_NAME:
@@ -591,7 +595,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
       }
     }
 
-    dialect.bindField(statement, index, schema, value, colDef);
+    dialect.bindField(statement, index, schema, value, colDef, field);
     return verify(statement, times(1));
   }
 }

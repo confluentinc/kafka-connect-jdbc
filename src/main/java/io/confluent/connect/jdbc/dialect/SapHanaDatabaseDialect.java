@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -96,6 +97,10 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
       case INT32:
         return "INTEGER";
       case INT64:
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_CONVERSION_FIELDS).contains(field.name())) {
+          return "TIMESTAMP";
+        }
         return "BIGINT";
       case FLOAT32:
         return "REAL";
@@ -104,6 +109,10 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "BOOLEAN";
       case STRING:
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_CONVERSION_FIELDS).contains(field.name())) {
+          return "TIMESTAMP";
+        }
         return "VARCHAR(1000)";
       case BYTES:
         return "BLOB";

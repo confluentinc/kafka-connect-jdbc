@@ -123,8 +123,7 @@ public class BufferedRecords {
           config,
           connection,
           tableId,
-          fieldsMetadata
-      );
+          fieldsMetadata);
       final String insertSql = getInsertSql();
       final String deleteSql = getDeleteSql();
       log.debug(

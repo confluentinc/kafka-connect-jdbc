@@ -568,4 +568,11 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
                 .replaceAll("(?i)(;keyStoreSecret=)[^;]*", "$1****")
                 .replaceAll("(?i)(;gsscredential=)[^;]*", "$1****");
   }
+
+  @Override
+  public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
+    throw new SQLException(
+        "SQL Server does not support synonyms. Please use views instead."
+    );
+  }
 }

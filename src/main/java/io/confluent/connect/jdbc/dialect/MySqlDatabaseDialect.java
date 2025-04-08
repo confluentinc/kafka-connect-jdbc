@@ -169,4 +169,11 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
                 .replaceAll("(?i)([(,]password=)[^,)]*", "$1****")
                 .replaceAll("(://[^:]*:)([^@]*)@", "$1****@");
   }
+
+  @Override
+  public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
+    throw new SQLException(
+        "MySQL does not support synonyms. Please use views instead."
+    );
+  }
 }

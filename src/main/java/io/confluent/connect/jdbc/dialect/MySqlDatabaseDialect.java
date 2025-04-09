@@ -121,7 +121,12 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "TINYINT";
       case STRING:
-        return "TEXT";
+        // MySQL only allows keys with fixed length type for keys up to a maximum length of 256
+        if (field.isPrimaryKey()) {
+          return "VARCHAR(256)";
+        } else {
+          return "TEXT";
+        }
       case BYTES:
         return "VARBINARY(1024)";
       default:

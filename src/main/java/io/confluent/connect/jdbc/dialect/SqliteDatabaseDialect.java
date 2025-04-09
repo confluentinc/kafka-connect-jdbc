@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -86,11 +87,19 @@ public class SqliteDatabaseDialect extends GenericDatabaseDialect {
       case INT16:
       case INT32:
       case INT64:
+        if (config instanceof JdbcSinkConfig
+            && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
+          return "NUMERIC";
+        }
         return "INTEGER";
       case FLOAT32:
       case FLOAT64:
         return "REAL";
       case STRING:
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
+          return "NUMERIC";
+        }
         return "TEXT";
       case BYTES:
         return "BLOB";

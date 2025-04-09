@@ -23,6 +23,7 @@ import io.confluent.connect.jdbc.util.TableId;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Collections;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -53,7 +54,7 @@ public class TableQuerierTest {
     when(databaseDialectMock.expressionBuilder())
       .thenReturn(ExpressionBuilder.create());
     when(databaseDialectMock.criteriaFor(Matchers.any(ColumnId.class), Matchers.anyListOf(ColumnId.class)))
-      .thenReturn(new TimestampIncrementingCriteria(new ColumnId(new TableId(null,null,TABLE_NAME),INCREMENTING_COLUMN_NAME), null,null));
+      .thenReturn(new TimestampIncrementingCriteria(new ColumnId(new TableId(null,null,TABLE_NAME),INCREMENTING_COLUMN_NAME),null, null));
 	    
     connectionMock = mock(Connection.class);	  
   }
@@ -65,6 +66,7 @@ public class TableQuerierTest {
                                                     QueryMode.TABLE, 
                                                     TABLE_NAME, 
                                                     null, 
+                                                    null,
                                                     null,
                                                     INCREMENTING_COLUMN_NAME, 
                                                     null,
@@ -86,7 +88,8 @@ public class TableQuerierTest {
                                                     QueryMode.QUERY, 
                                                     QUERY, 
                                                     null, 
-                                                    null, 
+                                                    null,
+                                                    null,
                                                     INCREMENTING_COLUMN_NAME, 
                                                     null, 
                                                     TIMESTAMP_DELAY, 
@@ -98,6 +101,28 @@ public class TableQuerierTest {
     querier.createPreparedStatement(connectionMock);
 
     verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM name WHERE \"name\".\"column\" > ? ORDER BY \"name\".\"column\" ASC /* SUFFIX */"));
+  }
+
+  @Test
+  public void testTimestampIncrementingTableQuerierInQueryModeWithCustomParametrizedQuery() throws SQLException {
+    TimestampIncrementingTableQuerier querier = new TimestampIncrementingTableQuerier(
+            databaseDialectMock,
+            QueryMode.QUERY,
+            QUERY + " WHERE incrementing_column > ? ORDER BY incrementing_column ASC",
+            null,
+            null,
+            Collections.singletonList(JdbcSourceConnectorConfig.QueryParameter.INCREMENTING_OFFSET),
+            INCREMENTING_COLUMN_NAME,
+            null,
+            TIMESTAMP_DELAY,
+            null,
+            "", /* default value */
+            JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL
+    );
+
+    querier.createPreparedStatement(connectionMock);
+
+    verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM name WHERE incrementing_column > ? ORDER BY incrementing_column ASC"));
   }
   
   @Test

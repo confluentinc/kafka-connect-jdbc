@@ -350,7 +350,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
         return "int";
       case INT64:
         if (config instanceof JdbcSinkConfig
-             && config.getList(JdbcSinkConfig.TIMESTAMP_CONVERSION_FIELDS).contains(field.name())) {
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
           return "datetime2";
         }
         return "bigint";
@@ -362,7 +362,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
         return "bit";
       case STRING:
         if (config instanceof JdbcSinkConfig
-             && config.getList(JdbcSinkConfig.TIMESTAMP_CONVERSION_FIELDS).contains(field.name())) {
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
           return "datetime2";
         } else if (field.isPrimaryKey()) {
           // Should be no more than 900 which is the MSSQL constraint

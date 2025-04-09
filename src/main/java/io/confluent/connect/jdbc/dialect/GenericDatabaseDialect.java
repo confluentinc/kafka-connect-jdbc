@@ -163,7 +163,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   private final int batchMaxRows;
   private final TimeZone timeZone;
   private final JdbcSinkConfig.TimestampPrecisionMode timestampPrecisionMode;
-  private final Set<String> timestampCoversionFields;
+  private final Set<String> timestampFieldsList;
   private final TimeZone dateTimeZone;
   private final JdbcSourceConnectorConfig.TimestampGranularity tsGranularity;
 
@@ -202,7 +202,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           config.getString(JdbcSinkConfig.QUOTE_SQL_IDENTIFIERS_CONFIG)
       );
       timestampPrecisionMode = sinkConfig.timestampPrecisionMode;
-      timestampCoversionFields = sinkConfig.timestampConversionFields;
+      timestampFieldsList = sinkConfig.timestampFieldsList;
 
     } else {
       catalogPattern = config.getString(JdbcSourceTaskConfig.CATALOG_PATTERN_CONFIG);
@@ -212,7 +212,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           config.getString(JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_CONFIG)
       );
       timestampPrecisionMode = null;
-      timestampCoversionFields = null;
+      timestampFieldsList = null;
     }
     if (config instanceof JdbcSourceConnectorConfig) {
       mapNumerics = ((JdbcSourceConnectorConfig)config).numericMapping();
@@ -1736,7 +1736,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         break;
       case INT64:
         if (config instanceof JdbcSinkConfig
-            && timestampCoversionFields.contains(fieldName)) {
+            && timestampFieldsList.contains(fieldName)) {
           if (timestampPrecisionMode
               == JdbcSinkConfig.TimestampPrecisionMode.MICROSECONDS) {
             Timestamp ts = DateTimeUtils.formatSinkMicrosTimestamp((Long) value);
@@ -1761,7 +1761,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         break;
       case STRING:
         if (config instanceof JdbcSinkConfig
-            && timestampCoversionFields.contains(fieldName)) {
+            && timestampFieldsList.contains(fieldName)) {
           if (timestampPrecisionMode
               == JdbcSinkConfig.TimestampPrecisionMode.MICROSECONDS) {
             Timestamp ts = DateTimeUtils.formatSinkMicrosTimestamp((String) value);

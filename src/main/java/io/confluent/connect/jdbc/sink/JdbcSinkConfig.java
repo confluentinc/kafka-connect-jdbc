@@ -277,15 +277,15 @@ public class JdbcSinkConfig extends AbstractConfig {
           + "the timestamp will be converted to microsecond precision. If set to "
           + "nanoseconds the timestamp will be converted to nanoseconds precision.";
 
-  public static final String TIMESTAMP_CONVERSION_FIELDS = "timestamp.conversion.fields";
-  private static final String TIMESTAMP_CONVERSION_FIELDS_DEFAULT = "";
-  private static final String TIMESTAMP_CONVERSION_FIELDS_DOC =
+  public static final String TIMESTAMP_FIELDS_LIST = "timestamp.fields.list";
+  private static final String TIMESTAMP_FIELDS_LIST_DEFAULT = "";
+  private static final String TIMESTAMP_FIELDS_LIST_DOC =
       "List of comma-separated record value timestamp field names that should be converted "
           + "to timestamps. These fields will be converted based on precision mode specified in "
           + TIMESTAMP_PRECISION_MODE_CONFIG
           + "(microseconds or nanoseconds). The timestamp fields included here "
           + "should be Long or String type and nested fields are not supported.";
-  private static final String TIMESTAMP_CONVERSION_FIELDS_DISPLAY = "Timestamp Fields Whitelist";
+  private static final String TIMESTAMP_FIELDS_LIST_DISPLAY = "Timestamp Fields Whitelist";
 
   public static final String QUOTE_SQL_IDENTIFIERS_CONFIG =
       JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_CONFIG;
@@ -556,15 +556,15 @@ public class JdbcSinkConfig extends AbstractConfig {
             DATE_TIMEZONE_RECOMMENDER
         )
         .define(
-            TIMESTAMP_CONVERSION_FIELDS,
+            TIMESTAMP_FIELDS_LIST,
             ConfigDef.Type.LIST,
-            TIMESTAMP_CONVERSION_FIELDS_DEFAULT,
+            TIMESTAMP_FIELDS_LIST_DEFAULT,
             ConfigDef.Importance.MEDIUM,
-            TIMESTAMP_CONVERSION_FIELDS_DOC,
+            TIMESTAMP_FIELDS_LIST_DOC,
             DATAMAPPING_GROUP,
             7,
             ConfigDef.Width.MEDIUM,
-            TIMESTAMP_CONVERSION_FIELDS_DISPLAY
+            TIMESTAMP_FIELDS_LIST_DISPLAY
         )
         .define(
             TIMESTAMP_PRECISION_MODE_CONFIG,
@@ -673,7 +673,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final PrimaryKeyMode pkMode;
   public final List<String> pkFields;
   public final Set<String> fieldsWhitelist;
-  public final Set<String> timestampConversionFields;
+  public final Set<String> timestampFieldsList;
   public final String dialectName;
   public final TimeZone timeZone;
   public final TimeZone dateTimeZone;
@@ -697,7 +697,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     replaceNullWithDefault = getBoolean(REPLACE_NULL_WITH_DEFAULT);
     maxRetries = getInt(MAX_RETRIES);
     retryBackoffMs = getInt(RETRY_BACKOFF_MS);
-    timestampConversionFields = new HashSet<>(getList(TIMESTAMP_CONVERSION_FIELDS));
+    timestampFieldsList = new HashSet<>(getList(TIMESTAMP_FIELDS_LIST));
     autoCreate = getBoolean(AUTO_CREATE);
     autoEvolve = getBoolean(AUTO_EVOLVE);
     insertMode = InsertMode.valueOf(getString(INSERT_MODE).toUpperCase());

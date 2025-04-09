@@ -251,7 +251,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
         return "NUMBER(10,0)";
       case INT64:
         if (config instanceof JdbcSinkConfig
-             && config.getList(JdbcSinkConfig.TIMESTAMP_CONVERSION_FIELDS).contains(field.name())) {
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
           if (((JdbcSinkConfig) config).timestampPrecisionMode
                == JdbcSinkConfig.TimestampPrecisionMode.MICROSECONDS) {
             return "TIMESTAMP(6)";
@@ -270,7 +270,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
         return "NUMBER(1,0)";
       case STRING:
         if (config instanceof JdbcSinkConfig
-            && config.getList(JdbcSinkConfig.TIMESTAMP_CONVERSION_FIELDS).contains(field.name())) {
+            && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
           if (((JdbcSinkConfig) config).timestampPrecisionMode
               == JdbcSinkConfig.TimestampPrecisionMode.MICROSECONDS) {
             return "TIMESTAMP(6)";

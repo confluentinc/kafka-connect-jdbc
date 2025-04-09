@@ -320,7 +320,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         return "INT";
       case INT64:
         if (config instanceof JdbcSinkConfig
-             && config.getList(JdbcSinkConfig.TIMESTAMP_CONVERSION_FIELDS).contains(field.name())) {
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
           return "TIMESTAMP";
         }
         return "BIGINT";
@@ -332,7 +332,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         return "BOOLEAN";
       case STRING:
         if (config instanceof JdbcSinkConfig
-             && config.getList(JdbcSinkConfig.TIMESTAMP_CONVERSION_FIELDS).contains(field.name())) {
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
           return "TIMESTAMP";
         }
         return "TEXT";

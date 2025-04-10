@@ -466,6 +466,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
   public void shouldBindStringAccordingToColumnDef() throws SQLException {
     int index = ThreadLocalRandom.current().nextInt();
     String value = "random text";
+    String field = "sample-test";
     Schema schema = Schema.STRING_SCHEMA;
     PreparedStatement stmtVarchar = mock(PreparedStatement.class);
     ColumnDefinition colDefVarchar = mock(ColumnDefinition.class);
@@ -479,13 +480,13 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
     ColumnDefinition colDefNvarchar = mock(ColumnDefinition.class);
     when(colDefNvarchar.type()).thenReturn(Types.NVARCHAR);
 
-    dialect.bindField(stmtVarchar, index, schema, value, colDefVarchar);
+    dialect.bindField(stmtVarchar, index, schema, value, colDefVarchar, field);
     verify(stmtVarchar, times(1)).setString(index, value);
 
-    dialect.bindField(stmtNchar, index, schema, value, colDefNchar);
+    dialect.bindField(stmtNchar, index, schema, value, colDefNchar, field);
     verify(stmtNchar, times(1)).setNString(index, value);
 
-    dialect.bindField(stmtNvarchar, index, schema, value, colDefNvarchar);
+    dialect.bindField(stmtNvarchar, index, schema, value, colDefNvarchar, field);
     verify(stmtNvarchar, times(1)).setNString(index, value);
   }
 }

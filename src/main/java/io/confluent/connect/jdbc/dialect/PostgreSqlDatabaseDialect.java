@@ -16,6 +16,7 @@
 package io.confluent.connect.jdbc.dialect;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
@@ -318,6 +319,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       case INT32:
         return "INT";
       case INT64:
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
+          return "TIMESTAMP";
+        }
         return "BIGINT";
       case FLOAT32:
         return "REAL";
@@ -326,6 +331,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "BOOLEAN";
       case STRING:
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
+          return "TIMESTAMP";
+        }
         return "TEXT";
       case BYTES:
         return "BYTEA";
@@ -499,9 +508,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       PreparedStatement statement,
       int index,
       Schema schema,
-      Object value
+      Object value,
+      String fieldName
   ) throws SQLException {
-
     switch (schema.type()) {
       case ARRAY: {
         Class<?> valueClass = value.getClass();
@@ -564,7 +573,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       default:
         break;
     }
-    return super.maybeBindPrimitive(statement, index, schema, value);
+    return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
   }
 
   /**

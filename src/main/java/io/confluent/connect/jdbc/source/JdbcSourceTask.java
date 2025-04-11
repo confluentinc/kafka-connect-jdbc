@@ -17,6 +17,8 @@ package io.confluent.connect.jdbc.source;
 
 import java.sql.SQLNonTransientException;
 import java.util.TimeZone;
+
+import oracle.jdbc.driver.OracleConnection;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -59,6 +61,7 @@ import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIso
 public class JdbcSourceTask extends SourceTask {
   // When no results, periodically return control flow to caller to give it a chance to pause us.
   private static final int CONSECUTIVE_EMPTY_RESULTS_BEFORE_RETURN = 3;
+  private static final String TABLE_TYPE_SYNONYM = "SYNONYM";
 
   private static final Logger log = LoggerFactory.getLogger(JdbcSourceTask.class);
 
@@ -195,6 +198,12 @@ public class JdbcSourceTask extends SourceTask {
         = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
     TimeZone timeZone = config.timeZone();
     String suffix = config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG).trim();
+
+    final List<String> tableTypes = config.getList(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG);
+    final Connection conn = cachedConnectionProvider.getConnection();
+    if (tableTypes.contains(TABLE_TYPE_SYNONYM) && conn instanceof OracleConnection) {
+      ((OracleConnection) conn).setIncludeSynonyms(true);
+    }
 
     if (queryMode.equals(TableQuerier.QueryMode.TABLE)) {
       validateColumnsExist(mode, incrementingColumn, timestampColumns, tables.get(0));

@@ -22,5 +22,5 @@
               files="(DataConverter|GenericDatabaseDialect|JdbcSourceTask).java"/>
 
     <suppress checks="ParameterNumber"
-              files="(ColumnDefinition|GenericDatabaseDialect|SqlServerDatabaseDialect|PostgreSqlDatabaseDialect|TimestampIncrementingTableQuerier).java"/>
+              files="(ColumnDefinition|GenericDatabaseDialect|SqlServerDatabaseDialect|PostgreSqlDatabaseDialect|TimestampIncrementingTableQuerier|TimestampTableQuerier).java"/>
 </suppressions>

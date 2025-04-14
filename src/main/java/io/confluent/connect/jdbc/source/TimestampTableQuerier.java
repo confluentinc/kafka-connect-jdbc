@@ -34,6 +34,7 @@ import java.util.Map;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TimestampGranularity;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.QueryParameter;
 import io.confluent.connect.jdbc.source.SchemaMapping.FieldSetter;
 
 /**
@@ -60,6 +61,7 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
       String name,
       String topicPrefix,
       List<String> timestampColumnNames,
+      List<QueryParameter> queryParameters,
       Map<String, Object> offsetMap,
       Long timestampDelay,
       TimeZone timeZone,
@@ -72,6 +74,7 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
         name,
         topicPrefix,
         timestampColumnNames,
+        queryParameters,
         null,
         offsetMap,
         timestampDelay,
@@ -156,7 +159,8 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
         schemaMapping.schema(),
         record,
         offset,
-        timestampGranularity
+        timestampGranularity,
+        !queryParameters.isEmpty()
     );
     Timestamp timestamp = timestampOffset.hasTimestampOffset()
                           ? timestampOffset.getTimestampOffset()

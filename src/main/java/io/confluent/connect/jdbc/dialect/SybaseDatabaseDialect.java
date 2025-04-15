@@ -357,7 +357,8 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
     try (PreparedStatement stmt = connection.prepareStatement(
         "SELECT base_object_name FROM sys.synonyms WHERE name = ? AND "
         + "schema_id = SCHEMA_ID()")) {
-      stmt.setString(1, synonymName);
+      String tableName = parseTableIdentifier(synonymName).tableName();
+      stmt.setString(1, tableName);
       ResultSet rs = stmt.executeQuery();
       if (rs.next()) {
         return rs.getString("base_object_name");

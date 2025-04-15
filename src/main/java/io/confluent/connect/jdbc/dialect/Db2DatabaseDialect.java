@@ -178,9 +178,10 @@ public class Db2DatabaseDialect extends GenericDatabaseDialect {
     try (PreparedStatement stmt = connection.prepareStatement(
         "SELECT TBOWNER, TBNAME FROM SYSCAT.SYNONYMS WHERE SYNSCHEMA = ? AND SYNNAME = ?")) {
       // Use the current schema if not specified
+      String tableName = parseTableIdentifier(synonymName).tableName();
       String schema = connection.getMetaData().getUserName();
       stmt.setString(1, schema);
-      stmt.setString(2, synonymName);
+      stmt.setString(2, tableName);
       ResultSet rs = stmt.executeQuery();
       if (rs.next()) {
         return rs.getString("TBNAME");

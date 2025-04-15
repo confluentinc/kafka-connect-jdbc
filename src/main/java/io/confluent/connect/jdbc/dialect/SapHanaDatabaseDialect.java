@@ -169,9 +169,10 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
         "SELECT SCHEMA_NAME, TARGET_SCHEMA_NAME, TARGET_OBJECT_NAME "
         + "FROM SYS.SYNONYMS WHERE SCHEMA_NAME = ? AND SYNONYM_NAME = ?")) {
       // Use the current schema if not specified
+      String tableName = parseTableIdentifier(synonymName).tableName();
       String schema = connection.getMetaData().getUserName();
       stmt.setString(1, schema);
-      stmt.setString(2, synonymName);
+      stmt.setString(2, tableName);
       ResultSet rs = stmt.executeQuery();
       if (rs.next()) {
         String targetSchema = rs.getString("TARGET_SCHEMA_NAME");

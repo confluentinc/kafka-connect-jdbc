@@ -327,10 +327,11 @@ public class JdbcSourceTask extends SourceTask {
         conn.setAutoCommit(true);
 
         String actualTable = table;
-        String tableType = config.getString(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG);
+        List<String> tableType = config.getList(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG);
         
-        if ("SYNONYM".equals(tableType)) {
+        if (tableType.contains("SYNONYM")) {
           actualTable = dialect.resolveSynonym(conn, table);
+          log.info("Resolved synonym {} to base table {}", table, actualTable);
           if (actualTable == null) {
             throw new ConfigException(
                 "Could not resolve base table for synonym: " + table

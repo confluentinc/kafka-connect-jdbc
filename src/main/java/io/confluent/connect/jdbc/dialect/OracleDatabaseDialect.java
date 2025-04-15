@@ -389,8 +389,9 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     try (PreparedStatement stmt = connection.prepareStatement(
         "SELECT TABLE_OWNER, TABLE_NAME FROM ALL_SYNONYMS WHERE OWNER = ? AND "
         + "SYNONYM_NAME = ?")) {
+      String tableName = parseTableIdentifier(synonymName).tableName();
       stmt.setString(1, connection.getMetaData().getUserName().toUpperCase());
-      stmt.setString(2, synonymName.toUpperCase());
+      stmt.setString(2, tableName.toUpperCase());
       ResultSet rs = stmt.executeQuery();
       if (rs.next()) {
         return rs.getString("TABLE_NAME");

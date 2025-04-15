@@ -208,6 +208,7 @@ public class TableMonitorThread extends Thread {
     } else {
       filteredTables.addAll(allTables);
     }
+
     List<TableId> priorTablesSnapshot = tables.getAndSet(filteredTables);
     if (!Objects.equals(priorTablesSnapshot, filteredTables)) {
       log.info("Filtered tables size: {}", filteredTables);

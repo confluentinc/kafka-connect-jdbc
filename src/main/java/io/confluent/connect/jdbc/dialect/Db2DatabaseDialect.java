@@ -22,6 +22,10 @@ import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Collection;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
@@ -189,5 +193,24 @@ public class Db2DatabaseDialect extends GenericDatabaseDialect {
     // DB2 has semicolon delimited property name-value pairs
     return super.sanitizedUrl(url)
                 .replaceAll("(?i)([:;]password=)[^;]*", "$1****");
+  }
+
+  @Override
+  public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
+    // DB2 supports synonyms through the SYSCAT.SYNONYMS catalog view
+    try (PreparedStatement stmt = connection.prepareStatement(
+        "SELECT TBOWNER, TBNAME FROM SYSCAT.SYNONYMS WHERE SYNSCHEMA = ? AND SYNNAME = ?")) {
+      // Use the current schema if not specified
+      String tableName = parseTableIdentifier(synonymName).tableName();
+      String schema = connection.getMetaData().getUserName();
+      stmt.setString(1, schema);
+      stmt.setString(2, tableName);
+      ResultSet rs = stmt.executeQuery();
+      if (rs.next()) {
+        return rs.getString("TBNAME");
+      }
+    }
+    // Fall back to generic implementation if SYSCAT.SYNONYMS query fails
+    return super.resolveSynonym(connection, synonymName);
   }
 }

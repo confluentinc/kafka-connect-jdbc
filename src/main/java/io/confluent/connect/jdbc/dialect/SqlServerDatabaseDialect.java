@@ -572,6 +572,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
 
   @Override
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
-    throw new SQLException("Sql Server Database does not support synonyms. Please use views instead.");
+    throw new SQLException(
+        "Sql Server Database does not support synonyms. Please use views instead.");
   }
 }

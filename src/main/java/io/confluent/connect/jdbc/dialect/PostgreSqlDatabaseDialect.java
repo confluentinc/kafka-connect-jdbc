@@ -100,6 +100,32 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     super(config, new IdentifierRules(".", "\"", "\""));
   }
 
+  /**
+   * Resolve a synonym to its target table name.
+   * PostgreSQL does not support synonyms, so this method always throws an exception.
+   *
+   * @param connection the database connection
+   * @param synonymName the synonym name to resolve
+   * @return never returns, always throws SQLException
+   * @throws SQLException with a message indicating that PostgreSQL does not support synonyms
+   */
+  @Override
+  public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
+    // PostgreSQL-specific implementation using pg_synonym
+    try (PreparedStatement stmt = connection.prepareStatement(
+        "SELECT synobjname FROM pg_synonym WHERE synname = ? AND "
+        + "nspname = current_schema()")) {
+      String tableName = parseTableIdentifier(synonymName).tableName();
+      stmt.setString(1, tableName);
+      ResultSet rs = stmt.executeQuery();
+      if (rs.next()) {
+        return rs.getString("synobjname");
+      }
+    }
+    // Fall back to generic implementation if pg_synonym query fails
+    return super.resolveSynonym(connection, synonymName);
+  }
+
   @Override
   public Connection getConnection() throws SQLException {
     Connection result = super.getConnection();

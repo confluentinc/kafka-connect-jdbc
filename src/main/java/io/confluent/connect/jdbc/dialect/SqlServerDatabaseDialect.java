@@ -30,6 +30,7 @@ import org.slf4j.LoggerFactory;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.time.ZonedDateTime;
@@ -576,5 +577,10 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
                 .replaceAll("(?i)(;password=)[^;]*", "$1****")
                 .replaceAll("(?i)(;keyStoreSecret=)[^;]*", "$1****")
                 .replaceAll("(?i)(;gsscredential=)[^;]*", "$1****");
+  }
+
+  @Override
+  public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
+    throw new SQLException("Sql Server Database does not support synonyms. Please use views instead.");
   }
 }

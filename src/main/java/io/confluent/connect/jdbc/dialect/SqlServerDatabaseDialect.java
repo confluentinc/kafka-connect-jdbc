@@ -96,6 +96,8 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
 
   private boolean verifiedSqlServerTimestamp = false;
 
+  List<String> tableTypeConfig = config.getList(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG);
+
   /**
    * The provider for {@link SqlServerDatabaseDialect}.
    */
@@ -522,28 +524,24 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     }
 
     // Get synonyms from sys.synonyms on a separate query
-    if (config instanceof JdbcSourceConnectorConfig) {
-      List<String> tableTypeConfig = config.getList(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG);
-      // If SYNONYM is requested, get synonyms from sys.synonyms
-      if (tableTypeConfig.contains("SYNONYM")) {
-        String synonymQuery =
-            "SELECT "
-                + "DB_NAME() as catalog_name, "
-                + "SCHEMA_NAME(schema_id) as schema_name, "
-                + "name as synonym_name "
-                + "FROM sys.synonyms";
+    if (tableTypeConfig.contains("SYNONYM")) {
+      String synonymQuery =
+          "SELECT "
+              + "DB_NAME() as catalog_name, "
+              + "SCHEMA_NAME(schema_id) as schema_name, "
+              + "name as synonym_name "
+              + "FROM sys.synonyms";
 
-        try (Statement stmt = conn.createStatement();
-            ResultSet synonymRs = stmt.executeQuery(synonymQuery)) {
-          while (synonymRs.next()) {
-            String catalogName = synonymRs.getString("catalog_name");
-            String schemaName = synonymRs.getString("schema_name");
-            String synonymName = synonymRs.getString("synonym_name");
+      try (Statement stmt = conn.createStatement();
+          ResultSet synonymRs = stmt.executeQuery(synonymQuery)) {
+        while (synonymRs.next()) {
+          String catalogName = synonymRs.getString(1);
+          String schemaName = synonymRs.getString(2);
+          String synonymName = synonymRs.getString(3);
 
-            TableId tableId = new TableId(catalogName, schemaName, synonymName);
-            if (includeTable(tableId)) {
-              tableIds.add(tableId);
-            }
+          TableId tableId = new TableId(catalogName, schemaName, synonymName);
+          if (includeTable(tableId)) {
+            tableIds.add(tableId);
           }
         }
       }

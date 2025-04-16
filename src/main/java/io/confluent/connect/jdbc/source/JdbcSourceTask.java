@@ -98,6 +98,7 @@ public class JdbcSourceTask extends SourceTask {
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
     Boolean tablesFetched = config.getBoolean(JdbcSourceTaskConfig.TABLES_FETCHED);
     String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
+    List<String> tableType = config.getList(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG);
 
     if ((tables.isEmpty() && query.isEmpty())) {
       // We are still waiting for the tables call to complete.
@@ -197,7 +198,7 @@ public class JdbcSourceTask extends SourceTask {
     String suffix = config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG).trim();
 
     if (queryMode.equals(TableQuerier.QueryMode.TABLE)) {
-      validateColumnsExist(mode, incrementingColumn, timestampColumns, tables.get(0));
+      validateColumnsExist(mode, incrementingColumn, timestampColumns, tables.get(0), tableType);
     }
 
     for (String tableOrQuery : tablesOrQuery) {
@@ -317,7 +318,8 @@ public class JdbcSourceTask extends SourceTask {
       String mode, 
       String incrementingColumn, 
       List<String> timestampColumns, 
-      String table
+      String table,
+      List<String> tableType
   ) {
     try {
       final Connection conn = cachedConnectionProvider.getConnection();
@@ -325,7 +327,6 @@ public class JdbcSourceTask extends SourceTask {
       try {
         conn.setAutoCommit(true);
         String actualTable = table;
-        List<String> tableType = config.getList(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG);
 
         Map<ColumnId, ColumnDefinition> defnsById =
             dialect.describeColumns(conn, table, null);

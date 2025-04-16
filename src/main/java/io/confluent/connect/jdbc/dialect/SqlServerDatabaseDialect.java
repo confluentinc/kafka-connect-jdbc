@@ -16,6 +16,7 @@
 package io.confluent.connect.jdbc.dialect;
 
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -27,18 +28,22 @@ import org.apache.kafka.connect.data.Timestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Types;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Calendar;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.TimeZone;
+import java.util.Calendar;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode;
@@ -505,6 +510,58 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
   }
 
   @Override
+  public List<TableId> tableIds(Connection conn) throws SQLException {
+    DatabaseMetaData metadata = conn.getMetaData();
+    String[] tableTypes = tableTypes(metadata, this.tableTypes);
+    String tableTypeDisplay = displayableTableTypes(tableTypes, ", ");
+    log.debug("Using {} dialect to get {}", this, tableTypeDisplay);
+    List<TableId> tableIds = new ArrayList<>();
+
+    // Get regular tables using metadata connection
+    try (ResultSet rs = metadata.getTables(catalogPattern(), schemaPattern(), "%", tableTypes)) {
+      while (rs.next()) {
+        String catalogName = rs.getString(1);
+        String schemaName = rs.getString(2);
+        String tableName = rs.getString(3);
+        TableId tableId = new TableId(catalogName, schemaName, tableName);
+        if (includeTable(tableId)) {
+          tableIds.add(tableId);
+        }
+      }
+    }
+
+    // Get synonyms from sys.synonyms on a separate query
+    if (config instanceof JdbcSourceConnectorConfig) {
+      List<String> tableTypeConfig = config.getList(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG);
+      // If SYNONYM is requested, get synonyms from sys.synonyms
+      if (tableTypeConfig.contains("SYNONYM")) {
+        String synonymQuery =
+            "SELECT "
+                + "DB_NAME() as catalog_name, "
+                + "SCHEMA_NAME(schema_id) as schema_name, "
+                + "name as synonym_name "
+                + "FROM sys.synonyms";
+
+        try (Statement stmt = conn.createStatement();
+            ResultSet synonymRs = stmt.executeQuery(synonymQuery)) {
+          while (synonymRs.next()) {
+            String catalogName = synonymRs.getString("catalog_name");
+            String schemaName = synonymRs.getString("schema_name");
+            String synonymName = synonymRs.getString("synonym_name");
+
+            TableId tableId = new TableId(catalogName, schemaName, synonymName);
+            if (includeTable(tableId)) {
+              tableIds.add(tableId);
+            }
+          }
+        }
+      }
+    }
+    log.debug("Used {} dialect to find {} {}", this, tableIds.size(), tableTypeDisplay);
+    return tableIds;
+  }
+
+  @Override
   protected ColumnDefinition columnDefinition(
       ResultSet resultSet,
       ColumnId id,
@@ -576,5 +633,24 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
                 .replaceAll("(?i)(;password=)[^;]*", "$1****")
                 .replaceAll("(?i)(;keyStoreSecret=)[^;]*", "$1****")
                 .replaceAll("(?i)(;gsscredential=)[^;]*", "$1****");
+  }
+
+  @Override
+  public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
+    // Oracle-specific implementation using ALL_SYNONYMS view
+    try (PreparedStatement stmt =
+        connection.prepareStatement(
+            "SELECT PARSENAME(s.base_object_name, 2) AS TABLE_OWNER,"
+                + "PARSENAME(s.base_object_name, 1) "
+                + "AS TABLE_NAME FROM sys.synonyms s WHERE s.name = ?; ")) {
+      String tableName = parseTableIdentifier(synonymName).tableName();
+      stmt.setString(1, tableName.toUpperCase());
+      ResultSet rs = stmt.executeQuery();
+      if (rs.next()) {
+        return rs.getString("TABLE_NAME");
+      }
+    }
+    // Fall back to generic implementation if ALL_SYNONYMS query fails
+    return super.resolveSynonym(connection, synonymName);
   }
 }

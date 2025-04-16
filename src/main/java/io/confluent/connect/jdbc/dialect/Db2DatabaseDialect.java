@@ -172,6 +172,6 @@ public class Db2DatabaseDialect extends GenericDatabaseDialect {
 
   @Override
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
-    throw new SQLException("IBM DB2 does not support synonyms. Please use views instead.");
+    throw new SQLException("DB2 does not support synonyms. Please use views instead.");
   }
 }

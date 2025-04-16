@@ -175,6 +175,7 @@ public class TableMonitorThread extends Thread {
     final List<TableId> allTables;
     try {
       allTables = dialect.tableIds(connectionProvider.getConnection());
+      log.debug("Got the following tables: {}", allTables);
     } catch (SQLException e) {
       log.error(
           "Error while trying to get updated table list, ignoring and waiting for next table poll"
@@ -207,6 +208,7 @@ public class TableMonitorThread extends Thread {
     } else {
       filteredTables.addAll(allTables);
     }
+
     List<TableId> priorTablesSnapshot = tables.getAndSet(filteredTables);
     if (!Objects.equals(priorTablesSnapshot, filteredTables)) {
       log.info("Filtered tables size: {}", filteredTables);

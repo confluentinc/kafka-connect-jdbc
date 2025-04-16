@@ -320,48 +320,36 @@ public class JdbcSourceTask extends SourceTask {
       String table
   ) {
     try {
-      log.info("Validating columns exist for table: {}", table);
       final Connection conn = cachedConnectionProvider.getConnection();
       boolean autoCommit = conn.getAutoCommit();
       try {
-        log.info("Validating columns exist for table");
         conn.setAutoCommit(true);
-
         String actualTable = table;
         List<String> tableType = config.getList(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG);
-        log.info("Table type is {}", tableType);
-        
-        if (tableType.contains("SYNONYM")) {
-          log.info("Table is a synonym");
+
+        Map<ColumnId, ColumnDefinition> defnsById =
+            dialect.describeColumns(conn, table, null);
+
+        // If the table is a synonym, resolve it to the base table
+        if (tableType.contains("SYNONYM") && defnsById.isEmpty()) {
           actualTable = dialect.resolveSynonym(conn, table);
-          log.info("Resolved synonym {} to base table {}", table, actualTable);
+          log.debug("Resolved synonym {} to base table {}", table, actualTable);
           if (actualTable == null) {
-            throw new ConfigException(
-                "Could not resolve base table for synonym: " + table
-            );
+            throw new ConfigException("Could not resolve base table for synonym: " + table);
+          } else {
+            defnsById =
+             dialect.describeColumns(conn, actualTable, null);
           }
-          log.info("Resolved synonym {} to base table {}", table, actualTable);
         }
 
-        Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(
-            conn, 
-            actualTable, 
-            null
-        );
-        log.info("Columns in table {} are {}", actualTable, defnsById);
         Set<String> columnNames = defnsById.keySet().stream()
             .map(ColumnId::name)
             .map(String::toLowerCase)
             .collect(Collectors.toSet());
-        log.info("Column names in table {} are {}", actualTable, columnNames);
         if ((mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)
             || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING))
             && !incrementingColumn.isEmpty()
             && !columnNames.contains(incrementingColumn.toLowerCase(Locale.getDefault()))) {
-          log.info(
-              "Incrementing column: {} does not exist in table {}",
-              incrementingColumn,
-              actualTable);
           throw new ConfigException(
               "Incrementing column: " + incrementingColumn
               + " does not exist in table '" + actualTable + "'"
@@ -371,7 +359,6 @@ public class JdbcSourceTask extends SourceTask {
         if ((mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)
             || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING))
             && !timestampColumns.isEmpty()) {
-          log.info("Timestamp columns: {} do not exist in table {}", timestampColumns, actualTable);
           Set<String> missingTsColumns = timestampColumns.stream()
               .filter(tsColumn -> !columnNames.contains(
                   tsColumn.toLowerCase(Locale.getDefault())
@@ -379,8 +366,6 @@ public class JdbcSourceTask extends SourceTask {
               .collect(Collectors.toSet());
 
           if (!missingTsColumns.isEmpty()) {
-            log.info(
-                "Timestamp columns: {} do not exist in table 2 {}", missingTsColumns, actualTable);
             throw new ConfigException(
                 "Timestamp columns: " + String.join(", ", missingTsColumns)
                 + " do not exist in table '" + actualTable + "'"

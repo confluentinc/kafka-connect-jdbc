@@ -98,6 +98,7 @@ public class JdbcSourceTask extends SourceTask {
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
     Boolean tablesFetched = config.getBoolean(JdbcSourceTaskConfig.TABLES_FETCHED);
     String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
+    List<String> tableType = config.getList(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG);
 
     if ((tables.isEmpty() && query.isEmpty())) {
       // We are still waiting for the tables call to complete.
@@ -197,7 +198,7 @@ public class JdbcSourceTask extends SourceTask {
     String suffix = config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG).trim();
 
     if (queryMode.equals(TableQuerier.QueryMode.TABLE)) {
-      validateColumnsExist(mode, incrementingColumn, timestampColumns, tables.get(0));
+      validateColumnsExist(mode, incrementingColumn, timestampColumns, tables.get(0), tableType);
     }
 
     for (String tableOrQuery : tablesOrQuery) {
@@ -314,45 +315,72 @@ public class JdbcSourceTask extends SourceTask {
   }
 
   private void validateColumnsExist(
-      String mode, String incrementingColumn, List<String> timestampColumns, String table) {
+      String mode, 
+      String incrementingColumn, 
+      List<String> timestampColumns, 
+      String table,
+      List<String> tableType
+  ) {
     try {
       final Connection conn = cachedConnectionProvider.getConnection();
       boolean autoCommit = conn.getAutoCommit();
       try {
-        log.info("Validating columns exist for table");
         conn.setAutoCommit(true);
-        Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, table, null);
-        Set<String> columnNames = defnsById.keySet().stream().map(ColumnId::name)
-            .map(String::toLowerCase).collect(Collectors.toSet());
+        String actualTable = table;
 
+        Map<ColumnId, ColumnDefinition> defnsById =
+            dialect.describeColumns(conn, table, null);
+
+        // If the table is a synonym, resolve it to the base table
+        if (tableType.contains("SYNONYM") && defnsById.isEmpty()) {
+          actualTable = dialect.resolveSynonym(conn, table);
+          log.debug("Resolved synonym {} to base table {}", table, actualTable);
+          if (actualTable == null) {
+            throw new ConfigException("Could not resolve base table for synonym: " + table);
+          } else {
+            defnsById =
+             dialect.describeColumns(conn, actualTable, null);
+          }
+        }
+
+        Set<String> columnNames = defnsById.keySet().stream()
+            .map(ColumnId::name)
+            .map(String::toLowerCase)
+            .collect(Collectors.toSet());
         if ((mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)
             || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING))
             && !incrementingColumn.isEmpty()
             && !columnNames.contains(incrementingColumn.toLowerCase(Locale.getDefault()))) {
-          throw new ConfigException("Incrementing column: " + incrementingColumn
-              + " does not exist.");
+          throw new ConfigException(
+              "Incrementing column: " + incrementingColumn
+              + " does not exist in table '" + actualTable + "'"
+          );
         }
 
         if ((mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)
             || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING))
             && !timestampColumns.isEmpty()) {
-
           Set<String> missingTsColumns = timestampColumns.stream()
-              .filter(tsColumn -> !columnNames.contains(tsColumn.toLowerCase(Locale.getDefault())))
+              .filter(tsColumn -> !columnNames.contains(
+                  tsColumn.toLowerCase(Locale.getDefault())
+              ))
               .collect(Collectors.toSet());
 
           if (!missingTsColumns.isEmpty()) {
-            throw new ConfigException("Timestamp columns: "
-                + String.join(", ", missingTsColumns)
-                + " do not exist.");
+            throw new ConfigException(
+                "Timestamp columns: " + String.join(", ", missingTsColumns)
+                + " do not exist in table '" + actualTable + "'"
+            );
           }
         }
       } finally {
         conn.setAutoCommit(autoCommit);
       }
     } catch (SQLException e) {
-      throw new ConnectException("Failed trying to validate that columns used for offsets exist",
-          e);
+      throw new ConnectException(
+          "Failed trying to validate that columns used for offsets exist",
+          e
+      );
     }
   }
 

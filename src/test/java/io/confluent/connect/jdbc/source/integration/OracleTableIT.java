@@ -24,7 +24,7 @@ import static org.apache.kafka.connect.runtime.ConnectorConfig.TASKS_MAX_CONFIG;
 @Category(IntegrationTest.class)
 public class OracleTableIT extends BaseConnectorIT {
   private final Map<String, String> props = new HashMap<>();
-  private final String synonymName = "TEST_SYNONYM";
+  private final String synonymName = "test-synonym";
 
   @SuppressWarnings("deprecation")
   @Rule
@@ -49,7 +49,7 @@ public class OracleTableIT extends BaseConnectorIT {
         JdbcSourceConnectorConfig.MODE_CONFIG,
         JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING);
     props.put(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG, "ID");
-    props.put(JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG, "TSTAMP");
+    props.put(JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG, "time");
 
     props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, synonymName);
     props.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, "topic_");
@@ -70,23 +70,21 @@ public class OracleTableIT extends BaseConnectorIT {
   }
 
   @Test
-  public void testSynonymStartupValidation() throws Exception {
-    String tableName = "TEST_TABLE";
+  public void testTaskStartupWithSynonymTable() throws Exception {
+    String tableName = "test-table";
     try (Statement s = connection.createStatement()) {
-      s.execute(
-          "CREATE TABLE "
-              + tableName
-              + "("
-              + "ID NUMBER NOT NULL, PRIMARY KEY (ID), "
-              + "TSTAMP TIMESTAMP NOT NULL"
-              + ")");
+      s.execute("CREATE TABLE " + tableName + "("
+                 + "ID NUMBER NOT NULL, "
+                 + "name varchar2(50) NOT NULL, "
+                 + "time TIMESTAMP NOT NULL, PRIMARY KEY (ID)"
+                 + ")");
     }
 
     try (Statement s = connection.createStatement()) {
       s.execute("CREATE SYNONYM " + synonymName + " FOR " + tableName);
     }
 
-    String connectorName = "synonymConnector";
+    String connectorName = "test-connector";
     connect.configureConnector(connectorName, props);
     waitForConnectorToStart(connectorName, 1);
 

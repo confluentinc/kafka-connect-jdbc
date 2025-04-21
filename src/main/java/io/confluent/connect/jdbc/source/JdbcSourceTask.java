@@ -327,22 +327,11 @@ public class JdbcSourceTask extends SourceTask {
       try {
         log.info("Validating columns exist for table: {}", table);
         conn.setAutoCommit(true);
-        String actualTable = table;
-
-        Map<ColumnId, ColumnDefinition> defnsById =
-            dialect.describeColumns(conn, table, null);
-
-        // If the table is a synonym, resolve it to the base table
-        if (tableType.contains("SYNONYM") && defnsById.isEmpty()) {
-          actualTable = dialect.resolveSynonym(conn, table);
-          log.debug("Resolved synonym {} to base table {}", table, actualTable);
-          if (actualTable == null) {
-            throw new ConfigException("Could not resolve base table for synonym: " + table);
-          } else {
-            defnsById =
-             dialect.describeColumns(conn, actualTable, null);
-          }
-        }
+        Map<ColumnId, ColumnDefinition> defnsById = describeColumnsForTables(
+         conn,
+         table,
+         config.getList(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG)
+        );
 
         Set<String> columnNames = defnsById.keySet().stream()
             .map(ColumnId::name)
@@ -354,7 +343,7 @@ public class JdbcSourceTask extends SourceTask {
             && !columnNames.contains(incrementingColumn.toLowerCase(Locale.getDefault()))) {
           throw new ConfigException(
               "Incrementing column: " + incrementingColumn
-              + " does not exist in table '" + actualTable + "'"
+              + " does not exist in table '" + table + "'"
           );
         }
 
@@ -370,7 +359,7 @@ public class JdbcSourceTask extends SourceTask {
           if (!missingTsColumns.isEmpty()) {
             throw new ConfigException(
                 "Timestamp columns: " + String.join(", ", missingTsColumns)
-                + " do not exist in table '" + actualTable + "'"
+                + " do not exist in table '" + table + "'"
             );
           }
         }
@@ -597,6 +586,25 @@ public class JdbcSourceTask extends SourceTask {
     tableQueue.add(expectedHead);
   }
 
+  private Map<ColumnId, ColumnDefinition> describeColumnsForTables(
+   Connection conn,
+   String table,
+   List<String> tableType
+  ) throws SQLException {
+    Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, table, null);
+
+    if (tableType.contains("SYNONYM") && defnsById.isEmpty()) {
+      String actualTable = dialect.resolveSynonym(conn, table);
+      log.debug("Resolved synonym {} to base table {}", table, actualTable);
+      if (actualTable == null) {
+        throw new ConfigException("Could not resolve base table for synonym: " + table);
+      }
+      defnsById = dialect.describeColumns(conn, actualTable, null);
+    }
+
+    return defnsById;
+  }
+
   private void validateNonNullable(
       String incrementalMode,
       String table,
@@ -616,7 +624,11 @@ public class JdbcSourceTask extends SourceTask {
       boolean autoCommit = conn.getAutoCommit();
       try {
         conn.setAutoCommit(true);
-        Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, table, null);
+        Map<ColumnId, ColumnDefinition> defnsById = describeColumnsForTables(
+            conn,
+            table,
+            config.getList(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG)
+        );
         for (ColumnDefinition defn : defnsById.values()) {
           String columnName = defn.id().name();
           if (columnName.equalsIgnoreCase(incrementingColumn)) {

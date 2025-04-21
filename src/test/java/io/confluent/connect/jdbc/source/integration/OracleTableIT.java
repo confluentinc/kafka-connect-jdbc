@@ -76,7 +76,7 @@ public class OracleTableIT extends BaseConnectorIT {
       s.execute("CREATE TABLE " + tableName + "("
                  + "ID NUMBER NOT NULL, "
                  + "name varchar2(50) NOT NULL, "
-                 + "time TIMESTAMP NOT NULL, PRIMARY KEY (ID)"
+                 + "currenttime TIMESTAMP NOT NULL, PRIMARY KEY (ID)"
                  + ")");
     }
 

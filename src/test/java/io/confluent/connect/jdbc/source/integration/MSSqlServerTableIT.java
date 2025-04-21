@@ -3,9 +3,7 @@ package io.confluent.connect.jdbc.source.integration;
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.jdbc.JdbcSourceConnector;
 import io.confluent.connect.jdbc.integration.BaseConnectorIT;
-import io.confluent.connect.jdbc.sink.integration.MicrosoftSqlServerSinkIT;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
-import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.runtime.ConnectorConfig;
 import org.junit.*;
 import org.junit.experimental.categories.Category;
@@ -17,18 +15,20 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.HashMap;
 import java.util.Map;
 
-import static org.apache.kafka.connect.runtime.ConnectorConfig.TASKS_MAX_CONFIG;
+import static org.apache.kafka.connect.runtime.ConnectorConfig.*;
 
 @Category(IntegrationTest.class)
 public class MSSqlServerTableIT extends BaseConnectorIT {
-  private static final Logger log = LoggerFactory.getLogger(MicrosoftSqlServerSinkIT.class);
-  private static final String CONNECTOR_NAME = "test-connector";
+  private static final Logger log = LoggerFactory.getLogger(MSSqlServerTableIT.class);
+  private static final String CONNECTOR_NAME = "test_connector";
   private static final String MSSQL_URL = "jdbc:sqlserver://0.0.0.0:1433";
   private static final String USER = "sa";
   private static final String PASS = "reallyStrongPwd123";
   private final String synonymName = "test_synonym";
+
 
   @ClassRule
   @SuppressWarnings("deprecation")
@@ -38,17 +38,14 @@ public class MSSqlServerTableIT extends BaseConnectorIT {
           .withEnv("SA_PASSWORD", PASS)
           .withFixedExposedPort(1433, 1433);
 
-  private Map<String, String> props;
+  private final Map<String, String> props = new HashMap<>();
   private Connection connection;
-  private JsonConverter jsonConverter;
 
-@Before
+  @Before
   public void setup() throws Exception {
-    //Set up JDBC Driver
-    Class.forName("com.microsoft.sqlserver.jdbc.SQLServerDriver");
-    connection = DriverManager.getConnection(MSSQL_URL, USER, PASS);
+    // Set up JDBC Driver
+    System.out.println("Setting up JDBC Driver");
     startConnect();
-
     props.put(ConnectorConfig.CONNECTOR_CLASS_CONFIG, JdbcSourceConnector.class.getName());
     props.put(TASKS_MAX_CONFIG, "1");
 
@@ -69,22 +66,23 @@ public class MSSqlServerTableIT extends BaseConnectorIT {
 
     connect.kafka().createTopic("topic_" + synonymName, 1);
 
-    connection =
-        DriverManager.getConnection(
-         MSSQL_URL, USER, PASS);
+    Class.forName("com.microsoft.sqlserver.jdbc.SQLServerDriver");
+    connection = DriverManager.getConnection(MSSQL_URL, USER, PASS);
   }
 
   @After
   public void close() throws SQLException {
-   connect.deleteConnector(CONNECTOR_NAME);
-   connection.close();
-   stopConnect();
+    connect.deleteConnector(CONNECTOR_NAME);
+    connection.close();
+    stopConnect();
   }
 
   @Test
   public void testTaskStartupWithSynonymTable() throws Exception {
     String tableName = "test_table";
     String tableNameWithSchema = "dbo." + tableName;
+    // Set up the connector properties
+
     try (Statement s = connection.createStatement()) {
       s.execute(
           "CREATE TABLE "

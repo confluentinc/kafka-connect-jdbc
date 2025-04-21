@@ -625,8 +625,8 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
     try (PreparedStatement stmt =
         connection.prepareStatement(
-            "SELECT PARSENAME(s.base_object_name, 1) AS TABLE_NAME,"
-                + "FROM sys.synonyms s WHERE s.name = ?;")) {
+            "SELECT PARSENAME(s.base_object_name, 1) AS TABLE_NAME "
+                + "FROM sys.synonyms s WHERE s.name = ?")) {
       String tableName = parseTableIdentifier(synonymName).tableName();
       stmt.setString(1, tableName.toUpperCase());
       ResultSet rs = stmt.executeQuery();

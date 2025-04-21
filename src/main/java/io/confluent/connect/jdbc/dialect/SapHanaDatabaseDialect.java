@@ -22,6 +22,10 @@ import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -165,5 +169,20 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
     builder.append(")");
     builder.append(" WITH PRIMARY KEY");
     return builder.toString();
+  }
+
+  @Override
+  public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
+    try (PreparedStatement stmt = connection.prepareStatement(
+        "SELECT OBJECT_NAME AS TARGET_SCHEMA_NAME "
+        + "FROM SYS.SYNONYMS WHERE SYNONYM_NAME = ?")) {
+      String tableName = parseTableIdentifier(synonymName).tableName();
+      stmt.setString(1, tableName);
+      ResultSet rs = stmt.executeQuery();
+      if (rs.next()) {
+       return rs.getString("TARGET_SCHEMA_NAME");
+      }
+    }
+    return super.resolveSynonym(connection, synonymName);
   }
 }

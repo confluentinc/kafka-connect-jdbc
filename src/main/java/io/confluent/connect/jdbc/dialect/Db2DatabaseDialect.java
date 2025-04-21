@@ -22,6 +22,8 @@ import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.Collection;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
@@ -189,5 +191,10 @@ public class Db2DatabaseDialect extends GenericDatabaseDialect {
     // DB2 has semicolon delimited property name-value pairs
     return super.sanitizedUrl(url)
                 .replaceAll("(?i)([:;]password=)[^;]*", "$1****");
+  }
+
+  @Override
+  public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
+    throw new SQLException("DB2 does not support synonyms. Please use views instead.");
   }
 }

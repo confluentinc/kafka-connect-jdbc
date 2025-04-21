@@ -24,7 +24,7 @@ import static org.apache.kafka.connect.runtime.ConnectorConfig.TASKS_MAX_CONFIG;
 @Category(IntegrationTest.class)
 public class OracleTableIT extends BaseConnectorIT {
   private final Map<String, String> props = new HashMap<>();
-  private final String synonymName = "test_synonym";
+  private final String synonymName = "TEST_SYNONYM";
 
   @SuppressWarnings("deprecation")
   @Rule
@@ -71,7 +71,7 @@ public class OracleTableIT extends BaseConnectorIT {
 
   @Test
   public void testTaskStartupWithSynonymTable() throws Exception {
-    String tableName = "test_table";
+    String tableName = "TEST_TABLE";
     try (Statement s = connection.createStatement()) {
       s.execute("CREATE TABLE " + tableName + "("
                  + "ID NUMBER NOT NULL, "

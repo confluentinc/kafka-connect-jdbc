@@ -24,7 +24,7 @@ import static org.apache.kafka.connect.runtime.ConnectorConfig.TASKS_MAX_CONFIG;
 @Category(IntegrationTest.class)
 public class MSSqlServerTableIT extends BaseConnectorIT {
   private static final Logger log = LoggerFactory.getLogger(MicrosoftSqlServerSinkIT.class);
-  private static final String CONNECTOR_NAME = "jdbc-sink-connector";
+  private static final String CONNECTOR_NAME = "test-connector";
   private static final String MSSQL_URL = "jdbc:sqlserver://0.0.0.0:1433";
   private static final String USER = "sa";
   private static final String PASS = "reallyStrongPwd123";
@@ -100,10 +100,9 @@ public class MSSqlServerTableIT extends BaseConnectorIT {
       s.execute("CREATE SYNONYM " + synonymName + " FOR " + tableNameWithSchema);
     }
 
-    String connectorName = "test-connector";
-    connect.configureConnector(connectorName, props);
-    waitForConnectorToStart(connectorName, 1);
+    connect.configureConnector(CONNECTOR_NAME, props);
+    waitForConnectorToStart(CONNECTOR_NAME, 1);
 
-    assertConnectorAndTasksRunning(connectorName, 1);
+    assertConnectorAndTasksRunning(CONNECTOR_NAME, 1);
   }
 }

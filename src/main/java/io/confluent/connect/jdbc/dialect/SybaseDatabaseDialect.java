@@ -353,18 +353,17 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
 
   @Override
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
-    // Sybase-specific implementation using sys.synonyms
     try (PreparedStatement stmt = connection.prepareStatement(
-        "SELECT base_object_name FROM sys.synonyms WHERE name = ? AND "
-        + "schema_id = SCHEMA_ID()")) {
+        "SELECT s.name AS synonym_name, PARSENAME(c.text, 1) AS base_table "
+        + "FROM sysobjects s JOIN syscomments c ON c.id = s.id"
+        + "WHERE  s.type = 'SN' AND s.name = ?")) {
       String tableName = parseTableIdentifier(synonymName).tableName();
       stmt.setString(1, tableName);
       ResultSet rs = stmt.executeQuery();
       if (rs.next()) {
-        return rs.getString("base_object_name");
+        return rs.getString("base_table");
       }
     }
-    // Fall back to generic implementation if sys.synonyms query fails
     return super.resolveSynonym(connection, synonymName);
   }
 }

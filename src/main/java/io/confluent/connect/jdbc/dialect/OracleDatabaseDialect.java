@@ -385,7 +385,6 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
 
   @Override
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
-    // Oracle-specific implementation using ALL_SYNONYMS view
     try (PreparedStatement stmt = connection.prepareStatement(
         "SELECT TABLE_OWNER, TABLE_NAME FROM ALL_SYNONYMS WHERE OWNER = ? AND "
         + "SYNONYM_NAME = ?")) {
@@ -397,7 +396,6 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
         return rs.getString("TABLE_NAME");
       }
     }
-    // Fall back to generic implementation if ALL_SYNONYMS query fails
     return super.resolveSynonym(connection, synonymName);
   }
 }

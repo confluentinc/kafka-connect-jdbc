@@ -2038,7 +2038,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
   @Override
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
-    // Default implementation uses JDBC metadata to resolve synonyms
     DatabaseMetaData metadata = connection.getMetaData();
     String tableName = parseTableIdentifier(synonymName).tableName();
     ResultSet tableRs = metadata.getTables(null, null, tableName, new String[]{"SYNONYM"});

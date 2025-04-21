@@ -325,6 +325,7 @@ public class JdbcSourceTask extends SourceTask {
       final Connection conn = cachedConnectionProvider.getConnection();
       boolean autoCommit = conn.getAutoCommit();
       try {
+        log.info("Validating columns exist for table: {}", table);
         conn.setAutoCommit(true);
         String actualTable = table;
 

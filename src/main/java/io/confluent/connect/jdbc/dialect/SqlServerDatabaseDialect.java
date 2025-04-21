@@ -96,8 +96,6 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
 
   private boolean verifiedSqlServerTimestamp = false;
 
-  List<String> tableTypeConfig = config.getList(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG);
-
   /**
    * The provider for {@link SqlServerDatabaseDialect}.
    */
@@ -523,8 +521,8 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       }
     }
 
-    // Get synonyms from sys.synonyms on a separate query
-    if (tableTypeConfig.contains("SYNONYM")) {
+    // Get synonyms from sys.synonyms on a separate statement
+    if (this.tableTypes.contains("SYNONYM")) {
       String synonymQuery =
           "SELECT "
               + "DB_NAME() as catalog_name, "
@@ -626,12 +624,10 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
 
   @Override
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
-    // Oracle-specific implementation using ALL_SYNONYMS view
     try (PreparedStatement stmt =
         connection.prepareStatement(
-            "SELECT PARSENAME(s.base_object_name, 2) AS TABLE_OWNER,"
-                + "PARSENAME(s.base_object_name, 1) "
-                + "AS TABLE_NAME FROM sys.synonyms s WHERE s.name = ?; ")) {
+            "SELECT PARSENAME(s.base_object_name, 1) AS TABLE_NAME,"
+                + "FROM sys.synonyms s WHERE s.name = ?;")) {
       String tableName = parseTableIdentifier(synonymName).tableName();
       stmt.setString(1, tableName.toUpperCase());
       ResultSet rs = stmt.executeQuery();

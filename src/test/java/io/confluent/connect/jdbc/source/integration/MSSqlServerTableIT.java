@@ -28,7 +28,7 @@ public class MSSqlServerTableIT extends BaseConnectorIT {
   private static final String MSSQL_URL = "jdbc:sqlserver://0.0.0.0:1433";
   private static final String USER = "sa";
   private static final String PASS = "reallyStrongPwd123";
-  private final String synonymName = "test-synonym";
+  private final String synonymName = "test_synonym";
 
   @ClassRule
   @SuppressWarnings("deprecation")
@@ -83,7 +83,7 @@ public class MSSqlServerTableIT extends BaseConnectorIT {
 
   @Test
   public void testTaskStartupWithSynonymTable() throws Exception {
-    String tableName = "test-table";
+    String tableName = "test_table";
     String tableNameWithSchema = "dbo." + tableName;
     try (Statement s = connection.createStatement()) {
       s.execute(

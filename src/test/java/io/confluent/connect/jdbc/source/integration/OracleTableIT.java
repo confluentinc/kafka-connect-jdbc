@@ -49,7 +49,7 @@ public class OracleTableIT extends BaseConnectorIT {
         JdbcSourceConnectorConfig.MODE_CONFIG,
         JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING);
     props.put(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG, "ID");
-    props.put(JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG, "time");
+    props.put(JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG, "currenttime");
 
     props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, synonymName);
     props.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, "topic_");

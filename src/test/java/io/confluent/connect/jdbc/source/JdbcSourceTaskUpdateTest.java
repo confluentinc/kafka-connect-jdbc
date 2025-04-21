@@ -111,7 +111,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     ConfigException e = assertThrows(
         ConfigException.class,
         () -> startTask(null, "INCORRECT INPUT", null));
-    assertEquals(e.getMessage(), "Incrementing column: INCORRECT INPUT does not exist.");
+    assertEquals(e.getMessage(), "Incrementing column: INCORRECT INPUT does not exist in table 'test'");
 
     PowerMock.verifyAll();
   }
@@ -130,7 +130,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
         ConfigException.class,
         () -> startTask("MODIFIED, incorrect, WRONG", "id", null)
     );
-    assertEquals(e.getMessage(),"Timestamp columns: incorrect, WRONG do not exist.");
+    assertEquals(e.getMessage(),"Timestamp columns: incorrect, WRONG do not exist in table 'test'");
 
     PowerMock.verifyAll();
   }

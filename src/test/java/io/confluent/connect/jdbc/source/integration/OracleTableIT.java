@@ -49,10 +49,10 @@ public class OracleTableIT extends BaseConnectorIT {
         JdbcSourceConnectorConfig.MODE_CONFIG,
         JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING);
     props.put(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG, "ID");
-    props.put(JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG, "currenttime");
+    props.put(JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG, "TSTAMP");
 
     props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, synonymName);
-    props.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, "topic_");
+    props.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, "synonymTest_");
 
     connect.kafka().createTopic("topic_" + synonymName, 1);
 
@@ -75,8 +75,8 @@ public class OracleTableIT extends BaseConnectorIT {
     try (Statement s = connection.createStatement()) {
       s.execute("CREATE TABLE " + tableName + "("
                  + "ID NUMBER NOT NULL, "
-                 + "name varchar2(50) NOT NULL, "
-                 + "currenttime TIMESTAMP NOT NULL, PRIMARY KEY (ID)"
+                 + "NAME varchar2(50) NOT NULL, "
+                 + "TSTAMP TIMESTAMP NOT NULL, PRIMARY KEY (ID)"
                  + ")");
     }
 

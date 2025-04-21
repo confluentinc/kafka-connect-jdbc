@@ -327,16 +327,15 @@ public class JdbcSourceTask extends SourceTask {
       try {
         log.info("Validating columns exist for table: {}", table);
         conn.setAutoCommit(true);
-        Map<ColumnId, ColumnDefinition> defnsById = describeColumnsForTables(
-         conn,
-         table,
-         config.getList(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG)
-        );
+        Map<ColumnId, ColumnDefinition> defnsById =
+            describeColumnsForTables(
+                conn, table, config.getList(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG));
 
-        Set<String> columnNames = defnsById.keySet().stream()
-            .map(ColumnId::name)
-            .map(String::toLowerCase)
-            .collect(Collectors.toSet());
+        Set<String> columnNames =
+            defnsById.keySet().stream()
+                .map(ColumnId::name)
+                .map(String::toLowerCase)
+                .collect(Collectors.toSet());
         if ((mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)
             || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING))
             && !incrementingColumn.isEmpty()
@@ -587,10 +586,7 @@ public class JdbcSourceTask extends SourceTask {
   }
 
   private Map<ColumnId, ColumnDefinition> describeColumnsForTables(
-   Connection conn,
-   String table,
-   List<String> tableType
-  ) throws SQLException {
+      Connection conn, String table, List<String> tableType) throws SQLException {
     Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, table, null);
 
     if (tableType.contains("SYNONYM") && defnsById.isEmpty()) {

@@ -16,7 +16,6 @@
 package io.confluent.connect.jdbc.dialect;
 
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
-import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;

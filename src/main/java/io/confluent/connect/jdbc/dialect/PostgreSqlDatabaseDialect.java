@@ -100,6 +100,12 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     super(config, new IdentifierRules(".", "\"", "\""));
   }
 
+
+  @Override
+  public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
+    throw new SQLException("PostgreSQL does not support synonyms. Please use views instead.");
+  }
+
   @Override
   public Connection getConnection() throws SQLException {
     Connection result = super.getConnection();

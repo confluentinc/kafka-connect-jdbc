@@ -23,6 +23,8 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 
 import java.util.Collection;
+import java.sql.Connection;
+import java.sql.SQLException;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
@@ -175,5 +177,10 @@ public class DerbyDatabaseDialect extends GenericDatabaseDialect {
     // Derby has semicolon delimited property name-value pairs
     return super.sanitizedUrl(url)
                 .replaceAll("(?i)(;password=)[^;]*", "$1****");
+  }
+
+  @Override
+  public String resolveSynonym(Connection connection, String tableId) throws SQLException {
+    throw new SQLException("Derby does not support synonyms. Please use views instead.");
   }
 }

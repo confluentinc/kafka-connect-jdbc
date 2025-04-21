@@ -22,6 +22,8 @@ import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -143,5 +145,10 @@ public class SqliteDatabaseDialect extends GenericDatabaseDialect {
   @Override
   protected String currentTimestampDatabaseQuery() {
     return "SELECT strftime('%Y-%m-%d %H:%M:%S.%f','now')";
+  }
+
+  @Override
+  public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
+    throw new SQLException("SQLite does not support synonyms. Please use views instead.");
   }
 }

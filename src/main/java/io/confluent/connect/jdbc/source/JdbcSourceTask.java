@@ -212,7 +212,8 @@ public class JdbcSourceTask extends SourceTask {
                 mode,
                 tableOrQuery,
                 incrementingColumn,
-                timestampColumns
+                timestampColumns,
+                tableType
             );
           }
           tablePartitionsToCheck = partitionsByTableFqn.get(tableOrQuery);
@@ -329,7 +330,7 @@ public class JdbcSourceTask extends SourceTask {
         conn.setAutoCommit(true);
         Map<ColumnId, ColumnDefinition> defnsById =
             describeColumnsForTables(
-                conn, table, config.getList(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG));
+                conn, table, tableType);
 
         Set<String> columnNames =
             defnsById.keySet().stream()
@@ -589,7 +590,7 @@ public class JdbcSourceTask extends SourceTask {
       Connection conn, String table, List<String> tableType) throws SQLException {
     Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, table, null);
 
-    if (tableType.contains("SYNONYM") && defnsById.isEmpty()) {
+    if (tableType.stream().anyMatch("SYNONYM"::equalsIgnoreCase) && defnsById.isEmpty()) {
       String actualTable = dialect.resolveSynonym(conn, table);
       log.debug("Resolved synonym {} to base table {}", table, actualTable);
       if (actualTable == null) {
@@ -605,7 +606,8 @@ public class JdbcSourceTask extends SourceTask {
       String incrementalMode,
       String table,
       String incrementingColumn,
-      List<String> timestampColumns
+      List<String> timestampColumns,
+      List<String> tableType
   ) {
     log.info("Validating non-nullable fields for table: {}", table);
     try {
@@ -623,7 +625,7 @@ public class JdbcSourceTask extends SourceTask {
         Map<ColumnId, ColumnDefinition> defnsById = describeColumnsForTables(
             conn,
             table,
-            config.getList(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG)
+            tableType
         );
         for (ColumnDefinition defn : defnsById.values()) {
           String columnName = defn.id().name();

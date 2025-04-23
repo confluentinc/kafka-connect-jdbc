@@ -44,7 +44,6 @@ public class MSSqlServerTableIT extends BaseConnectorIT {
   @Before
   public void setup() throws Exception {
     // Set up JDBC Driver
-    System.out.println("Setting up JDBC Driver");
     startConnect();
     props.put(ConnectorConfig.CONNECTOR_CLASS_CONFIG, JdbcSourceConnector.class.getName());
     props.put(TASKS_MAX_CONFIG, "1");

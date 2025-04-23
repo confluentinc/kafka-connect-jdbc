@@ -37,7 +37,13 @@ import java.sql.Statement;
 import java.sql.Types;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.TimeZone;
+import java.util.Calendar;
+import java.util.Arrays;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode;

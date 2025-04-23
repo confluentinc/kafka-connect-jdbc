@@ -396,6 +396,6 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
         return rs.getString("TABLE_NAME");
       }
     }
-    return super.resolveSynonym(connection, synonymName);
+    return null;
   }
 }

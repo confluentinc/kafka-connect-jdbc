@@ -635,7 +635,6 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
         return rs.getString("TABLE_NAME");
       }
     }
-    // Fall back to generic implementation if ALL_SYNONYMS query fails
-    return super.resolveSynonym(connection, synonymName);
+    return null;
   }
 }

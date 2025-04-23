@@ -353,17 +353,8 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
 
   @Override
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
-    try (PreparedStatement stmt = connection.prepareStatement(
-        "SELECT s.name AS synonym_name, PARSENAME(c.text, 1) AS base_table "
-        + "FROM sysobjects s JOIN syscomments c ON c.id = s.id"
-        + "WHERE  s.type = 'SN' AND s.name = ?")) {
-      String tableName = parseTableIdentifier(synonymName).tableName();
-      stmt.setString(1, tableName);
-      ResultSet rs = stmt.executeQuery();
-      if (rs.next()) {
-        return rs.getString("base_table");
-      }
-    }
-    return super.resolveSynonym(connection, synonymName);
+    throw new SQLException(
+     "Kafka JDBC Connector doesn't support Synonym Types on Sybase. "
+      + "Please use other table types instead.");
   }
 }

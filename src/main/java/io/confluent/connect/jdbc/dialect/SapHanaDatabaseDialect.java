@@ -164,17 +164,8 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
 
   @Override
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
-    try (PreparedStatement stmt =
-        connection.prepareStatement(
-            "SELECT OBJECT_NAME AS TARGET_SCHEMA_NAME "
-                + "FROM SYS.SYNONYMS WHERE SYNONYM_NAME = ?")) {
-      String tableName = parseTableIdentifier(synonymName).tableName();
-      stmt.setString(1, tableName);
-      ResultSet rs = stmt.executeQuery();
-      if (rs.next()) {
-        return rs.getString("TARGET_SCHEMA_NAME");
-      }
-    }
-    return super.resolveSynonym(connection, synonymName);
+    throw new SQLException(
+        "Kafka JDBC Connector doesn't support Synonym Types on SAP Hana. "
+         + "Please use other table types instead.");
   }
 }

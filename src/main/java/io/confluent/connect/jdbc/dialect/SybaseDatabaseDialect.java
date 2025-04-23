@@ -32,6 +32,7 @@ import org.apache.kafka.connect.data.Timestamp;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Collection;
@@ -358,5 +359,12 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
     builder.appendColumnName(col.name())
            .append("=incoming.")
            .appendColumnName(col.name());
+  }
+
+  @Override
+  public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
+    throw new SQLException(
+     "Kafka JDBC Connector doesn't support Synonym Types on Sybase. "
+      + "Please use other table types instead.");
   }
 }

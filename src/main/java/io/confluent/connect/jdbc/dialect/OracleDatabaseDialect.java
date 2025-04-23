@@ -27,7 +27,9 @@ import io.confluent.connect.jdbc.util.TableDefinition;
 import java.io.ByteArrayInputStream;
 import java.io.StringReader;
 import java.nio.ByteBuffer;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import org.apache.kafka.common.config.AbstractConfig;
@@ -404,5 +406,21 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       );
     }
     return tableId;
+  }
+
+  @Override
+  public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
+    try (PreparedStatement stmt = connection.prepareStatement(
+        "SELECT TABLE_OWNER, TABLE_NAME FROM ALL_SYNONYMS WHERE OWNER = ? AND "
+        + "SYNONYM_NAME = ?")) {
+      String tableName = parseTableIdentifier(synonymName).tableName();
+      stmt.setString(1, connection.getMetaData().getUserName().toUpperCase());
+      stmt.setString(2, tableName.toUpperCase());
+      ResultSet rs = stmt.executeQuery();
+      if (rs.next()) {
+        return rs.getString("TABLE_NAME");
+      }
+    }
+    return null;
   }
 }

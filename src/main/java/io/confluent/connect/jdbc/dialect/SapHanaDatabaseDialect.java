@@ -22,6 +22,10 @@ import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -165,5 +169,12 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
     builder.append(")");
     builder.append(" WITH PRIMARY KEY");
     return builder.toString();
+  }
+
+  @Override
+  public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
+    throw new SQLException(
+        "Kafka JDBC Connector doesn't support Synonym Types on SAP Hana. "
+         + "Please use other table types instead.");
   }
 }

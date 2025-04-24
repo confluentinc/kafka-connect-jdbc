@@ -24,6 +24,7 @@ import static org.apache.kafka.connect.runtime.ConnectorConfig.*;
 public class MSSqlServerTableIT extends BaseConnectorIT {
   private static final Logger log = LoggerFactory.getLogger(MSSqlServerTableIT.class);
   private static final String CONNECTOR_NAME = "test_connector";
+  private static final String CONNECTOR_NAME_OTHER = "test_connector_other";
   private static final String MSSQL_URL = "jdbc:sqlserver://0.0.0.0:1433";
   private static final String USER = "sa";
   private static final String PASS = "reallyStrongPwd123";
@@ -101,33 +102,12 @@ public class MSSqlServerTableIT extends BaseConnectorIT {
     waitForConnectorToStart(CONNECTOR_NAME, 1);
 
     assertConnectorAndTasksRunning(CONNECTOR_NAME, 1);
-  }
 
-@Test
-  public void testTaskStartupWithSynonymTableWithLowerCaseType() throws Exception {
-    String tableName = "test_table";
-    String tableNameWithSchema = "dbo." + tableName;
     props.put(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG, "Synonym");
-    // Set up the connector properties
+    connect.configureConnector(CONNECTOR_NAME_OTHER, props);
+    waitForConnectorToStart(CONNECTOR_NAME_OTHER, 1);
 
-    try (Statement s = connection.createStatement()) {
-      s.execute(
-       "CREATE TABLE "
-        + tableName
-        + "("
-        + "ID INT PRIMARY KEY, "
-        + "name VARCHAR(50) NOT NULL, "
-        + "time DATETIME2 NOT NULL"
-        + ")");
-    }
+    assertConnectorAndTasksRunning(CONNECTOR_NAME_OTHER, 1);
 
-    try (Statement s = connection.createStatement()) {
-      s.execute("CREATE SYNONYM " + synonymName + " FOR " + tableNameWithSchema);
-    }
-
-    connect.configureConnector(CONNECTOR_NAME, props);
-    waitForConnectorToStart(CONNECTOR_NAME, 1);
-
-    assertConnectorAndTasksRunning(CONNECTOR_NAME, 1);
   }
 }

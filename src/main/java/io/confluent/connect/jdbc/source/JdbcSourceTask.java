@@ -98,6 +98,7 @@ public class JdbcSourceTask extends SourceTask {
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
     Boolean tablesFetched = config.getBoolean(JdbcSourceTaskConfig.TABLES_FETCHED);
     String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
+    List<String> tableType = config.getList(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG);
 
     if ((tables.isEmpty() && query.isEmpty())) {
       // We are still waiting for the tables call to complete.
@@ -197,7 +198,7 @@ public class JdbcSourceTask extends SourceTask {
     String suffix = config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG).trim();
 
     if (queryMode.equals(TableQuerier.QueryMode.TABLE)) {
-      validateColumnsExist(mode, incrementingColumn, timestampColumns, tables.get(0));
+      validateColumnsExist(mode, incrementingColumn, timestampColumns, tables.get(0), tableType);
     }
 
     for (String tableOrQuery : tablesOrQuery) {
@@ -211,7 +212,8 @@ public class JdbcSourceTask extends SourceTask {
                 mode,
                 tableOrQuery,
                 incrementingColumn,
-                timestampColumns
+                timestampColumns,
+                tableType
             );
           }
           tablePartitionsToCheck = partitionsByTableFqn.get(tableOrQuery);
@@ -314,45 +316,61 @@ public class JdbcSourceTask extends SourceTask {
   }
 
   private void validateColumnsExist(
-      String mode, String incrementingColumn, List<String> timestampColumns, String table) {
+      String mode, 
+      String incrementingColumn, 
+      List<String> timestampColumns, 
+      String table,
+      List<String> tableType
+  ) {
     try {
       final Connection conn = cachedConnectionProvider.getConnection();
       boolean autoCommit = conn.getAutoCommit();
       try {
-        log.info("Validating columns exist for table");
+        log.info("Validating columns exist for table: {}", table);
         conn.setAutoCommit(true);
-        Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, table, null);
-        Set<String> columnNames = defnsById.keySet().stream().map(ColumnId::name)
-            .map(String::toLowerCase).collect(Collectors.toSet());
+        Map<ColumnId, ColumnDefinition> defnsById =
+            describeColumnsForTables(
+                conn, table, tableType);
 
+        Set<String> columnNames =
+            defnsById.keySet().stream()
+                .map(ColumnId::name)
+                .map(String::toLowerCase)
+                .collect(Collectors.toSet());
         if ((mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)
             || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING))
             && !incrementingColumn.isEmpty()
             && !columnNames.contains(incrementingColumn.toLowerCase(Locale.getDefault()))) {
-          throw new ConfigException("Incrementing column: " + incrementingColumn
-              + " does not exist.");
+          throw new ConfigException(
+              "Incrementing column: " + incrementingColumn
+              + " does not exist in table '" + table + "'"
+          );
         }
 
         if ((mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)
             || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING))
             && !timestampColumns.isEmpty()) {
-
           Set<String> missingTsColumns = timestampColumns.stream()
-              .filter(tsColumn -> !columnNames.contains(tsColumn.toLowerCase(Locale.getDefault())))
+              .filter(tsColumn -> !columnNames.contains(
+                  tsColumn.toLowerCase(Locale.getDefault())
+              ))
               .collect(Collectors.toSet());
 
           if (!missingTsColumns.isEmpty()) {
-            throw new ConfigException("Timestamp columns: "
-                + String.join(", ", missingTsColumns)
-                + " do not exist.");
+            throw new ConfigException(
+                "Timestamp columns: " + String.join(", ", missingTsColumns)
+                + " do not exist in table '" + table + "'"
+            );
           }
         }
       } finally {
         conn.setAutoCommit(autoCommit);
       }
     } catch (SQLException e) {
-      throw new ConnectException("Failed trying to validate that columns used for offsets exist",
-          e);
+      throw new ConnectException(
+          "Failed trying to validate that columns used for offsets exist",
+          e
+      );
     }
   }
 
@@ -568,11 +586,28 @@ public class JdbcSourceTask extends SourceTask {
     tableQueue.add(expectedHead);
   }
 
+  private Map<ColumnId, ColumnDefinition> describeColumnsForTables(
+      Connection conn, String table, List<String> tableType) throws SQLException {
+    Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, table, null);
+
+    if (tableType.stream().anyMatch("SYNONYM"::equalsIgnoreCase) && defnsById.isEmpty()) {
+      String actualTable = dialect.resolveSynonym(conn, table);
+      log.debug("Resolved synonym {} to base table {}", table, actualTable);
+      if (actualTable == null) {
+        throw new ConfigException("Could not resolve base table for synonym: " + table);
+      }
+      defnsById = dialect.describeColumns(conn, actualTable, null);
+    }
+
+    return defnsById;
+  }
+
   private void validateNonNullable(
       String incrementalMode,
       String table,
       String incrementingColumn,
-      List<String> timestampColumns
+      List<String> timestampColumns,
+      List<String> tableType
   ) {
     log.info("Validating non-nullable fields for table: {}", table);
     try {
@@ -587,7 +622,11 @@ public class JdbcSourceTask extends SourceTask {
       boolean autoCommit = conn.getAutoCommit();
       try {
         conn.setAutoCommit(true);
-        Map<ColumnId, ColumnDefinition> defnsById = dialect.describeColumns(conn, table, null);
+        Map<ColumnId, ColumnDefinition> defnsById = describeColumnsForTables(
+            conn,
+            table,
+            tableType
+        );
         for (ColumnDefinition defn : defnsById.values()) {
           String columnName = defn.id().name();
           if (columnName.equalsIgnoreCase(incrementingColumn)) {

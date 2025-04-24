@@ -359,4 +359,11 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
            .append("=incoming.")
            .appendColumnName(col.name());
   }
+
+  @Override
+  public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
+    throw new SQLException(
+     "Kafka JDBC Connector doesn't support Synonym Types on Sybase. "
+      + "Please use other table types instead.");
+  }
 }

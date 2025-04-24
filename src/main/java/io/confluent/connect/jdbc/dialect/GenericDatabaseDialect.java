@@ -2092,4 +2092,18 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   public String toString() {
     return name();
   }
+
+  @Override
+  public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
+    DatabaseMetaData metadata = connection.getMetaData();
+    String tableName = parseTableIdentifier(synonymName).tableName();
+    ResultSet tableRs = metadata.getTables(null, null, tableName, new String[]{"SYNONYM"});
+    if (tableRs.next()) {
+      ResultSet synonymRs = metadata.getColumns(null, null, tableName, null);
+      if (synonymRs.next()) {
+        return synonymRs.getString("TABLE_NAME");
+      }
+    }
+    return null;
+  }
 }

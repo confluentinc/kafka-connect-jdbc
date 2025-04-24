@@ -43,7 +43,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.TimeZone;
 import java.util.Calendar;
-import java.util.Arrays;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode;
@@ -522,7 +521,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     }
 
     // Get synonyms from sys.synonyms on a separate statement
-    if (Arrays.asList(tableTypes).contains("SYNONYM")) {
+    if (this.tableTypes.stream().anyMatch("SYNONYM"::equalsIgnoreCase)) {
       String synonymQuery =
           "SELECT "
               + "DB_NAME() as catalog_name, "

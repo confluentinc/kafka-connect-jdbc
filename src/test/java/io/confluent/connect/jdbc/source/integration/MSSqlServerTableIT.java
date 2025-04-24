@@ -102,4 +102,32 @@ public class MSSqlServerTableIT extends BaseConnectorIT {
 
     assertConnectorAndTasksRunning(CONNECTOR_NAME, 1);
   }
+
+@Test
+  public void testTaskStartupWithSynonymTableWithLowerCaseType() throws Exception {
+    String tableName = "test_table";
+    String tableNameWithSchema = "dbo." + tableName;
+    props.put(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG, "Synonym");
+    // Set up the connector properties
+
+    try (Statement s = connection.createStatement()) {
+      s.execute(
+       "CREATE TABLE "
+        + tableName
+        + "("
+        + "ID INT PRIMARY KEY, "
+        + "name VARCHAR(50) NOT NULL, "
+        + "time DATETIME2 NOT NULL"
+        + ")");
+    }
+
+    try (Statement s = connection.createStatement()) {
+      s.execute("CREATE SYNONYM " + synonymName + " FOR " + tableNameWithSchema);
+    }
+
+    connect.configureConnector(CONNECTOR_NAME, props);
+    waitForConnectorToStart(CONNECTOR_NAME, 1);
+
+    assertConnectorAndTasksRunning(CONNECTOR_NAME, 1);
+  }
 }

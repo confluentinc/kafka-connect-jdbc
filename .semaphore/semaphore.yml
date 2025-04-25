@@ -85,12 +85,10 @@ blocks:
           commands:
             # Don't run this block if target branch for PR is not a nightly branch or master branch
             - |
-              echo $SEMAPHORE_GIT_REPO_SLUG \
-              echo $SEMAPHORE_GIT_BRANCH \
               sem-trigger -p connect-ci-cd-pipelines \
                 -t run-connector-jar-tests \
                 -b master \
-                -d "|" -i "CONNECTOR_REPO_LIST=https://github.com/confluentinc/${SEMAPHORE_GIT_REPO_SLUG}|BRANCH_NAME=$SEMAPHORE_GIT_BRANCH" \
+                -d "|" -i "CONNECTOR_REPO_LIST=https://github.com/${SEMAPHORE_GIT_REPO_SLUG}|BRANCH_NAME=$SEMAPHORE_GIT_BRANCH" \
                 -w; \
 
 after_pipeline:

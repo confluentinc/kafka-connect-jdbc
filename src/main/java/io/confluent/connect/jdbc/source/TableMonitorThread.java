@@ -82,22 +82,26 @@ public class TableMonitorThread extends Thread {
     log.info("Starting thread to monitor tables.");
     while (shutdownLatch.getCount() > 0) {
       try {
+        log.trace("Starting table update check cycle");
         if (updateTables()) {
-          log.info("Task Reconfiguration has been invoked.");
+          log.trace("Table changes detected, requesting task reconfiguration");
           context.requestTaskReconfiguration();
+        } else {
+          log.trace("No table changes detected in this cycle");
         }
       } catch (Exception e) {
         throw fail(e);
       }
 
       try {
-        log.debug("Waiting {} ms to check for changed.", pollMs);
+        log.debug("Waiting {} ms to check for changed tables", pollMs);
         boolean shuttingDown = shutdownLatch.await(pollMs, TimeUnit.MILLISECONDS);
         if (shuttingDown) {
+          log.info("Shutdown signal received, stopping table monitor thread");
           return;
         }
       } catch (InterruptedException e) {
-        log.error("Unexpected InterruptedException, ignoring: ", e);
+        log.error("Unexpected InterruptedException in table monitor thread", e);
       }
     }
   }
@@ -108,6 +112,7 @@ public class TableMonitorThread extends Thread {
    *         successfully yet
    */
   public List<TableId> tables() {
+    log.trace("Requesting current tables list");
     awaitTablesReady(startupMs);
     List<TableId> tablesSnapshot = tables.get();
     if (tablesSnapshot == null) {
@@ -123,7 +128,7 @@ public class TableMonitorThread extends Thread {
 
     if (tablesSnapshot.isEmpty()) {
       log.info(
-          "Based on the supplied filtering rules, there are no matching tables to read from"
+          "Based on the supplied filtering rules, there are no matching tables to read data."
       );
     } else {
       log.debug(
@@ -136,6 +141,7 @@ public class TableMonitorThread extends Thread {
     }
 
     if (!duplicates.isEmpty()) {
+      log.warn("Duplicate table names detected: {}", duplicates);
       String configText;
       if (whitelist != null) {
         configText = "'" + JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + "'";
@@ -174,8 +180,9 @@ public class TableMonitorThread extends Thread {
   private boolean updateTables() {
     final List<TableId> allTables;
     try {
+      log.trace("Fetching all tables from database");
       allTables = dialect.tableIds(connectionProvider.getConnection());
-      log.debug("Got the following tables: {}", allTables);
+      log.debug("Retrieved {} tables from database: {}", allTables.size(), allTables);
     } catch (SQLException e) {
       log.error(
           "Error while trying to get updated table list, ignoring and waiting for next table poll"
@@ -188,24 +195,29 @@ public class TableMonitorThread extends Thread {
 
     final List<TableId> filteredTables = new ArrayList<>(allTables.size());
     if (whitelist != null) {
+      log.trace("Applying whitelist filter to tables");
       for (TableId table : allTables) {
         String fqn1 = dialect.expressionBuilder().append(table, QuoteMethod.NEVER).toString();
         String fqn2 = dialect.expressionBuilder().append(table, QuoteMethod.ALWAYS).toString();
         if (whitelist.contains(fqn1) || whitelist.contains(fqn2)
             || whitelist.contains(table.tableName())) {
           filteredTables.add(table);
+          log.trace("Table {} passed whitelist filter", table);
         }
       }
     } else if (blacklist != null) {
+      log.trace("Applying blacklist filter to tables");
       for (TableId table : allTables) {
         String fqn1 = dialect.expressionBuilder().append(table, QuoteMethod.NEVER).toString();
         String fqn2 = dialect.expressionBuilder().append(table, QuoteMethod.ALWAYS).toString();
         if (!(blacklist.contains(fqn1) || blacklist.contains(fqn2)
               || blacklist.contains(table.tableName()))) {
           filteredTables.add(table);
+          log.trace("Table {} passed blacklist filter", table);
         }
       }
     } else {
+      log.trace("No filters applied, using all tables");
       filteredTables.addAll(allTables);
     }
 
@@ -215,6 +227,7 @@ public class TableMonitorThread extends Thread {
     }
     synchronized (tables) {
       tables.notifyAll();
+      log.trace("Notified all waiting threads about table updates");
     }
     return !Objects.equals(priorTablesSnapshot, filteredTables);
   }

@@ -139,6 +139,7 @@ public class JdbcSourceTask extends SourceTask {
 
     cachedConnectionProvider = connectionProvider(maxConnAttempts, retryBackoff);
 
+
     dialect.setConnectionIsolationMode(
             cachedConnectionProvider.getConnection(),
             TransactionIsolationMode

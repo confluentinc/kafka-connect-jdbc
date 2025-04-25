@@ -85,6 +85,8 @@ blocks:
           commands:
             # Don't run this block if target branch for PR is not a nightly branch or master branch
             - |
+              echo $SEMAPHORE_GIT_REPO_SLUG \
+              echo $SEMAPHORE_GIT_BRANCH \
               sem-trigger -p connect-ci-cd-pipelines \
                 -t run-connector-jar-tests \
                 -b master \

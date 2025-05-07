@@ -83,8 +83,9 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
                                            String incrementingColumnName,
                                            Map<String, Object> offsetMap, Long timestampDelay,
                                            TimeZone timeZone, String suffix,
-                                           TimestampGranularity timestampGranularity) {
-    super(dialect, mode, name, topicPrefix, suffix);
+                                           TimestampGranularity timestampGranularity,
+                                           int queryTimeout) {
+    super(dialect, mode, name, topicPrefix, suffix, queryTimeout);
     this.incrementingColumnName = incrementingColumnName;
     this.timestampColumnNames = timestampColumnNames != null
         ? timestampColumnNames : Collections.emptyList();

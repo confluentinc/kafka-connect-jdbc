@@ -47,6 +47,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected final String topicPrefix;
   protected final TableId tableId;
   protected final String suffix;
+  protected final int queryTimeout;
 
   // Mutable state
 
@@ -64,7 +65,8 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
       QueryMode mode,
       String nameOrQuery,
       String topicPrefix,
-      String suffix
+      String suffix,
+      int queryTimeout
   ) {
     this.dialect = dialect;
     this.mode = mode;
@@ -74,6 +76,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     this.lastUpdate = 0;
     this.suffix = suffix;
     this.attemptedRetries = 0;
+    this.queryTimeout = queryTimeout;
   }
 
   public long getLastUpdate() {
@@ -85,6 +88,9 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
       return stmt;
     }
     createPreparedStatement(db);
+    if (queryTimeout > 0) {
+      stmt.setQueryTimeout(queryTimeout);
+    }
     return stmt;
   }
 

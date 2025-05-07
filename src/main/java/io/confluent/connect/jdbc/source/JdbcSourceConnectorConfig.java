@@ -30,14 +30,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import com.microsoft.sqlserver.jdbc.SQLServerConnection;
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
-import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
-import io.confluent.connect.jdbc.util.DateTimeUtils;
-import io.confluent.connect.jdbc.util.DefaultJdbcCredentialsProvider;
-import io.confluent.connect.jdbc.util.EnumRecommender;
-import io.confluent.connect.jdbc.util.JdbcCredentialsProvider;
-import io.confluent.connect.jdbc.util.JdbcCredentialsProviderValidator;
-import io.confluent.connect.jdbc.util.QuoteMethod;
-import io.confluent.connect.jdbc.util.TimeZoneValidator;
+import io.confluent.connect.jdbc.util.*;
 
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -824,9 +817,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   }
 
   public static final ConfigDef CONFIG_DEF = baseConfigDef();
+  public final String connectorName;
 
   public JdbcSourceConnectorConfig(Map<String, ?> props) {
     super(CONFIG_DEF, props);
+    this.connectorName = ConfigUtils.connectorName(props);
   }
 
   public String topicPrefix() {
@@ -1063,8 +1058,13 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   }
 
 
-  protected JdbcSourceConnectorConfig(ConfigDef subclassConfigDef, Map<String, String> props) {
+  public JdbcSourceConnectorConfig(ConfigDef subclassConfigDef, Map<String, String> props) {
     super(subclassConfigDef, props);
+    connectorName = ConfigUtils.connectorName(props);
+  }
+
+  public String connectorName() {
+    return connectorName;
   }
 
   public NumericMapping numericMapping() {

@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc;
 
+import io.confluent.connect.jdbc.util.*;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
@@ -40,10 +41,8 @@ import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.source.JdbcSourceTask;
 import io.confluent.connect.jdbc.source.JdbcSourceTaskConfig;
 import io.confluent.connect.jdbc.source.TableMonitorThread;
-import io.confluent.connect.jdbc.util.CachedConnectionProvider;
-import io.confluent.connect.jdbc.util.ExpressionBuilder;
-import io.confluent.connect.jdbc.util.TableId;
-import io.confluent.connect.jdbc.util.Version;
+
+import static io.confluent.connect.jdbc.source.JdbcSourceTaskConfig.TASK_ID_CONFIG;
 
 /**
  * JdbcConnector is a Kafka Connect Connector implementation that watches a JDBC database and
@@ -57,6 +56,7 @@ public class JdbcSourceConnector extends SourceConnector {
 
   private Map<String, String> configProperties;
   private JdbcSourceConnectorConfig config;
+  private JdbcSourceTaskConfig taskConfig;
   private CachedConnectionProvider cachedConnectionProvider;
   private TableMonitorThread tableMonitorThread;
   private DatabaseDialect dialect;
@@ -131,7 +131,9 @@ public class JdbcSourceConnector extends SourceConnector {
         tablePollMs,
         whitelistSet,
         blacklistSet,
-        Time.SYSTEM
+        Time.SYSTEM,
+        config.connectorName(),
+        taskConfig.getTaskID()
     );
     if (query.isEmpty()) {
       tableMonitorThread.start();
@@ -198,12 +200,14 @@ public class JdbcSourceConnector extends SourceConnector {
         List<List<TableId>> tablesGrouped =
             ConnectorUtils.groupPartitions(currentTables, numGroups);
         taskConfigs = new ArrayList<>(tablesGrouped.size());
+        int count = 0;
         for (List<TableId> taskTables : tablesGrouped) {
           Map<String, String> taskProps = new HashMap<>(configProperties);
           ExpressionBuilder builder = dialect.expressionBuilder();
           builder.appendList().delimitedBy(",").of(taskTables);
           taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, builder.toString());
           taskProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
+          taskProps.put(TASK_ID_CONFIG, count++ + "");
           taskConfigs.add(taskProps);
         }
         log.info("Current Tables size: {}", currentTables.size());

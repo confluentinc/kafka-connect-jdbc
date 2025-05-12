@@ -45,6 +45,8 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.Version;
 
+import static io.confluent.connect.jdbc.source.JdbcSourceTaskConfig.TASK_ID_CONFIG;
+
 /**
  * JdbcConnector is a Kafka Connect Connector implementation that watches a JDBC database and
  * generates tasks to ingest database contents.
@@ -57,6 +59,7 @@ public class JdbcSourceConnector extends SourceConnector {
 
   private Map<String, String> configProperties;
   private JdbcSourceConnectorConfig config;
+  private JdbcSourceTaskConfig taskConfig;
   private CachedConnectionProvider cachedConnectionProvider;
   private TableMonitorThread tableMonitorThread;
   private DatabaseDialect dialect;
@@ -131,7 +134,9 @@ public class JdbcSourceConnector extends SourceConnector {
         tablePollMs,
         whitelistSet,
         blacklistSet,
-        Time.SYSTEM
+        Time.SYSTEM,
+        config.connectorName(),
+        taskConfig.getTaskID()
     );
     if (query.isEmpty()) {
       tableMonitorThread.start();
@@ -174,7 +179,7 @@ public class JdbcSourceConnector extends SourceConnector {
       log.info("No custom query provided, generating task configurations for tables");
       List<TableId> currentTables = tableMonitorThread.tables();
       log.trace("Current tables from tableMonitorThread: {}", currentTables);
-      
+
       if (currentTables == null || currentTables.isEmpty()) {
         taskConfigs = new ArrayList<>(1);
         Map<String, String> taskProps = new HashMap<>(configProperties);
@@ -202,6 +207,7 @@ public class JdbcSourceConnector extends SourceConnector {
         List<List<TableId>> tablesGrouped =
             ConnectorUtils.groupPartitions(currentTables, numGroups);
         taskConfigs = new ArrayList<>(tablesGrouped.size());
+        int count = 0;
         for (List<TableId> taskTables : tablesGrouped) {
           Map<String, String> taskProps = new HashMap<>(configProperties);
           ExpressionBuilder builder = dialect.expressionBuilder();
@@ -209,6 +215,7 @@ public class JdbcSourceConnector extends SourceConnector {
           taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, builder.toString());
           taskProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
           log.trace("Assigned tables {} to task with tablesFetched=true", taskTables);
+          taskProps.put(TASK_ID_CONFIG, count++ + "");
           taskConfigs.add(taskProps);
         }
         log.info("Current Tables size: {}", currentTables.size());

@@ -78,7 +78,7 @@ public class TableMonitorThread extends Thread {
     this.tables = new AtomicReference<>();
     this.time = time;
 
-    this.setName(connectorName + "-" + taskId + "-TableMonitorThread")
+    this.setName(connectorName + "-" + taskId + "-TableMonitorThread");
   }
 
   @Override

@@ -38,6 +38,7 @@ import io.confluent.connect.jdbc.util.JdbcCredentialsProvider;
 import io.confluent.connect.jdbc.util.JdbcCredentialsProviderValidator;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TimeZoneValidator;
+import io.confluent.connect.jdbc.util.ConfigUtils;
 
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -1065,7 +1066,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   }
 
 
-  public JdbcSourceConnectorConfig(ConfigDef subclassConfigDef, Map<String, String> props) {
+  protected JdbcSourceConnectorConfig(ConfigDef subclassConfigDef, Map<String, String> props) {
     super(subclassConfigDef, props);
     connectorName = ConfigUtils.connectorName(props);
   }

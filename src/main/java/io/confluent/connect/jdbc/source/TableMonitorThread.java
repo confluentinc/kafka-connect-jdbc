@@ -63,7 +63,10 @@ public class TableMonitorThread extends Thread {
       long pollMs,
       Set<String> whitelist,
       Set<String> blacklist,
-      Time time
+      Time time,
+      String connectorName,
+      String taskId
+
   ) {
     this.dialect = dialect;
     this.connectionProvider = connectionProvider;

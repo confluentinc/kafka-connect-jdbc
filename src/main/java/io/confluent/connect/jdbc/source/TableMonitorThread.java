@@ -78,7 +78,6 @@ public class TableMonitorThread extends Thread {
     this.blacklist = blacklist;
     this.tables = new AtomicReference<>();
     this.time = time;
-    this.setName(connectorName + "-" + taskId + "-TableMonitorThread");
   }
 
   @Override

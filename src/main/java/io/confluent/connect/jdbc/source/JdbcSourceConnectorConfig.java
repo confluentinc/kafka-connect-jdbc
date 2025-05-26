@@ -38,7 +38,6 @@ import io.confluent.connect.jdbc.util.JdbcCredentialsProvider;
 import io.confluent.connect.jdbc.util.JdbcCredentialsProviderValidator;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TimeZoneValidator;
-import io.confluent.connect.jdbc.util.ConfigUtils;
 
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -825,11 +824,9 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   }
 
   public static final ConfigDef CONFIG_DEF = baseConfigDef();
-  public final String connectorName;
 
   public JdbcSourceConnectorConfig(Map<String, ?> props) {
     super(CONFIG_DEF, props);
-    this.connectorName = ConfigUtils.connectorName(props);
   }
 
   public String topicPrefix() {
@@ -1065,14 +1062,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     }
   }
 
-
   protected JdbcSourceConnectorConfig(ConfigDef subclassConfigDef, Map<String, String> props) {
     super(subclassConfigDef, props);
-    connectorName = ConfigUtils.connectorName(props);
   }
 
   public String connectorName() {
-    return connectorName;
+    return originalsStrings().get("name");
   }
 
   public NumericMapping numericMapping() {

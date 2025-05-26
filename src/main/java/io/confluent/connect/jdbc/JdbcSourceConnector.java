@@ -136,7 +136,6 @@ public class JdbcSourceConnector extends SourceConnector {
         whitelistSet,
         blacklistSet,
         Time.SYSTEM,
-        config.connectorName(),
         taskConfig.getTaskID()
     );
     if (query.isEmpty()) {

@@ -95,7 +95,7 @@ public class TableMonitorThreadTest {
   public void testSingleLookup() throws Exception {
     EasyMock.expect(dialect.expressionBuilder()).andReturn(ExpressionBuilder.create()).anyTimes();
     tableMonitorThread = new TableMonitorThread(dialect, connectionProvider, context,
-        STARTUP_LIMIT, POLL_INTERVAL, null, null, MockTime.SYSTEM,connectorName, connectorTaskId);
+        STARTUP_LIMIT, POLL_INTERVAL, null, null, MockTime.SYSTEM, connectorTaskId);
     expectTableNames(LIST_FOO, shutdownThread());
     EasyMock.replay(connectionProvider, dialect);
 
@@ -110,7 +110,7 @@ public class TableMonitorThreadTest {
   public void testTablesBlockingTimeoutOnUpdateThread() throws Exception {
     EasyMock.expect(dialect.expressionBuilder()).andReturn(ExpressionBuilder.create()).anyTimes();
     tableMonitorThread = new TableMonitorThread(dialect, connectionProvider, context,
-        STARTUP_LIMIT, 0, null, null, time,connectorName, connectorTaskId);
+        STARTUP_LIMIT, 0, null, null, time, connectorTaskId);
 
     CountDownLatch connectionRequested = new CountDownLatch(1);
     CountDownLatch connectionCompleted = new CountDownLatch(1);
@@ -161,7 +161,7 @@ public class TableMonitorThreadTest {
   public void testTablesBlockingWithDeadlineOnUpdateThread() throws Exception {
     EasyMock.expect(dialect.expressionBuilder()).andReturn(ExpressionBuilder.create());
     tableMonitorThread = new TableMonitorThread(dialect, connectionProvider, context,
-        STARTUP_LIMIT, POLL_INTERVAL, null, null, time,connectorName, connectorTaskId);
+        STARTUP_LIMIT, POLL_INTERVAL, null, null, time, connectorTaskId);
 
     EasyMock.expect(dialect.tableIds(EasyMock.eq(connection))).andReturn(Collections.emptyList());
     EasyMock.expect(connectionProvider.getConnection()).andReturn(connection);
@@ -188,7 +188,7 @@ public class TableMonitorThreadTest {
     Set<String> whitelist = new HashSet<>(Arrays.asList("foo", "bar"));
     EasyMock.expect(dialect.expressionBuilder()).andReturn(ExpressionBuilder.create()).anyTimes();
     tableMonitorThread = new TableMonitorThread(dialect, connectionProvider, context,
-        STARTUP_LIMIT, POLL_INTERVAL, whitelist, null, MockTime.SYSTEM,connectorName, connectorTaskId);
+        STARTUP_LIMIT, POLL_INTERVAL, whitelist, null, MockTime.SYSTEM, connectorTaskId);
     expectTableNames(LIST_FOO_BAR, shutdownThread());
     EasyMock.replay(connectionProvider, dialect);
 
@@ -204,7 +204,7 @@ public class TableMonitorThreadTest {
     Set<String> blacklist = new HashSet<>(Arrays.asList("bar", "baz"));
     EasyMock.expect(dialect.expressionBuilder()).andReturn(ExpressionBuilder.create()).anyTimes();
     tableMonitorThread = new TableMonitorThread(dialect, connectionProvider, context,
-        STARTUP_LIMIT, POLL_INTERVAL, null, blacklist, MockTime.SYSTEM,connectorName, connectorTaskId);
+        STARTUP_LIMIT, POLL_INTERVAL, null, blacklist, MockTime.SYSTEM, connectorTaskId);
     expectTableNames(LIST_FOO_BAR_BAZ, shutdownThread());
     EasyMock.replay(connectionProvider, dialect);
 
@@ -219,7 +219,7 @@ public class TableMonitorThreadTest {
   public void testReconfigOnUpdate() throws Exception {
     EasyMock.expect(dialect.expressionBuilder()).andReturn(ExpressionBuilder.create()).anyTimes();
     tableMonitorThread = new TableMonitorThread(dialect, connectionProvider, context,
-        STARTUP_LIMIT, POLL_INTERVAL, null, null, MockTime.SYSTEM,connectorName, connectorTaskId);
+        STARTUP_LIMIT, POLL_INTERVAL, null, null, MockTime.SYSTEM, connectorTaskId);
     expectTableNames(LIST_FOO);
     expectTableNames(LIST_FOO, checkTableNames("foo"));
     context.requestTaskReconfiguration();
@@ -247,7 +247,7 @@ public class TableMonitorThreadTest {
   @Test
   public void testInvalidConnection() throws Exception {
     tableMonitorThread = new TableMonitorThread(dialect, connectionProvider, context,
-        STARTUP_LIMIT, POLL_INTERVAL, null, null, MockTime.SYSTEM,connectorName, connectorTaskId);
+        STARTUP_LIMIT, POLL_INTERVAL, null, null, MockTime.SYSTEM, connectorTaskId);
     EasyMock.expect(connectionProvider.getConnection()).andThrow(new ConnectException("Simulated error with the db."));
 
     CountDownLatch errorLatch = new CountDownLatch(1);
@@ -270,7 +270,7 @@ public class TableMonitorThreadTest {
   public void testDuplicates() throws Exception {
     EasyMock.expect(dialect.expressionBuilder()).andReturn(ExpressionBuilder.create()).anyTimes();
     tableMonitorThread = new TableMonitorThread(dialect, connectionProvider, context,
-        STARTUP_LIMIT, POLL_INTERVAL, null, null, MockTime.SYSTEM,connectorName, connectorTaskId);
+        STARTUP_LIMIT, POLL_INTERVAL, null, null, MockTime.SYSTEM, connectorTaskId);
     expectTableNames(LIST_DUP_WITH_ALL, shutdownThread());
     context.requestTaskReconfiguration();
     EasyMock.expectLastCall();
@@ -288,7 +288,7 @@ public class TableMonitorThreadTest {
     Set<String> whitelist = new HashSet<>(Arrays.asList("dup"));
     EasyMock.expect(dialect.expressionBuilder()).andReturn(ExpressionBuilder.create()).anyTimes();
     tableMonitorThread = new TableMonitorThread(dialect, connectionProvider, context,
-        STARTUP_LIMIT, POLL_INTERVAL, whitelist, null, MockTime.SYSTEM,connectorName, connectorTaskId);
+        STARTUP_LIMIT, POLL_INTERVAL, whitelist, null, MockTime.SYSTEM, connectorTaskId);
     expectTableNames(LIST_DUP_ONLY, shutdownThread());
     context.requestTaskReconfiguration();
     EasyMock.expectLastCall();
@@ -307,7 +307,7 @@ public class TableMonitorThreadTest {
     Set<String> blacklist = new HashSet<>(Arrays.asList("foo"));
     EasyMock.expect(dialect.expressionBuilder()).andReturn(ExpressionBuilder.create()).anyTimes();
     tableMonitorThread = new TableMonitorThread(dialect, connectionProvider, context,
-        STARTUP_LIMIT, POLL_INTERVAL, null, blacklist, MockTime.SYSTEM,connectorName, connectorTaskId);
+        STARTUP_LIMIT, POLL_INTERVAL, null, blacklist, MockTime.SYSTEM, connectorTaskId);
     expectTableNames(LIST_DUP_WITH_ALL, shutdownThread());
     context.requestTaskReconfiguration();
     EasyMock.expectLastCall();
@@ -326,7 +326,7 @@ public class TableMonitorThreadTest {
     Set<String> whitelist = new HashSet<>(Arrays.asList("dup1.dup", "foo"));
     EasyMock.expect(dialect.expressionBuilder()).andReturn(ExpressionBuilder.create()).anyTimes();
     tableMonitorThread = new TableMonitorThread(dialect, connectionProvider, context,
-        STARTUP_LIMIT, POLL_INTERVAL, whitelist, null, MockTime.SYSTEM,connectorName, connectorTaskId);
+        STARTUP_LIMIT, POLL_INTERVAL, whitelist, null, MockTime.SYSTEM, connectorTaskId);
     expectTableNames(LIST_DUP_WITH_ALL, shutdownThread());
     EasyMock.replay(connectionProvider, dialect);
 
@@ -341,7 +341,7 @@ public class TableMonitorThreadTest {
     Set<String> blacklist = new HashSet<>(Arrays.asList("dup1.dup", "foo"));
     EasyMock.expect(dialect.expressionBuilder()).andReturn(ExpressionBuilder.create()).anyTimes();
     tableMonitorThread = new TableMonitorThread(dialect, connectionProvider, context,
-        STARTUP_LIMIT, POLL_INTERVAL, null, blacklist, MockTime.SYSTEM,connectorName, connectorTaskId);
+        STARTUP_LIMIT, POLL_INTERVAL, null, blacklist, MockTime.SYSTEM, connectorTaskId);
     expectTableNames(LIST_DUP_WITH_ALL, shutdownThread());
     EasyMock.replay(connectionProvider, dialect);
 

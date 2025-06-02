@@ -89,8 +89,8 @@ blocks:
             - |
               sem-trigger -p connect-ci-cd-pipelines \
                 -t run-connector-jar-tests \
-                -b master \
-                -i "CONNECTOR_NAME_LIST:${SEMAPHORE_GIT_REPO_SLUG}" \
+                -b repo-plugin-map-fix \
+                -i "REPO_NAME:$(basename SEMAPHORE_GIT_REPO_SLUG)" \
                 -i "BRANCH_NAME:${SEMAPHORE_GIT_BRANCH}" \
                 -w
 

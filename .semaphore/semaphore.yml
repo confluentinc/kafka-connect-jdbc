@@ -86,12 +86,13 @@ blocks:
             # Don't run this block if target branch for PR is not a nightly branch or master branch
             - echo "CONNECTOR_REPO_LIST=https://github.com/${SEMAPHORE_GIT_REPO_SLUG}"
             - echo "BRANCH_NAME=$SEMAPHORE_GIT_BRANCH"
+            - echo "BRANCH_NAME=$SEMAPHORE_GIT_PR_BRANCH"
             - |
               sem-trigger -p connect-ci-cd-pipelines \
                 -t run-connector-jar-tests \
                 -b repo-plugin-map-fix \
                 -i "REPO_NAME:$(basename SEMAPHORE_GIT_REPO_SLUG)" \
-                -i "BRANCH_NAME:${SEMAPHORE_GIT_BRANCH}" \
+                -i "BRANCH_NAME:${SEMAPHORE_GIT_PR_BRANCH}" \
                 -w
 
 after_pipeline:

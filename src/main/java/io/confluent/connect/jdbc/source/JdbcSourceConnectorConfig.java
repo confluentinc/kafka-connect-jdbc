@@ -1062,9 +1062,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     }
   }
 
-
   protected JdbcSourceConnectorConfig(ConfigDef subclassConfigDef, Map<String, String> props) {
     super(subclassConfigDef, props);
+  }
+
+  public String connectorName() {
+    return originalsStrings().get("name");
   }
 
   public NumericMapping numericMapping() {

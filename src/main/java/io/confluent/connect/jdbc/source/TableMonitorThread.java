@@ -63,9 +63,7 @@ public class TableMonitorThread extends Thread {
       long pollMs,
       Set<String> whitelist,
       Set<String> blacklist,
-      Time time,
-      String taskId
-
+      Time time
   ) {
     this.dialect = dialect;
     this.connectionProvider = connectionProvider;
@@ -77,7 +75,6 @@ public class TableMonitorThread extends Thread {
     this.blacklist = blacklist;
     this.tables = new AtomicReference<>();
     this.time = time;
-    this.setName(taskId + "-TableMonitorThread");
   }
 
   @Override

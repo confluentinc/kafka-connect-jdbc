@@ -135,8 +135,7 @@ public class JdbcSourceConnector extends SourceConnector {
         tablePollMs,
         whitelistSet,
         blacklistSet,
-        Time.SYSTEM,
-        taskConfig.getTaskID()
+        Time.SYSTEM
     );
     if (query.isEmpty()) {
       tableMonitorThread.start();

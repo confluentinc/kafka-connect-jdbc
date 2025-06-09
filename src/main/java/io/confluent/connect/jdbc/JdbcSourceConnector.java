@@ -45,6 +45,8 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.Version;
 
+import static io.confluent.connect.jdbc.source.JdbcSourceTaskConfig.TASK_ID_CONFIG;
+
 /**
  * JdbcConnector is a Kafka Connect Connector implementation that watches a JDBC database and
  * generates tasks to ingest database contents.
@@ -56,6 +58,8 @@ public class JdbcSourceConnector extends SourceConnector {
   private static final long MAX_TIMEOUT = 10000L;
 
   private Map<String, String> configProperties;
+
+  private JdbcSourceTaskConfig taskConfig;
   private JdbcSourceConnectorConfig config;
   private CachedConnectionProvider cachedConnectionProvider;
   private TableMonitorThread tableMonitorThread;
@@ -202,6 +206,7 @@ public class JdbcSourceConnector extends SourceConnector {
         List<List<TableId>> tablesGrouped =
             ConnectorUtils.groupPartitions(currentTables, numGroups);
         taskConfigs = new ArrayList<>(tablesGrouped.size());
+        int count = 0;
         for (List<TableId> taskTables : tablesGrouped) {
           Map<String, String> taskProps = new HashMap<>(configProperties);
           ExpressionBuilder builder = dialect.expressionBuilder();
@@ -209,6 +214,7 @@ public class JdbcSourceConnector extends SourceConnector {
           taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, builder.toString());
           taskProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
           log.trace("Assigned tables {} to task with tablesFetched=true", taskTables);
+          taskProps.put(TASK_ID_CONFIG, count++ + "");
           taskConfigs.add(taskProps);
         }
         log.info("Current Tables size: {}", currentTables.size());

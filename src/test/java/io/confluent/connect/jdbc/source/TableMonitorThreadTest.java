@@ -56,6 +56,9 @@ public class TableMonitorThreadTest {
   private static final long STARTUP_LIMIT = 50;
   private static final long POLL_INTERVAL = 100;
 
+  private static final String connectorName = "test-connector";
+  private static final String connectorTaskId = "test-task-id";
+
   private final static TableId FOO = new TableId(null, null, "foo");
   private final static TableId BAR = new TableId(null, null, "bar");
   private final static TableId BAZ = new TableId(null, null, "baz");

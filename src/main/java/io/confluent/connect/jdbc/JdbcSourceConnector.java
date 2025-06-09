@@ -45,6 +45,8 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.Version;
 
+import static io.confluent.connect.jdbc.source.JdbcSourceTaskConfig.TASK_ID_CONFIG;
+
 /**
  * JdbcConnector is a Kafka Connect Connector implementation that watches a JDBC database and
  * generates tasks to ingest database contents.
@@ -56,6 +58,7 @@ public class JdbcSourceConnector extends SourceConnector {
   private static final long MAX_TIMEOUT = 10000L;
 
   private Map<String, String> configProperties;
+  private JdbcSourceTaskConfig taskConfig;
   private JdbcSourceConnectorConfig config;
   private CachedConnectionProvider cachedConnectionProvider;
   private TableMonitorThread tableMonitorThread;

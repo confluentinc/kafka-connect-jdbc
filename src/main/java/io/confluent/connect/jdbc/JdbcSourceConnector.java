@@ -56,10 +56,12 @@ public class JdbcSourceConnector extends SourceConnector {
   private static final long MAX_TIMEOUT = 10000L;
 
   private Map<String, String> configProperties;
+  private JdbcSourceTaskConfig taskConfig;
   private JdbcSourceConnectorConfig config;
   private CachedConnectionProvider cachedConnectionProvider;
   private TableMonitorThread tableMonitorThread;
   private DatabaseDialect dialect;
+
 
   @Override
   public String version() {
@@ -72,6 +74,7 @@ public class JdbcSourceConnector extends SourceConnector {
     try {
       configProperties = properties;
       config = new JdbcSourceConnectorConfig(configProperties);
+      taskConfig = new JdbcSourceTaskConfig(properties);
     } catch (ConfigException e) {
       throw new ConnectException("Couldn't start JdbcSourceConnector due to configuration error",
                                  e);
@@ -131,7 +134,9 @@ public class JdbcSourceConnector extends SourceConnector {
         tablePollMs,
         whitelistSet,
         blacklistSet,
-        Time.SYSTEM
+        Time.SYSTEM,
+        config.connectorName(),
+        taskConfig.getTaskID()
     );
     if (query.isEmpty()) {
       tableMonitorThread.start();
@@ -167,7 +172,6 @@ public class JdbcSourceConnector extends SourceConnector {
       Map<String, String> taskProps = new HashMap<>(configProperties);
       taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
       taskProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
-      taskProps.put(JdbcSourceTaskConfig.TASK_ID_CONFIG, "1");
       taskConfigs = Collections.singletonList(taskProps);
       log.trace("Producing task configs with custom query");
       return taskConfigs;
@@ -180,7 +184,6 @@ public class JdbcSourceConnector extends SourceConnector {
         taskConfigs = new ArrayList<>(1);
         Map<String, String> taskProps = new HashMap<>(configProperties);
         taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
-        taskProps.put(JdbcSourceTaskConfig.TASK_ID_CONFIG, "1");
         if (currentTables == null) {
           /*
           currentTables is only null when the connector is starting up/restarting. In this case we
@@ -195,7 +198,6 @@ public class JdbcSourceConnector extends SourceConnector {
         } else {
           log.trace("currentTables is empty - no tables found after fetch");
           taskProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
-          taskProps.put(JdbcSourceTaskConfig.TASK_ID_CONFIG, "1");
           log.warn("No tables were found so there's no work to be done.");
         }
         taskConfigs.add(taskProps);
@@ -205,14 +207,15 @@ public class JdbcSourceConnector extends SourceConnector {
         List<List<TableId>> tablesGrouped =
             ConnectorUtils.groupPartitions(currentTables, numGroups);
         taskConfigs = new ArrayList<>(tablesGrouped.size());
+        int count = 0;
         for (List<TableId> taskTables : tablesGrouped) {
           Map<String, String> taskProps = new HashMap<>(configProperties);
           ExpressionBuilder builder = dialect.expressionBuilder();
           builder.appendList().delimitedBy(",").of(taskTables);
           taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, builder.toString());
           taskProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
-          taskProps.put(JdbcSourceTaskConfig.TASK_ID_CONFIG, "1");
           log.trace("Assigned tables {} to task with tablesFetched=true", taskTables);
+          taskProps.put(JdbcSourceTaskConfig.TASK_ID_CONFIG, count++ + "");
           taskConfigs.add(taskProps);
         }
         log.info("Current Tables size: {}", currentTables.size());

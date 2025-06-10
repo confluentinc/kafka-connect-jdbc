@@ -167,6 +167,7 @@ public class JdbcSourceConnector extends SourceConnector {
       Map<String, String> taskProps = new HashMap<>(configProperties);
       taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
       taskProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
+      taskProps.put(JdbcSourceTaskConfig.TASK_ID_CONFIG, "1");
       taskConfigs = Collections.singletonList(taskProps);
       log.trace("Producing task configs with custom query");
       return taskConfigs;
@@ -179,6 +180,7 @@ public class JdbcSourceConnector extends SourceConnector {
         taskConfigs = new ArrayList<>(1);
         Map<String, String> taskProps = new HashMap<>(configProperties);
         taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
+        taskProps.put(JdbcSourceTaskConfig.TASK_ID_CONFIG, "1");
         if (currentTables == null) {
           /*
           currentTables is only null when the connector is starting up/restarting. In this case we
@@ -193,6 +195,7 @@ public class JdbcSourceConnector extends SourceConnector {
         } else {
           log.trace("currentTables is empty - no tables found after fetch");
           taskProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
+          taskProps.put(JdbcSourceTaskConfig.TASK_ID_CONFIG, "1");
           log.warn("No tables were found so there's no work to be done.");
         }
         taskConfigs.add(taskProps);
@@ -208,6 +211,7 @@ public class JdbcSourceConnector extends SourceConnector {
           builder.appendList().delimitedBy(",").of(taskTables);
           taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, builder.toString());
           taskProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
+          taskProps.put(JdbcSourceTaskConfig.TASK_ID_CONFIG, "1");
           log.trace("Assigned tables {} to task with tablesFetched=true", taskTables);
           taskConfigs.add(taskProps);
         }

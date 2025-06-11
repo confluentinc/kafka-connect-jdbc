@@ -74,7 +74,7 @@ blocks:
           commands:
             - git clone --branch master --single-branch git@github.com:confluentinc/connect-releases.git
             - ./connect-releases/tasks/release-connect-plugins/generate-connect-changelogs.sh
-  - name: Connector Jar Build CI Gating
+  - name: Connector Jar KDP Tests Gating
     dependencies: []
     run:
       # Run this block only for pull requests

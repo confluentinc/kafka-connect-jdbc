@@ -89,7 +89,7 @@ blocks:
                   echo "PR is targeted to ${SEMAPHORE_GIT_BRANCH} branch which is feature or master branch. Triggering connector-jar-build task."; \
                   sem-trigger -p connect-ci-cd-pipelines \
                     -t run-connector-jar-tests \
-                    -b sem-jdbc-fail \
+                    -b master \
                     -i "REPO_NAME:$(basename $SEMAPHORE_GIT_REPO_SLUG)" \
                     -i "BRANCH_NAME:${SEMAPHORE_GIT_PR_BRANCH}" \
                     -w

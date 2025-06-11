@@ -85,12 +85,17 @@ blocks:
           commands:
             # Don't run this block if target branch for PR is not a nightly branch or master branch
             - |
-              sem-trigger -p connect-ci-cd-pipelines \
-                -t run-connector-jar-tests \
-                -b sem-jdbc-fail \
-                -i "REPO_NAME:$(basename $SEMAPHORE_GIT_REPO_SLUG)" \
-                -i "BRANCH_NAME:${SEMAPHORE_GIT_PR_BRANCH}" \
-                -w
+              if [[ "$SEMAPHORE_GIT_BRANCH" =~ ^[0-9]+\.[0-9]+\.x$ ]] || [[ "$SEMAPHORE_GIT_BRANCH" == "master" ]] ; then \
+                  echo "PR is targeted to ${SEMAPHORE_GIT_BRANCH} branch which is feature or master branch. Triggering connector-jar-build task."; \
+                  sem-trigger -p connect-ci-cd-pipelines \
+                    -t run-connector-jar-tests \
+                    -b sem-jdbc-fail \
+                    -i "REPO_NAME:$(basename $SEMAPHORE_GIT_REPO_SLUG)" \
+                    -i "BRANCH_NAME:${SEMAPHORE_GIT_PR_BRANCH}" \
+                    -w
+              else \
+                  echo "PR is targeted to ${SEMAPHORE_GIT_BRANCH} branch which is not feature or master branch. Skipping connector-jar-build task."; \
+              fi;
 
 after_pipeline:
   task:

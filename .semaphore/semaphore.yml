@@ -97,7 +97,6 @@ blocks:
                   echo "PR is targeted to ${SEMAPHORE_GIT_BRANCH} branch which is not feature or master branch. Skipping connector-jar-build task."; \
               fi;
 
-
 after_pipeline:
   task:
     agent:

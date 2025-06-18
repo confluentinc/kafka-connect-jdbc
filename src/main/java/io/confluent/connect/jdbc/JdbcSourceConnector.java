@@ -74,7 +74,6 @@ public class JdbcSourceConnector extends SourceConnector {
     try {
       configProperties = properties;
       config = new JdbcSourceConnectorConfig(configProperties);
-      taskConfig = new JdbcSourceTaskConfig(properties);
     } catch (ConfigException e) {
       throw new ConnectException("Couldn't start JdbcSourceConnector due to configuration error",
                                  e);

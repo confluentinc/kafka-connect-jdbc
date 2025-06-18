@@ -61,6 +61,7 @@ public class JdbcSourceConnector extends SourceConnector {
   private TableMonitorThread tableMonitorThread;
   private DatabaseDialect dialect;
 
+
   @Override
   public String version() {
     return Version.getVersion();
@@ -131,7 +132,9 @@ public class JdbcSourceConnector extends SourceConnector {
         tablePollMs,
         whitelistSet,
         blacklistSet,
-        Time.SYSTEM
+        Time.SYSTEM,
+        config.connectorName(),
+        config.getString(JdbcSourceTaskConfig.TASK_ID_CONFIG)
     );
     if (query.isEmpty()) {
       tableMonitorThread.start();
@@ -202,6 +205,7 @@ public class JdbcSourceConnector extends SourceConnector {
         List<List<TableId>> tablesGrouped =
             ConnectorUtils.groupPartitions(currentTables, numGroups);
         taskConfigs = new ArrayList<>(tablesGrouped.size());
+        int count = 0;
         for (List<TableId> taskTables : tablesGrouped) {
           Map<String, String> taskProps = new HashMap<>(configProperties);
           ExpressionBuilder builder = dialect.expressionBuilder();
@@ -209,6 +213,7 @@ public class JdbcSourceConnector extends SourceConnector {
           taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, builder.toString());
           taskProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
           log.trace("Assigned tables {} to task with tablesFetched=true", taskTables);
+          taskProps.put(JdbcSourceTaskConfig.TASK_ID_CONFIG, count++ + "");
           taskConfigs.add(taskProps);
         }
         log.info("Current Tables size: {}", currentTables.size());

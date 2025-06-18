@@ -37,13 +37,9 @@ public class JdbcSourceTaskConfig extends JdbcSourceConnectorConfig {
   static ConfigDef config = baseConfigDef()
       .define(TABLES_CONFIG, Type.LIST, Importance.HIGH, TABLES_DOC)
       .defineInternal(TABLES_FETCHED, Type.BOOLEAN, false, Importance.HIGH)
-      .define(TASK_ID_CONFIG, Type.STRING, "" ,Importance.HIGH, TASK_ID_DOC);
+      .define(TASK_ID_CONFIG, Type.STRING, "0" ,Importance.HIGH, TASK_ID_DOC);
 
   public JdbcSourceTaskConfig(Map<String, String> props) {
     super(config, props);
-  }
-
-  public String getTaskID() {
-    return getString(TASK_ID_CONFIG);
   }
 }

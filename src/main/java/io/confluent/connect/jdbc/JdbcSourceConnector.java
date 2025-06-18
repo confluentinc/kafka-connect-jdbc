@@ -56,7 +56,6 @@ public class JdbcSourceConnector extends SourceConnector {
   private static final long MAX_TIMEOUT = 10000L;
 
   private Map<String, String> configProperties;
-  private JdbcSourceTaskConfig taskConfig;
   private JdbcSourceConnectorConfig config;
   private CachedConnectionProvider cachedConnectionProvider;
   private TableMonitorThread tableMonitorThread;
@@ -135,7 +134,7 @@ public class JdbcSourceConnector extends SourceConnector {
         blacklistSet,
         Time.SYSTEM,
         config.connectorName(),
-        taskConfig.getTaskID()
+        config.getString(JdbcSourceTaskConfig.TASK_ID_CONFIG)
     );
     if (query.isEmpty()) {
       tableMonitorThread.start();

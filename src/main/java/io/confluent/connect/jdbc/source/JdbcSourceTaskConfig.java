@@ -31,9 +31,13 @@ public class JdbcSourceTaskConfig extends JdbcSourceConnectorConfig {
   private static final String TABLES_DOC = "List of tables for this task to watch for changes.";
   public static final String TABLES_FETCHED = "tables.fetched";
 
+  public static final String TASK_ID_CONFIG = "task.id";
+  private static final String TASK_ID_DOC = "Task's id";
+
   static ConfigDef config = baseConfigDef()
       .define(TABLES_CONFIG, Type.LIST, Importance.HIGH, TABLES_DOC)
-      .defineInternal(TABLES_FETCHED, Type.BOOLEAN, false, Importance.HIGH);
+      .defineInternal(TABLES_FETCHED, Type.BOOLEAN, false, Importance.HIGH)
+      .define(TASK_ID_CONFIG, Type.STRING, "0" ,Importance.HIGH, TASK_ID_DOC);
 
   public JdbcSourceTaskConfig(Map<String, String> props) {
     super(config, props);

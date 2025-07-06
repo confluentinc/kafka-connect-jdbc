@@ -167,12 +167,10 @@ public class JdbcDbWriter {
   }
 
   private String extractTableNameFormatFromHeader(SinkRecord sinkRecord) {
-    if (sinkRecord.headers() != null) {
-      Header header = sinkRecord.headers().lastWithName(TABLE_NAME_FORMAT);
-      log.info("Extracting table name format from header: {}", header);
-      if (header != null && header.value() != null) {
-        return header.value().toString();
-      }
+    Header header = sinkRecord.headers().lastWithName(TABLE_NAME_FORMAT);
+    log.info("Extracting table name format from header: {}", header);
+    if (header != null && header.value() != null) {
+      return header.value().toString();
     }
     return null;
   }

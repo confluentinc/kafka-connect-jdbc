@@ -126,8 +126,16 @@ public class JdbcSinkConfig extends AbstractConfig {
       "A format string for the destination table name, which may contain '${topic}' as a "
       + "placeholder for the originating topic name.\n"
       + "For example, ``kafka_${topic}`` for the topic 'orders' will map to the table name "
-      + "'kafka_orders'.";
+      + "'kafka_orders'.\n\n"
+      + "Special value: If set to ``__RECORD_HEADER__``, the table name will be dynamically "
+      + "determined from the Kafka message headers. In this mode, the connector will look for "
+      + "a header key ('table.name.format')"
+      + "that contains the actual table name. This allows routing messages from a single topic "
+      + "to different tables based on the message headers.\n"
+      + "Example header: ``{\"table.name.format\": \"user_events\"}`` will route the message"
+      + " to the 'user_events' table.";
   private static final String TABLE_NAME_FORMAT_DISPLAY = "Table Name Format";
+  public static final String TABLE_NAME_FORMAT_RECORD_HEADER = "__RECORD_HEADER__";
 
   public static final String MAX_RETRIES = "max.retries";
   private static final int MAX_RETRIES_DEFAULT = 10;

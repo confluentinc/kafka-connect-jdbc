@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.sink;
 
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.apache.kafka.connect.header.Header;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -30,6 +31,9 @@ import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.TableId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.TABLE_NAME_FORMAT;
+import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.TABLE_NAME_FORMAT_RECORD_HEADER;
 
 public class JdbcDbWriter {
   private static final Logger log = LoggerFactory.getLogger(JdbcDbWriter.class);
@@ -68,7 +72,7 @@ public class JdbcDbWriter {
     try {
       final Map<TableId, BufferedRecords> bufferByTable = new HashMap<>();
       for (SinkRecord record : records) {
-        final TableId tableId = destinationTable(record.topic(), schemaName, catalogName);
+        final TableId tableId = determineTableId(record, schemaName, catalogName);
         BufferedRecords buffer = bufferByTable.get(tableId);
         if (buffer == null) {
           buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
@@ -139,5 +143,37 @@ public class JdbcDbWriter {
       log.warn("Failed to get catalog: {}", e.getMessage());
       return Optional.empty();
     }
+  }
+
+  private TableId determineTableId(SinkRecord sinkRecord, String schemaName, String catalogName) {
+    // Only try to get table name from header if config.tableNameFormat is __RECORD_HEADER__
+    if (TABLE_NAME_FORMAT_RECORD_HEADER.equals(config.tableNameFormat)) {
+      String headerTableName = extractTableNameFormatFromHeader(sinkRecord);
+      if (headerTableName != null && !headerTableName.trim().isEmpty()) {
+        log.debug("Using table name from header: {} for record from topic: {}",
+                headerTableName, sinkRecord.topic());
+        return new TableId(catalogName, schemaName, headerTableName.trim());
+      } else {
+        throw new ConnectException(String.format(
+            "Header '%s' is not set or empty for record from topic '%s'. "
+            + "Please ensure the header is set correctly.",
+            TABLE_NAME_FORMAT, sinkRecord.topic()
+        ));
+      }
+    }
+
+    // Fall back to default behavior (topic-based table naming)
+    return destinationTable(sinkRecord.topic(), schemaName, catalogName);
+  }
+
+  private String extractTableNameFormatFromHeader(SinkRecord sinkRecord) {
+    if (sinkRecord.headers() != null) {
+      Header header = sinkRecord.headers().lastWithName(TABLE_NAME_FORMAT);
+      log.info("Extracting table name format from header: {}", header);
+      if (header != null && header.value() != null) {
+        return header.value().toString();
+      }
+    }
+    return null;
   }
 }

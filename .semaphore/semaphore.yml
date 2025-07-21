@@ -70,6 +70,30 @@ blocks:
             - git clone --branch master --single-branch git@github.com:confluentinc/connect-releases.git
             - ./connect-releases/tasks/release-connect-plugins/generate-connect-changelogs.sh
 
+# This is auto-managed by connect-ci-cd-pipelines semaphore task, to disable please reach out on slack #connect-testability
+  - name: Connector Kafka Docker Playground Test
+    dependencies: []
+    run:
+      # Run this block only for pull requests
+      when: "pull_request =~ '.*'"
+    task:
+      jobs:
+        - name: Trigger Kafka Docker Playground Test
+          commands:
+            # Don't run this block if target branch for PR is not a nightly branch or master branch
+            - |
+              if [[ "$SEMAPHORE_GIT_BRANCH" =~ ^[0-9]+\.[0-9]+\.x$ ]] || [[ "$SEMAPHORE_GIT_BRANCH" == "master" ]] ; then \
+                echo "PR is targeted to ${SEMAPHORE_GIT_BRANCH} branch which is feature or master branch. Triggering run-kdp-matrix-on-pr-builds task."; \
+                sem-trigger -p connect-ci-cd-pipelines \
+                  -t run-kdp-matrix-on-pr-builds \
+                  -b master \
+                  -i "REPO_NAME:$(basename $SEMAPHORE_GIT_REPO_SLUG)" \
+                  -i "BRANCH_NAME:${SEMAPHORE_GIT_PR_BRANCH}" \
+                  -w
+              else \
+                echo "PR is targeted to ${SEMAPHORE_GIT_BRANCH} branch which is not feature or master branch. Skipping Kafka Docker Playground Test Task."; \
+              fi;
+
 after_pipeline:
   task:
     agent:

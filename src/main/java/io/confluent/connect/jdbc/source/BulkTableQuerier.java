@@ -44,9 +44,10 @@ public class BulkTableQuerier extends TableQuerier {
       QueryMode mode,
       String name,
       String topicPrefix,
-      String suffix
+      String suffix,
+      int queryTimeout
   ) {
-    super(dialect, mode, name, topicPrefix, suffix);
+    super(dialect, mode, name, topicPrefix, suffix, queryTimeout);
   }
 
   @Override

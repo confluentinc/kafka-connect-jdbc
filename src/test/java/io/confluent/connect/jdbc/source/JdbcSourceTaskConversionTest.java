@@ -230,14 +230,27 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
 
   @Test
   public void testDecimal() throws Exception {
+    typeConversion("DECIMAL(1,0)", false,
+            new EmbeddedDerby.Literal("CAST (1 AS DECIMAL(1,0))"),
+            Schema.INT8_SCHEMA, new Byte("1"));
+    typeConversion("DECIMAL(3,0)", false,
+            new EmbeddedDerby.Literal("CAST (123 AS DECIMAL(3,0))"),
+            Schema.INT16_SCHEMA, new Short("123"));
+    typeConversion("DECIMAL(5,0)", false,
+            new EmbeddedDerby.Literal("CAST (12345 AS DECIMAL(5,0))"),
+            Schema.INT32_SCHEMA, new Integer("12345"));
+    typeConversion("DECIMAL(10,0)", false,
+            new EmbeddedDerby.Literal("CAST (1234567890 AS DECIMAL(10,0))"),
+            Schema.INT64_SCHEMA, new Long("1234567890"));
+
     SchemaBuilder schemaBuilder = Decimal.builder(2);
     schemaBuilder.parameter("connect.decimal.precision", Integer.toString(5));
 
     typeConversion("DECIMAL(5,2)",
         false,
         new EmbeddedDerby.Literal("CAST (123.45 AS DECIMAL(5,2))"),
-        schemaBuilder.build(),
-        new BigDecimal(new BigInteger("12345"), 2));
+        !extendedMapping ? schemaBuilder.build() : Schema.FLOAT64_SCHEMA,
+        !extendedMapping ? new BigDecimal(new BigInteger("12345"), 2) : 123.45);
   }
 
   @Test
@@ -246,12 +259,14 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
     schemaBuilder.parameter("connect.decimal.precision", Integer.toString(5));
 
     typeConversion("DECIMAL(5,2)", true,
-        new EmbeddedDerby.Literal("CAST(123.45 AS DECIMAL(5,2))"),
-        schemaBuilder.build(),
-        new BigDecimal(new BigInteger("12345"), 2));
+            new EmbeddedDerby.Literal("CAST(123.45 AS DECIMAL(5,2))"),
+            !extendedMapping ? schemaBuilder.build() : SchemaBuilder.float64().optional().build(),
+            !extendedMapping ? new BigDecimal(new BigInteger("12345"), 2) : 123.45);
+
     typeConversion("DECIMAL(5,2)", true, null,
-        schemaBuilder.build(),
-        null);
+            !extendedMapping ? schemaBuilder.build()
+                    : SchemaBuilder.float64().optional().build(),
+                   null);
   }
 
   @Test

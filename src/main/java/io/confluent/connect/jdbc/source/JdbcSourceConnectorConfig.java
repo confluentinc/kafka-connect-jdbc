@@ -124,7 +124,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "Precision (deprecated)";
 
   private static final String NUMERIC_MAPPING_DOC =
-      "Map NUMERIC values by precision and optionally scale to integral or decimal types.\n"
+      "Map NUMERIC/DECIMAL values by precision and optionally scale to integral or decimal types.\n"
       + "  * Use ``none`` if all NUMERIC columns are to be represented by Connect's DECIMAL "
       + "logical type.\n"
       + "  * Use ``best_fit`` if NUMERIC columns should be cast to Connect's INT8, INT16, "

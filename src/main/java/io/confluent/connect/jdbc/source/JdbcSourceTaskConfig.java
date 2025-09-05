@@ -30,10 +30,15 @@ public class JdbcSourceTaskConfig extends JdbcSourceConnectorConfig {
   public static final String TABLES_CONFIG = "tables";
   private static final String TABLES_DOC = "List of tables for this task to watch for changes.";
   public static final String TABLES_FETCHED = "tables.fetched";
+  public static final String ENGINE_SHUTDOWN_TIMEOUT = "engine.shutdown.timeout";
+  public static final String ENGINE_SHUTDOWN_TIMEOUT_DOC = "Delay in seconds to wait for the "
+      + "engine to shutdown.";
 
   static ConfigDef config = baseConfigDef()
       .define(TABLES_CONFIG, Type.LIST, Importance.HIGH, TABLES_DOC)
-      .defineInternal(TABLES_FETCHED, Type.BOOLEAN, false, Importance.HIGH);
+      .defineInternal(TABLES_FETCHED, Type.BOOLEAN, false, Importance.HIGH)
+      .defineInternal(ENGINE_SHUTDOWN_TIMEOUT, Type.INT, 10,
+          ConfigDef.Range.between(0,30), Importance.LOW, ENGINE_SHUTDOWN_TIMEOUT_DOC);
 
   public JdbcSourceTaskConfig(Map<String, String> props) {
     super(config, props);

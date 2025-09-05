@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.source;
 
 import java.sql.Connection;
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -109,8 +110,22 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final String BATCH_MAX_ROWS_DOC =
       "Maximum number of rows to include in a single batch when polling for new data. This "
       + "setting can be used to limit the amount of data buffered internally in the connector.";
-  public static final int BATCH_MAX_ROWS_DEFAULT = 100;
+  public static final int BATCH_MAX_ROWS_DEFAULT = 1000;
   private static final String BATCH_MAX_ROWS_DISPLAY = "Max Rows Per Batch";
+
+  public static final String MAX_BUFFER_SIZE_CONFIG = "max.buffer.size";
+  private static final String MAX_BUFFER_SIZE_DISPLAY = "Maximum Buffer Size";
+  private static final String MAX_BUFFER_SIZE_DOC =
+      "The maximum number of records from the source database that can be buffered into memory. "
+          + "The default of 0 means a buffer size will be based on the maximum batch size.";
+  static final int MAX_BUFFER_SIZE_DEFAULT = 0;
+
+  public static final String POLL_LINGER_MS_CONFIG = "poll.linger.ms";
+  public static final String POLL_LINGER_MS_DISPLAY = "Poll Linger Milliseconds";
+  public static final long POLL_LINGER_MS_DEFAULT = Duration.ofSeconds(5).toMillis();
+  protected static final String POLL_LINGER_MS_DOC =
+      "The maximum time to wait for a record before returning an empty batch. The default is "
+          + "5 seconds.";
 
   public static final String NUMERIC_PRECISION_MAPPING_CONFIG = "numeric.precision.mapping";
   private static final String NUMERIC_PRECISION_MAPPING_DOC =
@@ -742,6 +757,26 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.SHORT,
         BATCH_MAX_ROWS_DISPLAY
+    ).define(
+        MAX_BUFFER_SIZE_CONFIG,
+        Type.INT,
+        MAX_BUFFER_SIZE_DEFAULT,
+        Importance.LOW,
+        MAX_BUFFER_SIZE_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        MAX_BUFFER_SIZE_DISPLAY
+    ).define(
+        POLL_LINGER_MS_CONFIG,
+        Type.LONG,
+        POLL_LINGER_MS_DEFAULT,
+        Importance.LOW,
+        POLL_LINGER_MS_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        POLL_LINGER_MS_DISPLAY
     ).defineInternal(
         TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_CONFIG,
         Type.LONG,
@@ -1074,6 +1109,23 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public TimeZone timeZone() {
     String dbTimeZone = getString(JdbcSourceTaskConfig.DB_TIMEZONE_CONFIG);
     return TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
+  }
+
+  public int maxBatchSize() {
+    return getInt(BATCH_MAX_ROWS_CONFIG);
+  }
+
+  public int maxBufferSize() {
+    int bufferSize = getInt(MAX_BUFFER_SIZE_CONFIG);
+    if (bufferSize == 0) {
+      // Compute the default
+      bufferSize = maxBatchSize() * 4;
+    }
+    return bufferSize;
+  }
+
+  public Duration pollLingerMs() {
+    return Duration.ofMillis(getLong(POLL_LINGER_MS_CONFIG));
   }
 
   public static void main(String[] args) {

@@ -70,12 +70,10 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
   @Before
   public void setup() throws Exception {
     super.setup();
-    task.start(singleTableWithTimezoneConfig(extendedMapping, timezone));
   }
 
   @After
   public void tearDown() throws Exception {
-    task.stop();
     super.tearDown();
   }
 
@@ -87,6 +85,10 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
   @Test
   public void testNullableBoolean() throws Exception {
     typeConversion("BOOLEAN", true, false, Schema.OPTIONAL_BOOLEAN_SCHEMA, false);
+  }
+
+  @Test
+  public void testNullableBooleanWithNull() throws Exception {
     typeConversion("BOOLEAN", true, null, Schema.OPTIONAL_BOOLEAN_SCHEMA, null);
   }
 
@@ -98,6 +100,10 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
   @Test
   public void testNullableSmallInt() throws Exception {
     typeConversion("SMALLINT", true, 1, Schema.OPTIONAL_INT16_SCHEMA, (short) 1);
+  }
+
+  @Test
+  public void testNullableSmallIntWithNull() throws Exception {
     typeConversion("SMALLINT", true, null, Schema.OPTIONAL_INT16_SCHEMA, null);
   }
 
@@ -109,6 +115,10 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
   @Test
   public void testNullableInt() throws Exception {
     typeConversion("INTEGER", true, 1, Schema.OPTIONAL_INT32_SCHEMA, 1);
+  }
+
+  @Test
+  public void testNullableIntWithNull() throws Exception {
     typeConversion("INTEGER", true, null, Schema.OPTIONAL_INT32_SCHEMA, null);
   }
 
@@ -120,6 +130,10 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
   @Test
   public void testNullableBigInt() throws Exception {
     typeConversion("BIGINT", true, Long.MAX_VALUE, Schema.OPTIONAL_INT64_SCHEMA, Long.MAX_VALUE);
+  }
+
+  @Test
+  public void testNullableBigIntWithNull() throws Exception {
     typeConversion("BIGINT", true, null, Schema.OPTIONAL_INT64_SCHEMA, null);
   }
 
@@ -131,6 +145,10 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
   @Test
   public void testNullableReal() throws Exception {
     typeConversion("REAL", true, 1, Schema.OPTIONAL_FLOAT32_SCHEMA, 1.f);
+  }
+
+  @Test
+  public void testNullableRealWithNull() throws Exception {
     typeConversion("REAL", true, null, Schema.OPTIONAL_FLOAT32_SCHEMA, null);
   }
 
@@ -142,6 +160,10 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
   @Test
   public void testNullableDouble() throws Exception {
     typeConversion("DOUBLE", true, 1, Schema.OPTIONAL_FLOAT64_SCHEMA, 1.0);
+  }
+
+  @Test
+  public void testNullableDoubleWithNull() throws Exception {
     typeConversion("DOUBLE", true, null, Schema.OPTIONAL_FLOAT64_SCHEMA, null);
   }
 
@@ -155,6 +177,11 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
   public void testNullableChar() throws Exception {
     // Converted to string, so fixed size not checked
     typeConversion("CHAR(5)", true, "a", Schema.OPTIONAL_STRING_SCHEMA, "a    ");
+  }
+
+  @Test
+  public void testNullableCharWithNull() throws Exception {
+    // Converted to string, so fixed size not checked
     typeConversion("CHAR(5)", true, null, Schema.OPTIONAL_STRING_SCHEMA, null);
   }
 
@@ -168,6 +195,11 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
   public void testNullableVarChar() throws Exception {
     // Converted to string, so fixed size not checked
     typeConversion("VARCHAR(5)", true, "a", Schema.OPTIONAL_STRING_SCHEMA, "a");
+  }
+
+  @Test
+  public void testNullableVarCharWithNull() throws Exception {
+    // Converted to string, so fixed size not checked
     typeConversion("VARCHAR(5)", true, null, Schema.OPTIONAL_STRING_SCHEMA, null);
   }
 
@@ -183,6 +215,10 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
   public void testNullableBlob() throws Exception {
     typeConversion("BLOB(5)", true, new SerialBlob("a".getBytes()), Schema.OPTIONAL_BYTES_SCHEMA,
                    "a".getBytes());
+  }
+
+  @Test
+  public void testNullableBlobWithNull() throws Exception {
     typeConversion("BLOB(5)", true, null, Schema.OPTIONAL_BYTES_SCHEMA, null);
   }
 
@@ -196,6 +232,10 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
   @Test
   public void testNullableClob() throws Exception {
     typeConversion("CLOB(5)", true, "a", Schema.OPTIONAL_STRING_SCHEMA, "a");
+  }
+
+  @Test
+  public void testNullableClobWithNull() throws Exception {
     typeConversion("CLOB(5)", true, null, Schema.OPTIONAL_STRING_SCHEMA, null);
   }
 
@@ -209,6 +249,10 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
   public void testNullableBinary() throws Exception {
     typeConversion("CHAR(5) FOR BIT DATA", true, "a".getBytes(), Schema.OPTIONAL_BYTES_SCHEMA,
                    "a    ".getBytes());
+  }
+
+  @Test
+  public void testNullableBinaryWithNull() throws Exception {
     typeConversion("CHAR(5) FOR BIT DATA", true, null, Schema.OPTIONAL_BYTES_SCHEMA, null);
   }
 
@@ -249,6 +293,13 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
         new EmbeddedDerby.Literal("CAST(123.45 AS DECIMAL(5,2))"),
         schemaBuilder.build(),
         new BigDecimal(new BigInteger("12345"), 2));
+  }
+
+  @Test
+  public void testNullableDecimalWithNull() throws Exception {
+    SchemaBuilder schemaBuilder = Decimal.builder(2).optional();
+    schemaBuilder.parameter("connect.decimal.precision", Integer.toString(5));
+
     typeConversion("DECIMAL(5,2)", true, null,
         schemaBuilder.build(),
         null);
@@ -270,9 +321,15 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
     typeConversion("DATE", true, "1977-02-13",
                    Date.builder().optional().build(),
                    expected.getTime());
+  }
+
+  @Test
+  public void testNullableDateWithNull() throws Exception {
+    GregorianCalendar expected = new GregorianCalendar(1977, Calendar.FEBRUARY, 13, 0, 0, 0);
+    expected.setTimeZone(TimeZone.getTimeZone("UTC"));
     typeConversion("DATE", true, null,
-                   Date.builder().optional().build(),
-                   null);
+        Date.builder().optional().build(),
+        null);
   }
 
   @Test
@@ -291,9 +348,15 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
     typeConversion("TIME", true, "23:03:20",
                    Time.builder().optional().build(),
                    expected.getTime());
+  }
+
+  @Test
+  public void testNullableTimeWithNull() throws Exception {
+    GregorianCalendar expected = new GregorianCalendar(1970, Calendar.JANUARY, 1, 23, 3, 20);
+    expected.setTimeZone(timezone);
     typeConversion("TIME", true, null,
-                   Time.builder().optional().build(),
-                   null);
+        Time.builder().optional().build(),
+        null);
   }
 
   @Test
@@ -312,9 +375,15 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
     typeConversion("TIMESTAMP", true, "1977-02-13 23:03:20",
                    Timestamp.builder().optional().build(),
                    expected.getTime());
+  }
+
+  @Test
+  public void testNullableTimestampWithNull() throws Exception {
+    GregorianCalendar expected = new GregorianCalendar(1977, Calendar.FEBRUARY, 13, 23, 3, 20);
+    expected.setTimeZone(timezone);
     typeConversion("TIMESTAMP", true, null,
-                   Timestamp.builder().optional().build(),
-                   null);
+        Timestamp.builder().optional().build(),
+        null);
   }
 
   // Derby has an XML type, but the JDBC driver doesn't implement any of the type bindings,
@@ -329,8 +398,19 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
     }
     db.createTable(SINGLE_TABLE_NAME, "id", sqlColumnSpec);
     db.insert(SINGLE_TABLE_NAME, "id", sqlValue);
+    // starting task after creation of table to avoid failure in case of table not found
+    task.start(singleTableWithTimezoneConfig(extendedMapping, timezone, 1));
     List<SourceRecord> records = task.poll();
+    // Poll until we get the record from the record queue with timeout of 5 seconds
+    long startTime = System.currentTimeMillis();
+    long timeout = 5000;
+    while (records.isEmpty() && (System.currentTimeMillis() - startTime) < timeout) {
+      records = task.poll();
+    }
     validateRecords(records, convertedSchema, convertedValue);
+    // closing the task before dropping the table to avoid failure in case of table not found
+    // just to avoid failure logs
+    task.stop();
     db.dropTable(SINGLE_TABLE_NAME);
   }
 

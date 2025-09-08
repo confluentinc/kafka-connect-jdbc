@@ -860,6 +860,8 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
 
     startTask("modified", "id", null);
 
+    Thread.sleep(100);
+
     verifyPoll(3, "id", Arrays.asList(4, 5, 1), true, true, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     PowerMock.verifyAll();

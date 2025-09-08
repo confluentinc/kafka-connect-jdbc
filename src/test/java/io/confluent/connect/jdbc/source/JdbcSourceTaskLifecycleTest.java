@@ -364,7 +364,6 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
 
     mockedTask.tableQueue = priorityQueue;
     mockedTask.cachedConnectionProvider = mockCachedConnectionProvider;
-    mockedTask.maxRetriesPerQuerier = retryMax;
 
     return mockedTask;
   }

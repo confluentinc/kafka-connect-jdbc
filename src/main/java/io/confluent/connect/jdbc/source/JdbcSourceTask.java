@@ -515,8 +515,7 @@ public class JdbcSourceTask extends SourceTask {
         }
       }
     }
-    // Return null for empty results to maintain backward compatibility
-    return (results == null || results.isEmpty()) ? null : results;
+    return results;
   }
 
 

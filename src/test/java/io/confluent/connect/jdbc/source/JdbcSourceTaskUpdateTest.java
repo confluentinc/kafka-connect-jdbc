@@ -75,25 +75,40 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     // Bulk periodic load is currently the default
     task.start(singleTableConfig());
 
+    Thread.sleep(100);
+
+    // By the time poll is called, the table might have been queried multiple times by the
+    // TableQuerierProcessor, so we could get multiple entries for the same record
     List<SourceRecord> records = task.poll();
-    assertEquals(Collections.singletonMap(1, 1), countIntValues(records, "id"));
+    assertTrue(countIntValues(records, "id").get(1) >= 1);
     assertRecordsTopic(records, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     records = task.poll();
-    assertEquals(Collections.singletonMap(1, 1), countIntValues(records, "id"));
+    assertTrue(countIntValues(records, "id").get(1) >= 1);
     assertRecordsTopic(records, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     db.insert(SINGLE_TABLE_NAME, "id", 2);
-    records = task.poll();
-    Map<Integer, Integer> twoRecords = new HashMap<>();
-    twoRecords.put(1, 1);
-    twoRecords.put(2, 1);
-    assertEquals(twoRecords, countIntValues(records, "id"));
+
+    Thread.sleep(100);
+
+    while (!countIntValues(records, "id").containsKey(2)) {
+      records = task.poll();
+    }
+    assertTrue(countIntValues(records, "id").get(1) >= 1);
+    assertTrue(countIntValues(records, "id").get(2) >= 1);
     assertRecordsTopic(records, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     db.delete(SINGLE_TABLE_NAME, new EmbeddedDerby.EqualsCondition(column, 1));
-    records = task.poll();
-    assertEquals(Collections.singletonMap(2, 1), countIntValues(records, "id"));
+
+    Thread.sleep(100);
+
+    // The queue might still contain records corresponding to the deleted row
+    // So the poll might get records for the deleted row
+    while (countIntValues(records, "id").containsKey(1)) {
+      records = task.poll();
+    }
+
+    assertTrue(countIntValues(records, "id").get(2) >= 1);
     assertRecordsTopic(records, TOPIC_PREFIX + SINGLE_TABLE_NAME);
   }
 

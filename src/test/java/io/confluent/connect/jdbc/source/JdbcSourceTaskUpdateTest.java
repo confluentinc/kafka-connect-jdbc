@@ -732,6 +732,8 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
 
     startTask(null, "", null); // autoincrementing
 
+    Thread.sleep(100);
+
     // Effectively skips first poll
     verifyPoll(2, "id", Arrays.asList(2L, 3L), false, true, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 

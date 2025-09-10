@@ -241,13 +241,13 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       "table.monitoring.startup.polling.limit.ms";
   public static final long TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_DEFAULT = 10 * 1000;
 
-  public static final String TABLE_POLL_INTERVAL_MS_CONFIG = "table.poll.interval.ms";
-  private static final String TABLE_POLL_INTERVAL_MS_DOC =
-      "Frequency in ms to poll for new or removed tables, which may result in updated task "
+  public static final String TABLE_SCAN_INTERVAL_MS_CONFIG = "table.scan.interval.ms";
+  private static final String TABLE_SCAN_INTERVAL_MS_DOC =
+      "Frequency in ms to scan for new or removed tables, which may result in updated task "
       + "configurations to start polling for data in added tables or stop polling for data in "
       + "removed tables.";
-  public static final long TABLE_POLL_INTERVAL_MS_DEFAULT = 60 * 1000;
-  private static final String TABLE_POLL_INTERVAL_MS_DISPLAY
+  public static final long TABLE_SCAN_INTERVAL_MS_DEFAULT = 60 * 1000;
+  private static final String TABLE_SCAN_INTERVAL_MS_DISPLAY
       = "Metadata Change Monitoring Interval (ms)";
 
   public static final String TABLE_WHITELIST_CONFIG = "table.whitelist";
@@ -783,15 +783,15 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_DEFAULT,
         Importance.LOW
     ).define(
-        TABLE_POLL_INTERVAL_MS_CONFIG,
+        TABLE_SCAN_INTERVAL_MS_CONFIG,
         Type.LONG,
-        TABLE_POLL_INTERVAL_MS_DEFAULT,
+        TABLE_SCAN_INTERVAL_MS_DEFAULT,
         Importance.LOW,
-        TABLE_POLL_INTERVAL_MS_DOC,
+        TABLE_SCAN_INTERVAL_MS_DOC,
         CONNECTOR_GROUP,
         ++orderInGroup,
         Width.SHORT,
-        TABLE_POLL_INTERVAL_MS_DISPLAY
+        TABLE_SCAN_INTERVAL_MS_DISPLAY
     ).define(
         TOPIC_PREFIX_CONFIG,
         Type.STRING,

@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.source;
 
 import java.sql.Connection;
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -109,8 +110,22 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final String BATCH_MAX_ROWS_DOC =
       "Maximum number of rows to include in a single batch when polling for new data. This "
       + "setting can be used to limit the amount of data buffered internally in the connector.";
-  public static final int BATCH_MAX_ROWS_DEFAULT = 100;
+  public static final int BATCH_MAX_ROWS_DEFAULT = 1000;
   private static final String BATCH_MAX_ROWS_DISPLAY = "Max Rows Per Batch";
+
+  public static final String MAX_BUFFER_SIZE_CONFIG = "max.buffer.size";
+  private static final String MAX_BUFFER_SIZE_DISPLAY = "Maximum Buffer Size";
+  private static final String MAX_BUFFER_SIZE_DOC =
+      "The maximum number of records from the source database that can be buffered into memory. "
+          + "The default of 0 means a buffer size will be based on the maximum batch size.";
+  static final int MAX_BUFFER_SIZE_DEFAULT = 0;
+
+  public static final String POLL_LINGER_MS_CONFIG = "poll.linger.ms";
+  public static final String POLL_LINGER_MS_DISPLAY = "Poll Linger Milliseconds";
+  public static final long POLL_LINGER_MS_DEFAULT = Duration.ofSeconds(5).toMillis();
+  protected static final String POLL_LINGER_MS_DOC =
+      "The maximum time to wait for a record before returning an empty batch. The default is "
+          + "5 seconds.";
 
   public static final String NUMERIC_PRECISION_MAPPING_CONFIG = "numeric.precision.mapping";
   private static final String NUMERIC_PRECISION_MAPPING_DOC =
@@ -226,13 +241,13 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       "table.monitoring.startup.polling.limit.ms";
   public static final long TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_DEFAULT = 10 * 1000;
 
-  public static final String TABLE_POLL_INTERVAL_MS_CONFIG = "table.poll.interval.ms";
-  private static final String TABLE_POLL_INTERVAL_MS_DOC =
-      "Frequency in ms to poll for new or removed tables, which may result in updated task "
+  public static final String TABLE_SCAN_INTERVAL_MS_CONFIG = "table.scan.interval.ms";
+  private static final String TABLE_SCAN_INTERVAL_MS_DOC =
+      "Frequency in ms to scan for new or removed tables, which may result in updated task "
       + "configurations to start polling for data in added tables or stop polling for data in "
       + "removed tables.";
-  public static final long TABLE_POLL_INTERVAL_MS_DEFAULT = 60 * 1000;
-  private static final String TABLE_POLL_INTERVAL_MS_DISPLAY
+  public static final long TABLE_SCAN_INTERVAL_MS_DEFAULT = 60 * 1000;
+  private static final String TABLE_SCAN_INTERVAL_MS_DISPLAY
       = "Metadata Change Monitoring Interval (ms)";
 
   public static final String TABLE_WHITELIST_CONFIG = "table.whitelist";
@@ -742,21 +757,41 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.SHORT,
         BATCH_MAX_ROWS_DISPLAY
+    ).define(
+        MAX_BUFFER_SIZE_CONFIG,
+        Type.INT,
+        MAX_BUFFER_SIZE_DEFAULT,
+        Importance.LOW,
+        MAX_BUFFER_SIZE_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        MAX_BUFFER_SIZE_DISPLAY
+    ).define(
+        POLL_LINGER_MS_CONFIG,
+        Type.LONG,
+        POLL_LINGER_MS_DEFAULT,
+        Importance.LOW,
+        POLL_LINGER_MS_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        POLL_LINGER_MS_DISPLAY
     ).defineInternal(
         TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_CONFIG,
         Type.LONG,
         TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_DEFAULT,
         Importance.LOW
     ).define(
-        TABLE_POLL_INTERVAL_MS_CONFIG,
+        TABLE_SCAN_INTERVAL_MS_CONFIG,
         Type.LONG,
-        TABLE_POLL_INTERVAL_MS_DEFAULT,
+        TABLE_SCAN_INTERVAL_MS_DEFAULT,
         Importance.LOW,
-        TABLE_POLL_INTERVAL_MS_DOC,
+        TABLE_SCAN_INTERVAL_MS_DOC,
         CONNECTOR_GROUP,
         ++orderInGroup,
         Width.SHORT,
-        TABLE_POLL_INTERVAL_MS_DISPLAY
+        TABLE_SCAN_INTERVAL_MS_DISPLAY
     ).define(
         TOPIC_PREFIX_CONFIG,
         Type.STRING,
@@ -1074,6 +1109,23 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public TimeZone timeZone() {
     String dbTimeZone = getString(JdbcSourceTaskConfig.DB_TIMEZONE_CONFIG);
     return TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
+  }
+
+  public int maxBatchSize() {
+    return getInt(BATCH_MAX_ROWS_CONFIG);
+  }
+
+  public int maxBufferSize() {
+    int bufferSize = getInt(MAX_BUFFER_SIZE_CONFIG);
+    if (bufferSize == 0) {
+      // Compute the default
+      bufferSize = maxBatchSize() * 4;
+    }
+    return bufferSize;
+  }
+
+  public Duration pollLingerMs() {
+    return Duration.ofMillis(getLong(POLL_LINGER_MS_CONFIG));
   }
 
   public static void main(String[] args) {

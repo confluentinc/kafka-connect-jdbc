@@ -95,7 +95,7 @@ public class JdbcSourceConnector extends SourceConnector {
     log.info("Initial connection attempt with the database.");
     cachedConnectionProvider.getConnection();
 
-    long tablePollMs = config.getLong(JdbcSourceConnectorConfig.TABLE_POLL_INTERVAL_MS_CONFIG);
+    long tableScanMs = config.getLong(JdbcSourceConnectorConfig.TABLE_SCAN_INTERVAL_MS_CONFIG);
     long tableStartupLimitMs =
         config.getLong(JdbcSourceConnectorConfig.TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_CONFIG);
     List<String> whitelist = config.getList(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG);
@@ -128,7 +128,7 @@ public class JdbcSourceConnector extends SourceConnector {
         cachedConnectionProvider,
         context,
         tableStartupLimitMs,
-        tablePollMs,
+        tableScanMs,
         whitelistSet,
         blacklistSet,
         Time.SYSTEM

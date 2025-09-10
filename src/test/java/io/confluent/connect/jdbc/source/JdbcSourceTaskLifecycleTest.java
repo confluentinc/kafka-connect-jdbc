@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.source;
 
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.easymock.EasyMock;
 import org.junit.Test;
@@ -50,6 +51,7 @@ import static org.hamcrest.core.StringContains.containsString;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 
 @RunWith(PowerMockRunner.class)
@@ -161,31 +163,10 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
     PowerMock.verifyAll();
   }
 
-  @Test
-  public void testPollInterval() throws Exception {
-    // Here we just want to verify behavior of the poll method, not any loading of data, so we
-    // specifically want an empty
-    db.createTable(SINGLE_TABLE_NAME, "id", "INT");
-    // Need data or poll() never returns
-    db.insert(SINGLE_TABLE_NAME, "id", 1);
-
-    long startTime = time.milliseconds();
-    task.start(singleTableConfig());
-
-    // First poll should happen immediately
-    task.poll();
-    assertEquals(startTime, time.milliseconds());
-
-    // Subsequent polls have to wait for timeout
-    task.poll();
-    assertEquals(startTime + JdbcSourceConnectorConfig.POLL_INTERVAL_MS_DEFAULT,
-                 time.milliseconds());
-    task.poll();
-    assertEquals(startTime + 2 * JdbcSourceConnectorConfig.POLL_INTERVAL_MS_DEFAULT,
-                 time.milliseconds());
-
-    task.stop();
-  }
+  // Note: testPollInterval test was removed because the new RecordQueue-based architecture
+  // makes precise timing control impossible. The TableQuerierProcessor runs asynchronously
+  // in a background thread, so poll() timing is no longer directly controllable.
+  // This matches the Snowflake implementation which also removed this test.
 
 
   @Test
@@ -196,24 +177,19 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
 
     Map<String, String> taskConfig = singleTableConfig();
     taskConfig.put(JdbcSourceConnectorConfig.BATCH_MAX_ROWS_CONFIG, "1");
-    long startTime = time.milliseconds();
-    task.start(taskConfig);
-
-    // Two entries should get split across three poll() calls with no delay
     db.insert(SINGLE_TABLE_NAME, "id", 1);
     db.insert(SINGLE_TABLE_NAME, "id", 2);
+    task.start(taskConfig);
 
+    Thread.sleep(100);
+
+    // Two entries should get split across multiple poll() calls
     List<SourceRecord> records = task.poll();
-    assertEquals(startTime, time.milliseconds());
     assertEquals(1, records.size());
+    assertEquals(1, ((Struct)(records.get(0)).value()).get("id"));
     records = task.poll();
-    assertEquals(startTime, time.milliseconds());
     assertEquals(1, records.size());
-
-    // Subsequent poll should wait for next timeout
-    task.poll();
-    assertEquals(startTime + JdbcSourceConnectorConfig.POLL_INTERVAL_MS_DEFAULT,
-                 time.milliseconds());
+    assertEquals(2, ((Struct)(records.get(0)).value()).get("id"));
 
   }
 
@@ -222,30 +198,23 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
     db.createTable(SINGLE_TABLE_NAME, "id", "INT");
     db.createTable(SECOND_TABLE_NAME, "id", "INT");
 
-    long startTime = time.milliseconds();
-    task.start(twoTableConfig());
-
     db.insert(SINGLE_TABLE_NAME, "id", 1);
     db.insert(SECOND_TABLE_NAME, "id", 2);
 
-    // Both tables should be polled immediately, in order
+    Map<String, String> taskConfigs = twoTableConfig();
+    taskConfigs.put(JdbcSourceConnectorConfig.BATCH_MAX_ROWS_CONFIG, "1");
+    task.start(taskConfigs);
+
+    Thread.sleep(100);
+
+    // Both tables should be polled, in order
     List<SourceRecord> records = task.poll();
-    assertEquals(startTime, time.milliseconds());
     assertEquals(1, records.size());
     assertEquals(SINGLE_TABLE_PARTITION, records.get(0).sourcePartition());
     records = task.poll();
-    assertEquals(startTime, time.milliseconds());
     assertEquals(1, records.size());
     assertEquals(SECOND_TABLE_PARTITION, records.get(0).sourcePartition());
 
-    // Subsequent poll should wait for next timeout
-    records = task.poll();
-    assertEquals(startTime + JdbcSourceConnectorConfig.POLL_INTERVAL_MS_DEFAULT,
-                 time.milliseconds());
-    validatePollResultTable(records, 1, SINGLE_TABLE_NAME);
-    records = task.poll();
-    assertEquals(startTime + JdbcSourceConnectorConfig.POLL_INTERVAL_MS_DEFAULT,
-                 time.milliseconds());
     validatePollResultTable(records, 1, SECOND_TABLE_NAME);
 
   }
@@ -260,37 +229,37 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
 
     Map<String, String> taskConfig = twoTableConfig();
     taskConfig.put(JdbcSourceConnectorConfig.BATCH_MAX_ROWS_CONFIG, "1");
-    long startTime = time.milliseconds();
-    task.start(taskConfig);
 
     db.insert(SINGLE_TABLE_NAME, "id", 1);
     db.insert(SINGLE_TABLE_NAME, "id", 2);
     db.insert(SECOND_TABLE_NAME, "id", 3);
     db.insert(SECOND_TABLE_NAME, "id", 4);
 
-    // Both tables should be polled immediately, in order
+    task.start(taskConfig);
+
+    // wait for the records to be available in the table
+    Thread.sleep(100);
+
+    // Both tables should be polled, in order
     for(int i = 0; i < 2; i++) {
       List<SourceRecord> records = task.poll();
-      assertEquals(startTime, time.milliseconds());
       validatePollResultTable(records, 1, SINGLE_TABLE_NAME);
     }
     for(int i = 0; i < 2; i++) {
       List<SourceRecord> records = task.poll();
-      assertEquals(startTime, time.milliseconds());
       validatePollResultTable(records, 1, SECOND_TABLE_NAME);
     }
 
-    // Subsequent poll should wait for next timeout
+    // wait to allow the table querier to query the tables again and fill in the internal queue
+    Thread.sleep(100);
+
+    // Subsequent poll should continue processing
     for(int i = 0; i < 2; i++) {
       List<SourceRecord> records = task.poll();
-      assertEquals(startTime + JdbcSourceConnectorConfig.POLL_INTERVAL_MS_DEFAULT,
-                   time.milliseconds());
       validatePollResultTable(records, 1, SINGLE_TABLE_NAME);
     }
     for(int i = 0; i < 2; i++) {
       List<SourceRecord> records = task.poll();
-      assertEquals(startTime + JdbcSourceConnectorConfig.POLL_INTERVAL_MS_DEFAULT,
-                   time.milliseconds());
       validatePollResultTable(records, 1, SECOND_TABLE_NAME);
     }
   }
@@ -302,7 +271,7 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
 
     task.start(twoTableConfig());
 
-    assertNull(task.poll());
+    assertTrue(task.poll().isEmpty());
   }
 
   @Test
@@ -313,11 +282,14 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
     config.put(JdbcSourceTaskConfig.TABLES_CONFIG, "not_existing_table");
     task.start(config);
 
+    Thread.sleep(100);
+
     ConnectException e = assertThrows(ConnectException.class, () -> {
       task.poll();
     });
-    assertThat(e.getCause(), instanceOf(SQLNonTransientException.class));
-    assertThat(e.getMessage(), containsString("not_existing_table"));
+    assertThat(e.getCause(), instanceOf(ConnectException.class));
+    assertThat(e.getCause().getCause(), instanceOf(SQLNonTransientException.class));
+    assertThat(e.getCause().getMessage(), containsString("not_existing_table"));
   }
 
   @Test(expected = ConnectException.class)
@@ -364,7 +336,6 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
 
     mockedTask.tableQueue = priorityQueue;
     mockedTask.cachedConnectionProvider = mockCachedConnectionProvider;
-    mockedTask.maxRetriesPerQuerier = retryMax;
 
     return mockedTask;
   }

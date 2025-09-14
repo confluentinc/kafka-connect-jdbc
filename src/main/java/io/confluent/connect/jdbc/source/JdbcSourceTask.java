@@ -161,7 +161,8 @@ public class JdbcSourceTask extends SourceTask {
     Map<Map<String, String>, Map<String, Object>> offsets = null;
     if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)
         || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)
-        || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
+        || mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)
+        || mode.equals(JdbcSourceTaskConfig.MODE_CHANGE_TRACKING)) {
       List<Map<String, String>> partitions = new ArrayList<>(tables.size());
       switch (queryMode) {
         case TABLE:
@@ -207,7 +208,7 @@ public class JdbcSourceTask extends SourceTask {
       log.trace("Task executing in {} mode",queryMode);
       switch (queryMode) {
         case TABLE:
-          if (validateNonNulls) {
+          if (validateNonNulls & !mode.equals(JdbcSourceTaskConfig.MODE_CHANGE_TRACKING)) {
             validateNonNullable(
                 mode,
                 tableOrQuery,
@@ -303,6 +304,17 @@ public class JdbcSourceTask extends SourceTask {
                 timeZone,
                 suffix,
                 timestampGranularity
+            )
+        );
+      }  else if (mode.equals(JdbcSourceTaskConfig.MODE_CHANGE_TRACKING)) {
+        tableQueue.add(
+            new ChangeTrackingTableQuerier(
+                dialect,
+                queryMode,
+                tableOrQuery,
+                topicPrefix,
+                offset,
+                suffix
             )
         );
       }

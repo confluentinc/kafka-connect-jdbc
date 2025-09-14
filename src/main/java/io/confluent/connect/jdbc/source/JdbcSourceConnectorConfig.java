@@ -912,20 +912,40 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       switch (mode) {
         case MODE_BULK:
           return false;
+        case MODE_CHANGE_TRACKING:
+          return isChangeTrackingConfig(name);
         case MODE_TIMESTAMP:
-          return name.equals(TIMESTAMP_COLUMN_NAME_CONFIG) || name.equals(VALIDATE_NON_NULL_CONFIG);
+          return isTimestampOrValidationConfig(name);
         case MODE_INCREMENTING:
-          return name.equals(INCREMENTING_COLUMN_NAME_CONFIG)
-                 || name.equals(VALIDATE_NON_NULL_CONFIG);
+          return isIncrementingOrValidationConfig(name);
         case MODE_TIMESTAMP_INCREMENTING:
-          return name.equals(TIMESTAMP_COLUMN_NAME_CONFIG)
-                 || name.equals(INCREMENTING_COLUMN_NAME_CONFIG)
-                 || name.equals(VALIDATE_NON_NULL_CONFIG);
+          return isTimestampIncrementingConfig(name);
         case MODE_UNSPECIFIED:
           throw new ConfigException("Query mode must be specified");
         default:
           throw new ConfigException("Invalid mode: " + mode);
       }
+    }
+
+    private boolean isTimestampOrValidationConfig(String name) {
+      return name.equals(TIMESTAMP_COLUMN_NAME_CONFIG) || name.equals(VALIDATE_NON_NULL_CONFIG);
+    }
+
+    private boolean isIncrementingOrValidationConfig(String name) {
+      return name.equals(INCREMENTING_COLUMN_NAME_CONFIG)
+          || name.equals(VALIDATE_NON_NULL_CONFIG);
+    }
+
+    private boolean isTimestampIncrementingConfig(String name) {
+      return name.equals(TIMESTAMP_COLUMN_NAME_CONFIG)
+          || name.equals(INCREMENTING_COLUMN_NAME_CONFIG)
+          || name.equals(VALIDATE_NON_NULL_CONFIG);
+    }
+
+    private boolean isChangeTrackingConfig(String name) {
+      return !name.equals(INCREMENTING_COLUMN_NAME_CONFIG)
+          && !name.equals(TIMESTAMP_COLUMN_NAME_CONFIG)
+          && !name.equals(VALIDATE_NON_NULL_CONFIG);
     }
   }
 

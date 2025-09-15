@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.source;
 import io.confluent.connect.jdbc.util.DefaultJdbcCredentialsProvider;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Recommender;
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.ConfigValue;
 import org.easymock.EasyMock;
 import org.junit.After;
@@ -307,5 +308,124 @@ public class JdbcSourceConnectorConfigTest {
   @SuppressWarnings("unchecked")
   protected <T> void assertBlacklistRecommendations(T... recommendedValues) {
     assertContains(namedValue(results, JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG).recommendedValues(), recommendedValues);
+  }
+
+  // New tests for table include/exclude list functionality
+
+  private Map<String, String> createMinimalConfig() {
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:test://localhost");
+    props.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
+    return props;
+  }
+
+  @Test
+  public void testTableIncludeListConfiguration() {
+    Map<String, String> props = createMinimalConfig();
+    props.put(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG, "schema1\\.users,schema2\\.orders");
+    
+    JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
+    List<String> includeList = config.tableIncludeListRegexes();
+    
+    assertEquals(2, includeList.size());
+    assertTrue(includeList.contains("schema1\\.users"));
+    assertTrue(includeList.contains("schema2\\.orders"));
+  }
+
+  @Test
+  public void testTableExcludeListConfiguration() {
+    Map<String, String> props = createMinimalConfig();
+    props.put(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG, ".*");
+    props.put(JdbcSourceConnectorConfig.TABLE_EXCLUDE_LIST_CONFIG, ".*temp.*,.*staging.*");
+    
+    JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
+    List<String> excludeList = config.tableExcludeListRegexes();
+    
+    assertEquals(2, excludeList.size());
+    assertTrue(excludeList.contains(".*temp.*"));
+    assertTrue(excludeList.contains(".*staging.*"));
+  }
+
+  @Test
+  public void testEmptyIncludeExcludeListsReturnEmptyLists() {
+    Map<String, String> props = createMinimalConfig();
+    
+    JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
+    
+    assertTrue(config.tableIncludeListRegexes().isEmpty());
+    assertTrue(config.tableExcludeListRegexes().isEmpty());
+  }
+
+  @Test(expected = ConfigException.class)
+  public void testInvalidRegexInIncludeListThrowsException() {
+    Map<String, String> props = createMinimalConfig();
+    props.put(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG, "[invalid-regex");
+    
+    new JdbcSourceConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void testInvalidRegexInExcludeListThrowsException() {
+    Map<String, String> props = createMinimalConfig();
+    props.put(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG, ".*");
+    props.put(JdbcSourceConnectorConfig.TABLE_EXCLUDE_LIST_CONFIG, "*invalid-regex[");
+    
+    new JdbcSourceConnectorConfig(props);
+  }
+
+  @Test
+  public void testValidRegexPatternsAreAccepted() {
+    Map<String, String> props = createMinimalConfig();
+    props.put(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG, 
+             "schema1\\.users,schema2\\.orders.*,.*\\.products");
+    props.put(JdbcSourceConnectorConfig.TABLE_EXCLUDE_LIST_CONFIG, 
+             ".*temp.*,.*staging.*,.*backup_\\d+");
+    
+    // Should not throw any exception
+    JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
+    
+    assertEquals(3, config.tableIncludeListRegexes().size());
+    assertEquals(3, config.tableExcludeListRegexes().size());
+  }
+
+  @Test
+  public void testComplexRegexPatterns() {
+    Map<String, String> props = createMinimalConfig();
+    props.put(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG, 
+             "prod_.*\\.customer_.*,test_.*\\.user[0-9]+,.*\\.(order|invoice)_data");
+    
+    JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
+    List<String> includeList = config.tableIncludeListRegexes();
+    
+    assertEquals(3, includeList.size());
+    assertTrue(includeList.contains("prod_.*\\.customer_.*"));
+    assertTrue(includeList.contains("test_.*\\.user[0-9]+"));
+    assertTrue(includeList.contains(".*\\.(order|invoice)_data"));
+  }
+
+  @Test
+  public void testSingleRegexPattern() {
+    Map<String, String> props = createMinimalConfig();
+    props.put(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG, "schema1\\..*");
+    
+    JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
+    List<String> includeList = config.tableIncludeListRegexes();
+    
+    assertEquals(1, includeList.size());
+    assertEquals("schema1\\..*", includeList.get(0));
+  }
+
+  @Test
+  public void testWhitespaceInRegexPatternsIsHandledCorrectly() {
+    Map<String, String> props = createMinimalConfig();
+    props.put(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG, " schema1\\.users , schema2\\.orders ");
+    
+    JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
+    List<String> includeList = config.tableIncludeListRegexes();
+    
+    assertEquals(2, includeList.size());
+    // Note: ConfigDef handles trimming for LIST type configurations
+    assertTrue(includeList.contains("schema1\\.users"));
+    assertTrue(includeList.contains("schema2\\.orders"));
   }
 }

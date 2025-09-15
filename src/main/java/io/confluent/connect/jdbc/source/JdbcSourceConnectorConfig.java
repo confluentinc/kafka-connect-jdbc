@@ -43,6 +43,7 @@ import io.confluent.connect.jdbc.util.TimeZoneValidator;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 import org.apache.kafka.common.Configurable;
 import org.apache.kafka.common.config.AbstractConfig;
@@ -266,6 +267,27 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String TABLE_BLACKLIST_DEFAULT = "";
   private static final String TABLE_BLACKLIST_DISPLAY = "Table Blacklist";
 
+  public static final String TABLE_INCLUDE_LIST_CONFIG = "table.include.list";
+  private static final String TABLE_INCLUDE_LIST_DOC =
+      "A comma-separated list of regular expressions that match the fully-qualified names of "
+      + "tables to be copied. Use a comma-separated list to specify multiple regular expressions. "
+      + "Table names are case-sensitive. For example, "
+      + "``table.include.list: \"schema1\\\\.customer.*,schema2\\\\.order.*\"``. "
+      + "If specified, ``table.exclude.list``, ``table.whitelist``, and ``table.blacklist`` "
+      + "may not be set.";
+  private static final String TABLE_INCLUDE_LIST_DISPLAY = "Tables Included (Regex)";
+
+  public static final String TABLE_EXCLUDE_LIST_CONFIG = "table.exclude.list";
+  private static final String TABLE_EXCLUDE_LIST_DOC =
+      "A comma-separated list of regular expressions that match the fully-qualified names of "
+      + "tables not to be copied. This only applies to tables that match the include list. "
+      + "REQUIRES ``table.include.list`` to be specified. "
+      + "Use a comma-separated list to specify multiple regular expressions. "
+      + "Table names are case-sensitive. For example, "
+      + "``table.exclude.list: \".*\\\\.temp.*,.*\\\\.staging.*\"``. "
+      + "If specified, ``table.whitelist`` and ``table.blacklist`` may not be set.";
+  private static final String TABLE_EXCLUDE_LIST_DISPLAY = "Tables Excluded (Regex)";
+
   public static final String SCHEMA_PATTERN_CONFIG = "schema.pattern";
   private static final String SCHEMA_PATTERN_DOC =
       "Schema pattern to fetch table metadata from the database.\n"
@@ -411,6 +433,36 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   private static final String SqlServerDatabaseDialectName = "SqlServerDatabaseDialect";
 
+  /**
+   * Validator for regex list configurations (table include/exclude lists).
+   * Validates that each regex pattern in the list is a valid Java regular expression.
+   */
+  private static ConfigDef.Validator regexListValidator() {
+    return new Validator() {
+      @Override
+      public void ensureValid(String name, Object value) {
+        @SuppressWarnings("unchecked")
+        List<String> regexList = (List<String>) value;
+        for (String regex : regexList) {
+          try {
+            Pattern.compile(regex.trim());
+          } catch (PatternSyntaxException e) {
+            throw new ConfigException(
+                name, value,
+                String.format("Must be a valid comma-separated list of regular expression "
+                            + "patterns: %s", e.getMessage())
+            );
+          }
+        }
+      }
+
+      @Override
+      public String toString() {
+        return "a valid comma-separated list of Java regular expressions";
+      }
+    };
+  }
+
   public static ConfigDef baseConfigDef() {
     ConfigDef config = new ConfigDef();
     addDatabaseOptions(config);
@@ -463,6 +515,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   private static final void addDatabaseOptions(ConfigDef config) {
     int orderInGroup = 0;
+    orderInGroup = addConnectionOptions(config, orderInGroup);
+    orderInGroup = addTableFilteringOptions(config, orderInGroup);
+    addSchemaAndDialectOptions(config, orderInGroup);
+  }
+
+  private static int addConnectionOptions(ConfigDef config, int orderInGroup) {
     config.define(
         CONNECTION_URL_CONFIG,
         Type.STRING,
@@ -526,7 +584,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.SHORT,
         CONNECTION_BACKOFF_DISPLAY
-    ).define(
+    );
+    return orderInGroup;
+  }
+
+  private static int addTableFilteringOptions(ConfigDef config, int orderInGroup) {
+    config.define(
         TABLE_WHITELIST_CONFIG,
         Type.LIST,
         TABLE_WHITELIST_DEFAULT,
@@ -547,6 +610,33 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Width.LONG,
         TABLE_BLACKLIST_DISPLAY
     ).define(
+        TABLE_INCLUDE_LIST_CONFIG,
+        Type.LIST,
+        Arrays.asList(),
+        regexListValidator(),
+        Importance.MEDIUM,
+        TABLE_INCLUDE_LIST_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        TABLE_INCLUDE_LIST_DISPLAY
+    ).define(
+        TABLE_EXCLUDE_LIST_CONFIG,
+        Type.LIST,
+        Arrays.asList(),
+        regexListValidator(),
+        Importance.MEDIUM,
+        TABLE_EXCLUDE_LIST_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        TABLE_EXCLUDE_LIST_DISPLAY
+    );
+    return orderInGroup;
+  }
+
+  private static void addSchemaAndDialectOptions(ConfigDef config, int orderInGroup) {
+    config.define(
         CATALOG_PATTERN_CONFIG,
         Type.STRING,
         CATALOG_PATTERN_DEFAULT,
@@ -1126,6 +1216,22 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public Duration pollLingerMs() {
     return Duration.ofMillis(getLong(POLL_LINGER_MS_CONFIG));
+  }
+
+  /**
+   * Get the table include list regex patterns.
+   * @return List of regex patterns for table inclusion, empty list if not configured
+   */
+  public List<String> tableIncludeListRegexes() {
+    return getList(TABLE_INCLUDE_LIST_CONFIG);
+  }
+
+  /**
+   * Get the table exclude list regex patterns.
+   * @return List of regex patterns for table exclusion, empty list if not configured
+   */
+  public List<String> tableExcludeListRegexes() {
+    return getList(TABLE_EXCLUDE_LIST_CONFIG);
   }
 
   public static void main(String[] args) {

@@ -18,6 +18,7 @@ package io.confluent.connect.jdbc.source;
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.util.ConnectionProvider;
 import io.confluent.connect.jdbc.util.QuoteMethod;
+import io.confluent.connect.jdbc.util.TableCollectionUtils;
 import io.confluent.connect.jdbc.util.TableId;
 
 import org.apache.kafka.common.errors.TimeoutException;
@@ -53,9 +54,16 @@ public class TableMonitorThread extends Thread {
   private final long pollMs;
   private final Set<String> whitelist;
   private final Set<String> blacklist;
+  private final Set<String> includeListRegex;
+  private final Set<String> excludeListRegex;
+  private final boolean useRegexFiltering;
   private final AtomicReference<List<TableId>> tables;
   private final Time time;
 
+  /**
+   * Legacy constructor for backward compatibility.
+   * Uses the original whitelist/blacklist filtering approach.
+   */
   public TableMonitorThread(DatabaseDialect dialect,
       ConnectionProvider connectionProvider,
       ConnectorContext context,
@@ -63,6 +71,24 @@ public class TableMonitorThread extends Thread {
       long pollMs,
       Set<String> whitelist,
       Set<String> blacklist,
+      Time time
+  ) {
+    this(dialect, connectionProvider, context, startupMs, pollMs, 
+         whitelist, blacklist, null, null, time);
+  }
+
+  /**
+   * New constructor supporting both legacy and regex-based filtering.
+   */
+  public TableMonitorThread(DatabaseDialect dialect,
+      ConnectionProvider connectionProvider,
+      ConnectorContext context,
+      long startupMs,
+      long pollMs,
+      Set<String> whitelist,
+      Set<String> blacklist,
+      Set<String> includeListRegex,
+      Set<String> excludeListRegex,
       Time time
   ) {
     this.dialect = dialect;
@@ -73,6 +99,10 @@ public class TableMonitorThread extends Thread {
     this.pollMs = pollMs;
     this.whitelist = whitelist;
     this.blacklist = blacklist;
+    this.includeListRegex = includeListRegex;
+    this.excludeListRegex = excludeListRegex;
+    this.useRegexFiltering = (includeListRegex != null && !includeListRegex.isEmpty())
+                            || (excludeListRegex != null && !excludeListRegex.isEmpty());
     this.tables = new AtomicReference<>();
     this.time = time;
   }
@@ -177,23 +207,13 @@ public class TableMonitorThread extends Thread {
     shutdownLatch.countDown();
   }
 
-  private boolean updateTables() {
-    final List<TableId> allTables;
-    try {
-      log.trace("Fetching all tables from database");
-      allTables = dialect.tableIds(connectionProvider.getConnection());
-      log.debug("Retrieved {} tables from database: {}", allTables.size(), allTables);
-    } catch (SQLException e) {
-      log.error(
-          "Error while trying to get updated table list, ignoring and waiting for next table poll"
-          + " interval",
-          e
-      );
-      connectionProvider.close();
-      return false;
-    }
-
+  /**
+   * Apply legacy exact-match filtering using whitelist/blacklist.
+   * This method preserves the original filtering behavior for backward compatibility.
+   */
+  private List<TableId> applyLegacyFiltering(List<TableId> allTables) {
     final List<TableId> filteredTables = new ArrayList<>(allTables.size());
+    
     if (whitelist != null) {
       log.trace("Applying whitelist filter to tables");
       for (TableId table : allTables) {
@@ -219,6 +239,47 @@ public class TableMonitorThread extends Thread {
     } else {
       log.trace("No filters applied, using all tables");
       filteredTables.addAll(allTables);
+    }
+    
+    return filteredTables;
+  }
+
+  private boolean updateTables() {
+    final List<TableId> allTables;
+    try {
+      log.trace("Fetching all tables from database");
+      allTables = dialect.tableIds(connectionProvider.getConnection());
+      log.debug("Retrieved {} tables from database: {}", allTables.size(), allTables);
+    } catch (SQLException e) {
+      log.error(
+          "Error while trying to get updated table list, ignoring and waiting for next table poll"
+          + " interval",
+          e
+      );
+      connectionProvider.close();
+      return false;
+    }
+
+    final List<TableId> filteredTables;
+    
+    if (useRegexFiltering) {
+      // New regex-based filtering
+      log.trace("Applying regex-based include/exclude filters to tables");
+      filteredTables = TableCollectionUtils.filterTables(
+          allTables, 
+          includeListRegex != null ? includeListRegex : java.util.Collections.emptySet(),
+          excludeListRegex != null ? excludeListRegex : java.util.Collections.emptySet()
+      );
+      log.debug("Regex filtering resulted in {} tables from {} total tables", 
+               filteredTables.size(), allTables.size());
+      if (log.isTraceEnabled()) {
+        for (TableId table : filteredTables) {
+          log.trace("Table {} passed regex filters", table);
+        }
+      }
+    } else {
+      // Legacy exact-match filtering
+      filteredTables = applyLegacyFiltering(allTables);
     }
 
     List<TableId> priorTablesSnapshot = tables.getAndSet(filteredTables);

@@ -98,21 +98,29 @@ public class JdbcSourceConnector extends SourceConnector {
     long tablePollMs = config.getLong(JdbcSourceConnectorConfig.TABLE_POLL_INTERVAL_MS_CONFIG);
     long tableStartupLimitMs =
         config.getLong(JdbcSourceConnectorConfig.TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_CONFIG);
+    
+    // Enhanced table filtering configuration validation
     List<String> whitelist = config.getList(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG);
     Set<String> whitelistSet = whitelist.isEmpty() ? null : new HashSet<>(whitelist);
+    
     List<String> blacklist = config.getList(JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG);
     Set<String> blacklistSet = blacklist.isEmpty() ? null : new HashSet<>(blacklist);
+    
+    List<String> includeList = config.tableIncludeListRegexes();
+    Set<String> includeListSet = includeList.isEmpty() ? null : new HashSet<>(includeList);
+    
+    List<String> excludeList = config.tableExcludeListRegexes();
+    Set<String> excludeListSet = excludeList.isEmpty() ? null : new HashSet<>(excludeList);
 
-    if (whitelistSet != null && blacklistSet != null) {
-      throw new ConnectException(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + " and "
-                                 + JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG + " are "
-                                 + "exclusive.");
-    }
+    // Comprehensive validation of mutually exclusive configurations
+    validateTableFilteringConfigs(whitelistSet, blacklistSet, includeListSet, excludeListSet);
+
     String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
     if (!query.isEmpty()) {
-      if (whitelistSet != null || blacklistSet != null) {
+      if (whitelistSet != null || blacklistSet != null 
+          || includeListSet != null || excludeListSet != null) {
         log.error(
-            "Configuration error: {} is set, but table whitelist or blacklist is also specified."
+            "Configuration error: {} is set, but table filtering options are also specified. "
                 + "These settings cannot be used together.",
             JdbcSourceConnectorConfig.QUERY_CONFIG);
         throw new ConnectException(JdbcSourceConnectorConfig.QUERY_CONFIG + " may not be combined"
@@ -121,16 +129,18 @@ public class JdbcSourceConnector extends SourceConnector {
       // Force filtering out the entire set of tables since the one task we'll generate is for the
       // query.
       whitelistSet = Collections.emptySet();
-
     }
+    
     tableMonitorThread = new TableMonitorThread(
         dialect,
         cachedConnectionProvider,
         context,
         tableStartupLimitMs,
         tablePollMs,
-        whitelistSet,
-        blacklistSet,
+        whitelistSet,      // Legacy
+        blacklistSet,      // Legacy
+        includeListSet,    // New
+        excludeListSet,    // New
         Time.SYSTEM
     );
     if (query.isEmpty()) {
@@ -141,6 +151,75 @@ public class JdbcSourceConnector extends SourceConnector {
 
   protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
     return new CachedConnectionProvider(dialect, maxConnAttempts, retryBackoff);
+  }
+
+  /**
+   * Validate table filtering configurations to ensure they are mutually exclusive.
+   * This method ensures that legacy whitelist/blacklist configurations cannot be used
+   * together with the new include/exclude list configurations.
+   */
+  private void validateTableFilteringConfigs(Set<String> whitelistSet, Set<String> blacklistSet, 
+                                           Set<String> includeListSet, Set<String> excludeListSet) {
+    validateLegacyConfigExclusivity(whitelistSet, blacklistSet);
+    validateLegacyAndNewConfigExclusivity(whitelistSet, blacklistSet, 
+                                          includeListSet, excludeListSet);
+    warnOnEmptyIncludeWithExclude(includeListSet, excludeListSet);
+  }
+
+  private void validateLegacyConfigExclusivity(Set<String> whitelistSet, Set<String> blacklistSet) {
+    if (whitelistSet != null && blacklistSet != null) {
+      throw new ConnectException(
+          "Legacy table filtering configurations are mutually exclusive. Cannot use both "
+          + JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + " and "
+          + JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG + " together."
+      );
+    }
+  }
+
+  private void validateLegacyAndNewConfigExclusivity(Set<String> whitelistSet, 
+                                                    Set<String> blacklistSet,
+                                                    Set<String> includeListSet, 
+                                                    Set<String> excludeListSet) {
+    boolean hasLegacyConfig = whitelistSet != null || blacklistSet != null;
+    boolean hasNewConfig = includeListSet != null || excludeListSet != null;
+    
+    // Exclude list cannot exist without include list
+    if (excludeListSet != null && includeListSet == null) {
+      throw new ConnectException(
+          JdbcSourceConnectorConfig.TABLE_EXCLUDE_LIST_CONFIG 
+          + " cannot be used without " + JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG
+          + ". Exclude list only applies to tables that match the include list."
+      );
+    }
+    
+    if (hasLegacyConfig && hasNewConfig) {
+      List<String> configsUsed = new ArrayList<>();
+      if (whitelistSet != null) {
+        configsUsed.add(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG);
+      }
+      if (blacklistSet != null) {
+        configsUsed.add(JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG);
+      }
+      if (includeListSet != null) {
+        configsUsed.add(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG);
+      }
+      if (excludeListSet != null) {
+        configsUsed.add(JdbcSourceConnectorConfig.TABLE_EXCLUDE_LIST_CONFIG);
+      }
+      
+      throw new ConnectException(
+          "Table filtering configurations are mutually exclusive. "
+          + "Cannot use legacy whitelist/blacklist with new include/exclude lists. "
+          + "Configured: " + String.join(", ", configsUsed)
+      );
+    }
+  }
+
+  private void warnOnEmptyIncludeWithExclude(Set<String> includeListSet, 
+                                             Set<String> excludeListSet) {
+    if (includeListSet != null && excludeListSet != null && includeListSet.isEmpty()) {
+      log.warn("Include list is empty but exclude list is specified. No tables will be selected.");
+    }
   }
 
   @Override

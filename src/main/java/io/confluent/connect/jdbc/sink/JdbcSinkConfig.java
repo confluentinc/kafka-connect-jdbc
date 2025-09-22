@@ -119,6 +119,16 @@ public class JdbcSinkConfig extends AbstractConfig {
   public static final long CONNECTION_BACKOFF_DEFAULT =
       JdbcSourceConnectorConfig.CONNECTION_BACKOFF_DEFAULT;
 
+  public static final String USE_MODERN_DATE_CONVERSION_CONFIG = "use.modern.date.conversion";
+  private static final String USE_MODERN_DATE_CONVERSION_DOC =
+      "When enabled, uses modern java.time API calculations for DATE and TIMESTAMP columns "
+      + "instead of legacy java.sql.* calculations. This addresses genuine drift between legacy "
+      + "and modern date handling for historical dates (particularly pre-1582 dates). "
+      + "When false (default), maintains backward compatibility with legacy behavior. "
+      + "Note: This does not affect TIME columns as timezone offsets are expected behavior.";
+  public static final boolean USE_MODERN_DATE_CONVERSION_DEFAULT = false;
+  private static final String USE_MODERN_DATE_CONVERSION_DISPLAY = "Use Modern Date Conversion";
+
   public static final String TABLE_NAME_FORMAT = "table.name.format";
   private static final String TABLE_NAME_FORMAT_DEFAULT = "${topic}";
   private static final String TABLE_NAME_FORMAT_DOC =
@@ -578,6 +588,17 @@ public class JdbcSinkConfig extends AbstractConfig {
             TIMESTAMP_PRECISION_MODE_CONFIG_DISPLAY,
             TIMESTAMP_PRECISION_MODE_RECOMMENDER
         )
+        .define(
+            USE_MODERN_DATE_CONVERSION_CONFIG,
+            ConfigDef.Type.BOOLEAN,
+            USE_MODERN_DATE_CONVERSION_DEFAULT,
+            ConfigDef.Importance.LOW,
+            USE_MODERN_DATE_CONVERSION_DOC,
+            DATAMAPPING_GROUP,
+            9,
+            ConfigDef.Width.MEDIUM,
+            USE_MODERN_DATE_CONVERSION_DISPLAY
+        )
         // DDL
         .define(
             AUTO_CREATE,
@@ -681,6 +702,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final boolean useHoldlockInMerge;
 
   public final boolean trimSensitiveLogsEnabled;
+  public final boolean useModernDateConversion;
 
   public JdbcSinkConfig(Map<?, ?> props) {
     super(CONFIG_DEF, props);
@@ -714,6 +736,7 @@ public class JdbcSinkConfig extends AbstractConfig {
         TimestampPrecisionMode.valueOf(getString(TIMESTAMP_PRECISION_MODE_CONFIG).toUpperCase());
     useHoldlockInMerge = getBoolean(MSSQL_USE_MERGE_HOLDLOCK);
     trimSensitiveLogsEnabled = getBoolean(TRIM_SENSITIVE_LOG_ENABLED);
+    useModernDateConversion = getBoolean(USE_MODERN_DATE_CONVERSION_CONFIG);
     if (deleteEnabled && pkMode != PrimaryKeyMode.RECORD_KEY) {
       throw new ConfigException(
           "Primary key mode must be 'record_key' when delete support is enabled");

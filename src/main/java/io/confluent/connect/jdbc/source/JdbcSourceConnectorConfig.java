@@ -309,6 +309,16 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final boolean VALIDATE_NON_NULL_DEFAULT = true;
   private static final String VALIDATE_NON_NULL_DISPLAY = "Validate Non Null";
 
+  public static final String USE_MODERN_DATE_CONVERSION_CONFIG = "use.modern.date.conversion";
+  private static final String USE_MODERN_DATE_CONVERSION_DOC =
+      "When enabled, uses modern java.time API calculations for DATE and TIMESTAMP columns "
+      + "instead of legacy java.sql.* calculations. This addresses genuine drift between legacy "
+      + "and modern date handling for historical dates (particularly pre-1582 dates). "
+      + "When false (default), maintains backward compatibility with legacy behavior. "
+      + "Note: This does not affect TIME columns as timezone offsets are expected behavior.";
+  public static final boolean USE_MODERN_DATE_CONVERSION_DEFAULT = false;
+  private static final String USE_MODERN_DATE_CONVERSION_DISPLAY = "Use Modern Date Conversion";
+
   public static final String TIMESTAMP_DELAY_INTERVAL_MS_CONFIG = "timestamp.delay.interval.ms";
   private static final String TIMESTAMP_DELAY_INTERVAL_MS_DOC =
       "How long to wait after a row with certain timestamp appears before we include it in the "
@@ -598,7 +608,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.LONG,
         DIALECT_NAME_DISPLAY,
-        DatabaseDialectRecommender.INSTANCE);
+        DatabaseDialectRecommender.INSTANCE
+    ).define(
+        USE_MODERN_DATE_CONVERSION_CONFIG,
+        Type.BOOLEAN,
+        USE_MODERN_DATE_CONVERSION_DEFAULT,
+        Importance.LOW,
+        USE_MODERN_DATE_CONVERSION_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        USE_MODERN_DATE_CONVERSION_DISPLAY);
   }
 
   private static final void addModeOptions(ConfigDef config) {
@@ -865,6 +885,10 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public String topicPrefix() {
     return getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG).trim();
+  }
+
+  public boolean useModernDateTime() {
+    return getBoolean(USE_MODERN_DATE_CONVERSION_CONFIG);
   }
 
   /**

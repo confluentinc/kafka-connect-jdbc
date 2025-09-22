@@ -27,6 +27,7 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TimeZone;
@@ -325,6 +326,101 @@ public class DateTimeUtils {
         .map(ChronoZonedDateTime::toInstant)
         .map(Timestamp::from)
         .orElse(null);
+  }
+
+  public static java.sql.Date convertToLegacyDate(java.util.Date sqlDate, ZoneId zoneId) {
+    if (sqlDate == null) {
+      return null;
+    }
+    java.sql.Timestamp ts =
+        convertToLegacyTimestamp(new java.sql.Timestamp(sqlDate.getTime()), zoneId);
+    return new java.sql.Date(ts.getTime());
+  }
+
+  public static java.sql.Date convertToModernDate(java.sql.Date sqlDate, ZoneId zoneId) {
+    if (sqlDate == null) {
+      return null;
+    }
+    java.sql.Timestamp ts =
+        convertToModernTimestamp(new java.sql.Timestamp(sqlDate.getTime()), zoneId);
+    return new java.sql.Date(ts.getTime());
+  }
+
+
+  public static java.sql.Timestamp convertToModernTimestamp(java.sql.Timestamp ts, ZoneId zoneId) {
+    if (ts == null) {
+      return null;
+    }
+
+    // Use legacy calendar to read fields (hybrid Julian/Gregorian), in the target zone
+    java.util.Calendar cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone(zoneId));
+    cal.setTimeInMillis(ts.getTime());
+
+    // Map (ERA, YEAR) -> proleptic ISO year for java.time
+    int era  = cal.get(java.util.Calendar.ERA);
+    int year = cal.get(java.util.Calendar.YEAR);
+    int isoYear = (era == java.util.GregorianCalendar.BC) ? 1 - year : year; // 1 BC->0, 2 BC->-1
+
+    java.time.LocalDateTime ldt = java.time.LocalDateTime.of(
+        isoYear,
+        cal.get(java.util.Calendar.MONTH) + 1,
+        cal.get(java.util.Calendar.DAY_OF_MONTH),
+        cal.get(java.util.Calendar.HOUR_OF_DAY),
+        cal.get(java.util.Calendar.MINUTE),
+        cal.get(java.util.Calendar.SECOND),
+        ts.getNanos()
+    );
+
+    long epochMillis = ldt.atZone(zoneId).toInstant().toEpochMilli();
+    return new Timestamp(epochMillis);
+  }
+
+
+
+  public static Timestamp convertToLegacyTimestamp(java.sql.Timestamp ts, ZoneId zoneId) {
+    if (ts == null) {
+      return null;
+    }
+    LocalDateTime ldt = LocalDateTime.ofInstant(ts.toInstant(), zoneId);
+
+    GregorianCalendar cal = new GregorianCalendar(TimeZone.getTimeZone(zoneId), Locale.ROOT);
+    cal.setLenient(false);
+    cal.clear();
+
+    int y = ldt.getYear();
+    if (y <= 0) {
+      // proleptic 0 == 1 BC, -1 == 2 BC, etc.
+      cal.set(Calendar.ERA, GregorianCalendar.BC);
+      cal.set(Calendar.YEAR, 1 - y);   // 0 -> 1, -1 -> 2, …
+    } else {
+      cal.set(Calendar.ERA, GregorianCalendar.AD);
+      cal.set(Calendar.YEAR, y);
+    }
+
+    cal.set(Calendar.MONTH, ldt.getMonthValue() - 1);
+    cal.set(Calendar.DAY_OF_MONTH, ldt.getDayOfMonth());
+    cal.set(Calendar.HOUR_OF_DAY, ldt.getHour());
+    cal.set(Calendar.MINUTE, ldt.getMinute());
+    cal.set(Calendar.SECOND, ldt.getSecond());
+    cal.set(Calendar.MILLISECOND, ldt.getNano() / (int) NANOSECONDS_PER_MILLISECOND);
+
+    Timestamp out = new Timestamp(cal.getTimeInMillis());
+    out.setNanos(ldt.getNano());
+    return out;
+  }
+
+  public static java.sql.Timestamp convertToLegacyTimestamp(java.util.Date ts, ZoneId zoneId) {
+    if (ts == null) {
+      return null;
+    }
+    return new java.sql.Timestamp(
+        convertToLegacyTimestamp(
+            new java.sql.Timestamp(
+                ts.getTime()
+            ),
+            zoneId
+        ).getTime()
+    );
   }
 
   private DateTimeUtils() {

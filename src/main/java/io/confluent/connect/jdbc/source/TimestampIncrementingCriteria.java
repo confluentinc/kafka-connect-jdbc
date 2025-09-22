@@ -79,6 +79,7 @@ public class TimestampIncrementingCriteria {
   protected final List<ColumnId> timestampColumns;
   protected final ColumnId incrementingColumn;
   protected final ZoneId zoneId;
+  protected final boolean useModernDateTime;
   private final LruCache<Schema, List<String>> caseAdjustedTimestampColumns;
 
 
@@ -93,6 +94,22 @@ public class TimestampIncrementingCriteria {
     this.zoneId = zoneId;
     this.caseAdjustedTimestampColumns =
         timestampColumns != null ? new LruCache<>(16) : null;
+    this.useModernDateTime = false;
+  }
+
+  public TimestampIncrementingCriteria(
+      ColumnId incrementingColumn,
+      List<ColumnId> timestampColumns,
+      ZoneId zoneId,
+      boolean useModernDateTime
+  ) {
+    this.timestampColumns =
+        timestampColumns != null ? timestampColumns : Collections.<ColumnId>emptyList();
+    this.incrementingColumn = incrementingColumn;
+    this.zoneId = zoneId;
+    this.caseAdjustedTimestampColumns =
+        timestampColumns != null ? new LruCache<>(16) : null;
+    this.useModernDateTime = useModernDateTime;
   }
 
   protected boolean hasTimestampColumns() {
@@ -152,7 +169,7 @@ public class TimestampIncrementingCriteria {
     stmt.setTimestamp(4, beginTime, DateTimeUtils.getZoneIdCalendar(zoneId));
     log.debug(
         "Executing prepared statement with start time value = {} end time = {} and incrementing"
-        + " value = {}", DateTimeUtils.formatTimestamp(beginTime, zoneId),
+        + " value = {}",         DateTimeUtils.formatTimestamp(beginTime, zoneId),
         DateTimeUtils.formatTimestamp(endTime, zoneId), incOffset
     );
   }
@@ -231,6 +248,9 @@ public class TimestampIncrementingCriteria {
     caseAdjustedTimestampColumns.computeIfAbsent(schema, this::findCaseSensitiveTimestampColumns);
     for (String timestampColumn : caseAdjustedTimestampColumns.get(schema)) {
       Timestamp ts = timestampGranularity.toTimestamp.apply(record.get(timestampColumn), zoneId);
+      if (useModernDateTime) {
+        ts = DateTimeUtils.convertToLegacyTimestamp(ts, zoneId);
+      }
       if (ts != null) {
         return ts;
       }

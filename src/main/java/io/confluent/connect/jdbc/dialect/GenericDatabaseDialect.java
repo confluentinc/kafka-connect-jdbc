@@ -169,6 +169,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   private final Set<String> timestampFieldsList;
   private final ZoneId dateTimeZoneId;
   private final JdbcSourceConnectorConfig.TimestampGranularity tsGranularity;
+  private final boolean useModernDateConversion;
 
   /**
    * Create a new dialect instance with the given connector configuration.
@@ -1436,8 +1437,13 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       }
       // Date is day + month + year
       case Types.DATE: {
-        return rs -> rs.getDate(col,
-            DateTimeUtils.getZoneIdCalendar(zoneId));
+        return rs -> {
+          java.sql.Date sqlDate = rs.getDate(col, DateTimeUtils.getZoneIdCalendar(dateTimeZoneId));
+          if (useModernDateConversion) {
+            return DateTimeUtils.convertToModernDate(sqlDate, dateTimeZoneId);
+          }
+          return sqlDate;
+        };
       }
 
       // Time is a time of day -- hour, minute, seconds, nanoseconds
@@ -1449,6 +1455,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       case Types.TIMESTAMP: {
         return rs -> {
           Timestamp timestamp = rs.getTimestamp(col, DateTimeUtils.getZoneIdCalendar(zoneId));
+          if (useModernDateConversion) {
+            timestamp = DateTimeUtils.convertToModernTimestamp(timestamp, zoneId);
+          }
           return tsGranularity.fromTimestamp.apply(timestamp, zoneId);
         };
       }
@@ -1744,15 +1753,21 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       case INT64:
         if (config instanceof JdbcSinkConfig
             && timestampFieldsList.contains(fieldName)) {
-          if (timestampPrecisionMode
-              == JdbcSinkConfig.TimestampPrecisionMode.MICROSECONDS) {
-            Timestamp ts = DateTimeUtils.formatSinkMicrosTimestamp((Long) value);
-            statement.setTimestamp(index, ts, DateTimeUtils.getZoneIdCalendar(zoneId));
-          } else if (timestampPrecisionMode
-              == JdbcSinkConfig.TimestampPrecisionMode.NANOSECONDS) {
-            Timestamp ts = DateTimeUtils.formatSinkNanosTimestamp((Long) value);
-            statement.setTimestamp(index, ts, DateTimeUtils.getZoneIdCalendar(zoneId));
+          Timestamp ts;
+          switch (timestampPrecisionMode) {
+            case MICROSECONDS:
+              ts = DateTimeUtils.formatSinkMicrosTimestamp((Long) value);
+              break;
+            case NANOSECONDS:
+              ts = DateTimeUtils.formatSinkNanosTimestamp((Long) value);
+              break;
+            default:
+              throw new IllegalStateException("Unexpected precision: " + timestampPrecisionMode);
           }
+          if (useModernDateConversion) {
+            ts = DateTimeUtils.convertToLegacyTimestamp(ts, zoneId);
+          }
+          statement.setTimestamp(index, ts, DateTimeUtils.getZoneIdCalendar(zoneId));
         } else {
           statement.setLong(index, (Long) value);
         }
@@ -1806,10 +1821,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     if (schema.name() != null) {
       switch (schema.name()) {
         case Date.LOGICAL_NAME:
+          java.sql.Date sqlDate = new java.sql.Date(((java.util.Date) value).getTime());
+          if (useModernDateConversion) {
+            sqlDate = DateTimeUtils.convertToLegacyDate((java.util.Date) value, dateTimeZoneId);
+          }
           statement.setDate(
               index,
-              new java.sql.Date(((java.util.Date) value).getTime()),
-              DateTimeUtils.getZoneIdCalendar(zoneId)
+              sqlDate,
+              DateTimeUtils.getZoneIdCalendar(dateTimeZoneId)
           );
           return true;
         case Decimal.LOGICAL_NAME:
@@ -1823,9 +1842,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           );
           return true;
         case org.apache.kafka.connect.data.Timestamp.LOGICAL_NAME:
+          java.sql.Timestamp sqlTimestamp =
+              new java.sql.Timestamp(((java.util.Date) value).getTime());
+          if (useModernDateConversion) {
+            sqlTimestamp = DateTimeUtils.convertToLegacyTimestamp((java.util.Date) value, zoneId);
+          }
           statement.setTimestamp(
               index,
-              new java.sql.Timestamp(((java.util.Date) value).getTime()),
+              sqlTimestamp,
               DateTimeUtils.getZoneIdCalendar(zoneId)
           );
           return true;

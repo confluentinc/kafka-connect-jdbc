@@ -38,6 +38,7 @@ import io.confluent.connect.jdbc.util.JdbcCredentialsProvider;
 import io.confluent.connect.jdbc.util.JdbcCredentialsProviderValidator;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TimeZoneValidator;
+import io.confluent.connect.jdbc.util.DateCalendarSystem;
 
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -309,6 +310,18 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final boolean VALIDATE_NON_NULL_DEFAULT = true;
   private static final String VALIDATE_NON_NULL_DISPLAY = "Validate Non Null";
 
+  public static final String DATE_CALENDAR_SYSTEM_CONFIG = "date.calendar.system";
+  private static final String DATE_CALENDAR_SYSTEM_DOC =
+      "The time elapsed from epoch populated in the end table topic for DATE or TIMESTAMP type "
+      + "columns can have two different values based upon the Calendar used to interpret it. If "
+      + "LEGACY is used, it will use the hybrid Gregorian/Julian calendar which was the default in "
+      + "the older java date time APIs. However, if 'PROLEPTIC_GREGORIAN' is used, then it will "
+      + "use the proleptic gregorian calendar which extends the Gregorian rules backward "
+      + "indefinitely and does not apply the 1582 cutover. This matches the behavior of modern "
+      + "Java date/time APIs (java.time). This is defaulted to LEGACY for backward compatibility.";
+  public static final String DATE_CALENDAR_SYSTEM_DEFAULT = DateCalendarSystem.LEGACY.toString();
+  private static final String DATE_CALENDAR_SYSTEM_DISPLAY = "Date Calendar System";
+
   public static final String TIMESTAMP_DELAY_INTERVAL_MS_CONFIG = "timestamp.delay.interval.ms";
   private static final String TIMESTAMP_DELAY_INTERVAL_MS_DOC =
       "How long to wait after a row with certain timestamp appears before we include it in the "
@@ -460,6 +473,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     return config;
   }
 
+  @SuppressWarnings("checkstyle:MethodLength")
   private static final void addDatabaseOptions(ConfigDef config) {
     int orderInGroup = 0;
     config.define(
@@ -598,7 +612,18 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.LONG,
         DIALECT_NAME_DISPLAY,
-        DatabaseDialectRecommender.INSTANCE);
+        DatabaseDialectRecommender.INSTANCE
+    ).define(
+        DATE_CALENDAR_SYSTEM_CONFIG,
+        Type.STRING,
+        DATE_CALENDAR_SYSTEM_DEFAULT,
+        ConfigDef.ValidString.in(DateCalendarSystem.getValidConfigValues()),
+        Importance.LOW,
+        DATE_CALENDAR_SYSTEM_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        DATE_CALENDAR_SYSTEM_DISPLAY);
   }
 
   private static final void addModeOptions(ConfigDef config) {
@@ -865,6 +890,10 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public String topicPrefix() {
     return getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG).trim();
+  }
+
+  public DateCalendarSystem getDateCalendarSystem() {
+    return DateCalendarSystem.fromConfigValue(getString(DATE_CALENDAR_SYSTEM_CONFIG));
   }
 
   /**

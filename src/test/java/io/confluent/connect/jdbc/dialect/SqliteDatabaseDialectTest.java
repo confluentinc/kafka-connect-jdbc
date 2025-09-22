@@ -28,7 +28,7 @@ import org.junit.Test;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Calendar;
-import java.util.TimeZone;
+import java.time.ZoneId;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -290,7 +290,7 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
 
   @Test
   public void useCurrentTimestampValue() throws SQLException {
-    Calendar cal = DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone("UTC"));
+    Calendar cal = DateTimeUtils.getZoneIdCalendar(ZoneId.of("UTC"));
 
     //Regular expression to check if the timestamp is of the format %Y-%m-%d %H:%M:%S.%f
     Pattern p = Pattern.compile("(\\p{Nd}++)\\Q-\\E(\\p{Nd}++)\\Q-\\E(\\p{Nd}++)\\Q \\E(\\p{Nd}++)"

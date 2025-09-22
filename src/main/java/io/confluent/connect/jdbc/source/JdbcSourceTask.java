@@ -37,6 +37,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
+import java.time.ZoneId;
 import java.util.TimeZone;
 import java.util.stream.Collectors;
 
@@ -187,7 +188,7 @@ public class JdbcSourceTask extends SourceTask {
         = config.getLong(JdbcSourceTaskConfig.TIMESTAMP_DELAY_INTERVAL_MS_CONFIG);
     boolean validateNonNulls
         = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
-    TimeZone timeZone = config.timeZone();
+    ZoneId zoneId = config.zoneId();
     String suffix = config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG).trim();
 
     if (queryMode.equals(TableQuerier.QueryMode.TABLE)) {
@@ -235,7 +236,7 @@ public class JdbcSourceTask extends SourceTask {
           }
         }
       }
-      offset = computeInitialOffset(tableOrQuery, offset, timeZone);
+      offset = computeInitialOffset(tableOrQuery, offset, zoneId);
 
       String topicPrefix = config.topicPrefix();
       JdbcSourceConnectorConfig.TimestampGranularity timestampGranularity
@@ -262,7 +263,7 @@ public class JdbcSourceTask extends SourceTask {
                 incrementingColumn,
                 offset,
                 timestampDelayInterval,
-                timeZone,
+                zoneId,
                 suffix,
                 timestampGranularity
             )
@@ -277,7 +278,7 @@ public class JdbcSourceTask extends SourceTask {
                 timestampColumns,
                 offset,
                 timestampDelayInterval,
-                timeZone,
+                zoneId,
                 suffix,
                 timestampGranularity
             )
@@ -293,7 +294,7 @@ public class JdbcSourceTask extends SourceTask {
                 incrementingColumn,
                 offset,
                 timestampDelayInterval,
-                timeZone,
+                zoneId,
                 suffix,
                 timestampGranularity
             )
@@ -414,7 +415,7 @@ public class JdbcSourceTask extends SourceTask {
   protected Map<String, Object> computeInitialOffset(
           String tableOrQuery,
           Map<String, Object> partitionOffset,
-          TimeZone timezone) {
+          ZoneId zoneId) {
     if (!(partitionOffset == null)) {
       log.info("Partition offset for '{}' is not null. Using existing offset.", tableOrQuery);
       return partitionOffset;
@@ -429,7 +430,7 @@ public class JdbcSourceTask extends SourceTask {
           // use the current time
           try {
             final Connection con = cachedConnectionProvider.getConnection();
-            Calendar cal = Calendar.getInstance(timezone);
+            Calendar cal = Calendar.getInstance(TimeZone.getTimeZone(zoneId));
             timestampInitial = dialect.currentTimeOnDB(con, cal).getTime();
           } catch (SQLException e) {
             throw new ConnectException("Error while getting initial timestamp from database", e);

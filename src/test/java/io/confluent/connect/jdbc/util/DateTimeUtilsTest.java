@@ -17,20 +17,19 @@ package io.confluent.connect.jdbc.util;
 
 import org.junit.Test;
 
-import java.math.BigInteger;
 import java.time.LocalDateTime;
 import java.time.Instant;
 import java.time.Month;
 import java.sql.Timestamp;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
-import java.util.TimeZone;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
 public class DateTimeUtilsTest {
 
-  private TimeZone utcTimeZone = TimeZone.getTimeZone(ZoneOffset.UTC);
+  private ZoneId utcZoneId = ZoneOffset.UTC;
 
   @Test
   public void testTimestampToNanosLong() {
@@ -77,43 +76,43 @@ public class DateTimeUtilsTest {
   public void testTimestampToIsoDateTime() {
     Timestamp timestamp = Timestamp.from(Instant.now());
     timestamp.setNanos(141362049);
-    String isoDateTime = DateTimeUtils.toIsoDateTimeString(timestamp, utcTimeZone);
+    String isoDateTime = DateTimeUtils.toIsoDateTimeString(timestamp, utcZoneId);
     assertEquals("141362049", isoDateTime.substring(isoDateTime.lastIndexOf('.') + 1));
-    assertEquals(timestamp, DateTimeUtils.toTimestampFromIsoDateTime(isoDateTime, utcTimeZone));
+    assertEquals(timestamp, DateTimeUtils.toTimestampFromIsoDateTime(isoDateTime, utcZoneId));
   }
 
   @Test
   public void testTimestampToIsoDateTimeNanosLeading0s() {
     Timestamp timestamp = Timestamp.from(Instant.now());
     timestamp.setNanos(1);
-    String isoDateTime = DateTimeUtils.toIsoDateTimeString(timestamp, utcTimeZone);
+    String isoDateTime = DateTimeUtils.toIsoDateTimeString(timestamp, utcZoneId);
     assertEquals("000000001", isoDateTime.substring(isoDateTime.lastIndexOf('.') + 1));
-    assertEquals(timestamp, DateTimeUtils.toTimestampFromIsoDateTime(isoDateTime, utcTimeZone));
+    assertEquals(timestamp, DateTimeUtils.toTimestampFromIsoDateTime(isoDateTime, utcZoneId));
   }
 
   @Test
   public void testTimestampToIsoDateTimeNanosTrailing0s() {
     Timestamp timestamp = Timestamp.from(Instant.now());
     timestamp.setNanos(100);
-    String isoDateTime = DateTimeUtils.toIsoDateTimeString(timestamp, utcTimeZone);
+    String isoDateTime = DateTimeUtils.toIsoDateTimeString(timestamp, utcZoneId);
     assertEquals("000000100", isoDateTime.substring(isoDateTime.lastIndexOf('.') + 1));
-    assertEquals(timestamp, DateTimeUtils.toTimestampFromIsoDateTime(isoDateTime, utcTimeZone));
+    assertEquals(timestamp, DateTimeUtils.toTimestampFromIsoDateTime(isoDateTime, utcZoneId));
   }
 
   @Test
   public void testTimestampToIsoDateTimeNanos0s() {
     Timestamp timestamp = Timestamp.from(Instant.now());
     timestamp.setNanos(0);
-    String isoDateTime = DateTimeUtils.toIsoDateTimeString(timestamp, utcTimeZone);
+    String isoDateTime = DateTimeUtils.toIsoDateTimeString(timestamp, utcZoneId);
     assertEquals("000000000", isoDateTime.substring(isoDateTime.lastIndexOf('.') + 1));
-    assertEquals(timestamp, DateTimeUtils.toTimestampFromIsoDateTime(isoDateTime, utcTimeZone));
+    assertEquals(timestamp, DateTimeUtils.toTimestampFromIsoDateTime(isoDateTime, utcZoneId));
   }
 
   @Test
   public void testTimestampToIsoDateTimeNull() {
-    String isoDateTime = DateTimeUtils.toIsoDateTimeString(null, utcTimeZone);
+    String isoDateTime = DateTimeUtils.toIsoDateTimeString(null, utcZoneId);
     assertNull(isoDateTime);
-    Timestamp timestamp = DateTimeUtils.toTimestampFromIsoDateTime(null, utcTimeZone);
+    Timestamp timestamp = DateTimeUtils.toTimestampFromIsoDateTime(null, utcZoneId);
     assertNull(timestamp);
   }
 }

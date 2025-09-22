@@ -113,6 +113,17 @@ public class JdbcSourceTaskTestBase {
     return props;
   }
 
+  protected Map<String, String> singleTableWithTimezoneConfig(
+      boolean completeMapping,
+      TimeZone tz,
+      Integer batch) {
+    Map<String, String> props = singleTableConfig(completeMapping);
+    props.put(JdbcSourceTaskConfig.DB_TIMEZONE_CONFIG, tz.getID());
+    props.put(JdbcSourceTaskConfig.BATCH_MAX_ROWS_CONFIG, batch.toString());
+    props.put(JdbcSourceConnectorConfig.POLL_LINGER_MS_CONFIG, "0");
+    return props;
+  }
+
   protected Map<String, String> twoTableConfig() {
     Map<String, String> props = new HashMap<>();
     props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, db.getUrl());

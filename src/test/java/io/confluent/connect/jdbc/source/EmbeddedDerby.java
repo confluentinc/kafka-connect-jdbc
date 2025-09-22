@@ -27,7 +27,9 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.util.BytesUtil;
@@ -223,9 +225,23 @@ public class EmbeddedDerby {
    */
   public void insert(String table, Object... columns)
       throws IllegalArgumentException, SQLException {
+    String insertStmt = insertStatementBuilder(table, columns);
+    execute(insertStmt);
+  }
+
+  /**
+   * Build an INSERT statement for a table.
+   * @param table the table to insert the record into
+   * @param columns list of column names followed by values
+   * @return the INSERT statement as a string
+   * @throws IllegalArgumentException
+   * @throws SQLException
+   */
+  public String insertStatementBuilder(String table, Object... columns)
+      throws IllegalArgumentException, SQLException {
     if (columns.length % 2 != 0) {
       throw new IllegalArgumentException("Must specify values to insert as pairs of column name "
-                                         + "followed by values");
+          + "followed by values");
     }
 
     StringBuilder builder = new StringBuilder();
@@ -246,7 +262,50 @@ public class EmbeddedDerby {
       builder.append(formatLiteral(columns[i]));
     }
     builder.append(")");
-    execute(builder.toString());
+    return builder.toString();
+  }
+
+  /**
+   * Executes statements without committing the connection
+   *
+   * @param statement A SQL statement
+   * @param furtherStatements Further SQL statement(s)
+   *
+   * @return the Connection instance; never null
+   */
+  public Connection executeWithoutCommit(String statement, String... furtherStatements) {
+    java.util.List<String> statements = new java.util.ArrayList<>();
+    statements.add(statement);
+    if (furtherStatements != null) {
+      for (String further : furtherStatements) {
+        statements.add(further);
+      }
+    }
+
+    try {
+      Connection connection = DriverManager.getConnection(getUrl());
+      connection.setAutoCommit(false);
+      try (Statement stmt = connection.createStatement()) {
+        for (String stmtStr : statements) {
+          stmt.execute(stmtStr);
+        }
+      }
+      return connection;
+    }
+    catch (RuntimeException e) {
+      throw e;
+    }
+    catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  /**
+   * Commits the passed connection
+   *
+   */
+  public void commit(Connection conn) throws SQLException{
+    conn.commit();
   }
 
   /**

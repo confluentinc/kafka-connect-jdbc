@@ -190,6 +190,10 @@ public class JdbcSourceTask extends SourceTask {
         = config.getList(JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
     List<String> timestampColumnMappings = config.timestampColumnMapping();
     List<String> incrementingColumnMappings = config.incrementingColumnMapping();
+    
+    log.info("Timestamp column mappings: {}", timestampColumnMappings);
+    log.info("Incrementing column mappings: {}", incrementingColumnMappings);
+    log.info("Mode: {}", config.getString(JdbcSourceTaskConfig.MODE_CONFIG));
 
     // Validate mapping configurations
     if (config.modeUsesTimestampColumn() && !timestampColumnMappings.isEmpty()) {

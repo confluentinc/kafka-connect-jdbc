@@ -247,9 +247,9 @@ public class TableMonitorThread extends Thread {
   private boolean updateTables() {
     final List<TableId> allTables;
     try {
-      log.trace("Fetching all tables from database");
+      log.info("Fetching all tables from database");
       allTables = dialect.tableIds(connectionProvider.getConnection());
-      log.debug("Retrieved {} tables from database: {}", allTables.size(), allTables);
+      log.info("Retrieved {} tables from database: {}", allTables.size(), allTables);
     } catch (SQLException e) {
       log.error(
           "Error while trying to get updated table list, ignoring and waiting for next table poll"
@@ -264,18 +264,19 @@ public class TableMonitorThread extends Thread {
     
     if (useRegexFiltering) {
       // New regex-based filtering
-      log.trace("Applying regex-based include/exclude filters to tables");
+      log.info("Applying regex-based include/exclude filters to tables");
+      log.info("Include regex patterns: {}", includeListRegex);
+      log.info("Exclude regex patterns: {}", excludeListRegex);
       filteredTables = TableCollectionUtils.filterTables(
           allTables, 
           includeListRegex != null ? includeListRegex : java.util.Collections.emptySet(),
           excludeListRegex != null ? excludeListRegex : java.util.Collections.emptySet()
       );
-      log.debug("Regex filtering resulted in {} tables from {} total tables", 
+      log.info("Regex filtering resulted in {} tables from {} total tables", 
                filteredTables.size(), allTables.size());
-      if (log.isTraceEnabled()) {
-        for (TableId table : filteredTables) {
-          log.trace("Table {} passed regex filters", table);
-        }
+      log.info("Filtered tables: {}", filteredTables);
+      for (TableId table : filteredTables) {
+        log.info("Table {} passed regex filters", table);
       }
     } else {
       // Legacy exact-match filtering

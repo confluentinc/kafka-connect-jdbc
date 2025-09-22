@@ -69,6 +69,7 @@ public class JdbcSourceConnector extends SourceConnector {
   @Override
   public void start(Map<String, String> properties) throws ConnectException {
     log.info("Starting JDBC Source Connector");
+    log.info("Configuration properties: {}", properties);
     try {
       configProperties = properties;
       config = new JdbcSourceConnectorConfig(configProperties);
@@ -76,6 +77,10 @@ public class JdbcSourceConnector extends SourceConnector {
       throw new ConnectException("Couldn't start JdbcSourceConnector due to configuration error",
                                  e);
     }
+    
+    // Log table filtering configuration
+    log.info("Table include list: {}", config.tableIncludeListRegexes());
+    log.info("Table exclude list: {}", config.tableExcludeListRegexes());
 
     final String dbUrl = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
     final int maxConnectionAttempts = config.getInt(
@@ -252,7 +257,8 @@ public class JdbcSourceConnector extends SourceConnector {
     } else {
       log.info("No custom query provided, generating task configurations for tables");
       List<TableId> currentTables = tableMonitorThread.tables();
-      log.trace("Current tables from tableMonitorThread: {}", currentTables);
+      log.info("Current tables from tableMonitorThread: {}", currentTables);
+      log.info("Number of tables found: {}", currentTables != null ? currentTables.size() : 0);
       
       if (currentTables == null || currentTables.isEmpty()) {
         taskConfigs = new ArrayList<>(1);

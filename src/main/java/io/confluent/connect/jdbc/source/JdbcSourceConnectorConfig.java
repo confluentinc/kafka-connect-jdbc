@@ -213,6 +213,26 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String TIMESTAMP_COLUMN_NAME_DEFAULT = "";
   private static final String TIMESTAMP_COLUMN_NAME_DISPLAY = "Timestamp Column Name";
 
+  public static final String TIMESTAMP_COLUMN_MAPPING_CONFIG = "timestamp.columns.mapping";
+  private static final String TIMESTAMP_COLUMN_MAPPING_DOC = "A comma separated list of table regex"
+      + " to timestamp columns mappings. On specifying multiple timestamp columns, COALESCE SQL "
+      + "function would be used to find out the effective timestamp for a row. Expected format is"
+      + " ``regex1:[col1|col2],regex2:[col3]``. Regexes would be matched against the"
+      + " fully-qualified table names of tables. Every table included for capture should match "
+      + "exactly one of the provided mappings. An example for a valid input would be "
+      + "``SCHEMA1.EMPLOYEES.SALARY.*:[UPDATED_AT|MODIFIED_AT],ACCOUNTS.*:[CHANGED_AT]``";
+  private static final String TIMESTAMP_COLUMN_MAPPING_DISPLAY =
+      "Table to timestamp columns mappings";
+
+  public static final String INCREMENTING_COLUMN_MAPPING_CONFIG = "incrementing.column.mapping";
+  private static final String INCREMENTING_COLUMN_MAPPING_DOC = "A comma separated list of table "
+      + "regex to incrementing column mappings. Expected format is ``regex1:col2,regex2:col1``."
+      + " Regexes would be matched against the fully-qualified table names of tables. Every table "
+      + "included for capture should match exactly one of the provided mappings. An example for a"
+      + " valid input would be ``SCHEMA1.EMPLOYEES.SALARY*:EMP_ID,ACCOUNTS.*:ID``";
+  private static final String INCREMENTING_COLUMN_MAPPING_DISPLAY =
+      "Table to incrementing column mappings";
+
   public static final String TIMESTAMP_INITIAL_CONFIG = "timestamp.initial";
   public static final Long TIMESTAMP_INITIAL_DEFAULT = null;
   public static final Long TIMESTAMP_INITIAL_CURRENT = Long.valueOf(-1);
@@ -459,6 +479,135 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       @Override
       public String toString() {
         return "a valid comma-separated list of Java regular expressions";
+      }
+    };
+  }
+
+  private static ConfigDef.Validator tableRegexToMultipleColumnsValidator() {
+    return new Validator() {
+      @Override
+      public void ensureValid(String name, Object value) {
+        @SuppressWarnings("unchecked")
+        List<String> mappings = (List<String>) value;
+        for (String mapping : mappings) {
+          validateMapping(name, mapping.trim());
+        }
+      }
+
+      @SuppressWarnings({"checkstyle:NPathComplexity"})
+      private void validateMapping(String configName, String mapping) {
+        // Split the mapping into regex and columns parts
+        String[] parts = mapping.split(":", 2);
+        if (parts.length != 2) {
+          throw new ConfigException(
+              configName,
+              mapping,
+              "Invalid format. Expected 'regex:[col1|col2|...]'"
+          );
+        }
+
+        // Validate regex pattern
+        String regex = parts[0].trim();
+        try {
+          Pattern.compile(regex);
+        } catch (Exception e) {
+          throw new ConfigException(
+              configName,
+              regex,
+              String.format("Invalid regular expression: %s", e.getMessage())
+          );
+        }
+
+        // Validate columns list
+        String columnsList = parts[1].trim();
+        if (!columnsList.startsWith("[") || !columnsList.endsWith("]")) {
+          throw new ConfigException(
+              configName,
+              columnsList,
+              "Columns list must be enclosed in square brackets"
+          );
+        }
+
+        // Extract and validate individual column names
+        String columnsContent = columnsList.substring(1, columnsList.length() - 1);
+        if (columnsContent.trim().isEmpty()) {
+          throw new ConfigException(
+              configName,
+              columnsList,
+              "Columns list cannot be empty"
+          );
+        }
+
+        String[] columns = columnsContent.split("\\|");
+        for (String column : columns) {
+          String trimmedColumn = column.trim();
+          if (trimmedColumn.isEmpty()) {
+            throw new ConfigException(
+                configName,
+                columnsList,
+                "Every column name should be non-empty string"
+            );
+          }
+        }
+      }
+
+      @Override
+      public String toString() {
+        return "a list of mappings in the format 'regex:[col1|col2|...]' where regex is a "
+            + "valid Java regular expression and columns are valid column names";
+      }
+    };
+  }
+
+  private static ConfigDef.Validator tableRegexToSingleColumnValidator() {
+    return new Validator() {
+      @Override
+      public void ensureValid(String name, Object value) {
+        @SuppressWarnings("unchecked")
+        List<String> mappings = (List<String>) value;
+        for (String mapping : mappings) {
+          validateMapping(name, mapping.trim());
+        }
+      }
+
+      private void validateMapping(String configName, String mapping) {
+        // Split the mapping into regex and column parts
+        String[] parts = mapping.split(":", 2);
+        if (parts.length != 2) {
+          throw new ConfigException(
+              configName,
+              mapping,
+              "Invalid format. Expected 'regex:columnName'"
+          );
+        }
+
+        // Validate regex pattern
+        String regex = parts[0].trim();
+        try {
+          Pattern.compile(regex);
+        } catch (Exception e) {
+          throw new ConfigException(
+              configName,
+              regex,
+              String.format("Invalid regular expression: %s", e.getMessage())
+          );
+        }
+
+        // Validate column name
+        String columnName = parts[1].trim();
+        if (columnName.isEmpty()) {
+          throw new ConfigException(
+              configName,
+              columnName,
+              "Column name cannot be empty"
+          );
+        }
+      }
+
+      @Override
+      public String toString() {
+        return "a list of mappings in the format 'regex:columnName' where regex is a valid "
+            + "Java regular expression and columnName is a valid column name";
       }
     };
   }
@@ -714,6 +863,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Arrays.asList(
             INCREMENTING_COLUMN_NAME_CONFIG,
             TIMESTAMP_COLUMN_NAME_CONFIG,
+            INCREMENTING_COLUMN_MAPPING_CONFIG,
+            TIMESTAMP_COLUMN_MAPPING_CONFIG,
             VALIDATE_NON_NULL_CONFIG
         )
     ).define(
@@ -737,6 +888,30 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.MEDIUM,
         TIMESTAMP_COLUMN_NAME_DISPLAY,
+        MODE_DEPENDENTS_RECOMMENDER
+    ).define(
+        TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        Type.LIST,
+        Arrays.asList(),
+        tableRegexToMultipleColumnsValidator(),
+        Importance.MEDIUM,
+        TIMESTAMP_COLUMN_MAPPING_DOC,
+        MODE_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        TIMESTAMP_COLUMN_MAPPING_DISPLAY,
+        MODE_DEPENDENTS_RECOMMENDER
+    ).define(
+        INCREMENTING_COLUMN_MAPPING_CONFIG,
+        Type.LIST,
+        Arrays.asList(),
+        tableRegexToSingleColumnValidator(),
+        Importance.MEDIUM,
+        INCREMENTING_COLUMN_MAPPING_DOC,
+        MODE_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        INCREMENTING_COLUMN_MAPPING_DISPLAY,
         MODE_DEPENDENTS_RECOMMENDER
     ).define(
         TIMESTAMP_INITIAL_CONFIG,
@@ -1034,23 +1209,40 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     @Override
     public boolean visible(String name, Map<String, Object> config) {
       String mode = (String) config.get(MODE_CONFIG);
+      return isVisibleForMode(name, mode);
+    }
+
+    private boolean isVisibleForMode(String name, String mode) {
       switch (mode) {
         case MODE_BULK:
           return false;
         case MODE_TIMESTAMP:
-          return name.equals(TIMESTAMP_COLUMN_NAME_CONFIG) || name.equals(VALIDATE_NON_NULL_CONFIG);
+          return isTimestampModeField(name);
         case MODE_INCREMENTING:
-          return name.equals(INCREMENTING_COLUMN_NAME_CONFIG)
-                 || name.equals(VALIDATE_NON_NULL_CONFIG);
+          return isIncrementingModeField(name);
         case MODE_TIMESTAMP_INCREMENTING:
-          return name.equals(TIMESTAMP_COLUMN_NAME_CONFIG)
-                 || name.equals(INCREMENTING_COLUMN_NAME_CONFIG)
-                 || name.equals(VALIDATE_NON_NULL_CONFIG);
+          return isTimestampIncrementingModeField(name);
         case MODE_UNSPECIFIED:
           throw new ConfigException("Query mode must be specified");
         default:
           throw new ConfigException("Invalid mode: " + mode);
       }
+    }
+
+    private boolean isTimestampModeField(String name) {
+      return name.equals(TIMESTAMP_COLUMN_NAME_CONFIG) 
+             || name.equals(TIMESTAMP_COLUMN_MAPPING_CONFIG)
+             || name.equals(VALIDATE_NON_NULL_CONFIG);
+    }
+
+    private boolean isIncrementingModeField(String name) {
+      return name.equals(INCREMENTING_COLUMN_NAME_CONFIG)
+             || name.equals(INCREMENTING_COLUMN_MAPPING_CONFIG)
+             || name.equals(VALIDATE_NON_NULL_CONFIG);
+    }
+
+    private boolean isTimestampIncrementingModeField(String name) {
+      return isTimestampModeField(name) || isIncrementingModeField(name);
     }
   }
 
@@ -1232,6 +1424,60 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
    */
   public List<String> tableExcludeListRegexes() {
     return getList(TABLE_EXCLUDE_LIST_CONFIG);
+  }
+
+  /**
+   * Get the timestamp column mapping configurations.
+   * @return List of timestamp column mappings, empty list if not configured
+   */
+  public List<String> timestampColumnMapping() {
+    return getList(TIMESTAMP_COLUMN_MAPPING_CONFIG);
+  }
+
+  /**
+   * Get the incrementing column mapping configurations.
+   * @return List of incrementing column mappings, empty list if not configured
+   */
+  public List<String> incrementingColumnMapping() {
+    return getList(INCREMENTING_COLUMN_MAPPING_CONFIG);
+  }
+
+  /**
+   * Get the regex patterns from timestamp column mappings.
+   * @return List of regex patterns from timestamp mappings
+   */
+  public List<String> timestampColMappingRegexes() {
+    return timestampColumnMapping().stream()
+        .map(mapping -> mapping.split(":")[0].trim())
+        .collect(java.util.stream.Collectors.toList());
+  }
+
+  /**
+   * Get the regex patterns from incrementing column mappings.
+   * @return List of regex patterns from incrementing mappings
+   */
+  public List<String> incrementingColMappingRegexes() {
+    return incrementingColumnMapping().stream()
+        .map(mapping -> mapping.split(":")[0].trim())
+        .collect(java.util.stream.Collectors.toList());
+  }
+
+  /**
+   * Check if the current mode uses timestamp columns.
+   * @return true if mode uses timestamp columns
+   */
+  public boolean modeUsesTimestampColumn() {
+    String mode = getString(MODE_CONFIG);
+    return Arrays.asList(MODE_TIMESTAMP, MODE_TIMESTAMP_INCREMENTING).contains(mode);
+  }
+
+  /**
+   * Check if the current mode uses incrementing columns.
+   * @return true if mode uses incrementing columns
+   */
+  public boolean modeUsesIncrementingColumn() {
+    String mode = getString(MODE_CONFIG);
+    return Arrays.asList(MODE_INCREMENTING, MODE_TIMESTAMP_INCREMENTING).contains(mode);
   }
 
   public static void main(String[] args) {

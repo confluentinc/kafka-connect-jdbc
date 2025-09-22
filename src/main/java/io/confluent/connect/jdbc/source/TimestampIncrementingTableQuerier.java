@@ -171,7 +171,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
       ResultSetMetaData metadata = resultSet.getMetaData();
       dialect.validateSpecificColumnTypes(metadata, timestampColumns);
       schemaMapping = SchemaMapping.create(schemaName, metadata, dialect);
-      log.info("Current Result is null. Executing query.");
+      log.debug("Current Result is null. Executing query.");
     } else {
       log.trace("Current ResultSet {} isn't null. Continuing to seek.", resultSet.hashCode());
     }

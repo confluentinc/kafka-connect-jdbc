@@ -15,7 +15,7 @@
 
 package io.confluent.connect.jdbc.source;
 
-import java.util.TimeZone;
+import java.time.ZoneId;
 
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
@@ -62,7 +62,7 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
       List<String> timestampColumnNames,
       Map<String, Object> offsetMap,
       Long timestampDelay,
-      TimeZone timeZone,
+      ZoneId zoneId,
       String suffix,
       TimestampGranularity timestampGranularity
   ) {
@@ -75,7 +75,7 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
         null,
         offsetMap,
         timestampDelay,
-        timeZone,
+        zoneId,
         suffix,
         timestampGranularity
     );

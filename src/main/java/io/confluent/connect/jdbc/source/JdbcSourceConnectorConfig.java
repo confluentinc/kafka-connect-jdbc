@@ -25,7 +25,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.TimeZone;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.microsoft.sqlserver.jdbc.SQLServerConnection;
@@ -1049,8 +1048,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
             DateTimeUtils.toTimestampFromIsoDateTime((String) isoDateTimeString, tz));
 
     public final Function<Boolean, Schema> schemaFunction;
-    public final BiFunction<Timestamp, TimeZone, Object> fromTimestamp;
-    public final BiFunction<Object, TimeZone, Timestamp> toTimestamp;
+    public final BiFunction<Timestamp, ZoneId, Object> fromTimestamp;
+    public final BiFunction<Object, ZoneId, Timestamp> toTimestamp;
 
     public static final String DEFAULT = CONNECT_LOGICAL.name().toLowerCase(Locale.ROOT);
 
@@ -1067,8 +1066,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     }
 
     TimestampGranularity(Function<Boolean, Schema> schemaFunction,
-        BiFunction<Timestamp, TimeZone, Object> fromTimestamp,
-        BiFunction<Object, TimeZone, Timestamp> toTimestamp) {
+        BiFunction<Timestamp, ZoneId, Object> fromTimestamp,
+        BiFunction<Object, ZoneId, Timestamp> toTimestamp) {
       this.schemaFunction = schemaFunction;
       this.fromTimestamp = fromTimestamp;
       this.toTimestamp = toTimestamp;
@@ -1106,9 +1105,9 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     return NumericMapping.get(this);
   }
 
-  public TimeZone timeZone() {
+  public ZoneId zoneId() {
     String dbTimeZone = getString(JdbcSourceTaskConfig.DB_TIMEZONE_CONFIG);
-    return TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
+    return ZoneId.of(dbTimeZone);
   }
 
   public int maxBatchSize() {

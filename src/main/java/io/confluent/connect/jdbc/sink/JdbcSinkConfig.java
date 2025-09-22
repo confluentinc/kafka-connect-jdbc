@@ -25,7 +25,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TimeZone;
 import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
@@ -675,8 +674,8 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final Set<String> fieldsWhitelist;
   public final Set<String> timestampFieldsList;
   public final String dialectName;
-  public final TimeZone timeZone;
-  public final TimeZone dateTimeZone;
+  public final ZoneId zoneId;
+  public final ZoneId dateTimeZoneId;
   public final TimestampPrecisionMode timestampPrecisionMode;
   public final EnumSet<TableType> tableTypes;
   public final boolean useHoldlockInMerge;
@@ -706,11 +705,11 @@ public class JdbcSinkConfig extends AbstractConfig {
     dialectName = getString(DIALECT_NAME_CONFIG);
     fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
     String dbTimeZone = getString(DB_TIMEZONE_CONFIG);
-    timeZone = TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
+    zoneId = ZoneId.of(dbTimeZone);
     DateTimezone dateTimezoneConfig =
         DateTimezone.valueOf(getString(DATE_TIMEZONE_CONFIG).toUpperCase());
-    dateTimeZone = dateTimezoneConfig.equals(DateTimezone.UTC)
-        ? TimeZone.getTimeZone(ZoneOffset.UTC) : timeZone;
+    dateTimeZoneId = dateTimezoneConfig.equals(DateTimezone.UTC)
+        ? ZoneOffset.UTC : zoneId;
     timestampPrecisionMode =
         TimestampPrecisionMode.valueOf(getString(TIMESTAMP_PRECISION_MODE_CONFIG).toUpperCase());
     useHoldlockInMerge = getBoolean(MSSQL_USE_MERGE_HOLDLOCK);

@@ -17,9 +17,10 @@ package io.confluent.connect.jdbc.util;
 
 import java.math.BigInteger;
 import java.sql.Timestamp;
-import java.text.SimpleDateFormat;
+import java.time.ZonedDateTime;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.chrono.ChronoZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Calendar;
@@ -47,41 +48,31 @@ public class DateTimeUtils {
   private static final ThreadLocal<Map<TimeZone, Calendar>> TIMEZONE_CALENDARS =
       ThreadLocal.withInitial(HashMap::new);
 
-  private static final ThreadLocal<Map<TimeZone, SimpleDateFormat>> TIMEZONE_DATE_FORMATS =
-      ThreadLocal.withInitial(HashMap::new);
+  private static final DateTimeFormatter DATE_FORMATTER =
+      DateTimeFormatter.ofPattern("yyyy-MM-dd");
+  private static final DateTimeFormatter TIME_FORMATTER =
+      DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
+  private static final DateTimeFormatter TIMESTAMP_FORMATTER =
+      DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
 
-  private static final ThreadLocal<Map<TimeZone, SimpleDateFormat>> TIMEZONE_TIME_FORMATS =
-      ThreadLocal.withInitial(HashMap::new);
-
-  private static final ThreadLocal<Map<TimeZone, SimpleDateFormat>> TIMEZONE_TIMESTAMP_FORMATS =
-      ThreadLocal.withInitial(HashMap::new);
-
-  public static Calendar getTimeZoneCalendar(final TimeZone timeZone) {
+  public static Calendar getZoneIdCalendar(final ZoneId zoneId) {
+    TimeZone timeZone = TimeZone.getTimeZone(zoneId);
     return TIMEZONE_CALENDARS.get().computeIfAbsent(timeZone, GregorianCalendar::new);
   }
 
-  public static String formatDate(Date date, TimeZone timeZone) {
-    return TIMEZONE_DATE_FORMATS.get().computeIfAbsent(timeZone, aTimeZone -> {
-      SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
-      sdf.setTimeZone(aTimeZone);
-      return sdf;
-    }).format(date);
+  public static String formatDate(Date date, ZoneId zoneId) {
+    ZonedDateTime zoned = date.toInstant().atZone(zoneId);
+    return DATE_FORMATTER.format(zoned);
   }
 
-  public static String formatTime(Date date, TimeZone timeZone) {
-    return TIMEZONE_TIME_FORMATS.get().computeIfAbsent(timeZone, aTimeZone -> {
-      SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss.SSS");
-      sdf.setTimeZone(aTimeZone);
-      return sdf;
-    }).format(date);
+  public static String formatTime(Date date, ZoneId zoneId) {
+    ZonedDateTime zoned = date.toInstant().atZone(zoneId);
+    return TIME_FORMATTER.format(zoned);
   }
 
-  public static String formatTimestamp(Date date, TimeZone timeZone) {
-    return TIMEZONE_TIMESTAMP_FORMATS.get().computeIfAbsent(timeZone, aTimeZone -> {
-      SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
-      sdf.setTimeZone(aTimeZone);
-      return sdf;
-    }).format(date);
+  public static String formatTimestamp(Date date, ZoneId zoneId) {
+    ZonedDateTime zoned = date.toInstant().atZone(zoneId);
+    return TIMESTAMP_FORMATTER.format(zoned);
   }
 
   public static Timestamp formatSinkMicrosTimestamp(Long epochMicros) {
@@ -198,13 +189,13 @@ public class DateTimeUtils {
    * Get the iso date-time string with micro precision for the given {@link Timestamp}.
    *
    * @param timestamp the Java timestamp value
-   * @param tz the timezone of the source database
+   * @param zoneId the timezone of the source database
    * @return the string iso date time
    */
-  public static String toIsoDateMicrosTimeString(Timestamp timestamp, TimeZone tz) {
+  public static String toIsoDateMicrosTimeString(Timestamp timestamp, ZoneId zoneId) {
     return Optional.ofNullable(timestamp)
         .map(Timestamp::toInstant)
-        .map(t -> t.atZone(tz.toZoneId()))
+        .map(t -> t.atZone(zoneId))
         .map(t -> t.format(ISO_DATE_TIME_MICROS_FORMAT))
         .orElse(null);
   }
@@ -213,13 +204,13 @@ public class DateTimeUtils {
    * Get the iso date-time string with nano precision for the given {@link Timestamp}.
    *
    * @param timestamp the Java timestamp value
-   * @param tz the timezone of the source database
+   * @param zoneId the timezone of the source database
    * @return the string iso date time
    */
-  public static String toIsoDateTimeString(Timestamp timestamp, TimeZone tz) {
+  public static String toIsoDateTimeString(Timestamp timestamp, ZoneId zoneId) {
     return Optional.ofNullable(timestamp)
         .map(Timestamp::toInstant)
-        .map(t -> t.atZone(tz.toZoneId()))
+        .map(t -> t.atZone(zoneId))
         .map(t -> t.format(ISO_DATE_TIME_NANOS_FORMAT))
         .orElse(null);
   }
@@ -236,7 +227,7 @@ public class DateTimeUtils {
             m -> {
               Timestamp ts = new Timestamp(micros / MICROSECONDS_PER_MILLISECOND);
               long remainderMicros = micros % MICROSECONDS_PER_MILLISECOND;
-              ts.setNanos(ts.getNanos() + (int)(remainderMicros * NANOSECONDS_PER_MICROSECOND));
+              ts.setNanos(ts.getNanos() + (int) (remainderMicros * NANOSECONDS_PER_MICROSECOND));
               return ts;
             })
         .orElse(null);
@@ -265,7 +256,7 @@ public class DateTimeUtils {
     return Optional.ofNullable(nanos)
         .map(n -> {
           Timestamp ts = new Timestamp(nanos / NANOSECONDS_PER_MILLISECOND);
-          ts.setNanos((int)(nanos % NANOSECONDS_PER_SECOND));
+          ts.setNanos((int) (nanos % NANOSECONDS_PER_SECOND));
           return ts;
         })
         .orElse(null);
@@ -308,13 +299,13 @@ public class DateTimeUtils {
    * Get {@link Timestamp} from epoch with micro precision
    *
    * @param isoDT iso dateTime format "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
-   * @param tz the timezone of the source database
+   * @param zoneId the timezone of the source database
    * @return the equivalent java sql Timestamp
    */
-  public static Timestamp toTimestampFromIsoDateMicrosTime(String isoDT, TimeZone tz) {
+  public static Timestamp toTimestampFromIsoDateMicrosTime(String isoDT, ZoneId zoneId) {
     return Optional.ofNullable(isoDT)
         .map(i -> LocalDateTime.parse(isoDT, ISO_DATE_TIME_MICROS_FORMAT))
-        .map(t -> t.atZone(tz.toZoneId()))
+        .map(t -> t.atZone(zoneId))
         .map(ChronoZonedDateTime::toInstant)
         .map(Timestamp::from)
         .orElse(null);
@@ -324,13 +315,13 @@ public class DateTimeUtils {
    * Get {@link Timestamp} from epoch with nano precision
    *
    * @param isoDT iso dateTime format "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS"
-   * @param tz the timezone of the source database
+   * @param zoneId the timezone of the source database
    * @return the equivalent java sql Timestamp
    */
-  public static Timestamp toTimestampFromIsoDateTime(String isoDT, TimeZone tz) {
+  public static Timestamp toTimestampFromIsoDateTime(String isoDT, ZoneId zoneId) {
     return Optional.ofNullable(isoDT)
         .map(i -> LocalDateTime.parse(isoDT, ISO_DATE_TIME_NANOS_FORMAT))
-        .map(t -> t.atZone(tz.toZoneId()))
+        .map(t -> t.atZone(zoneId))
         .map(ChronoZonedDateTime::toInstant)
         .map(Timestamp::from)
         .orElse(null);

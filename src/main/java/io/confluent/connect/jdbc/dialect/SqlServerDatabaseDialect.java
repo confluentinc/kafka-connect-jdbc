@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import java.time.ZoneId;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
@@ -42,7 +43,6 @@ import java.util.Calendar;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.TimeZone;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode;
@@ -287,7 +287,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
    * @throws SQLException if there is a problem getting the value
    */
   protected Object convertDateTimeOffset(ResultSet rs, int col) throws SQLException {
-    return rs.getTimestamp(col, DateTimeUtils.getTimeZoneCalendar(timeZone()));
+    return rs.getTimestamp(col, DateTimeUtils.getZoneIdCalendar(zoneId()));
   }
 
   /**
@@ -306,21 +306,21 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       int col
   ) throws SQLException {
     String value = rs.getString(col);
-    return value == null ? null : dateTimeOffsetFrom(rs.getString(col), timeZone());
+    return value == null ? null : dateTimeOffsetFrom(rs.getString(col), zoneId());
   }
 
   /**
    * Utility method to parse the string form of a SQL Server DATETIMEOFFSET value into a
    * {@link java.sql.Timestamp} value.
    *
-   * @param value    the string DATETIMEOFFSET value; never null
-   * @param timeZone the timezone in which the {@link java.sql.Timestamp} should be defined; may
-   *                 not be null
+   * @param value  the string DATETIMEOFFSET value; never null
+   * @param zoneId the timezone in which the {@link java.sql.Timestamp} should be defined; may
+   *               not be null
    * @return the equivalent {@link java.sql.Timestamp}; never null
    */
-  protected static java.sql.Timestamp dateTimeOffsetFrom(String value, TimeZone timeZone) {
+  protected static java.sql.Timestamp dateTimeOffsetFrom(String value, ZoneId zoneId) {
     ZonedDateTime zdt = ZonedDateTime.parse(value, DATE_TIME_FORMATTER);
-    zdt = zdt.withZoneSameInstant(timeZone.toZoneId());
+    zdt = zdt.withZoneSameInstant(zoneId);
     return java.sql.Timestamp.from(zdt.toInstant());
   }
 

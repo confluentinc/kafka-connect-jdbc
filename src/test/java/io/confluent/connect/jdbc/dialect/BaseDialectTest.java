@@ -69,21 +69,13 @@ import static org.mockito.Mockito.when;
 
 public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
 
-  protected static final GregorianCalendar EPOCH_PLUS_TEN_THOUSAND_DAYS;
-  protected static final GregorianCalendar EPOCH_PLUS_TEN_THOUSAND_MILLIS;
   protected static final GregorianCalendar MARCH_15_2001_MIDNIGHT;
 
   static {
-    EPOCH_PLUS_TEN_THOUSAND_DAYS = new GregorianCalendar(1970, Calendar.JANUARY, 1, 0, 0, 0);
-    EPOCH_PLUS_TEN_THOUSAND_DAYS.setTimeZone(TimeZone.getTimeZone("UTC"));
-    EPOCH_PLUS_TEN_THOUSAND_DAYS.add(Calendar.DATE, 10000);
-
-    EPOCH_PLUS_TEN_THOUSAND_MILLIS = new GregorianCalendar(1970, Calendar.JANUARY, 1, 0, 0, 0);
-    EPOCH_PLUS_TEN_THOUSAND_MILLIS.setTimeZone(TimeZone.getTimeZone("UTC"));
-    EPOCH_PLUS_TEN_THOUSAND_MILLIS.add(Calendar.MILLISECOND, 10000);
 
     MARCH_15_2001_MIDNIGHT = new GregorianCalendar(2001, Calendar.MARCH, 15, 0, 0, 0);
     MARCH_15_2001_MIDNIGHT.setTimeZone(TimeZone.getTimeZone("UTC"));
+
   }
 
   protected QuoteMethod quoteIdentfiiers;
@@ -432,7 +424,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
         Decimal.schema(0),
         new BigDecimal("1.5").setScale(0, BigDecimal.ROUND_HALF_EVEN)
     ).setBigDecimal(index, new BigDecimal(2));
-    Calendar utcCalendar = DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone(ZoneOffset.UTC));
+    Calendar utcCalendar = DateTimeUtils.getZoneIdCalendar(ZoneOffset.UTC);
     verifyBindField(
       ++index,
       Date.SCHEMA,

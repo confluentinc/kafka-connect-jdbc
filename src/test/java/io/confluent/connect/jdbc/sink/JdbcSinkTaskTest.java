@@ -37,7 +37,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TimeZone;
+import java.time.ZoneId;
 import java.util.concurrent.CompletableFuture;
 
 import org.apache.kafka.connect.data.Schema;
@@ -101,7 +101,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     props.put("pk.mode", "kafka");
     props.put("pk.fields", "kafka_topic,kafka_partition,kafka_offset");
     String timeZoneID = "America/Los_Angeles";
-    TimeZone timeZone = TimeZone.getTimeZone(timeZoneID);
+    ZoneId zoneId = ZoneId.of(timeZoneID);
     props.put("db.timezone", timeZoneID);
 
     JdbcSinkTask task = new JdbcSinkTask();
@@ -148,7 +148,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
                 assertEquals(struct.getFloat64("double"), rs.getDouble("double"), 0.01);
                 java.sql.Timestamp dbTimestamp = rs.getTimestamp(
                     "modified",
-                    DateTimeUtils.getTimeZoneCalendar(timeZone)
+                    DateTimeUtils.getZoneIdCalendar(zoneId)
                 );
                 assertEquals(((java.util.Date) struct.get("modified")).getTime(), dbTimestamp.getTime());
               }
@@ -217,7 +217,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
                 assertEquals(struct.getFloat64("double"), rs.getDouble("double"), 0.01);
                 java.sql.Timestamp dbTimestamp = rs.getTimestamp(
                     "modified",
-                    DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone(ZoneOffset.UTC))
+                    DateTimeUtils.getZoneIdCalendar(ZoneOffset.UTC)
                 );
                 assertEquals(((java.util.Date) struct.get("modified")).getTime(), dbTimestamp.getTime());
               }

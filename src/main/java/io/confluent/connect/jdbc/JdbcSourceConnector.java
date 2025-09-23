@@ -69,6 +69,7 @@ public class JdbcSourceConnector extends SourceConnector {
   @Override
   public void start(Map<String, String> properties) throws ConnectException {
     log.info("Starting JDBC Source Connector");
+    log.info("Configuration properties: {}", properties);
     try {
       configProperties = properties;
       config = new JdbcSourceConnectorConfig(configProperties);
@@ -76,6 +77,10 @@ public class JdbcSourceConnector extends SourceConnector {
       throw new ConnectException("Couldn't start JdbcSourceConnector due to configuration error",
                                  e);
     }
+    
+    // Log table filtering configuration
+    log.info("Table include list: {}", config.tableIncludeListRegexes());
+    log.info("Table exclude list: {}", config.tableExcludeListRegexes());
 
     final String dbUrl = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
     final int maxConnectionAttempts = config.getInt(
@@ -98,21 +103,26 @@ public class JdbcSourceConnector extends SourceConnector {
     long tablePollMs = config.getLong(JdbcSourceConnectorConfig.TABLE_POLL_INTERVAL_MS_CONFIG);
     long tableStartupLimitMs =
         config.getLong(JdbcSourceConnectorConfig.TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_CONFIG);
+    
+    // Extract table filtering configurations for table monitor thread
     List<String> whitelist = config.getList(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG);
     Set<String> whitelistSet = whitelist.isEmpty() ? null : new HashSet<>(whitelist);
+    
     List<String> blacklist = config.getList(JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG);
     Set<String> blacklistSet = blacklist.isEmpty() ? null : new HashSet<>(blacklist);
+    
+    List<String> includeList = config.tableIncludeListRegexes();
+    Set<String> includeListSet = includeList.isEmpty() ? null : new HashSet<>(includeList);
+    
+    List<String> excludeList = config.tableExcludeListRegexes();
+    Set<String> excludeListSet = excludeList.isEmpty() ? null : new HashSet<>(excludeList);
 
-    if (whitelistSet != null && blacklistSet != null) {
-      throw new ConnectException(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + " and "
-                                 + JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG + " are "
-                                 + "exclusive.");
-    }
     String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
     if (!query.isEmpty()) {
-      if (whitelistSet != null || blacklistSet != null) {
+      if (whitelistSet != null || blacklistSet != null 
+          || includeListSet != null || excludeListSet != null) {
         log.error(
-            "Configuration error: {} is set, but table whitelist or blacklist is also specified."
+            "Configuration error: {} is set, but table filtering options are also specified. "
                 + "These settings cannot be used together.",
             JdbcSourceConnectorConfig.QUERY_CONFIG);
         throw new ConnectException(JdbcSourceConnectorConfig.QUERY_CONFIG + " may not be combined"
@@ -121,16 +131,18 @@ public class JdbcSourceConnector extends SourceConnector {
       // Force filtering out the entire set of tables since the one task we'll generate is for the
       // query.
       whitelistSet = Collections.emptySet();
-
     }
+    
     tableMonitorThread = new TableMonitorThread(
         dialect,
         cachedConnectionProvider,
         context,
         tableStartupLimitMs,
         tablePollMs,
-        whitelistSet,
-        blacklistSet,
+        whitelistSet,      // Legacy
+        blacklistSet,      // Legacy
+        includeListSet,    // New
+        excludeListSet,    // New
         Time.SYSTEM
     );
     if (query.isEmpty()) {
@@ -141,6 +153,75 @@ public class JdbcSourceConnector extends SourceConnector {
 
   protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
     return new CachedConnectionProvider(dialect, maxConnAttempts, retryBackoff);
+  }
+
+  /**
+   * Validate table filtering configurations to ensure they are mutually exclusive.
+   * This method ensures that legacy whitelist/blacklist configurations cannot be used
+   * together with the new include/exclude list configurations.
+   */
+  private void validateTableFilteringConfigs(Set<String> whitelistSet, Set<String> blacklistSet, 
+                                           Set<String> includeListSet, Set<String> excludeListSet) {
+    validateLegacyConfigExclusivity(whitelistSet, blacklistSet);
+    validateLegacyAndNewConfigExclusivity(whitelistSet, blacklistSet, 
+                                          includeListSet, excludeListSet);
+    warnOnEmptyIncludeWithExclude(includeListSet, excludeListSet);
+  }
+
+  private void validateLegacyConfigExclusivity(Set<String> whitelistSet, Set<String> blacklistSet) {
+    if (whitelistSet != null && blacklistSet != null) {
+      throw new ConnectException(
+          "Legacy table filtering configurations are mutually exclusive. Cannot use both "
+          + JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + " and "
+          + JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG + " together."
+      );
+    }
+  }
+
+  private void validateLegacyAndNewConfigExclusivity(Set<String> whitelistSet, 
+                                                    Set<String> blacklistSet,
+                                                    Set<String> includeListSet, 
+                                                    Set<String> excludeListSet) {
+    boolean hasLegacyConfig = whitelistSet != null || blacklistSet != null;
+    boolean hasNewConfig = includeListSet != null || excludeListSet != null;
+    
+    // Exclude list cannot exist without include list
+    if (excludeListSet != null && includeListSet == null) {
+      throw new ConnectException(
+          JdbcSourceConnectorConfig.TABLE_EXCLUDE_LIST_CONFIG 
+          + " cannot be used without " + JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG
+          + ". Exclude list only applies to tables that match the include list."
+      );
+    }
+    
+    if (hasLegacyConfig && hasNewConfig) {
+      List<String> configsUsed = new ArrayList<>();
+      if (whitelistSet != null) {
+        configsUsed.add(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG);
+      }
+      if (blacklistSet != null) {
+        configsUsed.add(JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG);
+      }
+      if (includeListSet != null) {
+        configsUsed.add(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG);
+      }
+      if (excludeListSet != null) {
+        configsUsed.add(JdbcSourceConnectorConfig.TABLE_EXCLUDE_LIST_CONFIG);
+      }
+      
+      throw new ConnectException(
+          "Table filtering configurations are mutually exclusive. "
+          + "Cannot use legacy whitelist/blacklist with new include/exclude lists. "
+          + "Configured: " + String.join(", ", configsUsed)
+      );
+    }
+  }
+
+  private void warnOnEmptyIncludeWithExclude(Set<String> includeListSet, 
+                                             Set<String> excludeListSet) {
+    if (includeListSet != null && excludeListSet != null && includeListSet.isEmpty()) {
+      log.warn("Include list is empty but exclude list is specified. No tables will be selected.");
+    }
   }
 
   @Override
@@ -154,7 +235,205 @@ public class JdbcSourceConnector extends SourceConnector {
     JdbcSourceConnectorConfig jdbcSourceConnectorConfig
             = new JdbcSourceConnectorConfig(connectorConfigs);
     jdbcSourceConnectorConfig.validateMultiConfigs(config);
+    
+    // Validate static config conflicts that don't require database access
+    validateStaticConfigConflicts(jdbcSourceConnectorConfig, config);
+    
+    // Validate mode-dependent column requirements
+    validateModeColumnRequirements(jdbcSourceConnectorConfig, config);
+    
     return config;
+  }
+
+  /**
+   * Validate static configuration conflicts that don't require database connectivity.
+   * This includes mutually exclusive configurations and logical inconsistencies.
+   */
+  private void validateStaticConfigConflicts(JdbcSourceConnectorConfig jdbcConfig, Config config) {
+    // Extract table filtering configurations
+    List<String> whitelist = jdbcConfig.getList(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG);
+    Set<String> whitelistSet = whitelist.isEmpty() ? null : new HashSet<>(whitelist);
+    
+    List<String> blacklist = jdbcConfig.getList(JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG);
+    Set<String> blacklistSet = blacklist.isEmpty() ? null : new HashSet<>(blacklist);
+    
+    List<String> includeList = jdbcConfig.tableIncludeListRegexes();
+    Set<String> includeListSet = includeList.isEmpty() ? null : new HashSet<>(includeList);
+    
+    List<String> excludeList = jdbcConfig.tableExcludeListRegexes();
+    Set<String> excludeListSet = excludeList.isEmpty() ? null : new HashSet<>(excludeList);
+
+    // Validate table filtering conflicts
+    validateTableFilteringConflicts(whitelistSet, blacklistSet, includeListSet, excludeListSet, 
+        config);
+    
+    // Validate column mapping conflicts
+    validateColumnMappingConflicts(jdbcConfig, config);
+  }
+
+  /**
+   * Validate table filtering configuration conflicts.
+   */
+  private void validateTableFilteringConflicts(Set<String> whitelistSet, Set<String> blacklistSet,
+                                               Set<String> includeListSet, 
+                                               Set<String> excludeListSet,
+                                               Config config) {
+    // Legacy configs cannot be used together
+    if (whitelistSet != null && blacklistSet != null) {
+      addConfigError(config, JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG,
+          "Legacy table filtering configurations are mutually exclusive. Cannot use both "
+          + JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + " and "
+          + JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG + " together.");
+      addConfigError(config, JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG,
+          "Cannot use with " + JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG);
+    }
+
+    // Exclude list requires include list
+    if (excludeListSet != null && includeListSet == null) {
+      addConfigError(config, JdbcSourceConnectorConfig.TABLE_EXCLUDE_LIST_CONFIG,
+          JdbcSourceConnectorConfig.TABLE_EXCLUDE_LIST_CONFIG 
+          + " cannot be used without " + JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG
+          + ". Exclude list only applies to tables that match the include list.");
+    }
+
+    // Legacy and new configs are mutually exclusive
+    boolean hasLegacyConfig = whitelistSet != null || blacklistSet != null;
+    boolean hasNewConfig = includeListSet != null || excludeListSet != null;
+    
+    if (hasLegacyConfig && hasNewConfig) {
+      List<String> configsUsed = new ArrayList<>();
+      if (whitelistSet != null) {
+        configsUsed.add(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG);
+        addConfigError(config, JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG,
+            "Cannot use legacy whitelist/blacklist with new include/exclude lists. "
+            + "Configured: " + String.join(", ", configsUsed));
+      }
+      if (blacklistSet != null) {
+        configsUsed.add(JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG);
+        addConfigError(config, JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG,
+            "Cannot use legacy whitelist/blacklist with new include/exclude lists. "
+            + "Configured: " + String.join(", ", configsUsed));
+      }
+      if (includeListSet != null) {
+        configsUsed.add(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG);
+        addConfigError(config, JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG,
+            "Cannot use new include/exclude lists with legacy whitelist/blacklist. "
+            + "Configured: " + String.join(", ", configsUsed));
+      }
+      if (excludeListSet != null) {
+        configsUsed.add(JdbcSourceConnectorConfig.TABLE_EXCLUDE_LIST_CONFIG);
+        addConfigError(config, JdbcSourceConnectorConfig.TABLE_EXCLUDE_LIST_CONFIG,
+            "Cannot use new include/exclude lists with legacy whitelist/blacklist. "
+            + "Configured: " + String.join(", ", configsUsed));
+      }
+    }
+  }
+
+  /**
+   * Validate column mapping configuration conflicts.
+   */
+  private void validateColumnMappingConflicts(JdbcSourceConnectorConfig jdbcConfig, 
+                                              Config config) {
+    // Get column configurations
+    List<String> timestampColumnName = jdbcConfig.getList(
+        JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
+    List<String> timestampColumnsMapping = jdbcConfig.timestampColumnMapping();
+    String incrementingColumnName = jdbcConfig.getString(
+        JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG);
+    List<String> incrementingColumnMapping = jdbcConfig.incrementingColumnMapping();
+
+    // Timestamp column conflicts
+    boolean hasLegacyTimestampConfig = timestampColumnName != null 
+        && !timestampColumnName.isEmpty() 
+        && !timestampColumnName.get(0).trim().isEmpty();
+    boolean hasNewTimestampConfig = timestampColumnsMapping != null 
+        && !timestampColumnsMapping.isEmpty();
+    
+    if (hasLegacyTimestampConfig && hasNewTimestampConfig) {
+      addConfigError(config, JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG,
+          "Cannot use both timestamp.column.name and timestamp.columns.mapping. "
+          + "Use timestamp.columns.mapping for new implementations.");
+      addConfigError(config, JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_MAPPING_CONFIG,
+          "Cannot use both timestamp.columns.mapping and timestamp.column.name. "
+          + "Remove timestamp.column.name for new implementations.");
+    }
+
+    // Incrementing column conflicts
+    boolean hasLegacyIncrementingConfig = incrementingColumnName != null 
+        && !incrementingColumnName.trim().isEmpty();
+    boolean hasNewIncrementingConfig = incrementingColumnMapping != null 
+        && !incrementingColumnMapping.isEmpty();
+    
+    if (hasLegacyIncrementingConfig && hasNewIncrementingConfig) {
+      addConfigError(config, JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG,
+          "Cannot use both incrementing.column.name and incrementing.column.mapping. "
+          + "Use incrementing.column.mapping for new implementations.");
+      addConfigError(config, JdbcSourceConnectorConfig.INCREMENTING_COLUMN_MAPPING_CONFIG,
+          "Cannot use both incrementing.column.mapping and incrementing.column.name. "
+          + "Remove incrementing.column.name for new implementations.");
+    }
+  }
+
+  /**
+   * Validate that mode-dependent column configurations are properly provided.
+   */
+  private void validateModeColumnRequirements(JdbcSourceConnectorConfig jdbcConfig, Config config) {
+    String mode = jdbcConfig.getString(JdbcSourceConnectorConfig.MODE_CONFIG);
+    
+    // Get column configurations
+    List<String> timestampColumnName = jdbcConfig.getList(
+        JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
+    List<String> timestampColumnsMapping = jdbcConfig.timestampColumnMapping();
+    String incrementingColumnName = jdbcConfig.getString(
+        JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG);
+    List<String> incrementingColumnMapping = jdbcConfig.incrementingColumnMapping();
+
+    // Check if legacy configs are provided and non-empty
+    boolean hasLegacyTimestampConfig = timestampColumnName != null 
+        && !timestampColumnName.isEmpty() 
+        && !timestampColumnName.get(0).trim().isEmpty();
+    boolean hasNewTimestampConfig = timestampColumnsMapping != null 
+        && !timestampColumnsMapping.isEmpty();
+    boolean hasLegacyIncrementingConfig = incrementingColumnName != null 
+        && !incrementingColumnName.trim().isEmpty();
+    boolean hasNewIncrementingConfig = incrementingColumnMapping != null 
+        && !incrementingColumnMapping.isEmpty();
+
+    // Validate timestamp mode requirements
+    if (JdbcSourceConnectorConfig.MODE_TIMESTAMP.equals(mode) 
+        || JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING.equals(mode)) {
+      if (!hasLegacyTimestampConfig && !hasNewTimestampConfig) {
+        addConfigError(config, JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG,
+            "Mode '" + mode + "' requires timestamp column configuration. "
+            + "Provide either 'timestamp.column.name' or 'timestamp.columns.mapping'.");
+        addConfigError(config, JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_MAPPING_CONFIG,
+            "Mode '" + mode + "' requires timestamp column configuration. "
+            + "Provide either 'timestamp.column.name' or 'timestamp.columns.mapping'.");
+      }
+    }
+
+    // Validate incrementing mode requirements
+    if (JdbcSourceConnectorConfig.MODE_INCREMENTING.equals(mode) 
+        || JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING.equals(mode)) {
+      if (!hasLegacyIncrementingConfig && !hasNewIncrementingConfig) {
+        addConfigError(config, JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG,
+            "Mode '" + mode + "' requires incrementing column configuration. "
+            + "Provide either 'incrementing.column.name' or 'incrementing.column.mapping'.");
+        addConfigError(config, JdbcSourceConnectorConfig.INCREMENTING_COLUMN_MAPPING_CONFIG,
+            "Mode '" + mode + "' requires incrementing column configuration. "
+            + "Provide either 'incrementing.column.name' or 'incrementing.column.mapping'.");
+      }
+    }
+  }
+
+  /**
+   * Helper method to add validation errors to config values.
+   */
+  private void addConfigError(Config config, String configName, String errorMessage) {
+    config.configValues().stream()
+        .filter(cv -> cv.name().equals(configName))
+        .findFirst()
+        .ifPresent(cv -> cv.addErrorMessage(errorMessage));
   }
 
   @Override
@@ -173,7 +452,8 @@ public class JdbcSourceConnector extends SourceConnector {
     } else {
       log.info("No custom query provided, generating task configurations for tables");
       List<TableId> currentTables = tableMonitorThread.tables();
-      log.trace("Current tables from tableMonitorThread: {}", currentTables);
+      log.info("Current tables from tableMonitorThread: {}", currentTables);
+      log.info("Number of tables found: {}", currentTables != null ? currentTables.size() : 0);
       
       if (currentTables == null || currentTables.isEmpty()) {
         taskConfigs = new ArrayList<>(1);

@@ -8,7 +8,7 @@ set -euo pipefail
 DOMAIN_OWNER="519856050701"
 DOMAIN="confluent"
 REGION="us-west-2"
-REPOSITORY="maven"
+REPOSITORY="maven-snapshots"
 NAMESPACE="io/confluent"
 ARTIFACT_ID="kafka-connect-jdbc"
 

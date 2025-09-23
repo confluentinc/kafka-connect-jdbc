@@ -15,8 +15,6 @@
 
 package io.confluent.connect.jdbc.source;
 
-import java.sql.SQLNonTransientException;
-import java.util.TimeZone;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -27,6 +25,7 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -38,9 +37,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Function;
+import java.util.TimeZone;
 import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
@@ -48,6 +45,7 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.RecordQueue;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.Version;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIsolationMode;
@@ -57,8 +55,6 @@ import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIso
  * generates Kafka Connect records.
  */
 public class JdbcSourceTask extends SourceTask {
-  // When no results, periodically return control flow to caller to give it a chance to pause us.
-  private static final int CONSECUTIVE_EMPTY_RESULTS_BEFORE_RETURN = 3;
 
   private static final Logger log = LoggerFactory.getLogger(JdbcSourceTask.class);
 
@@ -68,10 +64,8 @@ public class JdbcSourceTask extends SourceTask {
   //Visible for Testing
   CachedConnectionProvider cachedConnectionProvider;
   PriorityQueue<TableQuerier> tableQueue = new PriorityQueue<>();
-  private final AtomicBoolean running = new AtomicBoolean(false);
-  private final AtomicLong taskThreadId = new AtomicLong(0);
-
-  int maxRetriesPerQuerier;
+  protected RecordQueue<SourceRecord> engine;
+  private TableQuerierProcessor tableQuerierProcessor;
 
   public JdbcSourceTask() {
     this.time = Time.SYSTEM;
@@ -104,7 +98,6 @@ public class JdbcSourceTask extends SourceTask {
       // We are still waiting for the tables call to complete.
       // Start task but do nothing.
       if (!tablesFetched) {
-        taskThreadId.set(Thread.currentThread().getId());
         log.info("Started JDBC source task. Waiting for DB tables to be fetched.");
         return;
       }
@@ -308,11 +301,35 @@ public class JdbcSourceTask extends SourceTask {
       }
     }
 
-    running.set(true);
-    taskThreadId.set(Thread.currentThread().getId());
+    if (!tableQueue.isEmpty()) {
+      startTableQuerierProcessor();
+    }
     log.info("Started JDBC source task");
+  }
 
-    maxRetriesPerQuerier = config.getInt(JdbcSourceConnectorConfig.QUERY_RETRIES_CONFIG);
+  private void startTableQuerierProcessor() {
+    initEngine();
+    tableQuerierProcessor = new TableQuerierProcessor(
+        config,
+        time,
+        tableQueue,
+        cachedConnectionProvider,
+        dialect
+    );
+    engine.submit("Table Querier Processor", "tableQuerierProcessor",
+        tableQuerierProcessor::process);
+  }
+
+  private void initEngine() {
+    // Create the queue, which by default uses a blocking array queue, batches created from
+    // new ArrayList(maxBatchSize), and a caching thread pool executor,
+    RecordQueue.Builder<SourceRecord> builder = RecordQueue.<SourceRecord>builder()
+        .maxBatchSize(config.maxBatchSize())
+        .maxQueueSize(config.maxBufferSize())
+        .maxPollLinger(config.pollLingerMs())
+        .maxExecutorThreads(1)
+        .clock(time);
+    engine = builder.build();
   }
 
   private void validateColumnsExist(
@@ -431,13 +448,29 @@ public class JdbcSourceTask extends SourceTask {
   public void stop() throws ConnectException {
     log.info("Stopping JDBC source task");
 
-    // In earlier versions of Kafka, stop() was not called from the task thread. In this case, all
-    // resources are closed at the end of 'poll()' when no longer running or if there is an error.
-    running.set(false);
-
-    if (taskThreadId.longValue() == Thread.currentThread().getId()) {
-      shutdown();
+    if (engine != null) {
+      try {
+        engine.stop();
+        try {
+          boolean gracefulStop = engine.awaitTermination(Duration.ofSeconds(
+              config.getInt(JdbcSourceTaskConfig.ENGINE_SHUTDOWN_TIMEOUT)));
+          if (!gracefulStop) {
+            log.warn("Could not shut down the engine gracefully in time.");
+          }
+        } catch (InterruptedException e) {
+          Thread.interrupted();
+          log.debug("Interrupted while waiting for the task's queue to shut down");
+        }
+      } finally {
+        engine = null;
+      }
     }
+
+    if (tableQuerierProcessor != null) {
+      tableQuerierProcessor.shutdown();
+    }
+
+    closeResources();
   }
 
   protected void closeResources() {
@@ -464,127 +497,27 @@ public class JdbcSourceTask extends SourceTask {
 
   @Override
   public List<SourceRecord> poll() throws InterruptedException {
-    log.trace("Polling for new data");
-
-    // If the call to get tables has not completed we will not do anything.
-    // This is only valid in table mode.
-    Boolean tablesFetched = config.getBoolean(JdbcSourceTaskConfig.TABLES_FETCHED);
-    String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
-    if (query.isEmpty() && !tablesFetched) {
-      final long sleepMs = config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
-      log.trace("Waiting for tables to be fetched from the database. No records will be polled. "
-          + "Waiting {} ms to poll", sleepMs);
-      time.sleep(sleepMs);
+    if (engine == null) {
+      // Engine is not initialized yet, so nothing to poll
       return null;
     }
-
-    Map<TableQuerier, Integer> consecutiveEmptyResults = tableQueue.stream().collect(
-        Collectors.toMap(Function.identity(), (q) -> 0));
-    while (running.get()) {
-      final TableQuerier querier = tableQueue.peek();
-
-      if (!querier.querying()) {
-        // If not in the middle of an update, wait for next update time
-        final long nextUpdate = querier.getLastUpdate()
-            + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
-        final long now = time.milliseconds();
-        final long sleepMs = Math.min(nextUpdate - now, 100);
-
-        if (sleepMs > 0) {
-          log.trace("Waiting {} ms to poll {} next", nextUpdate - now, querier.toString());
-          time.sleep(sleepMs);
-          continue; // Re-check stop flag before continuing
+    // Get the next batch from the queue
+    List<SourceRecord> results = engine.poll();
+    if (log.isTraceEnabled()) {
+      if (results != null && !results.isEmpty()) {
+        SourceRecord lastRecord = results.get(results.size() - 1);
+        Map<String, ?> lastOffset = lastRecord.sourceOffset();
+        if (lastOffset != null) {
+          log.trace("Offset of last polled record: {}", lastOffset.entrySet().stream()
+              .map(k ->
+                  k.getKey().toString() + " : " + k.getValue().toString()
+              ).collect(Collectors.joining(", ")));
         }
       }
-
-      final List<SourceRecord> results = new ArrayList<>();
-      try {
-        log.debug("Checking for next block of results from {}", querier.toString());
-        querier.maybeStartQuery(cachedConnectionProvider.getConnection());
-
-        int batchMaxRows = config.getInt(JdbcSourceTaskConfig.BATCH_MAX_ROWS_CONFIG);
-        boolean hadNext = true;
-        while (results.size() < batchMaxRows && (hadNext = querier.next())) {
-          results.add(querier.extractRecord());
-        }
-        querier.resetRetryCount();
-
-        if (!hadNext) {
-          // If we finished processing the results from the current query, we can reset and send
-          // the querier to the tail of the queue
-          resetAndRequeueHead(querier, false);
-        }
-
-        if (results.isEmpty()) {
-          consecutiveEmptyResults.compute(querier, (k, v) -> v + 1);
-          log.trace("No updates for {}", querier.toString());
-
-          if (Collections.min(consecutiveEmptyResults.values())
-              >= CONSECUTIVE_EMPTY_RESULTS_BEFORE_RETURN) {
-            log.trace("More than " + CONSECUTIVE_EMPTY_RESULTS_BEFORE_RETURN
-                + " consecutive empty results for all queriers, returning");
-            return null;
-          } else {
-            continue;
-          }
-        } else {
-          consecutiveEmptyResults.put(querier, 0);
-        }
-
-        log.debug("Returning {} records for {}", results.size(), querier);
-        return results;
-      } catch (SQLNonTransientException sqle) {
-        log.error("Non-transient SQL exception while running query for table: {}",
-            querier, sqle);
-        resetAndRequeueHead(querier, true);
-        // This task has failed, so close any resources (may be reopened if needed) before throwing
-        closeResources();
-        throw new ConnectException(sqle);
-      } catch (SQLException sqle) {
-        log.error(
-                "SQL exception while running query for table: {}, {}."
-                        + " Attempting retry {} of {} attempts.",
-                querier,
-                sqle,
-                querier.getAttemptedRetryCount() + 1,
-                maxRetriesPerQuerier
-        );
-        resetAndRequeueHead(querier, true);
-        if (maxRetriesPerQuerier > 0
-                && querier.getAttemptedRetryCount() >= maxRetriesPerQuerier) {
-          closeResources();
-          throw new ConnectException("Failed to Query table after retries", sqle);
-        }
-        querier.incrementRetryCount();
-        return null;
-      } catch (Throwable t) {
-        log.error("Failed to run query for table: {}", querier, t);
-        resetAndRequeueHead(querier, true);
-        // This task has failed, so close any resources (may be reopened if needed) before throwing
-        closeResources();
-        throw t;
-      }
     }
-
-    shutdown();
-    return null;
+    return results;
   }
 
-  private void shutdown() {
-    final TableQuerier querier = tableQueue.peek();
-    if (querier != null) {
-      resetAndRequeueHead(querier, true);
-    }
-    closeResources();
-  }
-
-  private void resetAndRequeueHead(TableQuerier expectedHead, boolean resetOffset) {
-    log.debug("Resetting querier {}", expectedHead.toString());
-    TableQuerier removedQuerier = tableQueue.poll();
-    assert removedQuerier == expectedHead;
-    expectedHead.reset(time.milliseconds(), resetOffset);
-    tableQueue.add(expectedHead);
-  }
 
   private Map<ColumnId, ColumnDefinition> describeColumnsForTables(
       Connection conn, String table, List<String> tableType) throws SQLException {

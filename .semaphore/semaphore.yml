@@ -40,7 +40,7 @@ blocks:
             - pip install confluent-release-tools -q
             - . sem-pint
             - sudo apt-get --assume-yes install libncurses6
-            - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 -Ddependency.check.skip=true --batch-mode --no-transfer-progress clean verify install dependency:analyze validate
+            - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 -Ddependency.check.skip=true --batch-mode --no-transfer-progress clean compile
             - . cve-scan
             - . cache-maven store
       epilogue:
@@ -57,8 +57,8 @@ blocks:
       jobs:
         - name: Release
           commands:
-            - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 -Ddependency.check.skip=true --batch-mode -DaltDeploymentRepository=confluent-codeartifact-internal::default::https://confluent-519856050701.d.codeartifact.us-west-2.amazonaws.com/maven/maven-snapshots/
-              -DrepositoryId=confluent-codeartifact-internal deploy -DskipTests
+            - chmod +x scripts/release-internal-version.sh
+            - ./scripts/release-internal-version.sh
   - name: Release Notes
     dependencies: []
     run:

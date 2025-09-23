@@ -38,7 +38,7 @@ blocks:
         - name: Test
           commands:
             - . sem-pint
-            - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 --batch-mode --no-transfer-progress clean compile
+            - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 --batch-mode --no-transfer-progress clean compile package -DskipTests -DskipITs
             - export TRIVY_DISABLE_VEX_NOTICE=true
             - trivy version
             - echo "Check go/connector-dev-vuln-remediation for fixing or suppressing vulnerabilities found by trivy"

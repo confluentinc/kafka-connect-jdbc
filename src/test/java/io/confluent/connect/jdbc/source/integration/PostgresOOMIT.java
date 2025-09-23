@@ -67,6 +67,7 @@ public class PostgresOOMIT extends BaseOOMIntegrationTest {
     assertTrue(task.poll().size() > 0);
     assertNoLocksOpen(task);
     task.stop();
+    Thread.sleep(1000); // to ensure that postgres has time to close the connection
     assertNoLocksOpen(task);
   }
 

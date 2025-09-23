@@ -104,27 +104,12 @@ deploy_to_codeartifact() {
     local codeartifact_url="https://confluent-${DOMAIN_OWNER}.d.codeartifact.${REGION}.amazonaws.com/maven/${REPOSITORY}/"
     echo "Using CodeArtifact URL: ${codeartifact_url}"
     
-    # Create temporary settings.xml with CodeArtifact configuration
-    local temp_settings="/tmp/settings-codeartifact.xml"
-    cat > "$temp_settings" << EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<settings>
-    <servers>
-        <server>
-            <id>confluent-codeartifact-internal</id>
-            <username>aws</username>
-            <password>${token}</password>
-        </server>
-    </servers>
-</settings>
-EOF
-    
     # Deploy both jar and test-jar
     echo "Starting Maven deployment..."
-    mvn -s "$temp_settings" -Dcloud -Pjenkins -U \
+    mvn -Dcloud -Pjenkins -U \
         -Dmaven.wagon.http.retryHandler.count=10 \
         -Ddependency.check.skip=true \
-        -B --batch-mode --no-transfer-progress \
+        --batch-mode --no-transfer-progress \
         -DaltDeploymentRepository="confluent-codeartifact-internal::default::${codeartifact_url}" \
         -DrepositoryId=confluent-codeartifact-internal \
         clean deploy -DskipTests 2>&1

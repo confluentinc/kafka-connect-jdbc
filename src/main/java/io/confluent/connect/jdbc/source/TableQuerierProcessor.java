@@ -65,6 +65,10 @@ public class TableQuerierProcessor {
         }
       }
 
+      if (!destination.isRunning()) {
+        break;
+      }
+
       try {
         processQuerier(destination, querier);
       } catch (SQLNonTransientException sqle) {
@@ -100,7 +104,7 @@ public class TableQuerierProcessor {
     log.debug("Checking for next block of results from {}", querier.toString());
     querier.maybeStartQuery(cachedConnectionProvider.getConnection());
     int numPolledRecords = 0;
-    while (querier.next()) {
+    while (destination.isRunning() && querier.next()) {
       try {
         numPolledRecords++;
         sendToQueue(destination, querier.extractRecord());

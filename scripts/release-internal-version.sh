@@ -14,13 +14,33 @@ ARTIFACT_ID="kafka-connect-jdbc"
 
 echo "Starting internal release for kafka-connect-jdbc"
 
-# Extract base version from pom.xml (e.g., "10.8.5-SNAPSHOT" -> "10.8.5")
-BASE_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout -B | sed 's/-SNAPSHOT//')
-echo "Base version from pom.xml: ${BASE_VERSION}"
+# Extract version from pom.xml and determine release base version
+POM_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout -B)
+echo "POM version: ${POM_VERSION}"
+
+# If version is X.Y.Z-SNAPSHOT, we should release internal versions based on X.Y.(Z-1)
+if [[ "$POM_VERSION" == *-SNAPSHOT ]]; then
+    SNAPSHOT_VERSION=$(echo "$POM_VERSION" | sed 's/-SNAPSHOT//')
+    # Extract major.minor.patch and decrement patch version
+    if [[ "$SNAPSHOT_VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+        MAJOR=${BASH_REMATCH[1]}
+        MINOR=${BASH_REMATCH[2]}
+        PATCH=${BASH_REMATCH[3]}
+        RELEASE_PATCH=$((PATCH - 1))
+        BASE_VERSION="${MAJOR}.${MINOR}.${RELEASE_PATCH}"
+    else
+        echo "Error: Unable to parse version format: ${SNAPSHOT_VERSION}"
+        exit 1
+    fi
+else
+    # If not a snapshot, use the version as-is
+    BASE_VERSION="$POM_VERSION"
+fi
+
+echo "Base version for internal release: ${BASE_VERSION}"
 
 # Function to get AWS CodeArtifact authorization token
 get_codeartifact_token() {
-    echo "Getting AWS CodeArtifact authorization token..."
     aws codeartifact get-authorization-token \
         --domain-owner "$DOMAIN_OWNER" \
         --domain "$DOMAIN" \
@@ -32,22 +52,34 @@ get_codeartifact_token() {
 # Function to get existing versions from CodeArtifact
 get_existing_versions() {
     local token=$1
-    echo "Fetching existing versions from CodeArtifact..."
-    
+
     # Get maven-metadata.xml
     local metadata_url="https://confluent-${DOMAIN_OWNER}.d.codeartifact.${REGION}.amazonaws.com/maven/${REPOSITORY}/${NAMESPACE}/${ARTIFACT_ID}/maven-metadata.xml"
     local auth_header="Authorization: Basic $(echo -n "aws:${token}" | base64)"
-    
-    # Fetch metadata and extract versions matching our base version pattern
-    curl -s -H "$auth_header" "$metadata_url" | \
-        grep -o "<version>${BASE_VERSION}_[0-9]\+</version>" | \
-        sed 's/<version>\(.*\)<\/version>/\1/' || true
+
+    # If POM version is not a snapshot, check if exact version exists
+    if [[ "$POM_VERSION" != *-SNAPSHOT ]]; then
+        curl -s -H "$auth_header" "$metadata_url" | \
+            grep -o "<version>$POM_VERSION</version>" | \
+            sed -E 's/<\/?version>//g' || true
+    else
+        # For snapshot versions, fetch versions matching our base version pattern with _x suffix
+        curl -s -H "$auth_header" "$metadata_url" | \
+                    grep -oE "<version>${BASE_VERSION//./\\.}[^<]*</version>" | \
+                    sed -E 's/<\/?version>//g' || true
+    fi
 }
 
 # Function to determine next version
 determine_next_version() {
     local existing_versions=$1
     local max_suffix=0
+    
+    # If POM version is not a snapshot, release with the same version
+    if [[ "$POM_VERSION" != *-SNAPSHOT ]]; then
+        echo "$BASE_VERSION"
+        return
+    fi
     
     if [[ -z "$existing_versions" ]]; then
         echo "${BASE_VERSION}_1"
@@ -73,23 +105,28 @@ update_pom_version() {
     local new_version=$1
     echo "Updating pom.xml version to ${new_version}"
     
-    # Use sed to replace the version in pom.xml
-    sed -i.bak "s|<version>${BASE_VERSION}-SNAPSHOT</version>|<version>${new_version}</version>|" pom.xml
+    # Use Maven versions plugin to set the new version
+    mvn versions:set -DnewVersion="${new_version}" -DgenerateBackupPoms=true --batch-mode --no-transfer-progress -q
     
     # Verify the change
-    if grep -q "<version>${new_version}</version>" pom.xml; then
+    local current_version=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout -B)
+    if [[ "$current_version" == "$new_version" ]]; then
         echo "Successfully updated pom.xml version to ${new_version}"
     else
-        echo "Failed to update pom.xml version"
+        echo "Failed to update pom.xml version. Expected: ${new_version}, Got: ${current_version}"
         exit 1
     fi
 }
 
 # Function to restore pom.xml version
 restore_pom_version() {
-    if [[ -f pom.xml.bak ]]; then
+    # Check if backup poms exist (created by versions:set)
+    if [[ -f pom.xml.versionsBackup ]] || find . -name "*.versionsBackup" -type f | grep -q .; then
         echo "Restoring original pom.xml version"
-        mv pom.xml.bak pom.xml
+        mvn versions:revert --batch-mode --no-transfer-progress -q
+        echo "Successfully reverted pom.xml to original version"
+    else
+        echo "No backup poms found, nothing to restore"
     fi
 }
 
@@ -117,9 +154,6 @@ deploy_to_codeartifact() {
     local deploy_result=$?
     echo "Maven deployment finished with exit code: ${deploy_result}"
     
-    # Clean up temporary settings file
-    rm -f "$temp_settings"
-    
     if [[ $deploy_result -eq 0 ]]; then
         echo "Successfully deployed version ${version} to CodeArtifact"
         echo "Artifacts deployed:"
@@ -144,11 +178,23 @@ main() {
     
     # Get existing versions
     EXISTING_VERSIONS=$(get_existing_versions "$TOKEN")
-    echo "Existing versions matching ${BASE_VERSION}_x pattern:"
-    if [[ -n "$EXISTING_VERSIONS" ]]; then
-        echo "$EXISTING_VERSIONS"
+    echo "Existing versions fetched: $(echo "$EXISTING_VERSIONS" | tr '\n' ' ')"
+    if [[ "$POM_VERSION" != *-SNAPSHOT ]]; then
+        echo "Checking if version ${BASE_VERSION} already exists:"
+        if [[ -n "$EXISTING_VERSIONS" ]]; then
+            echo "Version ${BASE_VERSION} already exists in CodeArtifact"
+            echo "Skipping deployment as version already exists"
+            exit 0
+        else
+            echo "Version ${BASE_VERSION} not found, proceeding with deployment"
+        fi
     else
-        echo "None found"
+        echo "Existing versions matching ${BASE_VERSION}_x pattern:"
+        if [[ -n "$EXISTING_VERSIONS" ]]; then
+            echo "$EXISTING_VERSIONS"
+        else
+            echo "None found"
+        fi
     fi
     
     # Determine next version

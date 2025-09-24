@@ -27,6 +27,7 @@ import java.util.Calendar;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TimeZone;
@@ -325,6 +326,202 @@ public class DateTimeUtils {
         .map(ChronoZonedDateTime::toInstant)
         .map(Timestamp::from)
         .orElse(null);
+  }
+
+  /**
+   * Produce a java.sql.Date such that its milliseconds since epoch value interpreted according to
+   * hybrid Julian/Gregorian calendar represents the same date time as the input java.util.Date's
+   * milliseconds since epoch value interpreted according to proleptic Gregorian calendar.
+   * 
+   * Refer {@link #convertToLegacyTimestamp(java.sql.Timestamp, ZoneId)} for details of the
+   * conversion process.
+   * 
+   * @param sqlDate java.sql.Date with milliseconds value of the date time in consideration
+   *                according to proleptic Gregorian calendar (can be null)
+   * @param zoneId zone in which the milliseconds since epoch is to be interpreted
+   * @return java.sql.Date with milliseconds value of the date time in consideration according to
+   *         hybrid Julian/Gregorian calendar, or null if input is null
+   */
+  public static java.sql.Date convertToLegacyDate(java.util.Date sqlDate, ZoneId zoneId) {
+    if (sqlDate == null) {
+      return null;
+    }
+    java.sql.Timestamp ts =
+        convertToLegacyTimestamp(new java.sql.Timestamp(sqlDate.getTime()), zoneId);
+    return new java.sql.Date(ts.getTime());
+  }
+
+  /**
+   * Produce a java.sql.Date such that its milliseconds since epoch value interpreted according to
+   * proleptic Gregorian calendar represents the same date time as the input java.sql.Date's
+   * milliseconds since epoch value interpreted according to hybrid Julian/Gregorian calendar.
+   *
+   * Refer {@link #convertToModernTimestamp(java.sql.Timestamp, ZoneId)} for details of the
+   *
+   * @param sqlDate java.sql.Date with milliseconds value of the date time in consideration
+   *                according to hybrid Julian/Gregorian calendar (can be null)
+   * @param zoneId zone in which the milliseconds since epoch is to be interpreted
+   * @return java.sql.Date with milliseconds value of the date time in consideration according to
+   *         proleptic Gregorian calendar, or null if input is null
+   */
+  public static java.sql.Date convertToModernDate(java.sql.Date sqlDate, ZoneId zoneId) {
+    if (sqlDate == null) {
+      return null;
+    }
+    java.sql.Timestamp ts =
+        convertToModernTimestamp(new java.sql.Timestamp(sqlDate.getTime()), zoneId);
+    return new java.sql.Date(ts.getTime());
+  }
+
+
+  /**
+   * Produce a java.sql.Timestamp such that its milliseconds since epoch value interpreted according
+   * to proleptic Gregorian calendar represents the same date time as the input java.sql.Timestamp's
+   * milliseconds since epoch value interpreted according to hybrid Julian/Gregorian calendar
+   * 
+   * <p>This method addresses the fundamental difference between how legacy Java date/time
+   * classes (java.util.Date, java.util.Calendar) and modern Java time classes 
+   * (java.time.LocalDateTime) interpret the same instant in time, particularly for
+   * dates before the Gregorian calendar cutover (October 15, 1582).</p>
+   * 
+   * <p><strong>The Problem:</strong> For dates before the Julian-Gregorian cutover,
+   * the same instant (milliseconds since epoch) produces different day/month/year/hour/
+   * minute/second values when interpreted by:
+   * <ul>
+   *   <li><strong>Legacy classes:</strong> Use hybrid Julian/Gregorian calendar with cutover at
+   *   Oct 15, 1582</li>
+   *   <li><strong>Modern classes:</strong> Use proleptic Gregorian calendar (Gregorian rules
+   *   extended backward)</li>
+   * </ul></p>
+   * 
+   * <p><strong>Conversion Process:</strong>
+   * <ol>
+   *   <li>Read the timestamp using legacy Calendar (hybrid Julian/Gregorian) in the target
+   *   timezone</li>
+   *   <li>Extract individual date/time fields (year, month, day, hour, minute, second)</li>
+   *   <li>Convert BC/AD era and year to ISO proleptic year numbering (1 BC → year 0, 2 BC →
+   *   year -1)</li>
+   *   <li>Create a modern LocalDateTime with these field values</li>
+   *   <li>Convert back to timestamp using modern semantics</li>
+   * </ol></p>
+   * 
+   * @param ts java.sql.Timestamp with milliseconds value of the date time in consideration
+   *           according to hybrid Julian/Gregorian calendar (can be null)
+   * @param zoneId zone in which the milliseconds since epoch is to be interpreted
+   * @return java.sql.Timestamp with milliseconds value of the date time in consideration
+   *         according to proleptic Gregorian calendar, or null if input is null
+   */
+  public static java.sql.Timestamp convertToModernTimestamp(java.sql.Timestamp ts, ZoneId zoneId) {
+    if (ts == null) {
+      return null;
+    }
+
+    java.util.Calendar cal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone(zoneId));
+    cal.setTimeInMillis(ts.getTime());
+
+    int era = cal.get(java.util.Calendar.ERA);
+    int year = cal.get(java.util.Calendar.YEAR);
+    // Convert BC/AD era system to ISO proleptic year numbering
+    // In legacy calendar: 1 BC = era BC + year 1, 2 BC = era BC + year 2
+    // In ISO system: 1 BC = year 0, 2 BC = year -1, etc.
+    int isoYear = (era == java.util.GregorianCalendar.BC) ? 1 - year : year;
+
+    java.time.LocalDateTime ldt = java.time.LocalDateTime.of(
+        isoYear,
+        cal.get(java.util.Calendar.MONTH) + 1,          // Convert 0-based to 1-based month
+        cal.get(java.util.Calendar.DAY_OF_MONTH),
+        cal.get(java.util.Calendar.HOUR_OF_DAY),
+        cal.get(java.util.Calendar.MINUTE),
+        cal.get(java.util.Calendar.SECOND),
+        ts.getNanos()
+    );
+
+    long epochMillis = ldt.atZone(zoneId).toInstant().toEpochMilli();
+    return new Timestamp(epochMillis);
+  }
+
+
+
+  /**
+   * Produce a java.sql.Timestamp such that its milliseconds since epoch value interpreted according
+   * to hybrid Julian/Gregorian calendar represents the same date time as the input
+   * java.sql.Timestamp's milliseconds since epoch value interpreted according to proleptic
+   * Gregorian calendar.
+   * 
+   * <p>This method performs the inverse operation of
+   * {@link #convertToModernTimestamp(java.sql.Timestamp, ZoneId)}.
+   *
+   * 
+   * <p><strong>Conversion Process:</strong>
+   * <ol>
+   *   <li>Extract date/time fields from the timestamp using modern LocalDateTime
+   *   (proleptic Gregorian)</li>
+   *   <li>Convert ISO proleptic year numbering to BC/AD era system (year 0 → 1 BC,
+   *   year -1 → 2 BC)</li>
+   *   <li>Set these field values in a legacy GregorianCalendar</li>
+   *   <li>Let the legacy calendar apply its hybrid Julian/Gregorian rules</li>
+   *   <li>Create a new timestamp from the legacy calendar's epoch milliseconds</li>
+   * </ol></p>
+   * 
+   * @param ts java.sql.Timestamp with milliseconds value of the date time in consideration
+   *           according to proleptic Gregorian calendar (can be null)
+   * @param zoneId zone in which the milliseconds since epoch is to be interpreted
+   * @return java.sql.Timestamp with milliseconds value of the date time in consideration
+   *         according to hybrid Julian/Gregorian calendar, or null if input is null
+   */
+  public static Timestamp convertToLegacyTimestamp(java.sql.Timestamp ts, ZoneId zoneId) {
+    if (ts == null) {
+      return null;
+    }
+    LocalDateTime ldt = LocalDateTime.ofInstant(ts.toInstant(), zoneId);
+
+    // Create a legacy GregorianCalendar to apply hybrid Julian/Gregorian rules
+    GregorianCalendar cal = new GregorianCalendar(TimeZone.getTimeZone(zoneId), Locale.ROOT);
+    cal.setLenient(false);  // Strict date validation
+
+    // Convert ISO proleptic year to BC/AD era system
+    int y = ldt.getYear();
+    if (y <= 0) {
+      // ISO proleptic: year 0 = 1 BC, year -1 = 2 BC, etc.
+      cal.set(Calendar.ERA, GregorianCalendar.BC);
+      cal.set(Calendar.YEAR, 1 - y);
+    } else {
+      cal.set(Calendar.ERA, GregorianCalendar.AD);
+      cal.set(Calendar.YEAR, y);
+    }
+
+    cal.set(Calendar.MONTH, ldt.getMonthValue() - 1);        // Convert 1-based to 0-based month
+    cal.set(Calendar.DAY_OF_MONTH, ldt.getDayOfMonth());
+    cal.set(Calendar.HOUR_OF_DAY, ldt.getHour());
+    cal.set(Calendar.MINUTE, ldt.getMinute());
+    cal.set(Calendar.SECOND, ldt.getSecond());
+    cal.set(Calendar.MILLISECOND, ldt.getNano() / (int) NANOSECONDS_PER_MILLISECOND);
+
+    Timestamp out = new Timestamp(cal.getTimeInMillis());
+    // Preserve full nanosecond precision from the original timestamp
+    out.setNanos(ldt.getNano());
+    return out;
+  }
+
+  /**
+   * <p>This is a convenience overload of {@link #convertToLegacyTimestamp(
+   * java.sql.Timestamp, ZoneId)} to handle java.util.Date inputs.</p>
+   * 
+   * @param ts java.util.Date with milliseconds value of the date time in consideration
+   *           according to proleptic Gregorian calendar (can be null)
+   * @param zoneId zone in which the milliseconds since epoch is to be interpreted
+   * @return java.sql.Timestamp with milliseconds value of the date time in consideration
+   *         according to hybrid Julian/Gregorian calendar, or null if input is null
+   */
+  public static java.sql.Timestamp convertToLegacyTimestamp(java.util.Date ts, ZoneId zoneId) {
+    if (ts == null) {
+      return null;
+    }
+    return convertToLegacyTimestamp(
+        new java.sql.Timestamp(
+            ts.getTime()
+        ), zoneId
+    );
   }
 
   private DateTimeUtils() {

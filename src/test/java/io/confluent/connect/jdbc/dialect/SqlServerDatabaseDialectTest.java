@@ -23,7 +23,6 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.TimeZone;
 import java.util.concurrent.ThreadLocalRandom;
 
 import io.confluent.connect.jdbc.util.ColumnDefinition;
@@ -72,14 +71,14 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
   @Test
   public void shouldConvertFromDateTimeOffset() {
     ZoneId utc = ZoneId.of("UTC");
-    TimeZone timeZone = TimeZone.getTimeZone(utc.getId());
+    ZoneId zoneId = utc;
 
     String value = "2016-12-08 12:34:56.7850000 -07:00";
-    java.sql.Timestamp ts = SqlServerDatabaseDialect.dateTimeOffsetFrom(value, timeZone);
+    java.sql.Timestamp ts = SqlServerDatabaseDialect.dateTimeOffsetFrom(value, zoneId);
     assertTimestamp(ZonedDateTime.of(2016, 12, 8, 19, 34, 56, 785000000, utc), ts);
 
     value = "2019-12-08 12:34:56.7850200 -00:00";
-    ts = SqlServerDatabaseDialect.dateTimeOffsetFrom(value, timeZone);
+    ts = SqlServerDatabaseDialect.dateTimeOffsetFrom(value, zoneId);
     assertTimestamp(ZonedDateTime.of(2019, 12, 8, 12, 34, 56, 785020000, utc), ts);
   }
 

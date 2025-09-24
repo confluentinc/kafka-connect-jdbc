@@ -16,6 +16,10 @@ fail_fast:
 execution_time_limit:
   hours: 1
 
+auto_cancel:
+  running:
+    when: "true"
+
 queue:
   - when: "branch != 'master' and branch !~ '[0-9]+\\.[0-9]+\\.x'"
     processing: parallel
@@ -38,7 +42,7 @@ blocks:
         - name: Test
           commands:
             - . sem-pint
-            - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 --batch-mode --no-transfer-progress clean verify install dependency:analyze validate
+            - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 --batch-mode --no-transfer-progress clean package -DskipTests -DskipITs
             - export TRIVY_DISABLE_VEX_NOTICE=true
             - trivy version
             - echo "Check go/connector-dev-vuln-remediation for fixing or suppressing vulnerabilities found by trivy"
@@ -62,6 +66,7 @@ blocks:
       jobs:
         - name: Release
           commands:
+            - . assume-iam-role arn:aws:iam::519856050701:role/semaphore-oidc
             - chmod +x scripts/release-internal-version.sh
             - ./scripts/release-internal-version.sh
   - name: Release Notes

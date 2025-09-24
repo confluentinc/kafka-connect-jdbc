@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -euo pipefail
+set -uo pipefail
 
 # No colors to avoid character encoding issues
 
@@ -16,6 +16,12 @@ echo "Starting internal release for kafka-connect-jdbc"
 
 # Extract version from pom.xml and determine release base version
 POM_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout -B)
+pom_eval_result=$?
+if [[ $pom_eval_result -ne 0 ]] || [[ -z "$POM_VERSION" ]]; then
+    echo "Failed to extract version from pom.xml (exit code: $pom_eval_result)"
+    echo "Please ensure Maven is properly configured and pom.xml is valid"
+    exit 1
+fi
 echo "POM version: ${POM_VERSION}"
 
 # If version is X.Y.Z-SNAPSHOT, we should release internal versions based on X.Y.(Z-1)
@@ -57,16 +63,43 @@ get_existing_versions() {
     local metadata_url="https://confluent-${DOMAIN_OWNER}.d.codeartifact.${REGION}.amazonaws.com/maven/${REPOSITORY}/${NAMESPACE}/${ARTIFACT_ID}/maven-metadata.xml"
     local auth_header="Authorization: Basic $(echo -n "aws:${token}" | base64)"
 
+    # Fetch metadata with proper error handling
+    local metadata_response
+    metadata_response=$(curl -s -H "$auth_header" "$metadata_url" 2>&1)
+    local curl_exit_code=$?
+    
+    # Check if curl failed
+    if [[ $curl_exit_code -ne 0 ]]; then
+        echo "Error: Failed to fetch metadata from CodeArtifact (curl exit code: $curl_exit_code)" >&2
+        echo "Response: $metadata_response" >&2
+        return 1
+    fi
+    
+    # Check for authentication errors in the response
+    if echo "$metadata_response" | grep -q "Unauthenticated\|invalid credentials\|401 Unauthorized"; then
+        echo "Error: Authentication failed when accessing CodeArtifact" >&2
+        echo "Response: $metadata_response" >&2
+        echo "Please check your AWS credentials and CodeArtifact permissions" >&2
+        return 1
+    fi
+    
+    # Check for other error responses
+    if echo "$metadata_response" | grep -q "<Error>\|<error>\|HTTP.*[45][0-9][0-9]"; then
+        echo "Error: Received error response from CodeArtifact" >&2
+        echo "Response: $metadata_response" >&2
+        return 1
+    fi
+
     # If POM version is not a snapshot, check if exact version exists
     if [[ "$POM_VERSION" != *-SNAPSHOT ]]; then
-        curl -s -H "$auth_header" "$metadata_url" | \
+        echo "$metadata_response" | \
             grep -o "<version>$POM_VERSION</version>" | \
             sed -E 's/<\/?version>//g' || true
     else
         # For snapshot versions, fetch versions matching our base version pattern with _x suffix
-        curl -s -H "$auth_header" "$metadata_url" | \
-                    grep -oE "<version>${BASE_VERSION//./\\.}[^<]*</version>" | \
-                    sed -E 's/<\/?version>//g' || true
+        echo "$metadata_response" | \
+            grep -oE "<version>${BASE_VERSION//./\\.}[^<]*</version>" | \
+            sed -E 's/<\/?version>//g' || true
     fi
 }
 
@@ -107,9 +140,20 @@ update_pom_version() {
     
     # Use Maven versions plugin to set the new version
     mvn versions:set -DnewVersion="${new_version}" -DgenerateBackupPoms=true --batch-mode --no-transfer-progress -q
+    local mvn_set_result=$?
+    if [[ $mvn_set_result -ne 0 ]]; then
+        echo "Failed to update pom.xml version using Maven versions plugin (exit code: $mvn_set_result)"
+        exit 1
+    fi
     
     # Verify the change
-    local current_version=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout -B)
+    current_version=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout -B)
+    local mvn_eval_result=$?
+    if [[ $mvn_eval_result -ne 0 ]]; then
+        echo "Failed to verify pom.xml version using Maven (exit code: $mvn_eval_result)"
+        exit 1
+    fi
+    
     if [[ "$current_version" == "$new_version" ]]; then
         echo "Successfully updated pom.xml version to ${new_version}"
     else
@@ -171,13 +215,23 @@ main() {
     
     # Get CodeArtifact token
     TOKEN=$(get_codeartifact_token)
-    if [[ -z "$TOKEN" ]]; then
+    local token_result=$?
+    if [[ $token_result -ne 0 ]] || [[ -z "$TOKEN" ]]; then
         echo "Failed to get CodeArtifact authorization token"
+        if [[ $token_result -ne 0 ]]; then
+            echo "AWS CLI command failed with exit code: $token_result"
+            echo "Please check your AWS credentials and region configuration"
+        fi
         exit 1
     fi
     
     # Get existing versions
     EXISTING_VERSIONS=$(get_existing_versions "$TOKEN")
+    local get_versions_result=$?
+    if [[ $get_versions_result -ne 0 ]]; then
+        echo "Failed to fetch existing versions from CodeArtifact"
+        exit 1
+    fi
     echo "Existing versions fetched: $(echo "$EXISTING_VERSIONS" | tr '\n' ' ')"
     if [[ "$POM_VERSION" != *-SNAPSHOT ]]; then
         echo "Checking if version ${BASE_VERSION} already exists:"

@@ -96,11 +96,6 @@ public enum DateCalendarSystem {
    * @return array of valid configuration value strings
    */
   public static String[] getValidConfigValues() {
-    DateCalendarSystem[] systems = values();
-    String[] configValues = new String[systems.length];
-    for (int i = 0; i < systems.length; i++) {
-      configValues[i] = systems[i].toString();
-    }
-    return configValues;
+    return new String[]{LEGACY.toString(), PROLEPTIC_GREGORIAN.toString()};
   }
 }

@@ -122,13 +122,16 @@ public class JdbcSinkConfig extends AbstractConfig {
 
   public static final String DATE_CALENDAR_SYSTEM_CONFIG = "date.calendar.system";
   private static final String DATE_CALENDAR_SYSTEM_DOC =
-      "Conversion of time since epoch value from the kafka topic record to DATE or TIMESTAMP "
+      "Conversion of time since epoch value in kafka topic record to DATE or TIMESTAMP "
       + "depends on the calendar used to interpret it. If LEGACY is used, it will use the hybrid "
       + "Gregorian/Julian calendar which was the default in the older java date time APIs. "
       + "However, if 'PROLEPTIC_GREGORIAN' is used, then it will use the proleptic gregorian "
       + "calendar which extends the Gregorian rules backward indefinitely and does not apply the "
       + "1582 cutover. This matches the behavior of modern Java date/time APIs (java.time). This "
-      + "is defaulted to LEGACY for backward compatibility.";
+      + "is defaulted to LEGACY for backward compatibility. The ideal setting for this depends on "
+      + "whether the values in source topic were populated using old or new java date time APIs. "
+      + "Changing this configuration on an existing connector might lead to a drift in the "
+      + "DATE/TIMESTAMP column's values populated in the sink database.";
   public static final String DATE_CALENDAR_SYSTEM_DEFAULT = DateCalendarSystem.LEGACY.toString();
   private static final String DATE_CALENDAR_SYSTEM_DISPLAY = "Date Calendar System";
 

@@ -1364,18 +1364,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     return Duration.ofMillis(getLong(POLL_LINGER_MS_CONFIG));
   }
 
-  /**
-   * Get the table include list regex patterns.
-   * @return List of regex patterns for table inclusion, empty list if not configured
-   */
+
   public List<String> tableIncludeListRegexes() {
     return getList(TABLE_INCLUDE_LIST_CONFIG);
   }
 
-  /**
-   * Get the table exclude list regex patterns.
-   * @return List of regex patterns for table exclusion, empty list if not configured
-   */
   public List<String> tableExcludeListRegexes() {
     return getList(TABLE_EXCLUDE_LIST_CONFIG);
   }

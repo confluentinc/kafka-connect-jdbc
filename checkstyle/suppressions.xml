@@ -29,4 +29,7 @@
 
     <suppress checks="OperatorWrap"
               files="MySqlConnectionWrapper.java"/>
+
+    <suppress checks="BooleanExpressionComplexity"
+              files="JdbcSourceConnectorValidation.java"/>
 </suppressions>

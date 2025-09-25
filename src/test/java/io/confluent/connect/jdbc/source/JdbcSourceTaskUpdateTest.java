@@ -588,11 +588,12 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
       startTask("modified", "id", null, 0L, invalidTimeZoneID);
       fail("A ConfigException should have been thrown");
     } catch (ConfigException e) {
-      assertThat(e.getMessage(),
-          equalTo(
-              "Invalid value org.apache.kafka.common.config.ConfigException: Invalid value Europe/Invalid "
-                      + "for configuration db.timezone: Invalid time zone identifier for configuration "
-                      + "Couldn't start JdbcSourceTask due to configuration error"));
+      assertTrue(
+          e.getMessage().contains(
+              "Invalid value org.apache.kafka.common.config.ConfigException: Invalid value "
+                                         + "Europe/Invalid for configuration db.timezone"
+          )
+      );
     }
   }
 

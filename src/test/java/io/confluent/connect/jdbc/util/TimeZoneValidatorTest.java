@@ -49,4 +49,9 @@ public class TimeZoneValidatorTest {
   public void testEmptyTimeZone() {
     TimeZoneValidator.INSTANCE.ensureValid("db.timezone", "");
   }
+
+  @Test
+  public void testShortIdTimeZone() {
+    TimeZoneValidator.INSTANCE.ensureValid("db.timezone", "PST");
+  }
 }

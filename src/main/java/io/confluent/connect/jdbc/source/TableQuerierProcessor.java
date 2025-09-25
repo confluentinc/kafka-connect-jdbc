@@ -48,7 +48,7 @@ public class TableQuerierProcessor {
       return 0;
     }
 
-    while (destination.isRunning()) {
+    while (destination.isRunning() && !tableQueue.isEmpty()) {
       final TableQuerier querier = tableQueue.peek();
 
       if (!querier.querying()) {
@@ -141,14 +141,15 @@ public class TableQuerierProcessor {
   private void handleSqlException(RecordDestination<SourceRecord> destination, 
                                   TableQuerier querier, SQLException sqle) {
     log.error(
-        "SQL exception while running query for table: {}, {}."
+        "SQL exception while running query for table: {}."
             + " Attempting retry {} of {} attempts.",
         querier,
-        sqle,
         querier.getAttemptedRetryCount() + 1,
-        maxRetriesPerQuerier
+        maxRetriesPerQuerier,
+        sqle
     );
-    resetAndRequeueHead(querier, true);
+
+    resetAndRequeueHead(querier, false);
     if (maxRetriesPerQuerier > 0
         && querier.getAttemptedRetryCount() >= maxRetriesPerQuerier) {
       destination.failWith(new ConnectException("Failed to Query table after retries", sqle));

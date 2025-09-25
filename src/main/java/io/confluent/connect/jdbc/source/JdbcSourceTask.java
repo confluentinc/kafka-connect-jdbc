@@ -47,6 +47,7 @@ import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.RecordQueue;
+import io.confluent.connect.jdbc.util.TableCollectionUtils;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.Version;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIsolationMode;
@@ -67,6 +68,8 @@ public class JdbcSourceTask extends SourceTask {
   PriorityQueue<TableQuerier> tableQueue = new PriorityQueue<>();
   protected RecordQueue<SourceRecord> engine;
   private TableQuerierProcessor tableQuerierProcessor;
+  private final Map<String, String> tableToIncrCol = new HashMap<>();
+  private final Map<String, List<String>> tableToTsCols = new HashMap<>();
 
   public JdbcSourceTask() {
     this.time = Time.SYSTEM;
@@ -146,7 +149,7 @@ public class JdbcSourceTask extends SourceTask {
     );
     TableQuerier.QueryMode queryMode = !query.isEmpty() ? TableQuerier.QueryMode.QUERY :
                                        TableQuerier.QueryMode.TABLE;
-    List<String> tablesOrQuery = queryMode == TableQuerier.QueryMode.QUERY
+    final List<String> tablesOrQuery = queryMode == TableQuerier.QueryMode.QUERY
                                  ? Collections.singletonList(query) : tables;
 
     String mode = config.getString(JdbcSourceTaskConfig.MODE_CONFIG);
@@ -180,10 +183,46 @@ public class JdbcSourceTask extends SourceTask {
       log.trace("The partition offsets are {}", offsets);
     }
 
-    String incrementingColumn
-        = config.getString(JdbcSourceTaskConfig.INCREMENTING_COLUMN_NAME_CONFIG);
-    List<String> timestampColumns
-        = config.getList(JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
+    // Support both legacy and new mapping configurations
+    List<String> timestampColumnMappings = config.timestampColumnMapping();
+    List<String> incrementingColumnMappings = config.incrementingColumnMapping();
+    
+    log.info("Timestamp column mappings: {}", timestampColumnMappings);
+    log.info("Incrementing column mappings: {}", incrementingColumnMappings);
+    log.info("Mode: {}", config.getString(JdbcSourceTaskConfig.MODE_CONFIG));
+
+    // Validate mapping configurations
+    if (config.modeUsesTimestampColumn() && !timestampColumnMappings.isEmpty()) {
+      // Convert string table names to TableId objects for validation
+      List<TableId> tableIds = tables.stream()
+          .map(dialect::parseTableIdentifier)
+          .collect(java.util.stream.Collectors.toList());
+      
+      TableCollectionUtils.validateEachTableMatchesExactlyOneRegex(
+          config.timestampColMappingRegexes(), tableIds, TableId::toUnquotedString,
+          problem -> {
+            throw new ConnectException(
+                "Error while validating timestamp column mappings: " + problem);
+          }
+      );
+      populateTableToTsColsMap();
+    }
+    if (config.modeUsesIncrementingColumn() && !incrementingColumnMappings.isEmpty()) {
+      // Convert string table names to TableId objects for validation
+      List<TableId> tableIds = tables.stream()
+          .map(dialect::parseTableIdentifier)
+          .collect(java.util.stream.Collectors.toList());
+      
+      TableCollectionUtils.validateEachTableMatchesExactlyOneRegex(
+          config.incrementingColMappingRegexes(), tableIds, TableId::toUnquotedString,
+          problem -> {
+            throw new ConnectException(
+                "Error while validating incrementing column mappings: " + problem);
+          }
+      );
+      populateTableToIncrementingColMap();
+    }
+
     Long timestampDelayInterval
         = config.getLong(JdbcSourceTaskConfig.TIMESTAMP_DELAY_INTERVAL_MS_CONFIG);
     boolean validateNonNulls
@@ -191,16 +230,22 @@ public class JdbcSourceTask extends SourceTask {
     ZoneId zoneId = config.zoneId();
     String suffix = config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG).trim();
 
-    if (queryMode.equals(TableQuerier.QueryMode.TABLE)) {
-      validateColumnsExist(mode, incrementingColumn, timestampColumns, tables.get(0), tableType);
-    }
-
     for (String tableOrQuery : tablesOrQuery) {
       final List<Map<String, String>> tablePartitionsToCheck;
       final Map<String, String> partition;
+      
+      // Get columns for this specific table (either from mapping or legacy config)
+      String incrementingColumn = getIncrementingColumn(tableOrQuery);
+      List<String> timestampColumns = getTimestampColumns(tableOrQuery);
+      
       log.trace("Task executing in {} mode",queryMode);
       switch (queryMode) {
         case TABLE:
+          // Validate columns exist for this specific table
+          if (queryMode.equals(TableQuerier.QueryMode.TABLE)) {
+            validateColumnsExist(mode, incrementingColumn, timestampColumns, tableOrQuery, 
+                tableType);
+          }
           if (validateNonNulls) {
             validateNonNullable(
                 mode,
@@ -597,4 +642,65 @@ public class JdbcSourceTask extends SourceTask {
                                  + " NULL", e);
     }
   }
+
+  void populateTableToIncrementingColMap() {
+    List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
+    List<String> tableRegexToIncrCols = config.incrementingColMappingRegexes();
+    
+    for (String table : tables) {
+      // Convert table string to TableId to get unquoted string for regex matching
+      TableId tableId = dialect.parseTableIdentifier(table);
+      String unquotedTableString = tableId.toUnquotedString();
+      
+      for (String tableRegexToIncrCol : tableRegexToIncrCols) {
+        String[] tableAndIncrCol = tableRegexToIncrCol.split(":", 2);
+        if (unquotedTableString.matches(tableAndIncrCol[0].trim())) {
+          tableToIncrCol.put(table, tableAndIncrCol[1].trim());
+          break;
+        }
+      }
+    }
+  }
+
+  void populateTableToTsColsMap() {
+    List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
+    List<String> tableRegexToTsCols = config.timestampColMappingRegexes();
+    
+    // If there are no timestamp mappings, nothing to populate
+    if (tableRegexToTsCols.isEmpty()) {
+      return;
+    }
+    
+    for (String table : tables) {
+      // Convert table string to TableId to get unquoted string for regex matching
+      TableId tableId = dialect.parseTableIdentifier(table);
+      String unquotedTableString = tableId.toUnquotedString();
+      
+      for (String tableRegexToTsCol : tableRegexToTsCols) {
+        String[] tableAndTsCols = tableRegexToTsCol.split(":", 2);
+        if (unquotedTableString.matches(tableAndTsCols[0].trim())) {
+          String columnsString = tableAndTsCols[1].trim();
+          // Remove brackets and split by pipe
+          String columnsContent = columnsString.substring(1, columnsString.length() - 1);
+          tableToTsCols.put(table, Arrays.asList(columnsContent.split("\\|")));
+          break;
+        }
+      }
+    }
+  }
+
+  private String getIncrementingColumn(String table) {
+    if (!config.tableIncludeListRegexes().isEmpty()) {
+      return tableToIncrCol.get(table);
+    }
+    return config.getString(JdbcSourceTaskConfig.INCREMENTING_COLUMN_NAME_CONFIG);
+  }
+
+  private List<String> getTimestampColumns(String table) {
+    if (!config.tableIncludeListRegexes().isEmpty()) {
+      return tableToTsCols.get(table);
+    }
+    return config.getList(JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
+  }
+
 }

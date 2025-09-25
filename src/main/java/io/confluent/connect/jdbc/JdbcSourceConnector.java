@@ -44,6 +44,7 @@ import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.Version;
+import io.confluent.connect.jdbc.validation.JdbcSourceConnectorValidation;
 
 /**
  * JdbcConnector is a Kafka Connect Connector implementation that watches a JDBC database and
@@ -76,6 +77,10 @@ public class JdbcSourceConnector extends SourceConnector {
       throw new ConnectException("Couldn't start JdbcSourceConnector due to configuration error",
                                  e);
     }
+    
+    // Log table filtering configuration
+    log.info("Table include list: {}", config.tableIncludeListRegexes());
+    log.info("Table exclude list: {}", config.tableExcludeListRegexes());
 
     final String dbUrl = config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG);
     final int maxConnectionAttempts = config.getInt(
@@ -98,21 +103,26 @@ public class JdbcSourceConnector extends SourceConnector {
     long tablePollMs = config.getLong(JdbcSourceConnectorConfig.TABLE_POLL_INTERVAL_MS_CONFIG);
     long tableStartupLimitMs =
         config.getLong(JdbcSourceConnectorConfig.TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_CONFIG);
+    
+    // Extract table filtering configurations for table monitor thread
     List<String> whitelist = config.getList(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG);
     Set<String> whitelistSet = whitelist.isEmpty() ? null : new HashSet<>(whitelist);
+    
     List<String> blacklist = config.getList(JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG);
     Set<String> blacklistSet = blacklist.isEmpty() ? null : new HashSet<>(blacklist);
+    
+    List<String> includeList = config.tableIncludeListRegexes();
+    Set<String> includeListSet = includeList.isEmpty() ? null : new HashSet<>(includeList);
+    
+    List<String> excludeList = config.tableExcludeListRegexes();
+    Set<String> excludeListSet = excludeList.isEmpty() ? null : new HashSet<>(excludeList);
 
-    if (whitelistSet != null && blacklistSet != null) {
-      throw new ConnectException(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + " and "
-                                 + JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG + " are "
-                                 + "exclusive.");
-    }
     String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
     if (!query.isEmpty()) {
-      if (whitelistSet != null || blacklistSet != null) {
+      if (whitelistSet != null || blacklistSet != null 
+          || includeListSet != null || excludeListSet != null) {
         log.error(
-            "Configuration error: {} is set, but table whitelist or blacklist is also specified."
+            "Configuration error: {} is set, but table filtering options are also specified. "
                 + "These settings cannot be used together.",
             JdbcSourceConnectorConfig.QUERY_CONFIG);
         throw new ConnectException(JdbcSourceConnectorConfig.QUERY_CONFIG + " may not be combined"
@@ -121,16 +131,18 @@ public class JdbcSourceConnector extends SourceConnector {
       // Force filtering out the entire set of tables since the one task we'll generate is for the
       // query.
       whitelistSet = Collections.emptySet();
-
     }
+    
     tableMonitorThread = new TableMonitorThread(
         dialect,
         cachedConnectionProvider,
         context,
         tableStartupLimitMs,
         tablePollMs,
-        whitelistSet,
-        blacklistSet,
+        whitelistSet,      // Legacy
+        blacklistSet,      // Legacy
+        includeListSet,    // New
+        excludeListSet,    // New
         Time.SYSTEM
     );
     if (query.isEmpty()) {
@@ -143,6 +155,7 @@ public class JdbcSourceConnector extends SourceConnector {
     return new CachedConnectionProvider(dialect, maxConnAttempts, retryBackoff);
   }
 
+
   @Override
   public Class<? extends Task> taskClass() {
     return JdbcSourceTask.class;
@@ -150,12 +163,9 @@ public class JdbcSourceConnector extends SourceConnector {
 
   @Override
   public Config validate(Map<String, String> connectorConfigs) {
-    Config config = super.validate(connectorConfigs);
-    JdbcSourceConnectorConfig jdbcSourceConnectorConfig
-            = new JdbcSourceConnectorConfig(connectorConfigs);
-    jdbcSourceConnectorConfig.validateMultiConfigs(config);
-    return config;
+    return new JdbcSourceConnectorValidation(connectorConfigs).validate();
   }
+
 
   @Override
   public List<Map<String, String>> taskConfigs(int maxTasks) {
@@ -173,7 +183,8 @@ public class JdbcSourceConnector extends SourceConnector {
     } else {
       log.info("No custom query provided, generating task configurations for tables");
       List<TableId> currentTables = tableMonitorThread.tables();
-      log.trace("Current tables from tableMonitorThread: {}", currentTables);
+      log.info("Current tables from tableMonitorThread: {}", currentTables);
+      log.info("Number of tables found: {}", currentTables != null ? currentTables.size() : 0);
       
       if (currentTables == null || currentTables.isEmpty()) {
         taskConfigs = new ArrayList<>(1);

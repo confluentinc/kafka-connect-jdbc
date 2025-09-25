@@ -26,7 +26,6 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.time.ZoneOffset;
 import java.util.Calendar;
-import java.util.TimeZone;
 import java.util.concurrent.ThreadLocalRandom;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -386,7 +385,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
             Decimal.schema(0),
             new BigDecimal("1.5").setScale(0, BigDecimal.ROUND_HALF_EVEN)
     ).setBigDecimal(index, new BigDecimal(2));
-    Calendar utcCalendar = DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone(ZoneOffset.UTC));
+    Calendar utcCalendar = DateTimeUtils.getZoneIdCalendar(ZoneOffset.UTC);
     verifyBindField(
             ++index,
             Date.SCHEMA,

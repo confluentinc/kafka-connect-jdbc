@@ -29,9 +29,9 @@ public class TableCollectionUtilsTest {
   private static final String TABLE1 = "table1";
   private static final String TABLE2 = "table2";
   private static final String TABLE3 = "table3";
-  private static final String TABLE_REGEX1 = ".*\"table1\"";
-  private static final String TABLE_REGEX2 = ".*\"table2\"";
-  private static final String TABLE_REGEX_ALL = ".*\"table.*\"";
+  private static final String TABLE_REGEX1 = ".*table1";
+  private static final String TABLE_REGEX2 = ".*table2";
+  private static final String TABLE_REGEX_ALL = ".*table.*";
 
 
   @Test
@@ -40,7 +40,7 @@ public class TableCollectionUtilsTest {
     List<TableId> tableIds = Arrays.asList(new TableId(null, DB1, TABLE1),
                                            new TableId(null, DB1, TABLE2));
     boolean result = TableCollectionUtils.validateEachTableMatchesExactlyOneRegex(
-        regexes, tableIds, TableId::toString, problem -> {});
+        regexes, tableIds, TableId::toUnquotedString, problem -> {});
 
     assertTrue(result);
   }
@@ -50,7 +50,7 @@ public class TableCollectionUtilsTest {
     List<String> regexes = Arrays.asList(TABLE_REGEX1, TABLE_REGEX2);
     List<TableId> tableIds = Arrays.asList(new TableId(null, DB1, TABLE3));
     boolean result = TableCollectionUtils.validateEachTableMatchesExactlyOneRegex(
-        regexes, tableIds, TableId::toString, problem -> {});
+        regexes, tableIds, TableId::toUnquotedString, problem -> {});
 
     assertFalse(result);
   }
@@ -60,7 +60,7 @@ public class TableCollectionUtilsTest {
     List<String> regexes = Arrays.asList(TABLE_REGEX1, TABLE_REGEX_ALL);
     List<TableId> tableIds = Arrays.asList(new TableId(null, DB1, TABLE1));
     boolean result = TableCollectionUtils.validateEachTableMatchesExactlyOneRegex(
-        regexes, tableIds, TableId::toString, problem -> {});
+        regexes, tableIds, TableId::toUnquotedString, problem -> {});
 
     assertFalse(result);
   }
@@ -70,7 +70,7 @@ public class TableCollectionUtilsTest {
     List<String> regexes = Arrays.asList();
     List<TableId> tableIds = Arrays.asList(new TableId(null, DB1, TABLE1));
     boolean result = TableCollectionUtils.validateEachTableMatchesExactlyOneRegex(
-        regexes, tableIds, TableId::toString, problem -> {});
+        regexes, tableIds, TableId::toUnquotedString, problem -> {});
 
     assertFalse(result);
   }

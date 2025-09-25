@@ -183,10 +183,6 @@ public class JdbcSourceTask extends SourceTask {
     }
 
     // Support both legacy and new mapping configurations
-    String legacyIncrementingColumn
-        = config.getString(JdbcSourceTaskConfig.INCREMENTING_COLUMN_NAME_CONFIG);
-    List<String> legacyTimestampColumns
-        = config.getList(JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
     List<String> timestampColumnMappings = config.timestampColumnMapping();
     List<String> incrementingColumnMappings = config.incrementingColumnMapping();
     
@@ -196,24 +192,34 @@ public class JdbcSourceTask extends SourceTask {
 
     // Validate mapping configurations
     if (config.modeUsesTimestampColumn() && !timestampColumnMappings.isEmpty()) {
+      // Convert string table names to TableId objects for validation
+      List<TableId> tableIds = tables.stream()
+          .map(dialect::parseTableIdentifier)
+          .collect(java.util.stream.Collectors.toList());
+      
       TableCollectionUtils.validateEachTableMatchesExactlyOneRegex(
-          config.timestampColMappingRegexes(), tables, java.util.function.Function.identity(),
+          config.timestampColMappingRegexes(), tableIds, TableId::toUnquotedString,
           problem -> {
             throw new ConnectException(
                 "Error while validating timestamp column mappings: " + problem);
           }
       );
-      populateTableToTsColsMap(tables, timestampColumnMappings);
+      populateTableToTsColsMap();
     }
     if (config.modeUsesIncrementingColumn() && !incrementingColumnMappings.isEmpty()) {
+      // Convert string table names to TableId objects for validation
+      List<TableId> tableIds = tables.stream()
+          .map(dialect::parseTableIdentifier)
+          .collect(java.util.stream.Collectors.toList());
+      
       TableCollectionUtils.validateEachTableMatchesExactlyOneRegex(
-          config.incrementingColMappingRegexes(), tables, java.util.function.Function.identity(),
+          config.incrementingColMappingRegexes(), tableIds, TableId::toUnquotedString,
           problem -> {
             throw new ConnectException(
                 "Error while validating incrementing column mappings: " + problem);
           }
       );
-      populateTableToIncrementingColMap(tables, incrementingColumnMappings);
+      populateTableToIncrementingColMap();
     }
 
     Long timestampDelayInterval
@@ -228,10 +234,8 @@ public class JdbcSourceTask extends SourceTask {
       final Map<String, String> partition;
       
       // Get columns for this specific table (either from mapping or legacy config)
-      String incrementingColumn = getIncrementingColumnForTable(tableOrQuery, 
-          legacyIncrementingColumn);
-      List<String> timestampColumns = getTimestampColumnsForTable(tableOrQuery, 
-          legacyTimestampColumns);
+      String incrementingColumn = getIncrementingColumn(tableOrQuery);
+      List<String> timestampColumns = getTimestampColumns(tableOrQuery);
       
       log.trace("Task executing in {} mode",queryMode);
       switch (queryMode) {
@@ -638,12 +642,18 @@ public class JdbcSourceTask extends SourceTask {
     }
   }
 
-  private void populateTableToIncrementingColMap(List<String> tables, 
-      List<String> tableRegexToIncrCols) {
+  void populateTableToIncrementingColMap() {
+    List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
+    List<String> tableRegexToIncrCols = config.incrementingColMappingRegexes();
+    
     for (String table : tables) {
+      // Convert table string to TableId to get unquoted string for regex matching
+      TableId tableId = dialect.parseTableIdentifier(table);
+      String unquotedTableString = tableId.toUnquotedString();
+      
       for (String tableRegexToIncrCol : tableRegexToIncrCols) {
         String[] tableAndIncrCol = tableRegexToIncrCol.split(":", 2);
-        if (table.matches(tableAndIncrCol[0].trim())) {
+        if (unquotedTableString.matches(tableAndIncrCol[0].trim())) {
           tableToIncrCol.put(table, tableAndIncrCol[1].trim());
           break;
         }
@@ -651,11 +661,23 @@ public class JdbcSourceTask extends SourceTask {
     }
   }
 
-  private void populateTableToTsColsMap(List<String> tables, List<String> tableRegexToTsCols) {
+  void populateTableToTsColsMap() {
+    List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
+    List<String> tableRegexToTsCols = config.timestampColMappingRegexes();
+    
+    // If there are no timestamp mappings, nothing to populate
+    if (tableRegexToTsCols.isEmpty()) {
+      return;
+    }
+    
     for (String table : tables) {
+      // Convert table string to TableId to get unquoted string for regex matching
+      TableId tableId = dialect.parseTableIdentifier(table);
+      String unquotedTableString = tableId.toUnquotedString();
+      
       for (String tableRegexToTsCol : tableRegexToTsCols) {
         String[] tableAndTsCols = tableRegexToTsCol.split(":", 2);
-        if (table.matches(tableAndTsCols[0].trim())) {
+        if (unquotedTableString.matches(tableAndTsCols[0].trim())) {
           String columnsString = tableAndTsCols[1].trim();
           // Remove brackets and split by pipe
           String columnsContent = columnsString.substring(1, columnsString.length() - 1);
@@ -666,15 +688,18 @@ public class JdbcSourceTask extends SourceTask {
     }
   }
 
-  private String getIncrementingColumnForTable(String table, String legacyIncrementingColumn) {
-    // Use mapping if available, otherwise fall back to legacy configuration
-    return tableToIncrCol.getOrDefault(table, legacyIncrementingColumn);
+  private String getIncrementingColumn(String table) {
+    if (!config.tableIncludeListRegexes().isEmpty()) {
+      return tableToIncrCol.get(table);
+    }
+    return config.getString(JdbcSourceTaskConfig.INCREMENTING_COLUMN_NAME_CONFIG);
   }
 
-  private List<String> getTimestampColumnsForTable(String table, 
-      List<String> legacyTimestampColumns) {
-    // Use mapping if available, otherwise fall back to legacy configuration
-    return tableToTsCols.getOrDefault(table, legacyTimestampColumns);
+  private List<String> getTimestampColumns(String table) {
+    if (!config.tableIncludeListRegexes().isEmpty()) {
+      return tableToTsCols.get(table);
+    }
+    return config.getList(JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
   }
 
 }

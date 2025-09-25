@@ -182,7 +182,7 @@ public class JdbcSourceConnectorValidationTest {
 
     assertErrors(1);
     assertErrors(MODE_CONFIG, 1);
-    assertErrorMatches(MODE_CONFIG, "Timestamp column mappings should not be provided");
+    assertErrorMatches(MODE_CONFIG, ".*Timestamp column configurations should not be provided.*");
   }
 
   @Test
@@ -195,7 +195,7 @@ public class JdbcSourceConnectorValidationTest {
 
     assertErrors(1);
     assertErrors(MODE_CONFIG, 1);
-    assertErrorMatches(MODE_CONFIG, "Incrementing column mappings should not be provided");
+    assertErrorMatches(MODE_CONFIG, ".*Incrementing column configurations should not be provided.*");
   }
 
   @Test
@@ -345,4 +345,217 @@ public class JdbcSourceConnectorValidationTest {
     assertErrorMatches(INCREMENTING_COLUMN_NAME_CONFIG, ".*Cannot use both incrementing.column.name and incrementing.column.mapping.*");
     assertErrorMatches(INCREMENTING_COLUMN_MAPPING_CONFIG, ".*Cannot use both incrementing.column.name and incrementing.column.mapping.*");
   }
+
+  // Tests for legacy table filtering with new column mapping conflicts
+  
+  @Test
+  public void validate_withWhitelistAndTimestampColumnMapping_setsError() {
+    props.remove(TABLE_INCLUDE_LIST_CONFIG); // Remove conflicting table filtering config
+    props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
+    
+    validate();
+    
+    assertErrors(2);
+    assertErrors(TABLE_WHITELIST_CONFIG, 1);
+    assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(TABLE_WHITELIST_CONFIG, ".*Cannot use legacy table filtering.*with new column mapping.*");
+    assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG, ".*Cannot use legacy table filtering.*with new column mapping.*");
+  }
+  
+  @Test
+  public void validate_withWhitelistAndIncrementingColumnMapping_setsError() {
+    props.remove(TABLE_INCLUDE_LIST_CONFIG); // Remove conflicting table filtering config
+    props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
+    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
+    
+    validate();
+    
+    assertErrors(2);
+    assertErrors(TABLE_WHITELIST_CONFIG, 1);
+    assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(TABLE_WHITELIST_CONFIG, ".*Cannot use legacy table filtering.*with new column mapping.*");
+    assertErrorMatches(INCREMENTING_COLUMN_MAPPING_CONFIG, ".*Cannot use legacy table filtering.*with new column mapping.*");
+  }
+  
+  @Test
+  public void validate_withBlacklistAndTimestampColumnMapping_setsError() {
+    props.remove(TABLE_INCLUDE_LIST_CONFIG); // Remove conflicting table filtering config
+    props.put(TABLE_BLACKLIST_CONFIG, "table1,table2");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
+    
+    validate();
+    
+    assertErrors(2);
+    assertErrors(TABLE_BLACKLIST_CONFIG, 1);
+    assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(TABLE_BLACKLIST_CONFIG, ".*Cannot use legacy table filtering.*with new column mapping.*");
+    assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG, ".*Cannot use legacy table filtering.*with new column mapping.*");
+  }
+  
+  @Test
+  public void validate_withBlacklistAndIncrementingColumnMapping_setsError() {
+    props.remove(TABLE_INCLUDE_LIST_CONFIG); // Remove conflicting table filtering config
+    props.put(TABLE_BLACKLIST_CONFIG, "table1,table2");
+    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
+    
+    validate();
+    
+    assertErrors(2);
+    assertErrors(TABLE_BLACKLIST_CONFIG, 1);
+    assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(TABLE_BLACKLIST_CONFIG, ".*Cannot use legacy table filtering.*with new column mapping.*");
+    assertErrorMatches(INCREMENTING_COLUMN_MAPPING_CONFIG, ".*Cannot use legacy table filtering.*with new column mapping.*");
+  }
+  
+  @Test
+  public void validate_withWhitelistAndBothColumnMappings_setsError() {
+    props.remove(TABLE_INCLUDE_LIST_CONFIG); // Remove conflicting table filtering config
+    props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
+    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
+    
+    validate();
+    
+    assertErrors(3);
+    assertErrors(TABLE_WHITELIST_CONFIG, 1);
+    assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
+    assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(TABLE_WHITELIST_CONFIG, ".*Cannot use legacy table filtering.*with new column mapping.*");
+    assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG, ".*Cannot use legacy table filtering.*with new column mapping.*");
+    assertErrorMatches(INCREMENTING_COLUMN_MAPPING_CONFIG, ".*Cannot use legacy table filtering.*with new column mapping.*");
+  }
+  
+  @Test
+  public void validate_withIncludeListAndColumnMappings_noErrors() {
+    // This should be allowed - new table filtering with new column mapping
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING); // Use mode that supports both columns
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
+    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
+    
+    validate();
+    
+    assertNoErrors();
+  }
+  
+  @Test
+  public void validate_withWhitelistAndLegacyColumnNames_noErrors() {
+    // This should be allowed - legacy table filtering with legacy column names
+    props.remove(TABLE_INCLUDE_LIST_CONFIG); // Remove conflicting table filtering config
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING); // Use mode that supports both columns
+    props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
+    props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts_col");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "inc_col");
+    
+    validate();
+    
+    assertNoErrors();
+  }
+
+  // Tests for legacy column name support (new functionality)
+  
+  @Test
+  public void validate_withValidModeTimestampWithLegacyColumnName_noErrors() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts_col");
+    
+    validate();
+    
+    assertNoErrors();
+  }
+  
+  @Test
+  public void validate_withValidModeIncrementingWithLegacyColumnName_noErrors() {
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "inc_col");
+    
+    validate();
+    
+    assertNoErrors();
+  }
+  
+  @Test
+  public void validate_withValidModeTimestampIncrementingWithLegacyColumnNames_noErrors() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts_col");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "inc_col");
+    
+    validate();
+    
+    assertNoErrors();
+  }
+  
+  @Test
+  public void validate_withValidModeTimestampIncrementingWithMixedConfigs_noErrors() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts_col"); // Legacy
+    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1"); // New
+    
+    validate();
+    
+    assertNoErrors();
+  }
+  
+  @Test
+  public void validate_withValidModeTimestampIncrementingWithMixedConfigsReverse_noErrors() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]"); // New
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "inc_col"); // Legacy
+    
+    validate();
+    
+    assertNoErrors();
+  }
+  
+  // Tests for "not provided when not required" validation
+  
+  @Test
+  public void validate_withModeBulkWithLegacyTimestampColumn_setsError() {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts_col");
+    
+    validate();
+    
+    assertErrors(1);
+    assertErrors(MODE_CONFIG, 1);
+    assertErrorMatches(MODE_CONFIG, ".*Timestamp column configurations should not be provided.*");
+  }
+  
+  @Test
+  public void validate_withModeBulkWithLegacyIncrementingColumn_setsError() {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "inc_col");
+    
+    validate();
+    
+    assertErrors(1);
+    assertErrors(MODE_CONFIG, 1);
+    assertErrorMatches(MODE_CONFIG, ".*Incrementing column configurations should not be provided.*");
+  }
+  
+  @Test
+  public void validate_withModeBulkWithNewTimestampMapping_setsError() {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
+    
+    validate();
+    
+    assertErrors(1);
+    assertErrors(MODE_CONFIG, 1);
+    assertErrorMatches(MODE_CONFIG, ".*Timestamp column configurations should not be provided.*");
+  }
+  
+  @Test
+  public void validate_withModeBulkWithNewIncrementingMapping_setsError() {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
+    
+    validate();
+    
+    assertErrors(1);
+    assertErrors(MODE_CONFIG, 1);
+    assertErrorMatches(MODE_CONFIG, ".*Incrementing column configurations should not be provided.*");
+  }
+  
 }

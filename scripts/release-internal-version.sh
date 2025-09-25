@@ -13,6 +13,7 @@ NAMESPACE="io/confluent"
 ARTIFACT_ID="kafka-connect-jdbc"
 
 echo "Starting internal release for kafka-connect-jdbc"
+echo ""
 
 # Extract version from pom.xml and determine release base version
 POM_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout -B)
@@ -24,83 +25,100 @@ if [[ $pom_eval_result -ne 0 ]] || [[ -z "$POM_VERSION" ]]; then
 fi
 echo "POM version: ${POM_VERSION}"
 
-# If version is X.Y.Z-SNAPSHOT, we should release internal versions based on X.Y.(Z-1)
-if [[ "$POM_VERSION" == *-SNAPSHOT ]]; then
-    SNAPSHOT_VERSION=$(echo "$POM_VERSION" | sed 's/-SNAPSHOT//')
-    # Extract major.minor.patch and decrement patch version
-    if [[ "$SNAPSHOT_VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
-        MAJOR=${BASH_REMATCH[1]}
-        MINOR=${BASH_REMATCH[2]}
-        PATCH=${BASH_REMATCH[3]}
-        RELEASE_PATCH=$((PATCH - 1))
-        BASE_VERSION="${MAJOR}.${MINOR}.${RELEASE_PATCH}"
+# Function to find the latest released version for internal releases
+find_latest_released_version() {
+    echo "Finding latest released version from CodeArtifact..." >&2
+    
+    # Get all released versions (non-snapshot, non-internal) from CodeArtifact
+    local all_versions
+    all_versions=$(aws codeartifact list-package-versions \
+        --domain "$DOMAIN" \
+        --domain-owner "$DOMAIN_OWNER" \
+        --repository "$REPOSITORY" \
+        --format maven \
+        --namespace "${NAMESPACE//\//.}" \
+        --package "$ARTIFACT_ID" \
+        --region "$REGION" \
+        --query "versions[?!contains(version, '_') && !contains(version, 'SNAPSHOT') && !contains(version, '-')].version" \
+        --output text 2>/dev/null)
+    
+    local aws_exit_code=$?
+    if [[ $aws_exit_code -ne 0 ]]; then
+        echo "Warning: Could not fetch released versions from CodeArtifact (exit code: $aws_exit_code)" >&2
+        return 1
+    fi
+    
+    if [[ -z "$all_versions" || "$all_versions" == "None" ]]; then
+        echo "No released versions found in CodeArtifact" >&2
+        return 1
+    fi
+    
+    # Sort versions and get the latest one, ensure we only return a single clean version
+    local latest_version
+    latest_version=$(echo "$all_versions" | tr '\t' '\n' | grep -v '^$' | sort -V | tail -1 | tr -d '\n\r')
+    
+    if [[ -n "$latest_version" ]]; then
+        echo "$latest_version"
+        return 0
     else
-        echo "Error: Unable to parse version format: ${SNAPSHOT_VERSION}"
+        echo "Could not determine latest version from response" >&2
+        return 1
+    fi
+}
+
+# Determine base version for internal releases
+if [[ "$POM_VERSION" == *-SNAPSHOT ]]; then
+    # For snapshot versions, find the latest released version to use as base
+    LATEST_RELEASED=$(find_latest_released_version)
+    if [[ $? -eq 0 && -n "$LATEST_RELEASED" ]]; then
+        BASE_VERSION="$LATEST_RELEASED"
+        echo "Using latest released version as base: ${BASE_VERSION}"
+    else
+        echo "Error: Cannot determine base version without CodeArtifact access"
+        echo "Please configure AWS credentials to query the latest released version"
+        echo "Run: aws configure"
         exit 1
     fi
 else
-    # If not a snapshot, use the version as-is
+    # If not a snapshot, it's a release version - use it as-is
     BASE_VERSION="$POM_VERSION"
+    echo "Using release version as-is: ${BASE_VERSION}"
 fi
 
 echo "Base version for internal release: ${BASE_VERSION}"
 
-# Function to get AWS CodeArtifact authorization token
-get_codeartifact_token() {
-    aws codeartifact get-authorization-token \
-        --domain-owner "$DOMAIN_OWNER" \
-        --domain "$DOMAIN" \
-        --region "$REGION" \
-        --query authorizationToken \
-        --output text
-}
 
-# Function to get existing versions from CodeArtifact
+# Function to get existing versions from CodeArtifact using AWS CLI
 get_existing_versions() {
-    local token=$1
-
-    # Get maven-metadata.xml
-    local metadata_url="https://confluent-${DOMAIN_OWNER}.d.codeartifact.${REGION}.amazonaws.com/maven/${REPOSITORY}/${NAMESPACE}/${ARTIFACT_ID}/maven-metadata.xml"
-    local auth_header="Authorization: Basic $(echo -n "aws:${token}" | base64)"
-
-    # Fetch metadata with proper error handling
-    local metadata_response
-    metadata_response=$(curl -s -H "$auth_header" "$metadata_url" 2>&1)
-    local curl_exit_code=$?
-    
-    # Check if curl failed
-    if [[ $curl_exit_code -ne 0 ]]; then
-        echo "Error: Failed to fetch metadata from CodeArtifact (curl exit code: $curl_exit_code)" >&2
-        echo "Response: $metadata_response" >&2
-        return 1
-    fi
-    
-    # Check for authentication errors in the response
-    if echo "$metadata_response" | grep -q "Unauthenticated\|invalid credentials\|401 Unauthorized"; then
-        echo "Error: Authentication failed when accessing CodeArtifact" >&2
-        echo "Response: $metadata_response" >&2
-        echo "Please check your AWS credentials and CodeArtifact permissions" >&2
-        return 1
-    fi
-    
-    # Check for other error responses
-    if echo "$metadata_response" | grep -q "<Error>\|<error>\|HTTP.*[45][0-9][0-9]"; then
-        echo "Error: Received error response from CodeArtifact" >&2
-        echo "Response: $metadata_response" >&2
-        return 1
-    fi
-
-    # If POM version is not a snapshot, check if exact version exists
-    if [[ "$POM_VERSION" != *-SNAPSHOT ]]; then
-        echo "$metadata_response" | \
-            grep -o "<version>$POM_VERSION</version>" | \
-            sed -E 's/<\/?version>//g' || true
-    else
+    # Only check for existing versions if POM version is a snapshot
+    # For release versions, we'll just try to deploy and let Maven handle conflicts
+    if [[ "$POM_VERSION" == *-SNAPSHOT ]]; then
         # For snapshot versions, fetch versions matching our base version pattern with _x suffix
-        echo "$metadata_response" | \
-            grep -oE "<version>${BASE_VERSION//./\\.}_[0-9]+</version>" | \
-            sed -E 's/<\/?version>//g' || true
+        aws codeartifact list-package-versions \
+            --domain "$DOMAIN" \
+            --domain-owner "$DOMAIN_OWNER" \
+            --repository "$REPOSITORY" \
+            --format maven \
+            --namespace "${NAMESPACE//\//.}" \
+            --package "$ARTIFACT_ID" \
+            --region "$REGION" \
+            --query "versions[?starts_with(version, '${BASE_VERSION}_')].version" \
+            --output text 2>&1
+        
+        local aws_exit_code=$?
+        
+        # Check if AWS CLI command failed
+        if [[ $aws_exit_code -ne 0 ]]; then
+            echo "Error: Failed to list package versions from CodeArtifact (exit code: $aws_exit_code)" >&2
+            echo "Please check your AWS credentials and CodeArtifact permissions" >&2
+            return 1
+        fi
+    else
+        # For release versions, return empty (no existing versions to check)
+        echo ""
     fi
+    
+    return 0
 }
 
 # Function to determine next version
@@ -176,8 +194,7 @@ restore_pom_version() {
 
 # Function to deploy to CodeArtifact
 deploy_to_codeartifact() {
-    local token=$1
-    local version=$2
+    local version=$1
     
     echo "Deploying version ${version} to CodeArtifact..."
     
@@ -212,43 +229,23 @@ deploy_to_codeartifact() {
 # Main execution
 main() {
     echo "=== Kafka Connect JDBC Internal Release ==="
-    
-    # Get CodeArtifact token
-    TOKEN=$(get_codeartifact_token)
-    local token_result=$?
-    if [[ $token_result -ne 0 ]] || [[ -z "$TOKEN" ]]; then
-        echo "Failed to get CodeArtifact authorization token"
-        if [[ $token_result -ne 0 ]]; then
-            echo "AWS CLI command failed with exit code: $token_result"
-            echo "Please check your AWS credentials and region configuration"
-        fi
-        exit 1
-    fi
-    
+
     # Get existing versions
-    EXISTING_VERSIONS=$(get_existing_versions "$TOKEN")
+    EXISTING_VERSIONS=$(get_existing_versions)
     local get_versions_result=$?
     if [[ $get_versions_result -ne 0 ]]; then
         echo "Failed to fetch existing versions from CodeArtifact"
         exit 1
     fi
-    echo "Existing versions fetched: $(echo "$EXISTING_VERSIONS" | tr '\n' ' ')"
-    if [[ "$POM_VERSION" != *-SNAPSHOT ]]; then
-        echo "Checking if version ${BASE_VERSION} already exists:"
-        if [[ -n "$EXISTING_VERSIONS" ]]; then
-            echo "Version ${BASE_VERSION} already exists in CodeArtifact"
-            echo "Skipping deployment as version already exists"
-            exit 0
-        else
-            echo "Version ${BASE_VERSION} not found, proceeding with deployment"
-        fi
-    else
-        echo "Existing versions matching ${BASE_VERSION}_x pattern:"
+    if [[ "$POM_VERSION" == *-SNAPSHOT ]]; then
+        echo "Existing versions matching ${BASE_VERSION}_x pattern: $(echo "$EXISTING_VERSIONS" | tr '\n' ' ')"
         if [[ -n "$EXISTING_VERSIONS" ]]; then
             echo "$EXISTING_VERSIONS"
         else
             echo "None found"
         fi
+    else
+        echo "Release version deployment - will attempt to deploy ${BASE_VERSION} directly"
     fi
     
     # Determine next version
@@ -262,7 +259,7 @@ main() {
     update_pom_version "$NEXT_VERSION"
     
     # Deploy to CodeArtifact
-    deploy_to_codeartifact "$TOKEN" "$NEXT_VERSION"
+    deploy_to_codeartifact "$NEXT_VERSION"
     
     echo "=== Internal release completed successfully ==="
     echo "Released version: ${NEXT_VERSION}"

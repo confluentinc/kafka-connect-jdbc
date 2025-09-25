@@ -16,10 +16,6 @@ fail_fast:
 execution_time_limit:
   hours: 1
 
-auto_cancel:
-  running:
-    when: "true"
-
 queue:
   - when: "branch != 'master' and branch !~ '[0-9]+\\.[0-9]+\\.x'"
     processing: parallel
@@ -42,7 +38,7 @@ blocks:
         - name: Test
           commands:
             - . sem-pint
-            - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 --batch-mode --no-transfer-progress clean package -DskipTests -DskipITs
+            - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 --batch-mode --no-transfer-progress clean verify install dependency:analyze validate
             - export TRIVY_DISABLE_VEX_NOTICE=true
             - trivy version
             - echo "Check go/connector-dev-vuln-remediation for fixing or suppressing vulnerabilities found by trivy"
@@ -66,9 +62,9 @@ blocks:
       jobs:
         - name: Release
           commands:
-            - . assume-iam-role arn:aws:iam::519856050701:role/semaphore-oidc
-            - chmod +x scripts/release-internal-version.sh
-            - ./scripts/release-internal-version.sh
+            - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 --batch-mode 
+              -DaltDeploymentRepository=confluent-codeartifact-internal::default::https://confluent-519856050701.d.codeartifact.us-west-2.amazonaws.com/maven/maven-snapshots/ 
+              -DrepositoryId=confluent-codeartifact-internal deploy -DskipTests
   - name: Release Notes
     dependencies: []
     run:
@@ -98,3 +94,6 @@ after_pipeline:
           - sem-version java 11
           - artifact pull workflow target
           - emit-sonarqube-data --run_only_sonar_scan
+auto_cancel:
+  running:
+    when: "true"

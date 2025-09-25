@@ -35,11 +35,15 @@ import javax.sql.rowset.serial.SerialBlob;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collection;
 import java.util.GregorianCalendar;
 import java.util.List;
+import java.util.Map;
 import java.util.TimeZone;
 
 import static org.junit.Assert.assertEquals;
@@ -306,6 +310,25 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
   }
 
   @Test
+  public void oldDateFollowsGregorianCalendar() throws Exception {
+    GregorianCalendar expected = new GregorianCalendar(1, Calendar.JANUARY, 1, 0, 0, 0);
+    expected.setTimeZone(TimeZone.getTimeZone("UTC"));
+    typeConversion("DATE", false, "0001-01-01",
+        Date.builder().build(),
+        expected.getTime());
+  }
+
+  @Test
+  public void oldDateShiftedDueToProlepticCalendar() throws Exception {
+    ZoneId zone = ZoneId.of("UTC");
+    java.util.Date expected = java.util.Date.from(
+        LocalDate.of(1, 1, 1).atStartOfDay(zone).toInstant()
+    );
+    typeConversion("DATE", false, "0001-01-01",
+        Date.builder().build(), expected, true);
+  }
+
+  @Test
   public void testDate() throws Exception {
     GregorianCalendar expected = new GregorianCalendar(1977, Calendar.FEBRUARY, 13, 0, 0, 0);
     expected.setTimeZone(TimeZone.getTimeZone("UTC"));
@@ -360,6 +383,26 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
   }
 
   @Test
+  public void oldTimestampFollowsGregorianCalendar() throws Exception {
+    GregorianCalendar expected = new GregorianCalendar(1, Calendar.JANUARY, 1, 12, 34, 56);
+    expected.setTimeZone(timezone);
+    typeConversion("TIMESTAMP", false, "0001-01-01 12:34:56",
+        Timestamp.builder().build(), expected.getTime());
+  }
+
+  @Test
+  public void oldTimestampIsShiftedDueToProlepticCalendar() throws Exception {
+    LocalDateTime localDateTime = LocalDateTime.of(
+        1, 1, 1, 12, 34, 56
+    );
+    java.util.Date date = java.util.Date.from(
+        localDateTime.atZone(ZoneId.of(timezone.getID())).toInstant()
+    );
+    typeConversion("TIMESTAMP", false, "0001-01-01 12:34:56",
+        Timestamp.builder().build(), date, true);
+  }
+
+  @Test
   public void testTimestamp() throws Exception {
     GregorianCalendar expected = new GregorianCalendar(1977, Calendar.FEBRUARY, 13, 23, 3, 20);
     expected.setTimeZone(timezone);
@@ -384,6 +427,36 @@ public class JdbcSourceTaskConversionTest extends JdbcSourceTaskTestBase {
     typeConversion("TIMESTAMP", true, null,
         Timestamp.builder().optional().build(),
         null);
+  }
+
+  private void typeConversion(String sqlType, boolean nullable,
+                              Object sqlValue, Schema convertedSchema,
+                              Object convertedValue,
+                              boolean useProlepticCalendar) throws Exception {
+    String sqlColumnSpec = sqlType;
+    if (!nullable) {
+      sqlColumnSpec += " NOT NULL";
+    }
+    db.createTable(SINGLE_TABLE_NAME, "id", sqlColumnSpec);
+    db.insert(SINGLE_TABLE_NAME, "id", sqlValue);
+    // starting task after creation of table to avoid failure in case of table not found
+    Map<String, String> config = singleTableWithTimezoneConfig(extendedMapping, timezone, 1);
+    if (useProlepticCalendar) {
+      config.put(JdbcSourceConnectorConfig.DATE_CALENDAR_SYSTEM_CONFIG, "PROLEPTIC_GREGORIAN");
+    }
+    task.start(config);
+    List<SourceRecord> records = task.poll();
+    // Poll until we get the record from the record queue with timeout of 5 seconds
+    long startTime = System.currentTimeMillis();
+    long timeout = 5000;
+    while (records.isEmpty() && (System.currentTimeMillis() - startTime) < timeout) {
+      records = task.poll();
+    }
+    validateRecords(records, convertedSchema, convertedValue);
+    // closing the task before dropping the table to avoid failure in case of table not found
+    // just to avoid failure logs
+    task.stop();
+    db.dropTable(SINGLE_TABLE_NAME);
   }
 
   // Derby has an XML type, but the JDBC driver doesn't implement any of the type bindings,

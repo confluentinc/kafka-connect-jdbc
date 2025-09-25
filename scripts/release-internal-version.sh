@@ -138,14 +138,21 @@ determine_next_version() {
     fi
     
     # Find the maximum suffix number
+    # Convert tabs to newlines and process each version
+    local versions_list
+    versions_list=$(echo "$existing_versions" | tr '\t' '\n')
+    
     while IFS= read -r version; do
+        # Skip empty lines
+        [[ -z "$version" ]] && continue
+        
         if [[ "$version" =~ ${BASE_VERSION}_([0-9]+) ]]; then
             local suffix=${BASH_REMATCH[1]}
             if (( suffix > max_suffix )); then
                 max_suffix=$suffix
             fi
         fi
-    done <<< "$existing_versions"
+    done <<< "$versions_list"
     
     local next_suffix=$((max_suffix + 1))
     echo "${BASE_VERSION}_${next_suffix}"
@@ -228,7 +235,7 @@ deploy_to_codeartifact() {
 
 # Main execution
 main() {
-    echo "=== Kafka Connect JDBC Internal Release ==="
+    echo "=== Kafka Connect JDBC artifact incremental release ==="
 
     # Get existing versions
     EXISTING_VERSIONS=$(get_existing_versions)
@@ -238,7 +245,7 @@ main() {
         exit 1
     fi
     if [[ "$POM_VERSION" == *-SNAPSHOT ]]; then
-        echo "Existing versions matching ${BASE_VERSION}_x pattern: $(echo "$EXISTING_VERSIONS" | tr '\n' ' ')"
+        echo "Existing versions matching ${BASE_VERSION}_x pattern: $(echo "$EXISTING_VERSIONS")"
         if [[ -n "$EXISTING_VERSIONS" ]]; then
             echo "$EXISTING_VERSIONS"
         else

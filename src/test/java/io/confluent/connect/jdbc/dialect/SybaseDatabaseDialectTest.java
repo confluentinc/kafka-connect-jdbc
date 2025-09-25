@@ -24,7 +24,6 @@ import java.sql.Types;
 import java.time.ZoneOffset;
 import java.util.Calendar;
 import java.util.List;
-import java.util.TimeZone;
 import java.util.concurrent.ThreadLocalRandom;
 
 import io.confluent.connect.jdbc.util.DateTimeUtils;
@@ -348,7 +347,7 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
     verifyBindField(++index, Schema.BYTES_SCHEMA, ByteBuffer.wrap(new byte[]{42})).setBytes(index, new byte[]{42});
     verifyBindField(++index, Schema.STRING_SCHEMA, "yep").setString(index, "yep");
     verifyBindField(++index, Decimal.schema(0), new BigDecimal("1.5").setScale(0, BigDecimal.ROUND_HALF_EVEN)).setBigDecimal(index, new BigDecimal(2));
-    Calendar utcCalendar = DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone(ZoneOffset.UTC));
+    Calendar utcCalendar = DateTimeUtils.getZoneIdCalendar(ZoneOffset.UTC);
     verifyBindField(
       ++index,
       Date.SCHEMA,

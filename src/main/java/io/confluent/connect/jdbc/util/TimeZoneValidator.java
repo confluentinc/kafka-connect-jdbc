@@ -19,16 +19,27 @@ import java.time.ZoneId;
 
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class TimeZoneValidator implements ConfigDef.Validator {
 
   public static final TimeZoneValidator INSTANCE = new TimeZoneValidator();
+  private static final Logger log = LoggerFactory.getLogger(TimeZoneValidator.class);
 
   @Override
   public void ensureValid(String name, Object value) {
     if (value != null) {
       if (!ZoneId.getAvailableZoneIds().contains(value.toString())) {
-        throw new ConfigException(name, value, "Invalid time zone identifier");
+        // Try the short IDs for compatibility with legacy values like "EST", "PST", etc.
+        try {
+          ZoneId.of(value.toString(), ZoneId.SHORT_IDS);
+          log.info("Falling back to short IDs for timezone: {}", value);
+        } catch (Exception e) {
+          throw new ConfigException(name, value,
+              "Invalid time zone. See the list of valid time zones at "
+                  + "https://docs.oracle.com/javase/8/docs/api/java/time/ZoneId.html#shortIds");
+        }
       }
     }
   }

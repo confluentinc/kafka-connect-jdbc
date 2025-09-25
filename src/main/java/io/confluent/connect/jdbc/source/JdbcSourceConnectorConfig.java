@@ -1107,7 +1107,14 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public ZoneId zoneId() {
     String dbTimeZone = getString(JdbcSourceTaskConfig.DB_TIMEZONE_CONFIG);
-    return ZoneId.of(dbTimeZone);
+    ZoneId zoneId;
+    try {
+      zoneId = ZoneId.of(dbTimeZone);
+    } catch (Exception e) {
+      LOG.info("Falling back to short IDs for timezone: {}", dbTimeZone);
+      zoneId = ZoneId.of(dbTimeZone, ZoneId.SHORT_IDS);
+    }
+    return zoneId;
   }
 
   public int maxBatchSize() {

@@ -342,7 +342,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
             "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_ZONE_ID),
             "id", 1);
 
-    startTask("modified", null, null, 4L, "UTC");
+    startTask("modified", null, null, 4L, "UTC", 2);
     verifyTimestampFirstPoll(TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     Long currentTime = new Date().getTime();
@@ -354,6 +354,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     db.insert(SINGLE_TABLE_NAME, "modified", new Timestamp(currentTime+500L).toString(), "id", 4);
     db.insert(SINGLE_TABLE_NAME, "modified", new Timestamp(currentTime+501L).toString(), "id", 5);
 
+    Thread.sleep(500);
     verifyPoll(2, "id", Arrays.asList(2, 3), true, false, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     // make sure we get the rest
@@ -1054,6 +1055,10 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
 
   private void startTask(String timestampColumn, String incrementingColumn, String query, int batchSize) {
     startTask(timestampColumn, incrementingColumn, query, 0L, "UTC", null, batchSize);
+  }
+
+  private void startTask(String timestampColumn, String incrementingColumn, String query, Long delay, String timeZone, int batchSize) {
+    startTask(timestampColumn, incrementingColumn, query, delay, timeZone, null, batchSize);
   }
 
   private void startTask(String timestampColumn, String incrementingColumn, String query, Long delay, String timeZone) {

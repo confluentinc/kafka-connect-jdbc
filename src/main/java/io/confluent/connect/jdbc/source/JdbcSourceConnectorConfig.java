@@ -1410,55 +1410,31 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     return getList(TABLE_EXCLUDE_LIST_CONFIG);
   }
 
-  /**
-   * Get the timestamp column mapping configurations.
-   * @return List of timestamp column mappings, empty list if not configured
-   */
   public List<String> timestampColumnMapping() {
     return getList(TIMESTAMP_COLUMN_MAPPING_CONFIG);
   }
 
-  /**
-   * Get the incrementing column mapping configurations.
-   * @return List of incrementing column mappings, empty list if not configured
-   */
   public List<String> incrementingColumnMapping() {
     return getList(INCREMENTING_COLUMN_MAPPING_CONFIG);
   }
 
-  /**
-   * Get the regex patterns from timestamp column mappings.
-   * @return List of regex patterns from timestamp mappings
-   */
   public List<String> timestampColMappingRegexes() {
     return timestampColumnMapping().stream()
         .map(mapping -> mapping.split(":")[0].trim())
         .collect(java.util.stream.Collectors.toList());
   }
 
-  /**
-   * Get the regex patterns from incrementing column mappings.
-   * @return List of regex patterns from incrementing mappings
-   */
   public List<String> incrementingColMappingRegexes() {
     return incrementingColumnMapping().stream()
         .map(mapping -> mapping.split(":")[0].trim())
         .collect(java.util.stream.Collectors.toList());
   }
 
-  /**
-   * Check if the current mode uses timestamp columns.
-   * @return true if mode uses timestamp columns
-   */
   public boolean modeUsesTimestampColumn() {
     String mode = getString(MODE_CONFIG);
     return Arrays.asList(MODE_TIMESTAMP, MODE_TIMESTAMP_INCREMENTING).contains(mode);
   }
 
-  /**
-   * Check if the current mode uses incrementing columns.
-   * @return true if mode uses incrementing columns
-   */
   public boolean modeUsesIncrementingColumn() {
     String mode = getString(MODE_CONFIG);
     return Arrays.asList(MODE_INCREMENTING, MODE_TIMESTAMP_INCREMENTING).contains(mode);

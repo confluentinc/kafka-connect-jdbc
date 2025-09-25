@@ -63,7 +63,7 @@ public class TableCollectionUtils {
     List<TableId> filteredTables = new ArrayList<>();
     
     for (TableId table : tables) {
-      String tableString = table.toString();
+      String tableString = table.toUnquotedString();
       boolean includeMatch = matchesAny(tableString, inclusionRegex);
       boolean excludeMatch = matchesAny(tableString, exclusionRegex);
       

@@ -645,7 +645,7 @@ public class JdbcSourceTask extends SourceTask {
 
   void populateTableToIncrementingColMap() {
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
-    List<String> tableRegexToIncrCols = config.incrementingColMappingRegexes();
+    List<String> tableRegexToIncrCols = config.incrementingColumnMapping();
     
     for (String table : tables) {
       // Convert table string to TableId to get unquoted string for regex matching
@@ -664,7 +664,7 @@ public class JdbcSourceTask extends SourceTask {
 
   void populateTableToTsColsMap() {
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
-    List<String> tableRegexToTsCols = config.timestampColMappingRegexes();
+    List<String> tableRegexToTsCols = config.timestampColumnMapping();
     
     // If there are no timestamp mappings, nothing to populate
     if (tableRegexToTsCols.isEmpty()) {

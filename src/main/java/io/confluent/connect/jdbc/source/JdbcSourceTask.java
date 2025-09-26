@@ -691,14 +691,14 @@ public class JdbcSourceTask extends SourceTask {
 
   private String getIncrementingColumn(String table) {
     if (!config.tableIncludeListRegexes().isEmpty()) {
-      return tableToIncrCol.get(table);
+      return tableToIncrCol.get(table) != null ? tableToIncrCol.get(table) : "";
     }
     return config.getString(JdbcSourceTaskConfig.INCREMENTING_COLUMN_NAME_CONFIG);
   }
 
   private List<String> getTimestampColumns(String table) {
     if (!config.tableIncludeListRegexes().isEmpty()) {
-      return tableToTsCols.get(table);
+      return tableToTsCols.get(table) != null ? tableToTsCols.get(table) : Collections.emptyList();
     }
     return config.getList(JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
   }

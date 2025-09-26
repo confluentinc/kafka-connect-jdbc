@@ -282,10 +282,6 @@ public class JdbcSourceConnectorValidation {
         && !timestampColumnName.get(0).trim().isEmpty();
     boolean hasNewTimestampConfig = timestampColumnsMapping != null 
         && !timestampColumnsMapping.isEmpty();
-    boolean hasLegacyIncrementingConfig = incrementingColumnName != null 
-        && !incrementingColumnName.trim().isEmpty();
-    boolean hasNewIncrementingConfig = incrementingColumnMapping != null 
-        && !incrementingColumnMapping.isEmpty();
     
     if (hasLegacyTimestampConfig && hasNewTimestampConfig) {
       String msg = "Cannot use both timestamp.column.name and timestamp.columns.mapping. "
@@ -307,6 +303,9 @@ public class JdbcSourceConnectorValidation {
       isValid = false;
     }
     
+    boolean hasLegacyIncrementingConfig = incrementingColumnName != null 
+        && !incrementingColumnName.trim().isEmpty();
+    
     if (hasNewTableFiltering && hasLegacyIncrementingConfig) {
       String msg = "Cannot use table.include.list with legacy incrementing.column.name. "
           + "Use incrementing.column.mapping with table.include.list.";
@@ -314,6 +313,9 @@ public class JdbcSourceConnectorValidation {
       addConfigError(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG, msg);
       isValid = false;
     }
+    
+    boolean hasNewIncrementingConfig = incrementingColumnMapping != null 
+        && !incrementingColumnMapping.isEmpty();
     
     if (hasLegacyIncrementingConfig && hasNewIncrementingConfig) {
       String msg = "Cannot use both incrementing.column.name and incrementing.column.mapping. "

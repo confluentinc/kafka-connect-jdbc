@@ -199,23 +199,8 @@ public class JdbcSourceConnectorValidation {
 
 
     if (hasLegacyConfig && hasNewConfig) {
-      List<String> configsUsed = new ArrayList<>();
 
-      if (whitelistSet != null) {
-        configsUsed.add(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG);
-      }
-      if (blacklistSet != null) {
-        configsUsed.add(JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG);
-      }
-      if (includeListSet != null) {
-        configsUsed.add(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG);
-      }
-      if (excludeListSet != null) {
-        configsUsed.add(JdbcSourceConnectorConfig.TABLE_EXCLUDE_LIST_CONFIG);
-      }
-
-      String msg = "Cannot use legacy whitelist/blacklist with new include/exclude lists. "
-          + "Configured: " + String.join(", ", configsUsed);
+      String msg = "Cannot use legacy whitelist/blacklist with new include/exclude lists. ";
 
       if (whitelistSet != null) {
         addConfigError(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, msg);

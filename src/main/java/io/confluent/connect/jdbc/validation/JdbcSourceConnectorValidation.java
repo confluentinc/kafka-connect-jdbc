@@ -247,7 +247,6 @@ public class JdbcSourceConnectorValidation {
     
     List<String> timestampColumnName = getTimestampColumnName();
     List<String> timestampColumnsMapping = getTimestampColumnMapping();
-    String incrementingColumnName = getIncrementingColumnName();
     List<String> incrementingColumnMapping = getIncrementingColumnMapping();
 
     Set<String> whitelistSet = getTableWhitelistSet();
@@ -303,6 +302,7 @@ public class JdbcSourceConnectorValidation {
       isValid = false;
     }
     
+    String incrementingColumnName = getIncrementingColumnName();
     boolean hasLegacyIncrementingConfig = incrementingColumnName != null 
         && !incrementingColumnName.trim().isEmpty();
     

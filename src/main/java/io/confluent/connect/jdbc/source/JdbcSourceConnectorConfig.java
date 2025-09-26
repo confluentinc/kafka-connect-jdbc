@@ -40,8 +40,8 @@ import io.confluent.connect.jdbc.util.DateCalendarSystem;
 
 import java.util.function.BiFunction;
 import java.util.function.Function;
-import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
+import com.google.re2j.Pattern;
+import com.google.re2j.PatternSyntaxException;
 
 import org.apache.kafka.common.Configurable;
 import org.apache.kafka.common.config.AbstractConfig;

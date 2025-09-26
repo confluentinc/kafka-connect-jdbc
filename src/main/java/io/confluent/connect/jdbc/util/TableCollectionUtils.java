@@ -21,7 +21,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.regex.Pattern;
+import com.google.re2j.Pattern;
 
 /**
  * Utility class for filtering collections of tables using regular expression patterns.

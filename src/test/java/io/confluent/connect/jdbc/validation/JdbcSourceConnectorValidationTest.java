@@ -24,7 +24,7 @@ import org.junit.Test;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.regex.Pattern;
+import com.google.re2j.Pattern;
 
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.*;
 import static org.junit.Assert.assertEquals;

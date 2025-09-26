@@ -21,10 +21,12 @@ import java.time.Duration;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.microsoft.sqlserver.jdbc.SQLServerConnection;
@@ -1438,6 +1440,68 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public boolean modeUsesIncrementingColumn() {
     String mode = getString(MODE_CONFIG);
     return Arrays.asList(MODE_INCREMENTING, MODE_TIMESTAMP_INCREMENTING).contains(mode);
+  }
+
+  // Helper methods for configuration access
+
+  /**
+   * Get table whitelist configuration as a set.
+   */
+  public Set<String> getTableWhitelistSet() {
+    List<String> whitelist = getList(TABLE_WHITELIST_CONFIG);
+    return whitelist.isEmpty() ? null : new HashSet<>(whitelist);
+  }
+
+  /**
+   * Get table blacklist configuration as a set.
+   */
+  public Set<String> getTableBlacklistSet() {
+    List<String> blacklist = getList(TABLE_BLACKLIST_CONFIG);
+    return blacklist.isEmpty() ? null : new HashSet<>(blacklist);
+  }
+
+  /**
+   * Get table include list configuration as a set.
+   */
+  public Set<String> getTableIncludeListSet() {
+    List<String> includeList = tableIncludeListRegexes();
+    return includeList.isEmpty() ? null : new HashSet<>(includeList);
+  }
+
+  /**
+   * Get table exclude list configuration as a set.
+   */
+  public Set<String> getTableExcludeListSet() {
+    List<String> excludeList = tableExcludeListRegexes();
+    return excludeList.isEmpty() ? null : new HashSet<>(excludeList);
+  }
+
+  /**
+   * Get timestamp column name configuration.
+   */
+  public List<String> getTimestampColumnName() {
+    return getList(TIMESTAMP_COLUMN_NAME_CONFIG);
+  }
+
+  /**
+   * Get timestamp column mapping configuration.
+   */
+  public List<String> getTimestampColumnMapping() {
+    return timestampColumnMapping();
+  }
+
+  /**
+   * Get incrementing column name configuration.
+   */
+  public String getIncrementingColumnName() {
+    return getString(INCREMENTING_COLUMN_NAME_CONFIG);
+  }
+
+  /**
+   * Get incrementing column mapping configuration.
+   */
+  public List<String> getIncrementingColumnMapping() {
+    return incrementingColumnMapping();
   }
 
   public static void main(String[] args) {

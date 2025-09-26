@@ -239,8 +239,8 @@ public class JdbcSourceConnectorValidationTest {
     assertErrors(2); // Error should be recorded for both configs
     assertErrors(TABLE_WHITELIST_CONFIG, 1);
     assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
-    assertErrorMatches(TABLE_WHITELIST_CONFIG, ".*Cannot use legacy whitelist/blacklist with new include/exclude lists.*");
-    assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot use legacy whitelist/blacklist with new include/exclude lists.*");
+    assertErrorMatches(TABLE_WHITELIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
+    assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
   }
   
   @Test
@@ -257,7 +257,7 @@ public class JdbcSourceConnectorValidationTest {
     assertErrors(TABLE_BLACKLIST_CONFIG, 1);
     assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
     assertErrors(TABLE_EXCLUDE_LIST_CONFIG, 1);
-    assertErrorMatches(TABLE_BLACKLIST_CONFIG, ".*Cannot use legacy whitelist/blacklist with new include/exclude lists.*");
+    assertErrorMatches(TABLE_BLACKLIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
   }
   
   @Test
@@ -339,14 +339,13 @@ public class JdbcSourceConnectorValidationTest {
     
     validate();
     
-    assertErrors(4); // Total errors: 2 from timestamp.column.name + 1 from timestamp.columns.mapping + 1 from table.include.list
-    assertErrors(TIMESTAMP_COLUMN_NAME_CONFIG, 2); // Conflict with mapping AND include list
-    assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1); // Conflict with timestamp.column.name
-    assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1); // Conflict with legacy timestamp.column.name
-    assertErrorMatches(TIMESTAMP_COLUMN_NAME_CONFIG, ".*Cannot use both timestamp.column.name and timestamp.columns.mapping.*");
-    assertErrorMatches(TIMESTAMP_COLUMN_NAME_CONFIG, ".*Cannot use table.include.list with legacy timestamp.column.name.*");
-    assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG, ".*Cannot use both timestamp.column.name and timestamp.columns.mapping.*");
-    assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot use table.include.list with legacy timestamp.column.name.*");
+    assertErrors(3); // Total errors: 1 from timestamp.column.name + 1 from timestamp.columns.mapping + 1 from table.include.list
+    assertErrors(TIMESTAMP_COLUMN_NAME_CONFIG, 1);
+    assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
+    assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
+    assertErrorMatches(TIMESTAMP_COLUMN_NAME_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
+    assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
+    assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
   }
   
   @Test
@@ -358,14 +357,13 @@ public class JdbcSourceConnectorValidationTest {
     
     validate();
     
-    assertErrors(4); // Total errors: 2 from incrementing.column.name + 1 from incrementing.column.mapping + 1 from table.include.list
-    assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 2); // Conflict with mapping AND include list
-    assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1); // Conflict with incrementing.column.name
-    assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1); // Conflict with legacy incrementing.column.name
-    assertErrorMatches(INCREMENTING_COLUMN_NAME_CONFIG, ".*Cannot use both incrementing.column.name and incrementing.column.mapping.*");
-    assertErrorMatches(INCREMENTING_COLUMN_NAME_CONFIG, ".*Cannot use table.include.list with legacy incrementing.column.name.*");
-    assertErrorMatches(INCREMENTING_COLUMN_MAPPING_CONFIG, ".*Cannot use both incrementing.column.name and incrementing.column.mapping.*");
-    assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot use table.include.list with legacy incrementing.column.name.*");
+    assertErrors(3); // Total errors: 1 from incrementing.column.name + 1 from incrementing.column.mapping + 1 from table.include.list
+    assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
+    assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1);
+    assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
+    assertErrorMatches(INCREMENTING_COLUMN_NAME_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
+    assertErrorMatches(INCREMENTING_COLUMN_MAPPING_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
+    assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
   }
 
   // Tests for legacy table filtering with new column mapping conflicts
@@ -381,8 +379,8 @@ public class JdbcSourceConnectorValidationTest {
     assertErrors(2);
     assertErrors(TABLE_WHITELIST_CONFIG, 1);
     assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
-    assertErrorMatches(TABLE_WHITELIST_CONFIG, ".*Cannot use legacy table filtering.*with new column mapping.*");
-    assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG, ".*Cannot use legacy table filtering.*with new column mapping.*");
+    assertErrorMatches(TABLE_WHITELIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
+    assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
   }
   
   @Test
@@ -396,8 +394,8 @@ public class JdbcSourceConnectorValidationTest {
     assertErrors(2);
     assertErrors(TABLE_WHITELIST_CONFIG, 1);
     assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1);
-    assertErrorMatches(TABLE_WHITELIST_CONFIG, ".*Cannot use legacy table filtering.*with new column mapping.*");
-    assertErrorMatches(INCREMENTING_COLUMN_MAPPING_CONFIG, ".*Cannot use legacy table filtering.*with new column mapping.*");
+    assertErrorMatches(TABLE_WHITELIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
+    assertErrorMatches(INCREMENTING_COLUMN_MAPPING_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
   }
   
   @Test
@@ -411,8 +409,8 @@ public class JdbcSourceConnectorValidationTest {
     assertErrors(2);
     assertErrors(TABLE_BLACKLIST_CONFIG, 1);
     assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
-    assertErrorMatches(TABLE_BLACKLIST_CONFIG, ".*Cannot use legacy table filtering.*with new column mapping.*");
-    assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG, ".*Cannot use legacy table filtering.*with new column mapping.*");
+    assertErrorMatches(TABLE_BLACKLIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
+    assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
   }
   
   @Test
@@ -426,8 +424,8 @@ public class JdbcSourceConnectorValidationTest {
     assertErrors(2);
     assertErrors(TABLE_BLACKLIST_CONFIG, 1);
     assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1);
-    assertErrorMatches(TABLE_BLACKLIST_CONFIG, ".*Cannot use legacy table filtering.*with new column mapping.*");
-    assertErrorMatches(INCREMENTING_COLUMN_MAPPING_CONFIG, ".*Cannot use legacy table filtering.*with new column mapping.*");
+    assertErrorMatches(TABLE_BLACKLIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
+    assertErrorMatches(INCREMENTING_COLUMN_MAPPING_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
   }
   
   @Test
@@ -443,9 +441,9 @@ public class JdbcSourceConnectorValidationTest {
     assertErrors(TABLE_WHITELIST_CONFIG, 1);
     assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
     assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1);
-    assertErrorMatches(TABLE_WHITELIST_CONFIG, ".*Cannot use legacy table filtering.*with new column mapping.*");
-    assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG, ".*Cannot use legacy table filtering.*with new column mapping.*");
-    assertErrorMatches(INCREMENTING_COLUMN_MAPPING_CONFIG, ".*Cannot use legacy table filtering.*with new column mapping.*");
+    assertErrorMatches(TABLE_WHITELIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
+    assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
+    assertErrorMatches(INCREMENTING_COLUMN_MAPPING_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
   }
   
   @Test
@@ -509,8 +507,8 @@ public class JdbcSourceConnectorValidationTest {
     assertErrors(2);
     assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
     assertErrors(TIMESTAMP_COLUMN_NAME_CONFIG, 1);
-    assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot use table.include.list with legacy timestamp.column.name.*");
-    assertErrorMatches(TIMESTAMP_COLUMN_NAME_CONFIG, ".*Cannot use table.include.list with legacy timestamp.column.name.*");
+    assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
+    assertErrorMatches(TIMESTAMP_COLUMN_NAME_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
   }
   
   @Test
@@ -524,8 +522,8 @@ public class JdbcSourceConnectorValidationTest {
     assertErrors(2);
     assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
     assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
-    assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot use table.include.list with legacy incrementing.column.name.*");
-    assertErrorMatches(INCREMENTING_COLUMN_NAME_CONFIG, ".*Cannot use table.include.list with legacy incrementing.column.name.*");
+    assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
+    assertErrorMatches(INCREMENTING_COLUMN_NAME_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
   }
   
   @Test
@@ -549,11 +547,13 @@ public class JdbcSourceConnectorValidationTest {
     
     validate();
     
-    assertErrors(2); // 1 error for timestamp.column.name + 1 error for table.include.list
+    assertErrors(3); // 1 error for timestamp.column.name + 1 error for table.include.list + 1 error for incrementing.column.mapping
     assertErrors(TIMESTAMP_COLUMN_NAME_CONFIG, 1);
     assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
-    assertErrorMatches(TIMESTAMP_COLUMN_NAME_CONFIG, ".*Cannot use table.include.list with legacy timestamp.column.name.*");
-    assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot use table.include.list with legacy timestamp.column.name.*");
+    assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(TIMESTAMP_COLUMN_NAME_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
+    assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
+    assertErrorMatches(INCREMENTING_COLUMN_MAPPING_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
   }
   
   @Test
@@ -565,11 +565,13 @@ public class JdbcSourceConnectorValidationTest {
     
     validate();
     
-    assertErrors(2); // 1 error for incrementing.column.name + 1 error for table.include.list
+    assertErrors(3); // 1 error for incrementing.column.name + 1 error for table.include.list + 1 error for timestamp.columns.mapping
     assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
     assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
-    assertErrorMatches(INCREMENTING_COLUMN_NAME_CONFIG, ".*Cannot use table.include.list with legacy incrementing.column.name.*");
-    assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot use table.include.list with legacy incrementing.column.name.*");
+    assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(INCREMENTING_COLUMN_NAME_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
+    assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
+    assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
   }
 
   

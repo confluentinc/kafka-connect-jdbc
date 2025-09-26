@@ -42,8 +42,6 @@ public class JdbcSourceConnectorValidationTest {
     props.put("name", "jdbc-connector");
     props.put(CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
     props.put(CONNECTION_USER_CONFIG, "testUser");
-    props.put(MODE_CONFIG, MODE_BULK);
-    props.put(TABLE_INCLUDE_LIST_CONFIG, TABLE_TEST_TABLE_ID.toString());
   }
 
   protected void validate() {
@@ -109,6 +107,7 @@ public class JdbcSourceConnectorValidationTest {
 
   @Test
   public void validate_withValidRegexInTableIncludeList_noErrors() {
+    props.put(MODE_CONFIG, MODE_BULK);
     props.put(TABLE_INCLUDE_LIST_CONFIG, TABLE_TEST_TABLE_ID.toString());
 
     validate();
@@ -119,6 +118,7 @@ public class JdbcSourceConnectorValidationTest {
   @Test
   public void validate_withValidModeIncrementingWithoutColumn_setsError() {
     props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(TABLE_WHITELIST_CONFIG, "table1,table2"); // Add table filtering
 
     validate();
 
@@ -130,6 +130,7 @@ public class JdbcSourceConnectorValidationTest {
   @Test
   public void validate_withValidModeTimestampWithoutTsCol_setsError() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(TABLE_WHITELIST_CONFIG, "table1,table2"); // Add table filtering
 
     validate();
 
@@ -141,6 +142,7 @@ public class JdbcSourceConnectorValidationTest {
   @Test
   public void validate_withValidModeTimestampWithTsCol_noErrors() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*"); // Add table filtering for new config
     props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
 
     validate();
@@ -151,6 +153,7 @@ public class JdbcSourceConnectorValidationTest {
   @Test
   public void validate_withValidModeTimestampIncrementingWithoutTsCol_setsError() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(TABLE_WHITELIST_CONFIG, "table1,table2"); // Add table filtering
 
     validate();
 
@@ -162,6 +165,7 @@ public class JdbcSourceConnectorValidationTest {
   @Test
   public void validate_withValidModeTimestampIncrementingWithTsCol_setsError() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*"); // Add table filtering for new config
     props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
 
     validate();
@@ -174,9 +178,9 @@ public class JdbcSourceConnectorValidationTest {
   @Test
   public void validate_withValidModeIncrementingWithTimestampCol_setsError() {
     props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*"); // Add table filtering for new config
     props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
     props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
-    // Keep the table filtering config from beforeEach to avoid early validation failure
 
     validate();
 
@@ -188,6 +192,7 @@ public class JdbcSourceConnectorValidationTest {
   @Test
   public void validate_withValidModeTimestampWithIncrementingCol_setsError() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*"); // Add table filtering for new config
     props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
     props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
 
@@ -201,6 +206,7 @@ public class JdbcSourceConnectorValidationTest {
   @Test
   public void validate_withValidModeBulk_noErrors() {
     props.put(MODE_CONFIG, MODE_BULK);
+    props.put(TABLE_WHITELIST_CONFIG, "table1,table2"); // Add table filtering
 
     validate();
 
@@ -224,6 +230,7 @@ public class JdbcSourceConnectorValidationTest {
   @Test
   public void validate_withBothWhitelistAndIncludeList_setsError() {
     // Set both old whitelist and new include.list configs
+    props.put(MODE_CONFIG, MODE_BULK);
     props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
     props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
     
@@ -239,6 +246,7 @@ public class JdbcSourceConnectorValidationTest {
   @Test
   public void validate_withBothBlacklistAndExcludeList_setsError() {
     // Set old blacklist and new exclude.list configs along with include.list
+    props.put(MODE_CONFIG, MODE_BULK);
     props.put(TABLE_BLACKLIST_CONFIG, "table1,table2");
     props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
     props.put(TABLE_EXCLUDE_LIST_CONFIG, "database.schema.excluded.*");
@@ -255,8 +263,8 @@ public class JdbcSourceConnectorValidationTest {
   @Test
   public void validate_withOnlyWhitelist_noErrors() {
     // Use only old whitelist config
+    props.put(MODE_CONFIG, MODE_BULK); // Add mode configuration
     props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
-    props.remove(TABLE_INCLUDE_LIST_CONFIG); // Remove new config
     
     validate();
     
@@ -266,8 +274,8 @@ public class JdbcSourceConnectorValidationTest {
   @Test
   public void validate_withOnlyBlacklist_noErrors() {
     // Use only old blacklist config
+    props.put(MODE_CONFIG, MODE_BULK); // Add mode configuration
     props.put(TABLE_BLACKLIST_CONFIG, "table1,table2");
-    props.remove(TABLE_INCLUDE_LIST_CONFIG); // Remove new config
     
     validate();
     
@@ -277,6 +285,7 @@ public class JdbcSourceConnectorValidationTest {
   @Test
   public void validate_withIncludeAndExcludeList_noErrors() {
     // Use new configs together (include.list and exclude.list)
+    props.put(MODE_CONFIG, MODE_BULK); // Add mode configuration
     props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
     props.put(TABLE_EXCLUDE_LIST_CONFIG, "database.schema.excluded.*");
     
@@ -289,6 +298,7 @@ public class JdbcSourceConnectorValidationTest {
   public void validate_withOnlyExcludeListAndNoIncludeList_setsError() {
     // Use only exclude.list without include.list
     props.remove(TABLE_INCLUDE_LIST_CONFIG);
+    props.put(MODE_CONFIG, MODE_BULK);
     props.put(TABLE_EXCLUDE_LIST_CONFIG, "database.schema.excluded.*");
     
     validate();
@@ -305,6 +315,8 @@ public class JdbcSourceConnectorValidationTest {
     props.remove(TABLE_EXCLUDE_LIST_CONFIG);
     props.remove(TABLE_WHITELIST_CONFIG);
     props.remove(TABLE_BLACKLIST_CONFIG);
+
+    props.put(MODE_CONFIG, MODE_BULK);
     
     validate();
     
@@ -320,37 +332,47 @@ public class JdbcSourceConnectorValidationTest {
   
   @Test
   public void validate_withBothTimestampColumnNameAndMapping_setsError() {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*"); // Use new table filtering to avoid legacy conflict
     props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts_col");
     props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
     
     validate();
     
-    assertErrors(2);
-    assertErrors(TIMESTAMP_COLUMN_NAME_CONFIG, 1);
-    assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
+    assertErrors(4); // Total errors: 2 from timestamp.column.name + 1 from timestamp.columns.mapping + 1 from table.include.list
+    assertErrors(TIMESTAMP_COLUMN_NAME_CONFIG, 2); // Conflict with mapping AND include list
+    assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1); // Conflict with timestamp.column.name
+    assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1); // Conflict with legacy timestamp.column.name
     assertErrorMatches(TIMESTAMP_COLUMN_NAME_CONFIG, ".*Cannot use both timestamp.column.name and timestamp.columns.mapping.*");
+    assertErrorMatches(TIMESTAMP_COLUMN_NAME_CONFIG, ".*Cannot use table.include.list with legacy timestamp.column.name.*");
     assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG, ".*Cannot use both timestamp.column.name and timestamp.columns.mapping.*");
+    assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot use table.include.list with legacy timestamp.column.name.*");
   }
   
   @Test
   public void validate_withBothIncrementingColumnNameAndMapping_setsError() {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*"); // Use new table filtering to avoid legacy conflict
     props.put(INCREMENTING_COLUMN_NAME_CONFIG, "inc_col");
     props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
     
     validate();
     
-    assertErrors(2);
-    assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
-    assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1);
+    assertErrors(4); // Total errors: 2 from incrementing.column.name + 1 from incrementing.column.mapping + 1 from table.include.list
+    assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 2); // Conflict with mapping AND include list
+    assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1); // Conflict with incrementing.column.name
+    assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1); // Conflict with legacy incrementing.column.name
     assertErrorMatches(INCREMENTING_COLUMN_NAME_CONFIG, ".*Cannot use both incrementing.column.name and incrementing.column.mapping.*");
+    assertErrorMatches(INCREMENTING_COLUMN_NAME_CONFIG, ".*Cannot use table.include.list with legacy incrementing.column.name.*");
     assertErrorMatches(INCREMENTING_COLUMN_MAPPING_CONFIG, ".*Cannot use both incrementing.column.name and incrementing.column.mapping.*");
+    assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot use table.include.list with legacy incrementing.column.name.*");
   }
 
   // Tests for legacy table filtering with new column mapping conflicts
   
   @Test
   public void validate_withWhitelistAndTimestampColumnMapping_setsError() {
-    props.remove(TABLE_INCLUDE_LIST_CONFIG); // Remove conflicting table filtering config
+    props.put(MODE_CONFIG, MODE_TIMESTAMP); // Add mode configuration
     props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
     props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
     
@@ -365,7 +387,7 @@ public class JdbcSourceConnectorValidationTest {
   
   @Test
   public void validate_withWhitelistAndIncrementingColumnMapping_setsError() {
-    props.remove(TABLE_INCLUDE_LIST_CONFIG); // Remove conflicting table filtering config
+    props.put(MODE_CONFIG, MODE_INCREMENTING); // Add mode configuration
     props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
     props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
     
@@ -380,7 +402,7 @@ public class JdbcSourceConnectorValidationTest {
   
   @Test
   public void validate_withBlacklistAndTimestampColumnMapping_setsError() {
-    props.remove(TABLE_INCLUDE_LIST_CONFIG); // Remove conflicting table filtering config
+    props.put(MODE_CONFIG, MODE_TIMESTAMP); // Add mode configuration
     props.put(TABLE_BLACKLIST_CONFIG, "table1,table2");
     props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
     
@@ -395,7 +417,7 @@ public class JdbcSourceConnectorValidationTest {
   
   @Test
   public void validate_withBlacklistAndIncrementingColumnMapping_setsError() {
-    props.remove(TABLE_INCLUDE_LIST_CONFIG); // Remove conflicting table filtering config
+    props.put(MODE_CONFIG, MODE_INCREMENTING); // Add mode configuration
     props.put(TABLE_BLACKLIST_CONFIG, "table1,table2");
     props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
     
@@ -410,7 +432,7 @@ public class JdbcSourceConnectorValidationTest {
   
   @Test
   public void validate_withWhitelistAndBothColumnMappings_setsError() {
-    props.remove(TABLE_INCLUDE_LIST_CONFIG); // Remove conflicting table filtering config
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING); // Add mode configuration
     props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
     props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
     props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
@@ -442,7 +464,6 @@ public class JdbcSourceConnectorValidationTest {
   @Test
   public void validate_withWhitelistAndLegacyColumnNames_noErrors() {
     // This should be allowed - legacy table filtering with legacy column names
-    props.remove(TABLE_INCLUDE_LIST_CONFIG); // Remove conflicting table filtering config
     props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING); // Use mode that supports both columns
     props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
     props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts_col");
@@ -457,6 +478,7 @@ public class JdbcSourceConnectorValidationTest {
   
   @Test
   public void validate_withValidModeTimestampWithLegacyColumnName_noErrors() {
+    props.put(TABLE_WHITELIST_CONFIG, "table1,table2"); // Add legacy table filtering
     props.put(MODE_CONFIG, MODE_TIMESTAMP);
     props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts_col");
     
@@ -467,6 +489,7 @@ public class JdbcSourceConnectorValidationTest {
   
   @Test
   public void validate_withValidModeIncrementingWithLegacyColumnName_noErrors() {
+    props.put(TABLE_WHITELIST_CONFIG, "table1,table2"); // Add legacy table filtering
     props.put(MODE_CONFIG, MODE_INCREMENTING);
     props.put(INCREMENTING_COLUMN_NAME_CONFIG, "inc_col");
     
@@ -508,6 +531,7 @@ public class JdbcSourceConnectorValidationTest {
   @Test
   public void validate_withValidModeTimestampIncrementingWithLegacyColumnNames_noErrors() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(TABLE_WHITELIST_CONFIG, "table1,table2"); // Add table filtering
     props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts_col");
     props.put(INCREMENTING_COLUMN_NAME_CONFIG, "inc_col");
     
@@ -517,32 +541,42 @@ public class JdbcSourceConnectorValidationTest {
   }
   
   @Test
-  public void validate_withValidModeTimestampIncrementingWithMixedConfigs_noErrors() {
+  public void validate_withValidModeTimestampIncrementingWithMixedConfigs_setsError() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
-    props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts_col"); // Legacy
-    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1"); // New
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*"); // New table filtering
+    props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts_col"); // Legacy column name - CONFLICT with include.list
+    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1"); // New column mapping
     
     validate();
     
-    assertNoErrors();
+    assertErrors(2); // 1 error for timestamp.column.name + 1 error for table.include.list
+    assertErrors(TIMESTAMP_COLUMN_NAME_CONFIG, 1);
+    assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
+    assertErrorMatches(TIMESTAMP_COLUMN_NAME_CONFIG, ".*Cannot use table.include.list with legacy timestamp.column.name.*");
+    assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot use table.include.list with legacy timestamp.column.name.*");
   }
   
   @Test
-  public void validate_withValidModeTimestampIncrementingWithMixedConfigsReverse_noErrors() {
+  public void validate_withValidModeTimestampIncrementingWithMixedConfigsReverse_setsError() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
-    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]"); // New
-    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "inc_col"); // Legacy
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*"); // New table filtering
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]"); // New column mapping
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "inc_col"); // Legacy column name - CONFLICT with include.list
     
     validate();
     
-    assertNoErrors();
+    assertErrors(2); // 1 error for incrementing.column.name + 1 error for table.include.list
+    assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
+    assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
+    assertErrorMatches(INCREMENTING_COLUMN_NAME_CONFIG, ".*Cannot use table.include.list with legacy incrementing.column.name.*");
+    assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot use table.include.list with legacy incrementing.column.name.*");
   }
-  
-  // Tests for "not provided when not required" validation
+
   
   @Test
   public void validate_withModeBulkWithLegacyTimestampColumn_setsError() {
     props.put(MODE_CONFIG, MODE_BULK);
+    props.put(TABLE_WHITELIST_CONFIG, "table1,table2"); // Add legacy table filtering
     props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts_col");
     
     validate();
@@ -555,6 +589,7 @@ public class JdbcSourceConnectorValidationTest {
   @Test
   public void validate_withModeBulkWithLegacyIncrementingColumn_setsError() {
     props.put(MODE_CONFIG, MODE_BULK);
+    props.put(TABLE_WHITELIST_CONFIG, "table1,table2"); // Add legacy table filtering
     props.put(INCREMENTING_COLUMN_NAME_CONFIG, "inc_col");
     
     validate();
@@ -567,6 +602,7 @@ public class JdbcSourceConnectorValidationTest {
   @Test
   public void validate_withModeBulkWithNewTimestampMapping_setsError() {
     props.put(MODE_CONFIG, MODE_BULK);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
     props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
     
     validate();
@@ -579,6 +615,7 @@ public class JdbcSourceConnectorValidationTest {
   @Test
   public void validate_withModeBulkWithNewIncrementingMapping_setsError() {
     props.put(MODE_CONFIG, MODE_BULK);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
     props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
     
     validate();

@@ -77,7 +77,7 @@ public class PopulateTableToTsColsMapTest {
     List<String> timestampMappings = Arrays.asList(".*users.*:[created_at]", ".*orders.*:[updated_at]");
     
     when(config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).thenReturn(tables);
-    when(config.timestampColMappingRegexes()).thenReturn(timestampMappings);
+    when(config.timestampColumnMapping()).thenReturn(timestampMappings);
     
     // Mock dialect to return proper TableId objects
     when(dialect.parseTableIdentifier("mydb.myschema.users"))
@@ -104,7 +104,7 @@ public class PopulateTableToTsColsMapTest {
     );
     
     when(config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).thenReturn(tables);
-    when(config.timestampColMappingRegexes()).thenReturn(timestampMappings);
+    when(config.timestampColumnMapping()).thenReturn(timestampMappings);
     
     // Mock dialect to return proper TableId objects
     when(dialect.parseTableIdentifier("mydb.myschema.users"))
@@ -130,7 +130,7 @@ public class PopulateTableToTsColsMapTest {
     List<String> timestampMappings = Arrays.asList(".*users.*:[created_at]", ".*orders.*:[updated_at]");
     
     when(config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).thenReturn(tables);
-    when(config.timestampColMappingRegexes()).thenReturn(timestampMappings);
+    when(config.timestampColumnMapping()).thenReturn(timestampMappings);
     
     // Mock dialect to return proper TableId objects (quoted)
     when(dialect.parseTableIdentifier("\"mydb\".\"myschema\".\"users\""))
@@ -154,7 +154,7 @@ public class PopulateTableToTsColsMapTest {
     List<String> timestampMappings = Arrays.asList(".*users.*:[created_at]", ".*orders.*:[updated_at]");
     
     when(config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).thenReturn(tables);
-    when(config.timestampColMappingRegexes()).thenReturn(timestampMappings);
+    when(config.timestampColumnMapping()).thenReturn(timestampMappings);
     
     // Mock dialect to return proper TableId objects
     when(dialect.parseTableIdentifier("mydb.myschema.products"))
@@ -178,7 +178,7 @@ public class PopulateTableToTsColsMapTest {
     );
     
     when(config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).thenReturn(tables);
-    when(config.timestampColMappingRegexes()).thenReturn(timestampMappings);
+    when(config.timestampColumnMapping()).thenReturn(timestampMappings);
     
     // Mock dialect to return proper TableId objects
     when(dialect.parseTableIdentifier("mydb.myschema.users"))
@@ -200,7 +200,7 @@ public class PopulateTableToTsColsMapTest {
     List<String> timestampMappings = Collections.emptyList();
     
     when(config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).thenReturn(tables);
-    when(config.timestampColMappingRegexes()).thenReturn(timestampMappings);
+    when(config.timestampColumnMapping()).thenReturn(timestampMappings);
 
     // Execute
     task.populateTableToTsColsMap();
@@ -216,7 +216,7 @@ public class PopulateTableToTsColsMapTest {
     List<String> timestampMappings = Arrays.asList(".*users.*:[created_at]");
     
     when(config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).thenReturn(tables);
-    when(config.timestampColMappingRegexes()).thenReturn(timestampMappings);
+    when(config.timestampColumnMapping()).thenReturn(timestampMappings);
 
     // Execute
     task.populateTableToTsColsMap();
@@ -235,7 +235,7 @@ public class PopulateTableToTsColsMapTest {
     );
     
     when(config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).thenReturn(tables);
-    when(config.timestampColMappingRegexes()).thenReturn(timestampMappings);
+    when(config.timestampColumnMapping()).thenReturn(timestampMappings);
     
     // Mock dialect to return proper TableId objects
     when(dialect.parseTableIdentifier("mydb.analytics.user_events"))
@@ -261,7 +261,7 @@ public class PopulateTableToTsColsMapTest {
     List<String> timestampMappings = Arrays.asList(".*users.*:[created_at]");
     
     when(config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).thenReturn(tables);
-    when(config.timestampColMappingRegexes()).thenReturn(timestampMappings);
+    when(config.timestampColumnMapping()).thenReturn(timestampMappings);
     
     // Mock dialect to return proper TableId objects (no catalog)
     when(dialect.parseTableIdentifier("myschema.users"))
@@ -282,7 +282,7 @@ public class PopulateTableToTsColsMapTest {
     List<String> timestampMappings = Arrays.asList("users:[created_at]");
     
     when(config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).thenReturn(tables);
-    when(config.timestampColMappingRegexes()).thenReturn(timestampMappings);
+    when(config.timestampColumnMapping()).thenReturn(timestampMappings);
     
     // Mock dialect to return proper TableId objects (no catalog, no schema)
     when(dialect.parseTableIdentifier("users"))

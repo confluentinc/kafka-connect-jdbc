@@ -282,6 +282,10 @@ public class JdbcSourceConnectorValidation {
         && !timestampColumnName.get(0).trim().isEmpty();
     boolean hasNewTimestampConfig = timestampColumnsMapping != null 
         && !timestampColumnsMapping.isEmpty();
+    boolean hasLegacyIncrementingConfig = incrementingColumnName != null 
+        && !incrementingColumnName.trim().isEmpty();
+    boolean hasNewIncrementingConfig = incrementingColumnMapping != null 
+        && !incrementingColumnMapping.isEmpty();
     
     if (hasLegacyTimestampConfig && hasNewTimestampConfig) {
       String msg = "Cannot use both timestamp.column.name and timestamp.columns.mapping. "
@@ -291,10 +295,25 @@ public class JdbcSourceConnectorValidation {
       isValid = false;
     }
 
-    boolean hasLegacyIncrementingConfig = incrementingColumnName != null 
-        && !incrementingColumnName.trim().isEmpty();
-    boolean hasNewIncrementingConfig = incrementingColumnMapping != null 
-        && !incrementingColumnMapping.isEmpty();
+    // Check for table.include.list with legacy column configurations
+    Set<String> includeListSet = getTableIncludeListSet();
+    boolean hasNewTableFiltering = includeListSet != null;
+    
+    if (hasNewTableFiltering && hasLegacyTimestampConfig) {
+      String msg = "Cannot use table.include.list with legacy timestamp.column.name. "
+          + "Use timestamp.columns.mapping with table.include.list.";
+      addConfigError(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG, msg);
+      addConfigError(JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG, msg);
+      isValid = false;
+    }
+    
+    if (hasNewTableFiltering && hasLegacyIncrementingConfig) {
+      String msg = "Cannot use table.include.list with legacy incrementing.column.name. "
+          + "Use incrementing.column.mapping with table.include.list.";
+      addConfigError(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG, msg);
+      addConfigError(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG, msg);
+      isValid = false;
+    }
     
     if (hasLegacyIncrementingConfig && hasNewIncrementingConfig) {
       String msg = "Cannot use both incrementing.column.name and incrementing.column.mapping. "

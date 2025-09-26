@@ -476,6 +476,36 @@ public class JdbcSourceConnectorValidationTest {
   }
   
   @Test
+  public void validate_withIncludeListAndLegacyTimestampColumnName_setsError() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
+    props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts_col");
+    
+    validate();
+    
+    assertErrors(2);
+    assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
+    assertErrors(TIMESTAMP_COLUMN_NAME_CONFIG, 1);
+    assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot use table.include.list with legacy timestamp.column.name.*");
+    assertErrorMatches(TIMESTAMP_COLUMN_NAME_CONFIG, ".*Cannot use table.include.list with legacy timestamp.column.name.*");
+  }
+  
+  @Test
+  public void validate_withIncludeListAndLegacyIncrementingColumnName_setsError() {
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "inc_col");
+    
+    validate();
+    
+    assertErrors(2);
+    assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
+    assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
+    assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot use table.include.list with legacy incrementing.column.name.*");
+    assertErrorMatches(INCREMENTING_COLUMN_NAME_CONFIG, ".*Cannot use table.include.list with legacy incrementing.column.name.*");
+  }
+  
+  @Test
   public void validate_withValidModeTimestampIncrementingWithLegacyColumnNames_noErrors() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
     props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts_col");

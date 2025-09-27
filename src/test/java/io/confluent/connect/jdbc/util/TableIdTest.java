@@ -25,7 +25,6 @@ public class TableIdTest {
   public void testToStringWithQuotes() {
     TableId tableId = new TableId("mydb", "myschema", "mytable");
     String result = tableId.toString();
-    // Should be quoted: "mydb"."myschema"."mytable"
     assertEquals("\"mydb\".\"myschema\".\"mytable\"", result);
   }
 
@@ -33,7 +32,6 @@ public class TableIdTest {
   public void testToUnquotedString() {
     TableId tableId = new TableId("mydb", "myschema", "mytable");
     String result = tableId.toUnquotedString();
-    // Should be unquoted: mydb.myschema.mytable
     assertEquals("mydb.myschema.mytable", result);
   }
 
@@ -41,7 +39,6 @@ public class TableIdTest {
   public void testToUnquotedStringWithNullSchema() {
     TableId tableId = new TableId("mydb", null, "mytable");
     String result = tableId.toUnquotedString();
-    // Should be unquoted: mydb.mytable
     assertEquals("mydb.mytable", result);
   }
 
@@ -49,7 +46,6 @@ public class TableIdTest {
   public void testToUnquotedStringWithNullCatalog() {
     TableId tableId = new TableId(null, "myschema", "mytable");
     String result = tableId.toUnquotedString();
-    // Should be unquoted: myschema.mytable
     assertEquals("myschema.mytable", result);
   }
 
@@ -57,7 +53,6 @@ public class TableIdTest {
   public void testToUnquotedStringWithOnlyTable() {
     TableId tableId = new TableId(null, null, "mytable");
     String result = tableId.toUnquotedString();
-    // Should be unquoted: mytable
     assertEquals("mytable", result);
   }
 }

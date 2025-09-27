@@ -183,7 +183,7 @@ public class JdbcSourceConnector extends SourceConnector {
     } else {
       log.info("No custom query provided, generating task configurations for tables");
       List<TableId> currentTables = tableMonitorThread.tables();
-      log.info("Current tables from tableMonitorThread: {}", currentTables);
+      log.trace("Current tables from tableMonitorThread: {}", currentTables);
       log.info("Number of tables found: {}", currentTables != null ? currentTables.size() : 0);
       
       if (currentTables == null || currentTables.isEmpty()) {

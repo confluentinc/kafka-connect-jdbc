@@ -263,10 +263,9 @@ public class TableMonitorThread extends Thread {
     final List<TableId> filteredTables;
     
     if (useRegexFiltering) {
-      // New regex-based filtering
-      log.info("Applying regex-based include/exclude filters to tables");
-      log.info("Include regex patterns: {}", includeListRegex);
-      log.info("Exclude regex patterns: {}", excludeListRegex);
+      log.debug("Applying regex-based include/exclude filters to tables");
+      log.debug("Include regex patterns: {}", includeListRegex);
+      log.debug("Exclude regex patterns: {}", excludeListRegex);
       filteredTables = TableCollectionUtils.filterTables(
           allTables, 
           includeListRegex != null ? includeListRegex : java.util.Collections.emptySet(),
@@ -275,9 +274,6 @@ public class TableMonitorThread extends Thread {
       log.info("Regex filtering resulted in {} tables from {} total tables", 
                filteredTables.size(), allTables.size());
       log.info("Filtered tables: {}", filteredTables);
-      for (TableId table : filteredTables) {
-        log.info("Table {} passed regex filters", table);
-      }
     } else {
       // Legacy exact-match filtering
       filteredTables = applyLegacyFiltering(allTables);

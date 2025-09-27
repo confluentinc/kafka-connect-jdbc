@@ -52,7 +52,6 @@ public class PopulateTableToTsColsMapTest {
     dialect = mock(GenericDatabaseDialect.class);
     tableToTsCols = new HashMap<>();
     
-    // Use reflection to set private fields for testing
     try {
       java.lang.reflect.Field configField = JdbcSourceTask.class.getDeclaredField("config");
       configField.setAccessible(true);
@@ -72,23 +71,19 @@ public class PopulateTableToTsColsMapTest {
 
   @Test
   public void testPopulateTableToTsColsMapWithSingleColumn() throws Exception {
-    // Setup
     List<String> tables = Arrays.asList("mydb.myschema.users", "mydb.myschema.orders");
     List<String> timestampMappings = Arrays.asList(".*users.*:[created_at]", ".*orders.*:[updated_at]");
     
     when(config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).thenReturn(tables);
     when(config.timestampColumnMapping()).thenReturn(timestampMappings);
     
-    // Mock dialect to return proper TableId objects
     when(dialect.parseTableIdentifier("mydb.myschema.users"))
         .thenReturn(new TableId("mydb", "myschema", "users"));
     when(dialect.parseTableIdentifier("mydb.myschema.orders"))
         .thenReturn(new TableId("mydb", "myschema", "orders"));
 
-    // Execute
     task.populateTableToTsColsMap();
 
-    // Verify
     assertEquals(2, tableToTsCols.size());
     assertEquals(Arrays.asList("created_at"), tableToTsCols.get("mydb.myschema.users"));
     assertEquals(Arrays.asList("updated_at"), tableToTsCols.get("mydb.myschema.orders"));
@@ -96,7 +91,6 @@ public class PopulateTableToTsColsMapTest {
 
   @Test
   public void testPopulateTableToTsColsMapWithMultipleColumns() throws Exception {
-    // Setup
     List<String> tables = Arrays.asList("mydb.myschema.users", "mydb.myschema.orders");
     List<String> timestampMappings = Arrays.asList(
         ".*users.*:[created_at|updated_at|modified_at]",
@@ -106,16 +100,13 @@ public class PopulateTableToTsColsMapTest {
     when(config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).thenReturn(tables);
     when(config.timestampColumnMapping()).thenReturn(timestampMappings);
     
-    // Mock dialect to return proper TableId objects
     when(dialect.parseTableIdentifier("mydb.myschema.users"))
         .thenReturn(new TableId("mydb", "myschema", "users"));
     when(dialect.parseTableIdentifier("mydb.myschema.orders"))
         .thenReturn(new TableId("mydb", "myschema", "orders"));
 
-    // Execute
     task.populateTableToTsColsMap();
 
-    // Verify
     assertEquals(2, tableToTsCols.size());
     assertEquals(Arrays.asList("created_at", "updated_at", "modified_at"), 
                  tableToTsCols.get("mydb.myschema.users"));
@@ -125,7 +116,6 @@ public class PopulateTableToTsColsMapTest {
 
   @Test
   public void testPopulateTableToTsColsMapWithQuotedTableNames() throws Exception {
-    // Setup - Test that quoted table names work correctly with toUnquotedString()
     List<String> tables = Arrays.asList("\"mydb\".\"myschema\".\"users\"", "\"mydb\".\"myschema\".\"orders\"");
     List<String> timestampMappings = Arrays.asList(".*users.*:[created_at]", ".*orders.*:[updated_at]");
     
@@ -138,10 +128,8 @@ public class PopulateTableToTsColsMapTest {
     when(dialect.parseTableIdentifier("\"mydb\".\"myschema\".\"orders\""))
         .thenReturn(new TableId("mydb", "myschema", "orders"));
 
-    // Execute
     task.populateTableToTsColsMap();
 
-    // Verify - should match because toUnquotedString() converts to "mydb.myschema.users"
     assertEquals(2, tableToTsCols.size());
     assertEquals(Arrays.asList("created_at"), tableToTsCols.get("\"mydb\".\"myschema\".\"users\""));
     assertEquals(Arrays.asList("updated_at"), tableToTsCols.get("\"mydb\".\"myschema\".\"orders\""));
@@ -149,27 +137,22 @@ public class PopulateTableToTsColsMapTest {
 
   @Test
   public void testPopulateTableToTsColsMapWithNoMatches() throws Exception {
-    // Setup
     List<String> tables = Arrays.asList("mydb.myschema.products");
     List<String> timestampMappings = Arrays.asList(".*users.*:[created_at]", ".*orders.*:[updated_at]");
     
     when(config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).thenReturn(tables);
     when(config.timestampColumnMapping()).thenReturn(timestampMappings);
     
-    // Mock dialect to return proper TableId objects
     when(dialect.parseTableIdentifier("mydb.myschema.products"))
         .thenReturn(new TableId("mydb", "myschema", "products"));
 
-    // Execute
     task.populateTableToTsColsMap();
 
-    // Verify - no matches should result in empty map
     assertEquals(0, tableToTsCols.size());
   }
 
   @Test
   public void testPopulateTableToTsColsMapWithMultipleMatches() throws Exception {
-    // Setup - table matches multiple regexes, should use first match
     List<String> tables = Arrays.asList("mydb.myschema.users");
     List<String> timestampMappings = Arrays.asList(
         ".*users.*:[created_at|updated_at]",
@@ -180,14 +163,11 @@ public class PopulateTableToTsColsMapTest {
     when(config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).thenReturn(tables);
     when(config.timestampColumnMapping()).thenReturn(timestampMappings);
     
-    // Mock dialect to return proper TableId objects
     when(dialect.parseTableIdentifier("mydb.myschema.users"))
         .thenReturn(new TableId("mydb", "myschema", "users"));
 
-    // Execute
     task.populateTableToTsColsMap();
 
-    // Verify - should use first match (.*users.*)
     assertEquals(1, tableToTsCols.size());
     assertEquals(Arrays.asList("created_at", "updated_at"), 
                  tableToTsCols.get("mydb.myschema.users"));
@@ -195,39 +175,32 @@ public class PopulateTableToTsColsMapTest {
 
   @Test
   public void testPopulateTableToTsColsMapWithEmptyMappings() throws Exception {
-    // Setup
     List<String> tables = Arrays.asList("mydb.myschema.users");
     List<String> timestampMappings = Collections.emptyList();
     
     when(config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).thenReturn(tables);
     when(config.timestampColumnMapping()).thenReturn(timestampMappings);
 
-    // Execute
     task.populateTableToTsColsMap();
 
-    // Verify - empty mappings should result in empty map
     assertEquals(0, tableToTsCols.size());
   }
 
   @Test
   public void testPopulateTableToTsColsMapWithEmptyTables() throws Exception {
-    // Setup
     List<String> tables = Collections.emptyList();
     List<String> timestampMappings = Arrays.asList(".*users.*:[created_at]");
     
     when(config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).thenReturn(tables);
     when(config.timestampColumnMapping()).thenReturn(timestampMappings);
 
-    // Execute
     task.populateTableToTsColsMap();
 
-    // Verify - empty tables should result in empty map
     assertEquals(0, tableToTsCols.size());
   }
 
   @Test
   public void testPopulateTableToTsColsMapWithComplexRegex() throws Exception {
-    // Setup - Test complex regex patterns
     List<String> tables = Arrays.asList("mydb.analytics.user_events", "mydb.analytics.order_events");
     List<String> timestampMappings = Arrays.asList(
         ".*analytics\\.user_.*:[event_timestamp|created_at]",
@@ -237,16 +210,13 @@ public class PopulateTableToTsColsMapTest {
     when(config.getList(JdbcSourceTaskConfig.TABLES_CONFIG)).thenReturn(tables);
     when(config.timestampColumnMapping()).thenReturn(timestampMappings);
     
-    // Mock dialect to return proper TableId objects
     when(dialect.parseTableIdentifier("mydb.analytics.user_events"))
         .thenReturn(new TableId("mydb", "analytics", "user_events"));
     when(dialect.parseTableIdentifier("mydb.analytics.order_events"))
         .thenReturn(new TableId("mydb", "analytics", "order_events"));
 
-    // Execute
     task.populateTableToTsColsMap();
 
-    // Verify
     assertEquals(2, tableToTsCols.size());
     assertEquals(Arrays.asList("event_timestamp", "created_at"), 
                  tableToTsCols.get("mydb.analytics.user_events"));
@@ -256,7 +226,6 @@ public class PopulateTableToTsColsMapTest {
 
   @Test
   public void testPopulateTableToTsColsMapWithSchemaOnlyTable() throws Exception {
-    // Setup - Test table without catalog
     List<String> tables = Arrays.asList("myschema.users");
     List<String> timestampMappings = Arrays.asList(".*users.*:[created_at]");
     
@@ -267,17 +236,14 @@ public class PopulateTableToTsColsMapTest {
     when(dialect.parseTableIdentifier("myschema.users"))
         .thenReturn(new TableId(null, "myschema", "users"));
 
-    // Execute
     task.populateTableToTsColsMap();
 
-    // Verify
     assertEquals(1, tableToTsCols.size());
     assertEquals(Arrays.asList("created_at"), tableToTsCols.get("myschema.users"));
   }
 
   @Test
   public void testPopulateTableToTsColsMapWithTableOnly() throws Exception {
-    // Setup - Test table without catalog or schema
     List<String> tables = Arrays.asList("users");
     List<String> timestampMappings = Arrays.asList("users:[created_at]");
     
@@ -288,10 +254,8 @@ public class PopulateTableToTsColsMapTest {
     when(dialect.parseTableIdentifier("users"))
         .thenReturn(new TableId(null, null, "users"));
 
-    // Execute
     task.populateTableToTsColsMap();
 
-    // Verify
     assertEquals(1, tableToTsCols.size());
     assertEquals(Arrays.asList("created_at"), tableToTsCols.get("users"));
   }

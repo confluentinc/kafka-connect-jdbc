@@ -56,16 +56,6 @@ public class JdbcSourceConnectorValidation {
    */
   public Config validate() {
     try {
-      // Check if there are any errors from the initial validateAll call
-      boolean hasValidateAllErrors = validationResult.configValues().stream()
-          .anyMatch(configValue -> !configValue.errorMessages().isEmpty());
-      
-      if (hasValidateAllErrors) {
-        log.info("Validation failed");
-        return this.validationResult;
-      }
-      
-      // Only proceed with custom validation if no errors from validateAll
       boolean validationResult = validateMultiConfigs()
           && validateLegacyNewConfigCompatibility()
           && validateTsAndIncModeColumnRequirements()

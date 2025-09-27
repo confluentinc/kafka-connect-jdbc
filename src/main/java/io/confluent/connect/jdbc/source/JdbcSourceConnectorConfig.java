@@ -509,7 +509,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       @SuppressWarnings({"checkstyle:NPathComplexity"})
       private void validateMapping(String configName, String mapping) {
         // Split the mapping into regex and columns parts
-        String[] parts = mapping.split(":", -1);
+        String[] parts = mapping.split(":", 2);
         if (parts.length != 2) {
           throw new ConfigException(
               configName,
@@ -550,7 +550,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
           );
         }
 
-        String[] columns = columnsContent.split("\\|", -1);
+        String[] columns = columnsContent.split("\\|");
         for (String column : columns) {
           String trimmedColumn = column.trim();
           if (trimmedColumn.isEmpty()) {
@@ -584,7 +584,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
       private void validateMapping(String configName, String mapping) {
         // Split the mapping into regex and column parts
-        String[] parts = mapping.split(":", -1);
+        String[] parts = mapping.split(":", 2);
         if (parts.length != 2) {
           throw new ConfigException(
               configName,

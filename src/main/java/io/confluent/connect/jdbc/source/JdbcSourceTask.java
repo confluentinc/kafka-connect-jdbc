@@ -39,6 +39,7 @@ import java.util.PriorityQueue;
 import java.util.Set;
 import java.time.ZoneId;
 import java.util.TimeZone;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
@@ -186,20 +187,11 @@ public class JdbcSourceTask extends SourceTask {
     // Support both legacy and new mapping configurations
     List<String> timestampColumnMappings = config.timestampColumnMapping();
     List<String> incrementingColumnMappings = config.incrementingColumnMapping();
-    
-    log.info("Timestamp column mappings: {}", timestampColumnMappings);
-    log.info("Incrementing column mappings: {}", incrementingColumnMappings);
-    log.info("Mode: {}", config.getString(JdbcSourceTaskConfig.MODE_CONFIG));
 
     // Validate mapping configurations
     if (config.modeUsesTimestampColumn() && !timestampColumnMappings.isEmpty()) {
-      // Convert string table names to TableId objects for validation
-      List<TableId> tableIds = tables.stream()
-          .map(dialect::parseTableIdentifier)
-          .collect(java.util.stream.Collectors.toList());
-      
       TableCollectionUtils.validateEachTableMatchesExactlyOneRegex(
-          config.timestampColMappingRegexes(), tableIds, TableId::toUnquotedString,
+          config.timestampColMappingRegexes(), tables, Function.identity(),
           problem -> {
             throw new ConnectException(
                 "Error while validating timestamp column mappings: " + problem);
@@ -208,13 +200,8 @@ public class JdbcSourceTask extends SourceTask {
       populateTableToTsColsMap();
     }
     if (config.modeUsesIncrementingColumn() && !incrementingColumnMappings.isEmpty()) {
-      // Convert string table names to TableId objects for validation
-      List<TableId> tableIds = tables.stream()
-          .map(dialect::parseTableIdentifier)
-          .collect(java.util.stream.Collectors.toList());
-      
       TableCollectionUtils.validateEachTableMatchesExactlyOneRegex(
-          config.incrementingColMappingRegexes(), tableIds, TableId::toUnquotedString,
+          config.incrementingColMappingRegexes(), tables, Function.identity(),
           problem -> {
             throw new ConnectException(
                 "Error while validating incrementing column mappings: " + problem);

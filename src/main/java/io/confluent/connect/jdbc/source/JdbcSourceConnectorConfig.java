@@ -291,8 +291,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "tables to be copied. Use a comma-separated list to specify multiple regular expressions. "
       + "Table names are case-sensitive. For example, "
       + "``table.include.list: \"schema1\\\\.customer.*,schema2\\\\.order.*\"``. "
-      + "If specified, ``table.exclude.list``, ``table.whitelist``, and ``table.blacklist`` "
-      + "may not be set.";
+      + "If specified, the legacy configs of ``table.whitelist``, and ``table.blacklist`` "
+      + "cannot be set.";
   private static final String TABLE_INCLUDE_LIST_DISPLAY = "Tables Included (Regex)";
 
   public static final String TABLE_EXCLUDE_LIST_CONFIG = "table.exclude.list";
@@ -303,7 +303,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "Use a comma-separated list to specify multiple regular expressions. "
       + "Table names are case-sensitive. For example, "
       + "``table.exclude.list: \".*\\\\.temp.*,.*\\\\.staging.*\"``. "
-      + "If specified, ``table.whitelist`` and ``table.blacklist`` may not be set.";
+      + "If specified, ``table.whitelist`` and ``table.blacklist`` cannot not be set.";
   private static final String TABLE_EXCLUDE_LIST_DISPLAY = "Tables Excluded (Regex)";
 
   public static final String SCHEMA_PATTERN_CONFIG = "schema.pattern";
@@ -1203,9 +1203,9 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         case MODE_BULK:
           return false;
         case MODE_TIMESTAMP:
-          return isTimestampModeField(name);
+          return isTimestampModeDependentField(name);
         case MODE_INCREMENTING:
-          return isIncrementingModeField(name);
+          return isIncrementingModeDependentField(name);
         case MODE_TIMESTAMP_INCREMENTING:
           return isTimestampIncrementingModeField(name);
         case MODE_UNSPECIFIED:
@@ -1215,20 +1215,20 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       }
     }
 
-    private boolean isTimestampModeField(String name) {
+    private boolean isTimestampModeDependentField(String name) {
       return name.equals(TIMESTAMP_COLUMN_NAME_CONFIG) 
              || name.equals(TIMESTAMP_COLUMN_MAPPING_CONFIG)
              || name.equals(VALIDATE_NON_NULL_CONFIG);
     }
 
-    private boolean isIncrementingModeField(String name) {
+    private boolean isIncrementingModeDependentField(String name) {
       return name.equals(INCREMENTING_COLUMN_NAME_CONFIG)
              || name.equals(INCREMENTING_COLUMN_MAPPING_CONFIG)
              || name.equals(VALIDATE_NON_NULL_CONFIG);
     }
 
     private boolean isTimestampIncrementingModeField(String name) {
-      return isTimestampModeField(name) || isIncrementingModeField(name);
+      return isTimestampModeDependentField(name) || isIncrementingModeDependentField(name);
     }
   }
 
@@ -1448,32 +1448,28 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
    * Get table whitelist configuration as a set.
    */
   public Set<String> getTableWhitelistSet() {
-    List<String> whitelist = getList(TABLE_WHITELIST_CONFIG);
-    return whitelist.isEmpty() ? null : new HashSet<>(whitelist);
+    return new HashSet<>(getList(TABLE_WHITELIST_CONFIG));
   }
 
   /**
    * Get table blacklist configuration as a set.
    */
   public Set<String> getTableBlacklistSet() {
-    List<String> blacklist = getList(TABLE_BLACKLIST_CONFIG);
-    return blacklist.isEmpty() ? null : new HashSet<>(blacklist);
+    return new HashSet<>(getList(TABLE_BLACKLIST_CONFIG));
   }
 
   /**
    * Get table include list configuration as a set.
    */
   public Set<String> getTableIncludeListSet() {
-    List<String> includeList = tableIncludeListRegexes();
-    return includeList.isEmpty() ? null : new HashSet<>(includeList);
+    return new HashSet<>(tableIncludeListRegexes());
   }
 
   /**
    * Get table exclude list configuration as a set.
    */
   public Set<String> getTableExcludeListSet() {
-    List<String> excludeList = tableExcludeListRegexes();
-    return excludeList.isEmpty() ? null : new HashSet<>(excludeList);
+    return new HashSet<>(tableExcludeListRegexes());
   }
 
   /**

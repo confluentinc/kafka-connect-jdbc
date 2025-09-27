@@ -310,8 +310,6 @@ public class JdbcSourceConnectorConfigTest {
     assertContains(namedValue(results, JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG).recommendedValues(), recommendedValues);
   }
 
-  // New tests for table include/exclude list functionality
-
   private Map<String, String> createMinimalConfig() {
     Map<String, String> props = new HashMap<>();
     props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:test://localhost");
@@ -381,7 +379,6 @@ public class JdbcSourceConnectorConfigTest {
     props.put(JdbcSourceConnectorConfig.TABLE_EXCLUDE_LIST_CONFIG, 
              ".*temp.*,.*staging.*,.*backup_\\d+");
     
-    // Should not throw any exception
     JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
     
     assertEquals(3, config.tableIncludeListRegexes().size());
@@ -424,7 +421,6 @@ public class JdbcSourceConnectorConfigTest {
     List<String> includeList = config.tableIncludeListRegexes();
     
     assertEquals(2, includeList.size());
-    // Note: ConfigDef handles trimming for LIST type configurations
     assertTrue(includeList.contains("schema1\\.users"));
     assertTrue(includeList.contains("schema2\\.orders"));
   }

@@ -166,8 +166,8 @@ public class JdbcSourceConnectorValidation {
     String incrementingColumnName = config.getIncrementingColumnName();
     List<String> timestampColumnName = config.getTimestampColumnName();
     
-    boolean hasWhitelist = whitelistSet != null;
-    boolean hasBlacklist = blacklistSet != null;
+    boolean hasWhitelist = !whitelistSet.isEmpty();
+    boolean hasBlacklist = !blacklistSet.isEmpty();
     boolean hasLegacyIncrementing = incrementingColumnName != null 
         && !incrementingColumnName.trim().isEmpty();
     boolean hasLegacyTimestamp = timestampColumnName != null 
@@ -188,8 +188,8 @@ public class JdbcSourceConnectorValidation {
     List<String> incrementingColumnMapping = config.getIncrementingColumnMapping();
     List<String> timestampColumnsMapping = config.getTimestampColumnMapping();
     
-    boolean hasIncludeList = includeListSet != null;
-    boolean hasExcludeList = excludeListSet != null;
+    boolean hasIncludeList = !includeListSet.isEmpty();
+    boolean hasExcludeList = !excludeListSet.isEmpty();
     boolean hasNewIncrementing = incrementingColumnMapping != null 
         && !incrementingColumnMapping.isEmpty();
     boolean hasNewTimestamp = timestampColumnsMapping != null 
@@ -212,22 +212,22 @@ public class JdbcSourceConnectorValidation {
     
     // Only add errors to configs that are actually present and non-empty
     Set<String> whitelistSet = config.getTableWhitelistSet();
-    if (whitelistSet != null) {
+    if (!whitelistSet.isEmpty()) {
       addConfigError(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, msg);
     }
     
     Set<String> blacklistSet = config.getTableBlacklistSet();
-    if (blacklistSet != null) {
+    if (!blacklistSet.isEmpty()) {
       addConfigError(JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG, msg);
     }
     
     Set<String> includeListSet = config.getTableIncludeListSet();
-    if (includeListSet != null) {
+    if (!includeListSet.isEmpty()) {
       addConfigError(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG, msg);
     }
     
     Set<String> excludeListSet = config.getTableExcludeListSet();
-    if (excludeListSet != null) {
+    if (!excludeListSet.isEmpty()) {
       addConfigError(JdbcSourceConnectorConfig.TABLE_EXCLUDE_LIST_CONFIG, msg);
     }
     
@@ -280,7 +280,7 @@ public class JdbcSourceConnectorValidation {
     Set<String> excludeListSet = config.getTableExcludeListSet();
     
     // Validate that exclude list requires include list
-    if (excludeListSet != null && includeListSet == null) {
+    if (!excludeListSet.isEmpty() && includeListSet.isEmpty()) {
       String msg = JdbcSourceConnectorConfig.TABLE_EXCLUDE_LIST_CONFIG 
           + " cannot be used without " + JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG
           + ". Exclude list only applies to tables that match the include list.";

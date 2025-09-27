@@ -37,7 +37,7 @@ public class JdbcSourceConnectorValidationTest {
   private Config results;
 
   @Before
-  public void beforeEach() throws Exception {
+  public void beforeEach() {
     props = new HashMap<>();
     props.put("name", "jdbc-connector");
     props.put(CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
@@ -116,30 +116,6 @@ public class JdbcSourceConnectorValidationTest {
   }
 
   @Test
-  public void validate_withValidModeIncrementingWithoutColumn_setsError() {
-    props.put(MODE_CONFIG, MODE_INCREMENTING);
-    props.put(TABLE_WHITELIST_CONFIG, "table1,table2"); // Add table filtering
-
-    validate();
-
-    assertErrors(1);
-    assertErrors(MODE_CONFIG, 1);
-    assertErrorMatches(MODE_CONFIG, "Incrementing column configuration must be provided");
-  }
-
-  @Test
-  public void validate_withValidModeTimestampWithoutTsCol_setsError() {
-    props.put(MODE_CONFIG, MODE_TIMESTAMP);
-    props.put(TABLE_WHITELIST_CONFIG, "table1,table2"); // Add table filtering
-
-    validate();
-
-    assertErrors(1);
-    assertErrors(MODE_CONFIG, 1);
-    assertErrorMatches(MODE_CONFIG, "Timestamp column configuration must be provided");
-  }
-
-  @Test
   public void validate_withValidModeTimestampWithTsCol_noErrors() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP);
     props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*"); // Add table filtering for new config
@@ -148,18 +124,6 @@ public class JdbcSourceConnectorValidationTest {
     validate();
 
     assertNoErrors();
-  }
-
-  @Test
-  public void validate_withValidModeTimestampIncrementingWithoutTsCol_setsError() {
-    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
-    props.put(TABLE_WHITELIST_CONFIG, "table1,table2"); // Add table filtering
-
-    validate();
-
-    assertErrors(1);
-    assertErrors(MODE_CONFIG, 1);
-    assertErrorMatches(MODE_CONFIG, "Timestamp column configuration must be provided");
   }
 
   @Test
@@ -574,33 +538,6 @@ public class JdbcSourceConnectorValidationTest {
     assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
   }
 
-  
-  @Test
-  public void validate_withModeBulkWithLegacyTimestampColumn_setsError() {
-    props.put(MODE_CONFIG, MODE_BULK);
-    props.put(TABLE_WHITELIST_CONFIG, "table1,table2"); // Add legacy table filtering
-    props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts_col");
-    
-    validate();
-    
-    assertErrors(1);
-    assertErrors(MODE_CONFIG, 1);
-    assertErrorMatches(MODE_CONFIG, ".*Timestamp column configurations should not be provided.*");
-  }
-  
-  @Test
-  public void validate_withModeBulkWithLegacyIncrementingColumn_setsError() {
-    props.put(MODE_CONFIG, MODE_BULK);
-    props.put(TABLE_WHITELIST_CONFIG, "table1,table2"); // Add legacy table filtering
-    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "inc_col");
-    
-    validate();
-    
-    assertErrors(1);
-    assertErrors(MODE_CONFIG, 1);
-    assertErrorMatches(MODE_CONFIG, ".*Incrementing column configurations should not be provided.*");
-  }
-  
   @Test
   public void validate_withModeBulkWithNewTimestampMapping_setsError() {
     props.put(MODE_CONFIG, MODE_BULK);

@@ -56,10 +56,24 @@ public class JdbcSourceConnectorValidation {
    */
   public Config validate() {
     try {
+      // Check if there are any errors from the initial validateAll call
+      boolean hasValidateAllErrors = validationResult.configValues().stream()
+              .anyMatch(configValue -> !configValue.errorMessages().isEmpty());
+
+      if (hasValidateAllErrors) {
+        log.info("Validation failed");
+        return this.validationResult;
+      }
+
       boolean validationResult = validateMultiConfigs()
-          && validateLegacyNewConfigCompatibility()
-          && validateTsAndIncModeColumnRequirements()
-          && validatePluginSpecificNeeds();
+          && validateLegacyNewConfigCompatibility();
+
+      if (validationResult && isUsingNewConfigs()) {
+        validationResult = validateTableInclusionConfigs()
+                           && validateTsAndIncModeColumnRequirements();
+      }
+
+      validationResult = validationResult && validatePluginSpecificNeeds();
       
       if (!validationResult) {
         log.info("Validation failed");
@@ -139,14 +153,6 @@ public class JdbcSourceConnectorValidation {
       return addConfigErrorsForNoConfigProvided();
     }
 
-    if (usingLegacyConfigs) {
-      return true;
-    }
-
-    if (usingNewConfigs) {
-      return validateNewConfigRequirements();
-    }
-    
     return true;
   }
 
@@ -269,7 +275,7 @@ public class JdbcSourceConnectorValidation {
   /**
    * Validate new config requirements (when using new configs only).
    */
-  private boolean validateNewConfigRequirements() {
+  private boolean validateTableInclusionConfigs() {
     Set<String> includeListSet = config.getTableIncludeListSet();
     Set<String> excludeListSet = config.getTableExcludeListSet();
     
@@ -299,10 +305,10 @@ public class JdbcSourceConnectorValidation {
    * Validate that mode-dependent column configurations are properly provided.
    */
   private boolean validateTsAndIncModeColumnRequirements() {
-    return validateTimestampColumnConfigProvidedWhenRequired()
-        && validateTimestampColumnConfigNotProvidedWhenNotRequired()
-        && validateIncrementingColumnConfigProvidedWhenRequired()
-        && validateIncrementingColumnConfigNotProvidedWhenNotRequired();
+    return validateTsColProvidedWhenRequired()
+           && validateTsColNotProvidedWhenNotRequired()
+           && validateIncrColProvidedWhenRequired()
+           && validateIncrColumnNotProvidedWhenNotRequired();
   }
 
 
@@ -310,21 +316,16 @@ public class JdbcSourceConnectorValidation {
    * Validate that timestamp column configuration is provided when required.
    * Accepts either legacy timestamp.column.name or new timestamp.columns.mapping.
    */
-  private boolean validateTimestampColumnConfigProvidedWhenRequired() {
+  private boolean validateTsColProvidedWhenRequired() {
     if (config.modeUsesTimestampColumn()) {
-      List<String> timestampColumnName = config.getTimestampColumnName();
       List<String> timestampColumnsMapping = config.getTimestampColumnMapping();
-      
-      boolean hasLegacyTimestampConfig = timestampColumnName != null 
-          && !timestampColumnName.isEmpty() 
-          && !timestampColumnName.get(0).trim().isEmpty();
-      boolean hasNewTimestampConfig = timestampColumnsMapping != null 
+      boolean hasNewTimestampConfig = timestampColumnsMapping != null
           && !timestampColumnsMapping.isEmpty();
       
-      if (!hasLegacyTimestampConfig && !hasNewTimestampConfig) {
+      if (!hasNewTimestampConfig) {
         String msg = String.format(
             "Timestamp column configuration must be provided when using mode '%s' or '%s'. "
-            + "Provide either 'timestamp.column.name' or 'timestamp.columns.mapping'.",
+            + "Provide 'timestamp.columns.mapping'.",
             JdbcSourceConnectorConfig.MODE_TIMESTAMP,
             JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING
         );
@@ -340,18 +341,14 @@ public class JdbcSourceConnectorValidation {
    * Validate that timestamp column configuration is not provided when not required.
    * Rejects both legacy timestamp.column.name and new timestamp.columns.mapping.
    */
-  private boolean validateTimestampColumnConfigNotProvidedWhenNotRequired() {
+  private boolean validateTsColNotProvidedWhenNotRequired() {
     if (!config.modeUsesTimestampColumn()) {
-      List<String> timestampColumnName = config.getTimestampColumnName();
       List<String> timestampColumnsMapping = config.getTimestampColumnMapping();
       
-      boolean hasLegacyTimestampConfig = timestampColumnName != null 
-          && !timestampColumnName.isEmpty() 
-          && !timestampColumnName.get(0).trim().isEmpty();
-      boolean hasNewTimestampConfig = timestampColumnsMapping != null 
+      boolean hasNewTimestampConfig = timestampColumnsMapping != null
           && !timestampColumnsMapping.isEmpty();
       
-      if (hasLegacyTimestampConfig || hasNewTimestampConfig) {
+      if (hasNewTimestampConfig) {
         String msg = String.format(
             "Timestamp column configurations should not be provided if mode is not '%s' or '%s'. "
             + "Remove 'timestamp.column.name' or 'timestamp.columns.mapping'.",
@@ -372,17 +369,14 @@ public class JdbcSourceConnectorValidation {
    * Validate that incrementing column configuration is provided when required.
    * Accepts either legacy incrementing.column.name or new incrementing.column.mapping.
    */
-  private boolean validateIncrementingColumnConfigProvidedWhenRequired() {
+  private boolean validateIncrColProvidedWhenRequired() {
     if (config.modeUsesIncrementingColumn()) {
-      String incrementingColumnName = config.getIncrementingColumnName();
       List<String> incrementingColumnMapping = config.getIncrementingColumnMapping();
       
-      boolean hasLegacyIncrementingConfig = incrementingColumnName != null 
-          && !incrementingColumnName.trim().isEmpty();
-      boolean hasNewIncrementingConfig = incrementingColumnMapping != null 
+      boolean hasNewIncrementingConfig = incrementingColumnMapping != null
           && !incrementingColumnMapping.isEmpty();
       
-      if (!hasLegacyIncrementingConfig && !hasNewIncrementingConfig) {
+      if (!hasNewIncrementingConfig) {
         String msg = String.format(
             "Incrementing column configuration must be provided when using mode '%s' or '%s'. "
             + "Provide either 'incrementing.column.name' or 'incrementing.column.mapping'.",
@@ -401,17 +395,14 @@ public class JdbcSourceConnectorValidation {
    * Validate that incrementing column configuration is not provided when not required.
    * Rejects both legacy incrementing.column.name and new incrementing.column.mapping.
    */
-  private boolean validateIncrementingColumnConfigNotProvidedWhenNotRequired() {
+  private boolean validateIncrColumnNotProvidedWhenNotRequired() {
     if (!config.modeUsesIncrementingColumn()) {
-      String incrementingColumnName = config.getIncrementingColumnName();
       List<String> incrementingColumnMapping = config.getIncrementingColumnMapping();
       
-      boolean hasLegacyIncrementingConfig = incrementingColumnName != null 
-          && !incrementingColumnName.trim().isEmpty();
-      boolean hasNewIncrementingConfig = incrementingColumnMapping != null 
+      boolean hasNewIncrementingConfig = incrementingColumnMapping != null
           && !incrementingColumnMapping.isEmpty();
       
-      if (hasLegacyIncrementingConfig || hasNewIncrementingConfig) {
+      if (hasNewIncrementingConfig) {
         String msg = String.format(
             "Incrementing column configurations "
               + "should not be provided if mode is not '%s' or '%s'. "

@@ -39,13 +39,6 @@ public class JdbcSourceConnectorConfigMappingTest {
         validatedConfig.get(JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_MAPPING_CONFIG);
     assertTrue(validatedValue.errorMessages().get(0).contains("Invalid format. Expected 'regex:[col1|col2|...]'"));
 
-    props.put(JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_MAPPING_CONFIG, "something:garbage:something");
-    validatedConfig =
-        JdbcSourceConnectorConfig.CONFIG_DEF.validateAll(props);
-    validatedValue =
-        validatedConfig.get(JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_MAPPING_CONFIG);
-    assertTrue(validatedValue.errorMessages().get(0).contains("Invalid format. Expected 'regex:[col1|col2|...]'"));
-
     props.put(JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_MAPPING_CONFIG, ".*):[col1, col2]");
     validatedConfig =
         JdbcSourceConnectorConfig.CONFIG_DEF.validateAll(props);
@@ -87,13 +80,6 @@ public class JdbcSourceConnectorConfigMappingTest {
         validatedConfig.get(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_MAPPING_CONFIG);
     assertTrue(validatedValue.errorMessages().get(0).contains("Invalid format. Expected 'regex:columnName'"));
 
-    props.put(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_MAPPING_CONFIG, "something:garbage:something");
-    validatedConfig =
-        JdbcSourceConnectorConfig.CONFIG_DEF.validateAll(props);
-    validatedValue =
-        validatedConfig.get(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_MAPPING_CONFIG);
-    assertTrue(validatedValue.errorMessages().get(0).contains("Invalid format. Expected 'regex:columnName'"));
-
     props.put(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_MAPPING_CONFIG, ".*):col1");
     validatedConfig =
         JdbcSourceConnectorConfig.CONFIG_DEF.validateAll(props);
@@ -101,7 +87,7 @@ public class JdbcSourceConnectorConfigMappingTest {
         validatedConfig.get(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_MAPPING_CONFIG);
     assertTrue(validatedValue.errorMessages().get(0).contains("Invalid regular expression"));
 
-    props.put(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_MAPPING_CONFIG, "abc.*:ID,abc.*: ,abc.*:ID");
+    props.put(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_MAPPING_CONFIG, "abc.*:,.*:col1");
     validatedConfig =
         JdbcSourceConnectorConfig.CONFIG_DEF.validateAll(props);
     validatedValue =

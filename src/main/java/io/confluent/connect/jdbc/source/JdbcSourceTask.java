@@ -39,7 +39,6 @@ import java.util.PriorityQueue;
 import java.util.Set;
 import java.time.ZoneId;
 import java.util.TimeZone;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
@@ -190,8 +189,13 @@ public class JdbcSourceTask extends SourceTask {
 
     // Validate mapping configurations
     if (config.modeUsesTimestampColumn() && !timestampColumnMappings.isEmpty()) {
+      // Convert string table names to TableId objects for validation
+      List<TableId> tableIds = tables.stream()
+              .map(dialect::parseTableIdentifier)
+              .collect(java.util.stream.Collectors.toList());
+
       TableCollectionUtils.validateEachTableMatchesExactlyOneRegex(
-          config.timestampColMappingRegexes(), tables, Function.identity(),
+          config.timestampColMappingRegexes(), tableIds, TableId::toUnquotedString,
           problem -> {
             throw new ConnectException(
                 "Error while validating timestamp column mappings: " + problem);
@@ -200,8 +204,13 @@ public class JdbcSourceTask extends SourceTask {
       populateTableToTsColsMap();
     }
     if (config.modeUsesIncrementingColumn() && !incrementingColumnMappings.isEmpty()) {
+      // Convert string table names to TableId objects for validation
+      List<TableId> tableIds = tables.stream()
+              .map(dialect::parseTableIdentifier)
+              .collect(java.util.stream.Collectors.toList());
+
       TableCollectionUtils.validateEachTableMatchesExactlyOneRegex(
-          config.incrementingColMappingRegexes(), tables, Function.identity(),
+          config.incrementingColMappingRegexes(), tableIds, TableId::toUnquotedString,
           problem -> {
             throw new ConnectException(
                 "Error while validating incrementing column mappings: " + problem);

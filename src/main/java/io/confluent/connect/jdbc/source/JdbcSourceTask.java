@@ -218,7 +218,9 @@ public class JdbcSourceTask extends SourceTask {
     String suffix = config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG).trim();
 
     if (queryMode.equals(TableQuerier.QueryMode.TABLE)) {
-      validateColumnsExist(mode, getIncrementingColumn(tables.get(0)), getTimestampColumns(tables.get(0)), tables.get(0),
+      validateColumnsExist(
+              mode, getIncrementingColumn(tables.get(0)),
+              getTimestampColumns(tables.get(0)), tables.get(0),
               tableType);
     }
 

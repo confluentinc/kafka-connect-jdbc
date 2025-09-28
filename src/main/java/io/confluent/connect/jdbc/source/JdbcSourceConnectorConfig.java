@@ -290,7 +290,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       "A comma-separated list of regular expressions that match the fully-qualified names of "
       + "tables to be copied. Use a comma-separated list to specify multiple regular expressions. "
       + "Table names are case-sensitive. For example, "
-      + "``table.include.list: \"schema1\\\\.customer.*,schema2\\\\.order.*\"``. "
+      + "``table.include.list: \"schema1.customer.*,schema2.order.*\"``. "
       + "If specified, the legacy configs of ``table.whitelist``, and ``table.blacklist`` "
       + "cannot be set.";
   private static final String TABLE_INCLUDE_LIST_DISPLAY = "Tables Included (Regex)";
@@ -302,7 +302,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "REQUIRES ``table.include.list`` to be specified. "
       + "Use a comma-separated list to specify multiple regular expressions. "
       + "Table names are case-sensitive. For example, "
-      + "``table.exclude.list: \".*\\\\.temp.*,.*\\\\.staging.*\"``. "
+      + "``table.exclude.list: \".*.temp.*,.*.staging.*\"``. "
       + "If specified, ``table.whitelist`` and ``table.blacklist`` cannot not be set.";
   private static final String TABLE_EXCLUDE_LIST_DISPLAY = "Tables Excluded (Regex)";
 

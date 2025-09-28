@@ -351,7 +351,7 @@ public class JdbcSourceConnectorValidation {
       if (hasNewTimestampConfig) {
         String msg = String.format(
             "Timestamp column configurations should not be provided if mode is not '%s' or '%s'. "
-            + "Remove 'timestamp.column.name' or 'timestamp.columns.mapping'.",
+            + "Remove 'timestamp.columns.mapping'.",
             JdbcSourceConnectorConfig.MODE_TIMESTAMP,
             JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING
         );
@@ -379,7 +379,7 @@ public class JdbcSourceConnectorValidation {
       if (!hasNewIncrementingConfig) {
         String msg = String.format(
             "Incrementing column configuration must be provided when using mode '%s' or '%s'. "
-            + "Provide either 'incrementing.column.name' or 'incrementing.column.mapping'.",
+            + "Provide 'incrementing.column.mapping'.",
             JdbcSourceConnectorConfig.MODE_INCREMENTING,
             JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING
         );
@@ -406,7 +406,7 @@ public class JdbcSourceConnectorValidation {
         String msg = String.format(
             "Incrementing column configurations "
               + "should not be provided if mode is not '%s' or '%s'. "
-              + "Remove 'incrementing.column.name' or 'incrementing.column.mapping'.",
+              + "Remove 'incrementing.column.mapping'.",
             JdbcSourceConnectorConfig.MODE_INCREMENTING,
             JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING
         );

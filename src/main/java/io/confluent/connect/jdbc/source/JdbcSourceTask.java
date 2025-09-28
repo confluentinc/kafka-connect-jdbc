@@ -217,6 +217,11 @@ public class JdbcSourceTask extends SourceTask {
     ZoneId zoneId = config.zoneId();
     String suffix = config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG).trim();
 
+    if (queryMode.equals(TableQuerier.QueryMode.TABLE)) {
+      validateColumnsExist(mode, getIncrementingColumn(tables.get(0)), getTimestampColumns(tables.get(0)), tables.get(0),
+              tableType);
+    }
+
     for (String tableOrQuery : tablesOrQuery) {
       final List<Map<String, String>> tablePartitionsToCheck;
       final Map<String, String> partition;
@@ -228,11 +233,6 @@ public class JdbcSourceTask extends SourceTask {
       log.trace("Task executing in {} mode",queryMode);
       switch (queryMode) {
         case TABLE:
-          // Validate columns exist for this specific table
-          if (queryMode.equals(TableQuerier.QueryMode.TABLE)) {
-            validateColumnsExist(mode, incrementingColumn, timestampColumns, tableOrQuery,
-                tableType);
-          }
           if (validateNonNulls) {
             validateNonNullable(
                 mode,

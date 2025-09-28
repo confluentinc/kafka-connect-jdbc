@@ -210,10 +210,10 @@ public class JdbcSourceTask extends SourceTask {
       populateTableToIncrementingColMap();
     }
 
-    String incrementingColumn
-        = config.getString(JdbcSourceTaskConfig.INCREMENTING_COLUMN_NAME_CONFIG);
-    List<String> timestampColumns
-        = config.getList(JdbcSourceTaskConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
+    String incrementingColumnFirstTable
+        = getIncrementingColumn(tables.get(0));
+    List<String> timestampColumnsFirstTable
+        = getTimestampColumns(tables.get(0));
     Long timestampDelayInterval
         = config.getLong(JdbcSourceTaskConfig.TIMESTAMP_DELAY_INTERVAL_MS_CONFIG);
     boolean validateNonNulls
@@ -222,7 +222,7 @@ public class JdbcSourceTask extends SourceTask {
     String suffix = config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG).trim();
 
     if (queryMode.equals(TableQuerier.QueryMode.TABLE)) {
-      validateColumnsExist(mode, incrementingColumn, timestampColumns, tables.get(0), tableType);
+      validateColumnsExist(mode, incrementingColumnFirstTable, timestampColumnsFirstTable, tables.get(0), tableType);
     }
 
     for (String tableOrQuery : tablesOrQuery) {
@@ -236,8 +236,8 @@ public class JdbcSourceTask extends SourceTask {
             validateNonNullable(
                 mode,
                 tableOrQuery,
-                incrementingColumn,
-                timestampColumns,
+                incrementingColumnFirstTable,
+                timestampColumnsFirstTable,
                 tableType
             );
           }
@@ -291,7 +291,7 @@ public class JdbcSourceTask extends SourceTask {
                 tableOrQuery,
                 topicPrefix,
                 null,
-                incrementingColumn,
+                incrementingColumnFirstTable,
                 offset,
                 timestampDelayInterval,
                 zoneId,
@@ -306,7 +306,7 @@ public class JdbcSourceTask extends SourceTask {
                 queryMode,
                 tableOrQuery,
                 topicPrefix,
-                timestampColumns,
+                timestampColumnsFirstTable,
                 offset,
                 timestampDelayInterval,
                 zoneId,
@@ -321,8 +321,8 @@ public class JdbcSourceTask extends SourceTask {
                 queryMode,
                 tableOrQuery,
                 topicPrefix,
-                timestampColumns,
-                incrementingColumn,
+                timestampColumnsFirstTable,
+                incrementingColumnFirstTable,
                 offset,
                 timestampDelayInterval,
                 zoneId,

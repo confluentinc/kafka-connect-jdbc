@@ -41,6 +41,12 @@ public class JdbcSourceConnectorValidation {
   protected final JdbcSourceConnectorConfig config;
   protected final Config validationResult;
 
+  public JdbcSourceConnectorValidation(JdbcSourceConnectorConfig config,
+                                          Config validationResult) {
+    this.config = config;
+    this.validationResult = validationResult;
+  }
+
   public JdbcSourceConnectorValidation(Map<String, String> connectorConfigs) {
     this.config = new JdbcSourceConnectorConfig(connectorConfigs);
     // Create Config object using ConfigDef.validateAll() approach

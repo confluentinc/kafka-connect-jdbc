@@ -427,7 +427,7 @@ public class JdbcSourceConnectorValidation {
   /**
    * Helper method to add validation errors to config values.
    */
-  private void addConfigError(String configName, String errorMessage) {
+  protected void addConfigError(String configName, String errorMessage) {
     validationResult.configValues().stream()
         .filter(cv -> cv.name().equals(configName))
         .findFirst()

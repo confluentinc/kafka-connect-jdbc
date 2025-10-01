@@ -16,10 +16,6 @@ fail_fast:
 execution_time_limit:
   hours: 1
 
-auto_cancel:
-  running:
-    when: "true"
-
 queue:
   - when: "branch != 'master' and branch !~ '[0-9]+\\.[0-9]+\\.x'"
     processing: parallel
@@ -61,14 +57,14 @@ blocks:
   - name: Release
     dependencies: ["Test"]
     run:
-      when: "branch =~ '[0-9]+\\.[0-9]+\\.x'"
+      when: "branch = 'master' or branch =~ '[0-9]+\\.[0-9]+\\.x'"
     task:
       jobs:
         - name: Release
           commands:
-            - . assume-iam-role arn:aws:iam::519856050701:role/semaphore-oidc
-            - chmod +x scripts/release-internal-version.sh
-            - ./scripts/release-internal-version.sh
+            - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 --batch-mode 
+              -DaltDeploymentRepository=confluent-codeartifact-internal::default::https://confluent-519856050701.d.codeartifact.us-west-2.amazonaws.com/maven/maven-snapshots/ 
+              -DrepositoryId=confluent-codeartifact-internal deploy -DskipTests
   - name: Release Notes
     dependencies: []
     run:
@@ -98,3 +94,6 @@ after_pipeline:
           - sem-version java 11
           - artifact pull workflow target
           - emit-sonarqube-data --run_only_sonar_scan
+auto_cancel:
+  running:
+    when: "true"

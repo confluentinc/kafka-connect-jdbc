@@ -63,9 +63,12 @@ public abstract class BaseConnectorIT {
     protected EmbeddedConnectCluster connect;
 
     protected void startConnect() {
-        connect = new EmbeddedConnectCluster.Builder()
-                .name("jdbc-connect-cluster")
-                .build();
+      HashMap<String, String> workerConfigs = new HashMap<>();
+      workerConfigs.put("plugin.discovery", "hybrid_warn");
+      connect = new EmbeddedConnectCluster.Builder()
+          .name("jdbc-connect-cluster")
+          .workerProps(workerConfigs)
+          .build();
 
         // start the clusters
         connect.start();

@@ -11,9 +11,13 @@ import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.test.IntegrationTest;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.testcontainers.containers.PostgreSQLContainer;
 
 import java.math.BigDecimal;
 import java.sql.Connection;
@@ -35,15 +39,18 @@ import static org.junit.Assert.assertTrue;
 @Category(IntegrationTest.class)
 public class PostgreSqlDialectIT extends BaseConnectorIT {
   
+  @ClassRule
+  public static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:13")
+      .withDatabaseName("testdb")
+      .withUsername("test")
+      .withPassword("test123");
+  
+  private static Connection connection;
+  
   private static final String TABLE_NAME = "pg_test_types";
   private static final String CONNECTOR_NAME = "PostgreSqlSourceConnector";
   private static final String TOPIC_PREFIX = "postgres-test-";
   private static final long POLLING_INTERVAL_MS = 1000L;
-  
-  // PostgreSQL connection details
-  private static final String PG_JDBC_URL = "jdbc:postgresql://localhost:64949/testdb";
-  private static final String PG_USER = "test";
-  private static final String PG_PASSWORD = "test123";
   
   // Test values for each data type
   private static final Short smallintCol = 32767;
@@ -76,6 +83,24 @@ public class PostgreSqlDialectIT extends BaseConnectorIT {
   
   private JsonConverter converter;
   private Map<String, String> props;
+  
+  @BeforeClass
+  public static void setupClass() throws SQLException {
+    postgres.start();
+    connection = DriverManager.getConnection(
+        postgres.getJdbcUrl(),
+        postgres.getUsername(),
+        postgres.getPassword()
+    );
+  }
+  
+  @AfterClass
+  public static void teardownClass() throws SQLException {
+    if (connection != null && !connection.isClosed()) {
+      connection.close();
+    }
+    postgres.stop();
+  }
   
   @Before
   public void setup() throws Exception {
@@ -113,9 +138,9 @@ public class PostgreSqlDialectIT extends BaseConnectorIT {
     props = new HashMap<>();
     props.put("connector.class", "io.confluent.connect.jdbc.JdbcSourceConnector");
     props.put("tasks.max", "1");
-    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, PG_JDBC_URL);
-    props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, PG_USER);
-    props.put(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, PG_PASSWORD);
+    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, postgres.getJdbcUrl());
+    props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, postgres.getUsername());
+    props.put(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, postgres.getPassword());
     props.put(JdbcSourceConnectorConfig.POLL_LINGER_MS_CONFIG, "0");
     props.put(JdbcSourceConnectorConfig.MODE_CONFIG, "bulk");
     props.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, TOPIC_PREFIX);
@@ -129,7 +154,7 @@ public class PostgreSqlDialectIT extends BaseConnectorIT {
   }
   
   private Connection getConnection() throws SQLException {
-    return DriverManager.getConnection(PG_JDBC_URL, PG_USER, PG_PASSWORD);
+    return connection;
   }
   
   private void createTableAndInsertData() throws SQLException {

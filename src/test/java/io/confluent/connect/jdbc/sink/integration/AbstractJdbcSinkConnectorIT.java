@@ -1,5 +1,3 @@
-package io.confluent.connect.jdbc.sink.integration;
-
 /*
  * Copyright 2018 Confluent Inc.
  *
@@ -14,6 +12,8 @@ package io.confluent.connect.jdbc.sink.integration;
  * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations under the License.
  */
+
+package io.confluent.connect.jdbc.sink.integration;
 
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.jdbc.integration.BaseConnectorIT;
@@ -41,6 +41,8 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -90,8 +92,6 @@ public abstract class AbstractJdbcSinkConnectorIT extends BaseConnectorIT {
     props.put(ConnectorConfig.TASKS_MAX_CONFIG, "1");
     props.put(ConnectorConfig.KEY_CONVERTER_CLASS_CONFIG, "org.apache.kafka.connect.json.JsonConverter");
     props.put(ConnectorConfig.VALUE_CONVERTER_CLASS_CONFIG, "org.apache.kafka.connect.json.JsonConverter");
-    // props.put("key.converter.schemas.enable", "true");  // Enable schemas for key converter
-    // props.put("value.converter.schemas.enable", "true"); // Enable schemas for value converter
     props.put(JdbcSinkConfig.CONNECTION_URL, getDatabaseConfig().getJdbcUrl());
     props.put(JdbcSinkConfig.CONNECTION_USER, getDatabaseConfig().getUsername());
     props.put(JdbcSinkConfig.CONNECTION_PASSWORD, getDatabaseConfig().getPassword());
@@ -569,8 +569,8 @@ public abstract class AbstractJdbcSinkConnectorIT extends BaseConnectorIT {
         assertEquals("Alice", rs.getString(normalizeIdentifier("name")));
 
         // Verify non-whitelisted fields are null
-        assertFalse("Email should be null", rs.getObject(normalizeIdentifier("email")) != null);
-        assertFalse("Age should be null", rs.getObject(normalizeIdentifier("age")) != null);
+        assertNull("Email should be null", rs.getObject(normalizeIdentifier("email")));
+        assertNull("Age should be null", rs.getObject(normalizeIdentifier("age")));
       }
     }
   }
@@ -698,8 +698,8 @@ public abstract class AbstractJdbcSinkConnectorIT extends BaseConnectorIT {
         assertEquals("TimestampTest", rs.getString(normalizeIdentifier("name")));
 
         // Verify timestamp fields were converted properly (not null at minimum)
-        assertFalse("created_at should not be null", rs.getObject(normalizeIdentifier("created_at")) == null);
-        assertFalse("updated_at should not be null", rs.getObject(normalizeIdentifier("updated_at")) == null);
+        assertNotNull("created_at should not be null", rs.getObject(normalizeIdentifier("created_at")));
+        assertNotNull("updated_at should not be null", rs.getObject(normalizeIdentifier("updated_at")));
       }
     }
   }

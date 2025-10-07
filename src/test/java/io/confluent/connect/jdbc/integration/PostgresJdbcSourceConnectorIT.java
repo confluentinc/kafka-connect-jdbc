@@ -99,7 +99,7 @@ public class PostgresJdbcSourceConnectorIT extends AbstractJdbcSourceConnectorIT
   }
 
   @Override
-  public void createTable(String tableName) throws SQLException {
+  protected void createTable(String tableName) throws SQLException {
     try (Statement stmt = connection.createStatement()) {
       stmt.execute("CREATE TABLE " + tableName + " (" +
                    "id SERIAL PRIMARY KEY, " +

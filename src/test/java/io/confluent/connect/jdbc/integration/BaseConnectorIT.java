@@ -65,7 +65,7 @@ public abstract class BaseConnectorIT {
     protected void startConnect() {
       HashMap<String, String> workerConfigs = new HashMap<>();
       workerConfigs.put("plugin.discovery", "hybrid_warn");
-      // Default is 60 seconds. Speeding this up to make tests run faster. ⚡
+      // Default is 60 seconds. Speeding this up to make tests run faster.
       workerConfigs.put("offset.flush.interval.ms", "1000");
       connect = new EmbeddedConnectCluster.Builder()
           .name("jdbc-connect-cluster")

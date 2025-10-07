@@ -66,12 +66,7 @@ public class TableCollectionUtils {
       String tableString = table.toUnquotedString();
       boolean includeMatch = matchesAny(tableString, inclusionRegex);
       boolean excludeMatch = matchesAny(tableString, exclusionRegex);
-      
-      // Use System.out for immediate visibility in logs
-      System.out.println("DEBUG: Table " + tableString + " - Include match: " + includeMatch 
-                        + ", Exclude match: " + excludeMatch + ", Final result: " 
-                        + (includeMatch && !excludeMatch));
-      
+
       if (includeMatch && !excludeMatch) {
         filteredTables.add(table);
       }

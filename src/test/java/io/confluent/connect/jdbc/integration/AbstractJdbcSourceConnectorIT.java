@@ -15,11 +15,11 @@
 
 package io.confluent.connect.jdbc.integration;
 
+import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.source.JdbcSourceTaskConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.connect.runtime.ConnectorConfig;
-import org.apache.kafka.test.IntegrationTest;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;

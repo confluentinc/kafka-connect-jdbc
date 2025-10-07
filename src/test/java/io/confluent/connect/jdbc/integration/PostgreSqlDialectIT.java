@@ -4,12 +4,12 @@
 
 package io.confluent.connect.jdbc.integration;
 
+import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.connect.data.SchemaAndValue;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.json.JsonConverter;
-import org.apache.kafka.test.IntegrationTest;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;

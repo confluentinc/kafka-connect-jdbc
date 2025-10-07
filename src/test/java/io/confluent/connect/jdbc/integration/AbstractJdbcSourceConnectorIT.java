@@ -15,11 +15,11 @@
 
 package io.confluent.connect.jdbc.integration;
 
+import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.source.JdbcSourceTaskConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.connect.runtime.ConnectorConfig;
-import org.apache.kafka.test.IntegrationTest;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -74,9 +74,12 @@ public abstract class AbstractJdbcSourceConnectorIT extends BaseConnectorIT {
     props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, getDatabaseConfig().getUsername());
     props.put(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, getDatabaseConfig().getPassword());
     props.put(JdbcSourceConnectorConfig.POLL_INTERVAL_MS_CONFIG, String.valueOf(POLLING_INTERVAL_MS));
+    // task thread is stuck while lingering, hence graceful stop fails in some of the tests. It's
+    // better to not linger.
+    props.put(JdbcSourceConnectorConfig.POLL_LINGER_MS_CONFIG, String.valueOf(0));
     props.put(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG, getTopicPrefix());
     props.put(JdbcSourceConnectorConfig.BATCH_MAX_ROWS_CONFIG, "100");
-    props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, needsUpperCaseIdentifiers() ? TEST_TABLE_NAME.toUpperCase() : TEST_TABLE_NAME);
+    props.put(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG, ".*" + (needsUpperCaseIdentifiers() ? TEST_TABLE_NAME.toUpperCase() : TEST_TABLE_NAME));
     props.put(JdbcSourceConnectorConfig.VALIDATE_NON_NULL_CONFIG, "false");
     props.put(JdbcSourceConnectorConfig.DIALECT_NAME_CONFIG, getDatabaseConfig().getDialectName());
   }
@@ -131,8 +134,10 @@ public abstract class AbstractJdbcSourceConnectorIT extends BaseConnectorIT {
     insertData(tableName, 3);
 
     // Configure connector for incrementing mode
+    String normalizedTableName = needsUpperCaseIdentifiers() ? TEST_TABLE_NAME.toUpperCase() : TEST_TABLE_NAME;
+    String normalizedIdColumn = needsUpperCaseIdentifiers() ? ID_COLUMN_NAME.toUpperCase() : ID_COLUMN_NAME;
     props.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_INCREMENTING);
-    props.put(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG, needsUpperCaseIdentifiers() ? ID_COLUMN_NAME.toUpperCase() : ID_COLUMN_NAME);
+    props.put(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_MAPPING_CONFIG, ".*" + normalizedTableName + ":" + normalizedIdColumn);
 
     String topic = getTopicPrefix() + tableName;
     connect.kafka().createTopic(topic, 1);
@@ -169,8 +174,10 @@ public abstract class AbstractJdbcSourceConnectorIT extends BaseConnectorIT {
     insertData(tableName, 3);
 
     // Configure connector for timestamp mode
+    String normalizedTableName = needsUpperCaseIdentifiers() ? TEST_TABLE_NAME.toUpperCase() : TEST_TABLE_NAME;
+    String normalizedTimestampColumn = needsUpperCaseIdentifiers() ? TIMESTAMP_COLUMN_NAME.toUpperCase() : TIMESTAMP_COLUMN_NAME;
     props.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_TIMESTAMP);
-    props.put(JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG, needsUpperCaseIdentifiers() ? TIMESTAMP_COLUMN_NAME.toUpperCase() : TIMESTAMP_COLUMN_NAME);
+    props.put(JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_MAPPING_CONFIG, ".*" + normalizedTableName + ":" + "["+normalizedTimestampColumn+"]");
 
     String topic = getTopicPrefix() + tableName;
     connect.kafka().createTopic(topic, 1);
@@ -218,10 +225,13 @@ public abstract class AbstractJdbcSourceConnectorIT extends BaseConnectorIT {
     insertData(tableName, 3);
 
     // Configure connector for timestamp+incrementing mode
+    String normalizedTableName = needsUpperCaseIdentifiers() ? TEST_TABLE_NAME.toUpperCase() : TEST_TABLE_NAME;
+    String normalizedTimestampColumn = needsUpperCaseIdentifiers() ? TIMESTAMP_COLUMN_NAME.toUpperCase() : TIMESTAMP_COLUMN_NAME;
+    String normalizedIdColumn = needsUpperCaseIdentifiers() ? ID_COLUMN_NAME.toUpperCase() : ID_COLUMN_NAME;
     props.put(JdbcSourceConnectorConfig.MODE_CONFIG,
         JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING);
-    props.put(JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG, needsUpperCaseIdentifiers() ? TIMESTAMP_COLUMN_NAME.toUpperCase() : TIMESTAMP_COLUMN_NAME);
-    props.put(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG, needsUpperCaseIdentifiers() ? ID_COLUMN_NAME.toUpperCase() : ID_COLUMN_NAME);
+    props.put(JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_MAPPING_CONFIG, ".*" + normalizedTableName + ":" + "["+normalizedTimestampColumn+"]");
+    props.put(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_MAPPING_CONFIG, ".*" + normalizedTableName + ":" + normalizedIdColumn);
 
     String topic = getTopicPrefix() + tableName;
     connect.kafka().createTopic(topic, 1);
@@ -283,6 +293,10 @@ public abstract class AbstractJdbcSourceConnectorIT extends BaseConnectorIT {
    */
   protected abstract String getTopicPrefix();
 
+  /**
+   * Create a standard test table with columns: id, name, value, updated_at.
+   * The id should be auto-incrementing, and updated_at should default to current timestamp.
+   */
   protected abstract void createTable(String tableName) throws SQLException;
 
   protected void insertData(String tableName, int count) throws SQLException {

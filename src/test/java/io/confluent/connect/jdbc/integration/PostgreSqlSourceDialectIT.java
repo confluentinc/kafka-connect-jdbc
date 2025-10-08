@@ -37,7 +37,7 @@ import static org.junit.Assert.assertTrue;
  * Tests all major PostgreSQL data types end-to-end through the JDBC Source Connector.
  */
 @Category(IntegrationTest.class)
-public class PostgreSqlDialectIT extends BaseConnectorIT {
+public class PostgreSqlSourceDialectIT extends BaseConnectorIT {
   
   @ClassRule
   public static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:13")

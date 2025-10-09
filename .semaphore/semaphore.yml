@@ -16,10 +16,6 @@ fail_fast:
 execution_time_limit:
   hours: 1
 
-auto_cancel:
-  running:
-    when: "true"
-
 queue:
   - when: "branch != 'master' and branch !~ '[0-9]+\\.[0-9]+\\.x'"
     processing: parallel
@@ -84,7 +80,12 @@ after_pipeline:
         commands:
           - checkout
           - sem-version java 11
-          - emit-sonarqube-data -a test-results
+          - artifact pull workflow target
+          - emit-sonarqube-data --run_only_sonar_scan
+
+auto_cancel:
+  running:
+    when: "true"
 
 promotions:
   - name: Release incremental f/w version

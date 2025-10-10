@@ -27,6 +27,7 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
@@ -79,6 +80,15 @@ public class BulkTableQuerier extends TableQuerier {
     return stmt.executeQuery();
   }
 
+  /**
+ * adding polling timestamp in metadata
+ */
+  private Map<String, Object> sourceOffset() {
+    Map<String, Object> offset = new HashMap<>();
+    offset.put("polling.timestamp", System.currentTimeMillis());
+    return offset;
+  }
+
   @Override
   public SourceRecord extractRecord() throws SQLException {
     Struct record = new Struct(schemaMapping.schema());
@@ -111,7 +121,7 @@ public class BulkTableQuerier extends TableQuerier {
       default:
         throw new ConnectException("Unexpected query mode: " + mode);
     }
-    return new SourceRecord(partition, null, topic, record.schema(), record);
+    return new SourceRecord(partition, sourceOffset(), topic, record.schema(), record);
   }
 
   @Override

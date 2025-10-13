@@ -51,8 +51,6 @@ public class JdbcSourceConnectorValidation {
 
   public JdbcSourceConnectorValidation(Map<String, String> connectorConfigs) {
     this.connectorConfigs = connectorConfigs;
-    this.validationResult = null;
-    this.config = null;
   }
 
 

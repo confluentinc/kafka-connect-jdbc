@@ -48,15 +48,12 @@ public class JdbcSourceConnectorValidation {
   }
 
   public JdbcSourceConnectorValidation(Map<String, String> connectorConfigs) {
-    // Create Config object using ConfigDef.validateAll() approach FIRST
-    // This collects validation errors without throwing exceptions
     Map<String, ConfigValue> configValuesMap = JdbcSourceConnectorConfig.CONFIG_DEF
         .validateAll(connectorConfigs);
     List<ConfigValue> configValues = new ArrayList<>(configValuesMap.values());
     this.validationResult = new Config(configValues);
     
     // Only create the config object if there are no validator errors
-    // If there are errors, we'll use a null config and skip business logic validation
     boolean hasValidatorErrors = configValues.stream()
         .anyMatch(cv -> !cv.errorMessages().isEmpty());
     
@@ -69,7 +66,6 @@ public class JdbcSourceConnectorValidation {
    */
   public Config validate() {
     try {
-      // Check if there are any errors from the initial validateAll call
       boolean hasValidateAllErrors = validationResult.configValues().stream()
               .anyMatch(configValue -> !configValue.errorMessages().isEmpty());
 

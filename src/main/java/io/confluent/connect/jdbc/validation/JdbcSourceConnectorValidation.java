@@ -38,26 +38,21 @@ import java.util.Set;
 public class JdbcSourceConnectorValidation {
 
   private static final Logger log = LoggerFactory.getLogger(JdbcSourceConnectorValidation.class);
-  protected final JdbcSourceConnectorConfig config;
-  protected final Config validationResult;
+  protected JdbcSourceConnectorConfig config;
+  protected Config validationResult;
+  private final Map<String, String> connectorConfigs;
 
   public JdbcSourceConnectorValidation(JdbcSourceConnectorConfig config,
                                           Config validationResult) {
     this.config = config;
     this.validationResult = validationResult;
+    this.connectorConfigs = null;
   }
 
   public JdbcSourceConnectorValidation(Map<String, String> connectorConfigs) {
-    Map<String, ConfigValue> configValuesMap = JdbcSourceConnectorConfig.CONFIG_DEF
-        .validateAll(connectorConfigs);
-    List<ConfigValue> configValues = new ArrayList<>(configValuesMap.values());
-    this.validationResult = new Config(configValues);
-    
-    // Only create the config object if there are no validator errors
-    boolean hasValidatorErrors = configValues.stream()
-        .anyMatch(cv -> !cv.errorMessages().isEmpty());
-    
-    this.config = hasValidatorErrors ? null : new JdbcSourceConnectorConfig(connectorConfigs);
+    this.connectorConfigs = connectorConfigs;
+    this.validationResult = null;
+    this.config = null;
   }
 
 
@@ -66,12 +61,24 @@ public class JdbcSourceConnectorValidation {
    */
   public Config validate() {
     try {
+      // Run validateAll() if not already done
+      if (validationResult == null && connectorConfigs != null) {
+        Map<String, ConfigValue> configValuesMap = JdbcSourceConnectorConfig.CONFIG_DEF
+            .validateAll(connectorConfigs);
+        List<ConfigValue> configValues = new ArrayList<>(configValuesMap.values());
+        validationResult = new Config(configValues);
+      }
+
       boolean hasValidateAllErrors = validationResult.configValues().stream()
               .anyMatch(configValue -> !configValue.errorMessages().isEmpty());
 
       if (hasValidateAllErrors) {
         log.info("Validation failed due to validator errors");
         return this.validationResult;
+      }
+
+      if (config == null && connectorConfigs != null) {
+        config = new JdbcSourceConnectorConfig(connectorConfigs);
       }
 
       boolean validationResult = validateMultiConfigs()

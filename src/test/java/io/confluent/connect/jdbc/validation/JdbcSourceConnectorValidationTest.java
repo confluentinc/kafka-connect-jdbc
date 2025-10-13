@@ -94,15 +94,36 @@ public class JdbcSourceConnectorValidationTest {
   }
 
   @Test
-  public void validate_withInvalidRegexInTableIncludeList_setsError() {
-    // This test is skipped because regex validation happens at ConfigDef level
-    // and throws ConfigException before our custom validation runs
+  public void validate_withInvalidRegexInTableIncludeList_setsValidatorError() {
+    props.put(MODE_CONFIG, MODE_BULK);
+    // Invalid regex: unbalanced parenthesis
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema(table.*");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
+    assertErrorMatches(
+        TABLE_INCLUDE_LIST_CONFIG,
+        ".*Must be a valid comma-separated list of regular expression patterns.*"
+    );
   }
 
   @Test
-  public void validate_withInvalidRegexInTableExcludeList_setsError() {
-    // This test is skipped because regex validation happens at ConfigDef level
-    // and throws ConfigException before our custom validation runs
+  public void validate_withInvalidRegexInTableExcludeList_setsValidatorError() {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
+    // Invalid regex: unbalanced bracket
+    props.put(TABLE_EXCLUDE_LIST_CONFIG, "database.schema[table.*");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(TABLE_EXCLUDE_LIST_CONFIG, 1);
+    assertErrorMatches(
+        TABLE_EXCLUDE_LIST_CONFIG,
+        ".*Must be a valid comma-separated list of regular expression patterns.*"
+    );
   }
 
   @Test
@@ -201,6 +222,217 @@ public class JdbcSourceConnectorValidationTest {
     assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
     assertErrorMatches(TABLE_WHITELIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
     assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
+  }
+
+  @Test
+  public void validate_all_combined_setsError() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "table1,table2");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "inc_col");
+    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "inc_col");
+    props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts_col");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "ts_col");
+
+    validate();
+
+    // We expect only 2 validator errors here:
+    // - Invalid format for timestamp mapping
+    // - Invalid format for incrementing mapping
+    // Business logic validation (legacy/new conflict) doesn't run when validator errors exist
+    assertErrors(2);
+    
+    // Validator errors for invalid formats
+    assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(
+        TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*Invalid format.*Expected 'regex:\\[col1\\|col2\\|...\\]'.*"
+    );
+    
+    assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(
+        INCREMENTING_COLUMN_MAPPING_CONFIG,
+        ".*Invalid format.*Expected 'regex:columnName'.*"
+    );
+  }
+
+  // ========== Validator Error Tests ==========
+  // These tests verify that ConfigDef validators properly catch invalid formats
+  // and report them as errors rather than throwing exceptions
+
+  @Test
+  public void validate_withInvalidTimestampMappingFormat_missingBrackets_setsError() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table.*:ts_col");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(
+        TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*Columns list must be enclosed in square brackets.*"
+    );
+  }
+
+  @Test
+  public void validate_withInvalidTimestampMappingFormat_emptyColumns_setsError() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table.*:[]");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(
+        TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*Columns list cannot be empty.*"
+    );
+  }
+
+  @Test
+  public void validate_withInvalidTimestampMappingFormat_missingColon_setsError() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table.*");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(
+        TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*Invalid format.*Expected 'regex:\\[col1\\|col2\\|...\\]'.*"
+    );
+  }
+
+  @Test
+  public void validate_withInvalidTimestampMappingFormat_emptyColumnName_setsError() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table.*:[col1||col3]");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(
+        TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*Every column name should be non-empty string.*"
+    );
+  }
+
+  @Test
+  public void validate_withInvalidTimestampMappingRegex_setsError() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
+    // Invalid regex: unbalanced parenthesis
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema(table.*:[ts_col]");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG, ".*Invalid regular expression.*");
+  }
+
+  @Test
+  public void validate_withInvalidIncrementingMappingFormat_missingColon_setsError() {
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
+    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table.*");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(
+        INCREMENTING_COLUMN_MAPPING_CONFIG,
+        ".*Invalid format.*Expected 'regex:columnName'.*"
+    );
+  }
+
+  @Test
+  public void validate_withInvalidIncrementingMappingFormat_emptyColumn_setsError() {
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
+    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table.*:");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(
+        INCREMENTING_COLUMN_MAPPING_CONFIG,
+        ".*Column name cannot be empty.*"
+    );
+  }
+
+  @Test
+  public void validate_withInvalidIncrementingMappingRegex_setsError() {
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
+    // Invalid regex: unbalanced bracket
+    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema[table.*:inc_col");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(INCREMENTING_COLUMN_MAPPING_CONFIG, ".*Invalid regular expression.*");
+  }
+
+  @Test
+  public void validate_withInvalidRegexInTableIncludeList_setsError() {
+    props.put(MODE_CONFIG, MODE_BULK);
+    // Invalid regex: unbalanced parenthesis
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema(table.*");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
+    assertErrorMatches(
+        TABLE_INCLUDE_LIST_CONFIG,
+        ".*Must be a valid comma-separated list of regular expression patterns.*"
+    );
+  }
+
+  @Test
+  public void validate_withInvalidRegexInTableExcludeList_setsError() {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
+    // Invalid regex: unbalanced bracket
+    props.put(TABLE_EXCLUDE_LIST_CONFIG, "database.schema[table.*");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(TABLE_EXCLUDE_LIST_CONFIG, 1);
+    assertErrorMatches(
+        TABLE_EXCLUDE_LIST_CONFIG,
+        ".*Must be a valid comma-separated list of regular expression patterns.*"
+    );
+  }
+
+  @Test
+  public void validate_withMultipleInvalidConfigs_reportsAllErrors() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema(table.*");
+    // Invalid incrementing format
+    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "invalid_format");
+    // Invalid timestamp format
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "also_invalid");
+
+    validate();
+
+    // All 3 validator errors should be reported
+    assertErrors(3);
+    assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
+    assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1);
+    assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
   }
   
   @Test

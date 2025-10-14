@@ -18,6 +18,7 @@ package io.confluent.connect.jdbc.source;
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.util.ConnectionProvider;
 import io.confluent.connect.jdbc.util.QuoteMethod;
+import io.confluent.connect.jdbc.util.TableCollectionUtils;
 import io.confluent.connect.jdbc.util.TableId;
 
 import org.apache.kafka.common.errors.TimeoutException;
@@ -53,9 +54,16 @@ public class TableMonitorThread extends Thread {
   private final long pollMs;
   private final Set<String> whitelist;
   private final Set<String> blacklist;
+  private final Set<String> includeListRegex;
+  private final Set<String> excludeListRegex;
+  private final boolean useRegexFiltering;
   private final AtomicReference<List<TableId>> tables;
   private final Time time;
 
+  /**
+   * Legacy constructor for backward compatibility.
+   * Uses the original whitelist/blacklist filtering approach.
+   */
   public TableMonitorThread(DatabaseDialect dialect,
       ConnectionProvider connectionProvider,
       ConnectorContext context,
@@ -63,6 +71,24 @@ public class TableMonitorThread extends Thread {
       long pollMs,
       Set<String> whitelist,
       Set<String> blacklist,
+      Time time
+  ) {
+    this(dialect, connectionProvider, context, startupMs, pollMs, 
+         whitelist, blacklist, null, null, time);
+  }
+
+  /**
+   * New constructor supporting both legacy and regex-based filtering.
+   */
+  public TableMonitorThread(DatabaseDialect dialect,
+      ConnectionProvider connectionProvider,
+      ConnectorContext context,
+      long startupMs,
+      long pollMs,
+      Set<String> whitelist,
+      Set<String> blacklist,
+      Set<String> includeListRegex,
+      Set<String> excludeListRegex,
       Time time
   ) {
     this.dialect = dialect;
@@ -73,6 +99,10 @@ public class TableMonitorThread extends Thread {
     this.pollMs = pollMs;
     this.whitelist = whitelist;
     this.blacklist = blacklist;
+    this.includeListRegex = includeListRegex;
+    this.excludeListRegex = excludeListRegex;
+    this.useRegexFiltering = (includeListRegex != null && !includeListRegex.isEmpty())
+                            || (excludeListRegex != null && !excludeListRegex.isEmpty());
     this.tables = new AtomicReference<>();
     this.time = time;
   }
@@ -82,21 +112,26 @@ public class TableMonitorThread extends Thread {
     log.info("Starting thread to monitor tables.");
     while (shutdownLatch.getCount() > 0) {
       try {
+        log.trace("Starting table update check cycle");
         if (updateTables()) {
+          log.trace("Table changes detected, requesting task reconfiguration");
           context.requestTaskReconfiguration();
+        } else {
+          log.trace("No table changes detected in this cycle");
         }
       } catch (Exception e) {
         throw fail(e);
       }
 
       try {
-        log.debug("Waiting {} ms to check for changed.", pollMs);
+        log.debug("Waiting {} ms to check for changed tables", pollMs);
         boolean shuttingDown = shutdownLatch.await(pollMs, TimeUnit.MILLISECONDS);
         if (shuttingDown) {
+          log.info("Shutdown signal received, stopping table monitor thread");
           return;
         }
       } catch (InterruptedException e) {
-        log.error("Unexpected InterruptedException, ignoring: ", e);
+        log.error("Unexpected InterruptedException in table monitor thread", e);
       }
     }
   }
@@ -107,6 +142,7 @@ public class TableMonitorThread extends Thread {
    *         successfully yet
    */
   public List<TableId> tables() {
+    log.trace("Requesting current tables list");
     awaitTablesReady(startupMs);
     List<TableId> tablesSnapshot = tables.get();
     if (tablesSnapshot == null) {
@@ -122,7 +158,7 @@ public class TableMonitorThread extends Thread {
 
     if (tablesSnapshot.isEmpty()) {
       log.info(
-          "Based on the supplied filtering rules, there are no matching tables to read from"
+          "Based on the supplied filtering rules, there are no matching tables to read data."
       );
     } else {
       log.debug(
@@ -135,6 +171,7 @@ public class TableMonitorThread extends Thread {
     }
 
     if (!duplicates.isEmpty()) {
+      log.warn("Duplicate table names detected: {}", duplicates);
       String configText;
       if (whitelist != null) {
         configText = "'" + JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + "'";
@@ -170,11 +207,49 @@ public class TableMonitorThread extends Thread {
     shutdownLatch.countDown();
   }
 
+  /**
+   * Apply legacy exact-match filtering using whitelist/blacklist.
+   * This method preserves the original filtering behavior for backward compatibility.
+   */
+  private List<TableId> applyLegacyFiltering(List<TableId> allTables) {
+    final List<TableId> filteredTables = new ArrayList<>(allTables.size());
+    
+    if (whitelist != null) {
+      log.trace("Applying whitelist filter to tables");
+      for (TableId table : allTables) {
+        String fqn1 = dialect.expressionBuilder().append(table, QuoteMethod.NEVER).toString();
+        String fqn2 = dialect.expressionBuilder().append(table, QuoteMethod.ALWAYS).toString();
+        if (whitelist.contains(fqn1) || whitelist.contains(fqn2)
+            || whitelist.contains(table.tableName())) {
+          filteredTables.add(table);
+          log.trace("Table {} passed whitelist filter", table);
+        }
+      }
+    } else if (blacklist != null) {
+      log.trace("Applying blacklist filter to tables");
+      for (TableId table : allTables) {
+        String fqn1 = dialect.expressionBuilder().append(table, QuoteMethod.NEVER).toString();
+        String fqn2 = dialect.expressionBuilder().append(table, QuoteMethod.ALWAYS).toString();
+        if (!(blacklist.contains(fqn1) || blacklist.contains(fqn2)
+              || blacklist.contains(table.tableName()))) {
+          filteredTables.add(table);
+          log.trace("Table {} passed blacklist filter", table);
+        }
+      }
+    } else {
+      log.trace("No filters applied, using all tables");
+      filteredTables.addAll(allTables);
+    }
+    
+    return filteredTables;
+  }
+
   private boolean updateTables() {
     final List<TableId> allTables;
     try {
+      log.info("Fetching all tables from database");
       allTables = dialect.tableIds(connectionProvider.getConnection());
-      log.debug("Got the following tables: {}", allTables);
+      log.info("Retrieved {} tables from database: {}", allTables.size(), allTables);
     } catch (SQLException e) {
       log.error(
           "Error while trying to get updated table list, ignoring and waiting for next table poll"
@@ -185,32 +260,32 @@ public class TableMonitorThread extends Thread {
       return false;
     }
 
-    final List<TableId> filteredTables = new ArrayList<>(allTables.size());
-    if (whitelist != null) {
-      for (TableId table : allTables) {
-        String fqn1 = dialect.expressionBuilder().append(table, QuoteMethod.NEVER).toString();
-        String fqn2 = dialect.expressionBuilder().append(table, QuoteMethod.ALWAYS).toString();
-        if (whitelist.contains(fqn1) || whitelist.contains(fqn2)
-            || whitelist.contains(table.tableName())) {
-          filteredTables.add(table);
-        }
-      }
-    } else if (blacklist != null) {
-      for (TableId table : allTables) {
-        String fqn1 = dialect.expressionBuilder().append(table, QuoteMethod.NEVER).toString();
-        String fqn2 = dialect.expressionBuilder().append(table, QuoteMethod.ALWAYS).toString();
-        if (!(blacklist.contains(fqn1) || blacklist.contains(fqn2)
-              || blacklist.contains(table.tableName()))) {
-          filteredTables.add(table);
-        }
-      }
+    final List<TableId> filteredTables;
+    
+    if (useRegexFiltering) {
+      log.debug("Applying regex-based include/exclude filters to tables");
+      log.debug("Include regex patterns: {}", includeListRegex);
+      log.debug("Exclude regex patterns: {}", excludeListRegex);
+      filteredTables = TableCollectionUtils.filterTables(
+          allTables, 
+          includeListRegex != null ? includeListRegex : java.util.Collections.emptySet(),
+          excludeListRegex != null ? excludeListRegex : java.util.Collections.emptySet()
+      );
+      log.info("Regex filtering resulted in {} tables from {} total tables", 
+               filteredTables.size(), allTables.size());
+      log.info("Filtered tables: {}", filteredTables);
     } else {
-      filteredTables.addAll(allTables);
+      // Legacy exact-match filtering
+      filteredTables = applyLegacyFiltering(allTables);
     }
 
     List<TableId> priorTablesSnapshot = tables.getAndSet(filteredTables);
+    if (!Objects.equals(priorTablesSnapshot, filteredTables)) {
+      log.info("Filtered tables size: {}", filteredTables);
+    }
     synchronized (tables) {
       tables.notifyAll();
+      log.trace("Notified all waiting threads about table updates");
     }
     return !Objects.equals(priorTablesSnapshot, filteredTables);
   }

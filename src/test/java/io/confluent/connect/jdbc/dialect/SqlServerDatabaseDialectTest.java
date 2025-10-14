@@ -23,7 +23,6 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.TimeZone;
 import java.util.concurrent.ThreadLocalRandom;
 
 import io.confluent.connect.jdbc.util.ColumnDefinition;
@@ -72,14 +71,14 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
   @Test
   public void shouldConvertFromDateTimeOffset() {
     ZoneId utc = ZoneId.of("UTC");
-    TimeZone timeZone = TimeZone.getTimeZone(utc.getId());
+    ZoneId zoneId = utc;
 
     String value = "2016-12-08 12:34:56.7850000 -07:00";
-    java.sql.Timestamp ts = SqlServerDatabaseDialect.dateTimeOffsetFrom(value, timeZone);
+    java.sql.Timestamp ts = SqlServerDatabaseDialect.dateTimeOffsetFrom(value, zoneId);
     assertTimestamp(ZonedDateTime.of(2016, 12, 8, 19, 34, 56, 785000000, utc), ts);
 
     value = "2019-12-08 12:34:56.7850200 -00:00";
-    ts = SqlServerDatabaseDialect.dateTimeOffsetFrom(value, timeZone);
+    ts = SqlServerDatabaseDialect.dateTimeOffsetFrom(value, zoneId);
     assertTimestamp(ZonedDateTime.of(2019, 12, 8, 12, 34, 56, 785020000, utc), ts);
   }
 
@@ -466,6 +465,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
   public void shouldBindStringAccordingToColumnDef() throws SQLException {
     int index = ThreadLocalRandom.current().nextInt();
     String value = "random text";
+    String field = "sample-test";
     Schema schema = Schema.STRING_SCHEMA;
     PreparedStatement stmtVarchar = mock(PreparedStatement.class);
     ColumnDefinition colDefVarchar = mock(ColumnDefinition.class);
@@ -479,13 +479,13 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
     ColumnDefinition colDefNvarchar = mock(ColumnDefinition.class);
     when(colDefNvarchar.type()).thenReturn(Types.NVARCHAR);
 
-    dialect.bindField(stmtVarchar, index, schema, value, colDefVarchar);
+    dialect.bindField(stmtVarchar, index, schema, value, colDefVarchar, field);
     verify(stmtVarchar, times(1)).setString(index, value);
 
-    dialect.bindField(stmtNchar, index, schema, value, colDefNchar);
+    dialect.bindField(stmtNchar, index, schema, value, colDefNchar, field);
     verify(stmtNchar, times(1)).setNString(index, value);
 
-    dialect.bindField(stmtNvarchar, index, schema, value, colDefNvarchar);
+    dialect.bindField(stmtNvarchar, index, schema, value, colDefNvarchar, field);
     verify(stmtNvarchar, times(1)).setNString(index, value);
   }
 }

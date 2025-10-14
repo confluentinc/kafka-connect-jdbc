@@ -69,21 +69,13 @@ import static org.mockito.Mockito.when;
 
 public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
 
-  protected static final GregorianCalendar EPOCH_PLUS_TEN_THOUSAND_DAYS;
-  protected static final GregorianCalendar EPOCH_PLUS_TEN_THOUSAND_MILLIS;
   protected static final GregorianCalendar MARCH_15_2001_MIDNIGHT;
 
   static {
-    EPOCH_PLUS_TEN_THOUSAND_DAYS = new GregorianCalendar(1970, Calendar.JANUARY, 1, 0, 0, 0);
-    EPOCH_PLUS_TEN_THOUSAND_DAYS.setTimeZone(TimeZone.getTimeZone("UTC"));
-    EPOCH_PLUS_TEN_THOUSAND_DAYS.add(Calendar.DATE, 10000);
-
-    EPOCH_PLUS_TEN_THOUSAND_MILLIS = new GregorianCalendar(1970, Calendar.JANUARY, 1, 0, 0, 0);
-    EPOCH_PLUS_TEN_THOUSAND_MILLIS.setTimeZone(TimeZone.getTimeZone("UTC"));
-    EPOCH_PLUS_TEN_THOUSAND_MILLIS.add(Calendar.MILLISECOND, 10000);
 
     MARCH_15_2001_MIDNIGHT = new GregorianCalendar(2001, Calendar.MARCH, 15, 0, 0, 0);
     MARCH_15_2001_MIDNIGHT.setTimeZone(TimeZone.getTimeZone("UTC"));
+
   }
 
   protected QuoteMethod quoteIdentfiiers;
@@ -432,7 +424,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
         Decimal.schema(0),
         new BigDecimal("1.5").setScale(0, BigDecimal.ROUND_HALF_EVEN)
     ).setBigDecimal(index, new BigDecimal(2));
-    Calendar utcCalendar = DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone(ZoneOffset.UTC));
+    Calendar utcCalendar = DateTimeUtils.getZoneIdCalendar(ZoneOffset.UTC);
     verifyBindField(
       ++index,
       Date.SCHEMA,
@@ -501,24 +493,27 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
   public void bindFieldStructUnsupported() throws SQLException {
     Schema structSchema = SchemaBuilder.struct().field("test", Schema.BOOLEAN_SCHEMA).build();
     ColumnDefinition colDef = mock(ColumnDefinition.class);
+    String field = "sample-test";
     when(colDef.type()).thenReturn(Types.BOOLEAN);
-    dialect.bindField(mock(PreparedStatement.class), 1, structSchema, new Struct(structSchema), colDef);
+    dialect.bindField(mock(PreparedStatement.class), 1, structSchema, new Struct(structSchema), colDef, field);
   }
 
   @Test(expected = ConnectException.class)
   public void bindFieldArrayUnsupported() throws SQLException {
     Schema arraySchema = SchemaBuilder.array(Schema.INT8_SCHEMA);
     ColumnDefinition colDef = mock(ColumnDefinition.class);
+    String field = "sample-test";
     when(colDef.type()).thenReturn(Types.ARRAY);
-    dialect.bindField(mock(PreparedStatement.class), 1, arraySchema, Collections.emptyList(), colDef);
+    dialect.bindField(mock(PreparedStatement.class), 1, arraySchema, Collections.emptyList(), colDef, field);
   }
 
   @Test(expected = ConnectException.class)
   public void bindFieldMapUnsupported() throws SQLException {
     Schema mapSchema = SchemaBuilder.map(Schema.INT8_SCHEMA, Schema.INT8_SCHEMA);
     ColumnDefinition colDef = mock(ColumnDefinition.class);
+    String field = "sample-test";
     when(colDef.type()).thenReturn(Types.STRUCT);
-    dialect.bindField(mock(PreparedStatement.class), 1, mapSchema, Collections.emptyMap(), colDef);
+    dialect.bindField(mock(PreparedStatement.class), 1, mapSchema, Collections.emptyMap(), colDef, field);
   }
 
   protected void assertSanitizedUrl(String url, String expectedSanitizedUrl) {
@@ -529,6 +524,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
       throws SQLException {
     PreparedStatement statement = mock(PreparedStatement.class);
     ColumnDefinition colDef = mock(ColumnDefinition.class);
+    String field = "sample-test";
     if (schema.name() != null) {
       switch (schema.name()) {
         case Decimal.LOGICAL_NAME:
@@ -591,7 +587,7 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
       }
     }
 
-    dialect.bindField(statement, index, schema, value, colDef);
+    dialect.bindField(statement, index, schema, value, colDef, field);
     return verify(statement, times(1));
   }
 }

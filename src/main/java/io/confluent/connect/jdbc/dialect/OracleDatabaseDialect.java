@@ -27,7 +27,9 @@ import io.confluent.connect.jdbc.util.TableDefinition;
 import java.io.ByteArrayInputStream;
 import java.io.StringReader;
 import java.nio.ByteBuffer;
+import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import org.apache.kafka.common.config.AbstractConfig;
@@ -118,14 +120,15 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       int index,
       Schema schema,
       Object value,
-      ColumnDefinition colDef
+      ColumnDefinition colDef,
+      String fieldName
   ) throws SQLException {
     if (value == null) {
       statement.setObject(index, null);
     } else {
       boolean bound = maybeBindLogical(statement, index, schema, value);
       if (!bound) {
-        bound = maybeBindPrimitive(statement, index, schema, value, colDef);
+        bound = maybeBindPrimitive(statement, index, schema, value, colDef, fieldName);
       }
       if (!bound) {
         throw new ConnectException("Unsupported source data type: " + schema.type());
@@ -138,15 +141,16 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       int index,
       Schema schema,
       Object value,
-      ColumnDefinition colDef
+      ColumnDefinition colDef,
+      String fieldName
   ) throws SQLException {
     if (colDef == null) {
-      return super.maybeBindPrimitive(statement, index, schema, value);
+      return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
     }
 
     switch (schema.type()) {
       case STRING:
-        return maybeBindStringPrimitive(statement, index, schema, value, colDef);
+        return maybeBindStringPrimitive(statement, index, schema, value, colDef, fieldName);
       case BYTES:
         if (colDef.type() != Types.BLOB) {
           break;
@@ -157,7 +161,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
         } else if (value instanceof byte[]) {
           statement.setBlob(index, new ByteArrayInputStream((byte[]) value));
         } else {
-          return super.maybeBindPrimitive(statement, index, schema, value);
+          return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
         }
         return true;
       case FLOAT32:
@@ -175,7 +179,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
         // Keep compiler happy.
     }
 
-    return super.maybeBindPrimitive(statement, index, schema, value);
+    return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
   }
 
   private boolean maybeBindStringPrimitive(
@@ -183,7 +187,8 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
           int index,
           Schema schema,
           Object value,
-          ColumnDefinition colDef
+          ColumnDefinition colDef,
+          String fieldName
   ) throws SQLException {
     switch (colDef.type()) {
       case Types.CLOB:
@@ -218,7 +223,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
         statement.setNString(index, (String) value);
         return true;
       default:
-        return super.maybeBindPrimitive(statement, index, schema, value);
+        return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
     }
   }
 
@@ -247,6 +252,17 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       case INT32:
         return "NUMBER(10,0)";
       case INT64:
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
+          if (((JdbcSinkConfig) config).timestampPrecisionMode
+               == JdbcSinkConfig.TimestampPrecisionMode.MICROSECONDS) {
+            return "TIMESTAMP(6)";
+          }
+          if (((JdbcSinkConfig) config).timestampPrecisionMode
+               == JdbcSinkConfig.TimestampPrecisionMode.NANOSECONDS) {
+            return "TIMESTAMP(9)";
+          }
+        }
         return "NUMBER(19,0)";
       case FLOAT32:
         return "BINARY_FLOAT";
@@ -255,6 +271,17 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "NUMBER(1,0)";
       case STRING:
+        if (config instanceof JdbcSinkConfig
+            && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
+          if (((JdbcSinkConfig) config).timestampPrecisionMode
+              == JdbcSinkConfig.TimestampPrecisionMode.MICROSECONDS) {
+            return "TIMESTAMP(6)";
+          }
+          if (((JdbcSinkConfig) config).timestampPrecisionMode
+              == JdbcSinkConfig.TimestampPrecisionMode.NANOSECONDS) {
+            return "TIMESTAMP(9)";
+          }
+        }
         return "VARCHAR2(4000)";
       case BYTES:
         return "BLOB";
@@ -379,5 +406,21 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       );
     }
     return tableId;
+  }
+
+  @Override
+  public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
+    try (PreparedStatement stmt = connection.prepareStatement(
+        "SELECT TABLE_OWNER, TABLE_NAME FROM ALL_SYNONYMS WHERE OWNER = ? AND "
+        + "SYNONYM_NAME = ?")) {
+      String tableName = parseTableIdentifier(synonymName).tableName();
+      stmt.setString(1, connection.getMetaData().getUserName().toUpperCase());
+      stmt.setString(2, tableName.toUpperCase());
+      ResultSet rs = stmt.executeQuery();
+      if (rs.next()) {
+        return rs.getString("TABLE_NAME");
+      }
+    }
+    return null;
   }
 }

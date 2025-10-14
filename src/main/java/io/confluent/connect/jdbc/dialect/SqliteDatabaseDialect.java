@@ -15,12 +15,15 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -86,11 +89,19 @@ public class SqliteDatabaseDialect extends GenericDatabaseDialect {
       case INT16:
       case INT32:
       case INT64:
+        if (config instanceof JdbcSinkConfig
+            && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
+          return "NUMERIC";
+        }
         return "INTEGER";
       case FLOAT32:
       case FLOAT64:
         return "REAL";
       case STRING:
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
+          return "NUMERIC";
+        }
         return "TEXT";
       case BYTES:
         return "BLOB";
@@ -134,5 +145,10 @@ public class SqliteDatabaseDialect extends GenericDatabaseDialect {
   @Override
   protected String currentTimestampDatabaseQuery() {
     return "SELECT strftime('%Y-%m-%d %H:%M:%S.%f','now')";
+  }
+
+  @Override
+  public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
+    throw new SQLException("SQLite does not support synonyms. Please use views instead.");
   }
 }

@@ -37,7 +37,7 @@ import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.TimeZone;
+import java.time.ZoneId;
 
 import static org.easymock.EasyMock.anyObject;
 import static org.easymock.EasyMock.eq;
@@ -95,7 +95,7 @@ public class TimestampTableQuerierTest {
         TIMESTAMP_COLUMNS,
         new TimestampIncrementingOffset(initialTimestampOffset, null).toMap(),
         10211197100L, // Timestamp delay
-        TimeZone.getTimeZone("UTC"),
+        ZoneId.of("UTC"),
         "",
         JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL
     );

@@ -629,6 +629,32 @@ public interface DatabaseDialect extends ConnectionProvider {
   }
 
   /**
+   * Method that binds a value with the given schema at the specified variable within a prepared
+   * statement. By default, the behavior is the same as the other overloaded method with the extra
+   * parameter colDef. This overloading method is introduced to deprecate the other overloaded
+   * method eventually.
+   *
+   * @param statement the prepared statement; may not be null
+   * @param index the 1-based index of the variable within the prepared statement
+   * @param schema the schema for the value; may be null only if the value is null
+   * @param value the value to be bound to the variable; may be null
+   * @param colDef the Definition of the column to be bound; may be null
+   * @param fieldName the name of the field which the value is bound to
+   * @throws SQLException if there is a problem binding the value into the statement
+   * @see #statementBinder
+   */
+  default void bindField(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
+      Object value,
+      ColumnDefinition colDef,
+      String fieldName)
+      throws SQLException {
+    bindField(statement, index, schema, value, colDef);
+  }
+
+  /**
    * A function to bind the values from a sink record into a prepared statement.
    */
   @FunctionalInterface
@@ -669,4 +695,14 @@ public interface DatabaseDialect extends ConnectionProvider {
      */
     Object convert(ResultSet resultSet) throws SQLException, IOException;
   }
+
+  /**
+   * Resolve a synonym to its base table name.
+   *
+   * @param connection the database connection; may not be null
+   * @param synonymName the name of the synonym to resolve; may not be null
+   * @return the base table name if the synonym exists, null otherwise
+   * @throws SQLException if there is an error accessing the metadata
+   */
+  String resolveSynonym(Connection connection, String synonymName) throws SQLException;
 }

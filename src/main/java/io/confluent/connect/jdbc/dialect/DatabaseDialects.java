@@ -30,8 +30,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import com.google.re2j.Matcher;
+import com.google.re2j.Pattern;
 import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.JdbcUrlInfo;
@@ -168,10 +168,10 @@ public class DatabaseDialects {
   }
 
   static JdbcUrlInfo extractJdbcUrlInfo(final String url) {
-    LOG.info("Validating JDBC URL.");
+    LOG.debug("Validating JDBC URL.");
     Matcher matcher = PROTOCOL_PATTERN.matcher(url);
     if (matcher.matches()) {
-      LOG.info("Validated JDBC URL.");
+      LOG.debug("Validated JDBC URL.");
       return new JdbcUrlDetails(matcher.group(1), matcher.group(2), url);
     }
     LOG.error("Not a valid JDBC URL: " + url);

@@ -131,4 +131,14 @@ public class TableId implements Comparable<TableId>, Expressable {
   public String toString() {
     return ExpressionBuilder.create().append(this).toString();
   }
+
+  /**
+   * Returns the table identifier as a simple dot-separated string without quotes.
+   * For example, returns "db.schema.table" instead of "\"db\".\"schema\".\"table\"".
+   *
+   * @return the unquoted table identifier
+   */
+  public String toUnquotedString() {
+    return ExpressionBuilder.create().append(this, QuoteMethod.NEVER).toString();
+  }
 }

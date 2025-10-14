@@ -17,31 +17,36 @@ package io.confluent.connect.jdbc.source;
 
 import java.sql.Connection;
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.TimeZone;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.microsoft.sqlserver.jdbc.SQLServerConnection;
-import io.confluent.connect.jdbc.dialect.DatabaseDialect;
-import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
+import io.confluent.connect.jdbc.util.DefaultJdbcCredentialsProvider;
 import io.confluent.connect.jdbc.util.EnumRecommender;
+import io.confluent.connect.jdbc.util.JdbcCredentialsProvider;
+import io.confluent.connect.jdbc.util.JdbcCredentialsProviderValidator;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TimeZoneValidator;
+import io.confluent.connect.jdbc.util.DateCalendarSystem;
 
 import java.util.function.BiFunction;
 import java.util.function.Function;
-import java.util.regex.Pattern;
+import com.google.re2j.Pattern;
+import com.google.re2j.PatternSyntaxException;
 
+import org.apache.kafka.common.Configurable;
 import org.apache.kafka.common.config.AbstractConfig;
-import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Importance;
 import org.apache.kafka.common.config.ConfigDef.Recommender;
@@ -49,7 +54,6 @@ import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.ConfigException;
-import org.apache.kafka.common.config.ConfigValue;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -105,8 +109,22 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final String BATCH_MAX_ROWS_DOC =
       "Maximum number of rows to include in a single batch when polling for new data. This "
       + "setting can be used to limit the amount of data buffered internally in the connector.";
-  public static final int BATCH_MAX_ROWS_DEFAULT = 100;
+  public static final int BATCH_MAX_ROWS_DEFAULT = 1000;
   private static final String BATCH_MAX_ROWS_DISPLAY = "Max Rows Per Batch";
+
+  public static final String MAX_BUFFER_SIZE_CONFIG = "max.buffer.size";
+  private static final String MAX_BUFFER_SIZE_DISPLAY = "Maximum Buffer Size";
+  private static final String MAX_BUFFER_SIZE_DOC =
+      "The maximum number of records from the source database that can be buffered into memory. "
+          + "The default of 0 means a buffer size will be based on the maximum batch size.";
+  static final int MAX_BUFFER_SIZE_DEFAULT = 0;
+
+  public static final String POLL_LINGER_MS_CONFIG = "poll.linger.ms";
+  public static final String POLL_LINGER_MS_DISPLAY = "Poll Linger Milliseconds";
+  public static final long POLL_LINGER_MS_DEFAULT = Duration.ofSeconds(5).toMillis();
+  protected static final String POLL_LINGER_MS_DOC =
+      "The maximum time to wait for a record before returning an empty batch. The default is "
+          + "5 seconds.";
 
   public static final String NUMERIC_PRECISION_MAPPING_CONFIG = "numeric.precision.mapping";
   private static final String NUMERIC_PRECISION_MAPPING_DOC =
@@ -193,6 +211,26 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String TIMESTAMP_COLUMN_NAME_DEFAULT = "";
   private static final String TIMESTAMP_COLUMN_NAME_DISPLAY = "Timestamp Column Name";
 
+  public static final String TIMESTAMP_COLUMN_MAPPING_CONFIG = "timestamp.columns.mapping";
+  private static final String TIMESTAMP_COLUMN_MAPPING_DOC = "A comma separated list of table regex"
+      + " to timestamp columns mappings. On specifying multiple timestamp columns, COALESCE SQL "
+      + "function would be used to find out the effective timestamp for a row. Expected format is"
+      + " ``regex1:[col1|col2],regex2:[col3]``. Regexes would be matched against the"
+      + " fully-qualified table names of tables. Every table included for capture should match "
+      + "exactly one of the provided mappings. An example for a valid input would be "
+      + "``SCHEMA1.EMPLOYEES.SALARY.*:[UPDATED_AT|MODIFIED_AT],ACCOUNTS.*:[CHANGED_AT]``";
+  private static final String TIMESTAMP_COLUMN_MAPPING_DISPLAY =
+      "Table to timestamp columns mappings";
+
+  public static final String INCREMENTING_COLUMN_MAPPING_CONFIG = "incrementing.column.mapping";
+  private static final String INCREMENTING_COLUMN_MAPPING_DOC = "A comma separated list of table "
+      + "regex to incrementing column mappings. Expected format is ``regex1:col2,regex2:col1``."
+      + " Regexes would be matched against the fully-qualified table names of tables. Every table "
+      + "included for capture should match exactly one of the provided mappings. An example for a"
+      + " valid input would be ``SCHEMA1.EMPLOYEES.SALARY*:EMP_ID,ACCOUNTS.*:ID``";
+  private static final String INCREMENTING_COLUMN_MAPPING_DISPLAY =
+      "Table to incrementing column mappings";
+
   public static final String TIMESTAMP_INITIAL_CONFIG = "timestamp.initial";
   public static final Long TIMESTAMP_INITIAL_DEFAULT = null;
   public static final Long TIMESTAMP_INITIAL_CURRENT = Long.valueOf(-1);
@@ -206,6 +244,9 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       "Define the granularity of the Timestamp column. Options include: \n"
           + "  * connect_logical (default): represents timestamp values using Kafka Connect's "
           + "built-in representations \n"
+          + "  * micros_long: represents timestamp values as micros since epoch\n"
+          + "  * micros_string: represents timestamp values as micros since epoch in string\n"
+          + "  * micros_iso_datetime_string: uses iso format 'yyyy-MM-dd'T'HH:mm:ss.SSSSSS'\n"
           + "  * nanos_long: represents timestamp values as nanos since epoch\n"
           + "  * nanos_string: represents timestamp values as nanos since epoch in string\n"
           + "  * nanos_iso_datetime_string: uses iso format 'yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS'\n";
@@ -243,6 +284,27 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "(for example, ``table.blacklist: \"User, Address, Email\"``).";
   public static final String TABLE_BLACKLIST_DEFAULT = "";
   private static final String TABLE_BLACKLIST_DISPLAY = "Table Blacklist";
+
+  public static final String TABLE_INCLUDE_LIST_CONFIG = "table.include.list";
+  private static final String TABLE_INCLUDE_LIST_DOC =
+      "A comma-separated list of regular expressions that match the fully-qualified names of "
+      + "tables to be copied. Use a comma-separated list to specify multiple regular expressions. "
+      + "Table names are case-sensitive. For example, "
+      + "``table.include.list: \"schema1.customer.*,schema2.order.*\"``. "
+      + "If specified, the legacy configs of ``table.whitelist``, and ``table.blacklist`` "
+      + "cannot be set.";
+  private static final String TABLE_INCLUDE_LIST_DISPLAY = "Tables Included (Regex)";
+
+  public static final String TABLE_EXCLUDE_LIST_CONFIG = "table.exclude.list";
+  private static final String TABLE_EXCLUDE_LIST_DOC =
+      "A comma-separated list of regular expressions that match the fully-qualified names of "
+      + "tables not to be copied. This only applies to tables that match the include list. "
+      + "REQUIRES ``table.include.list`` to be specified. "
+      + "Use a comma-separated list to specify multiple regular expressions. "
+      + "Table names are case-sensitive. For example, "
+      + "``table.exclude.list: \".*.temp.*,.*.staging.*\"``. "
+      + "If specified, ``table.whitelist`` and ``table.blacklist`` cannot not be set.";
+  private static final String TABLE_EXCLUDE_LIST_DISPLAY = "Tables Excluded (Regex)";
 
   public static final String SCHEMA_PATTERN_CONFIG = "schema.pattern";
   private static final String SCHEMA_PATTERN_DOC =
@@ -288,6 +350,20 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final boolean VALIDATE_NON_NULL_DEFAULT = true;
   private static final String VALIDATE_NON_NULL_DISPLAY = "Validate Non Null";
 
+  public static final String DATE_CALENDAR_SYSTEM_CONFIG = "date.calendar.system";
+  private static final String DATE_CALENDAR_SYSTEM_DOC =
+      "The time elapsed from epoch populated in the end table topic for DATE or TIMESTAMP type "
+      + "columns can have two different values based upon the Calendar used to interpret it. If "
+      + "LEGACY is used, it will use the hybrid Gregorian/Julian calendar which was the default in "
+      + "the older java date time APIs. However, if 'PROLEPTIC_GREGORIAN' is used, then it will "
+      + "use the proleptic gregorian calendar which extends the Gregorian rules backward "
+      + "indefinitely and does not apply the 1582 cutover. This matches the behavior of modern "
+      + "Java date/time APIs (java.time). This is defaulted to LEGACY for backward compatibility. "
+      + "Changing this configuration on an existing connector might lead to a drift in the kafka "
+      + "topic record values.";
+  public static final String DATE_CALENDAR_SYSTEM_DEFAULT = DateCalendarSystem.LEGACY.toString();
+  private static final String DATE_CALENDAR_SYSTEM_DISPLAY = "Date Calendar System";
+
   public static final String TIMESTAMP_DELAY_INTERVAL_MS_CONFIG = "timestamp.delay.interval.ms";
   private static final String TIMESTAMP_DELAY_INTERVAL_MS_DOC =
       "How long to wait after a row with certain timestamp appears before we include it in the "
@@ -314,7 +390,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public static final String QUERY_SUFFIX_CONFIG = "query.suffix";
   public static final String QUERY_SUFFIX_DEFAULT = "";
-  public static final String QUERY_SUFFIX_DOC = 
+  public static final String QUERY_SUFFIX_DOC =
       "Suffix to append at the end of the generated query.";
   public static final String QUERY_SUFFIX_DISPLAY = "Query suffix";
 
@@ -323,6 +399,23 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String QUERY_RETRIES_DOC =
           "Number of times to retry SQL exceptions encountered when executing queries.";
   public static final String QUERY_RETRIES_DISPLAY = "Query Retry Attempts";
+
+  /**
+   * The properties that begin with this prefix will be used to configure a class, specified by
+   * {@code jdbc.credentials.provider.class} if it implements {@link Configurable}.
+   */
+  public static final String CREDENTIALS_PROVIDER_CONFIG_PREFIX = "jdbc.credentials.provider.";
+
+  public static final String CREDENTIALS_PROVIDER_CLASS_CONFIG = CREDENTIALS_PROVIDER_CONFIG_PREFIX
+      + "class";
+  public static final Class<? extends JdbcCredentialsProvider> CREDENTIALS_PROVIDER_CLASS_DEFAULT =
+      DefaultJdbcCredentialsProvider.class;
+
+  public static final String CREDENTIALS_PROVIDER_CLASS_DISPLAY = "JDBC Credentials Provider Class";
+
+  public static final String CREDENTIALS_PROVIDER_CLASS_DOC = "Credentials provider or provider "
+      + "chain to use for authentication to database. By default the connector uses ``"
+      + DefaultJdbcCredentialsProvider.class.getName() + "``.";
 
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
@@ -372,6 +465,165 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   private static final String SqlServerDatabaseDialectName = "SqlServerDatabaseDialect";
 
+  /**
+   * Validator for regex list configurations (table include/exclude lists).
+   * Validates that each regex pattern in the list is a valid Java regular expression.
+   */
+  private static ConfigDef.Validator regexListValidator() {
+    return new Validator() {
+      @Override
+      public void ensureValid(String name, Object value) {
+        @SuppressWarnings("unchecked")
+        List<String> regexList = (List<String>) value;
+        for (String regex : regexList) {
+          try {
+            Pattern.compile(regex.trim());
+          } catch (PatternSyntaxException e) {
+            throw new ConfigException(
+                name, value,
+                String.format("Must be a valid comma-separated list of regular expression "
+                            + "patterns: %s", e.getMessage())
+            );
+          }
+        }
+      }
+
+      @Override
+      public String toString() {
+        return "a valid comma-separated list of Java regular expressions";
+      }
+    };
+  }
+
+  private static ConfigDef.Validator tableRegexToMultipleColumnsValidator() {
+    return new Validator() {
+      @Override
+      public void ensureValid(String name, Object value) {
+        @SuppressWarnings("unchecked")
+        List<String> mappings = (List<String>) value;
+        for (String mapping : mappings) {
+          validateMapping(name, mapping.trim());
+        }
+      }
+
+      @SuppressWarnings({"checkstyle:NPathComplexity"})
+      private void validateMapping(String configName, String mapping) {
+        // Split the mapping into regex and columns parts
+        String[] parts = mapping.split(":", -1);
+        if (parts.length != 2) {
+          throw new ConfigException(
+              configName,
+              mapping,
+              "Invalid format. Expected 'regex:[col1|col2|...]'"
+          );
+        }
+
+        // Validate regex pattern
+        String regex = parts[0].trim();
+        try {
+          Pattern.compile(regex);
+        } catch (Exception e) {
+          throw new ConfigException(
+              configName,
+              regex,
+              String.format("Invalid regular expression: %s", e.getMessage())
+          );
+        }
+
+        // Validate columns list
+        String columnsList = parts[1].trim();
+        if (!columnsList.startsWith("[") || !columnsList.endsWith("]")) {
+          throw new ConfigException(
+              configName,
+              columnsList,
+              "Columns list must be enclosed in square brackets"
+          );
+        }
+
+        // Extract and validate individual column names
+        String columnsContent = columnsList.substring(1, columnsList.length() - 1);
+        if (columnsContent.trim().isEmpty()) {
+          throw new ConfigException(
+              configName,
+              columnsList,
+              "Columns list cannot be empty"
+          );
+        }
+
+        String[] columns = columnsContent.split("\\|", -1);
+        for (String column : columns) {
+          String trimmedColumn = column.trim();
+          if (trimmedColumn.isEmpty()) {
+            throw new ConfigException(
+                configName,
+                columnsList,
+                "Every column name should be non-empty string"
+            );
+          }
+        }
+      }
+
+      @Override
+      public String toString() {
+        return "a list of mappings in the format 'regex:[col1|col2|...]' where regex is a "
+            + "valid Java regular expression and columns are valid column names";
+      }
+    };
+  }
+
+  private static ConfigDef.Validator tableRegexToSingleColumnValidator() {
+    return new Validator() {
+      @Override
+      public void ensureValid(String name, Object value) {
+        @SuppressWarnings("unchecked")
+        List<String> mappings = (List<String>) value;
+        for (String mapping : mappings) {
+          validateMapping(name, mapping.trim());
+        }
+      }
+
+      private void validateMapping(String configName, String mapping) {
+        // Split the mapping into regex and column parts
+        String[] parts = mapping.split(":", -1);
+        if (parts.length != 2) {
+          throw new ConfigException(
+              configName,
+              mapping,
+              "Invalid format. Expected 'regex:columnName'"
+          );
+        }
+
+        // Validate regex pattern
+        String regex = parts[0].trim();
+        try {
+          Pattern.compile(regex);
+        } catch (Exception e) {
+          throw new ConfigException(
+              configName,
+              regex,
+              String.format("Invalid regular expression: %s", e.getMessage())
+          );
+        }
+
+        // Validate column name
+        String columnName = parts[1].trim();
+        if (columnName.isEmpty()) {
+          throw new ConfigException(
+              configName,
+              columnName,
+              "Column name cannot be empty"
+          );
+        }
+      }
+
+      @Override
+      public String toString() {
+        return "a list of mappings in the format 'regex:columnName' where regex is a valid "
+            + "Java regular expression and columnName is a valid column name";
+      }
+    };
+  }
+
   public static ConfigDef baseConfigDef() {
     ConfigDef config = new ConfigDef();
     addDatabaseOptions(config);
@@ -380,50 +632,15 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     return config;
   }
 
-  public Config validateMultiConfigs(Config config) {
-    HashMap<String, ConfigValue> configValues = new HashMap<>();
-    config.configValues().stream()
-            .filter((configValue) ->
-                    configValue.name().equals(
-                            JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG
-                    )
-            ).forEach(configValue -> configValues.putIfAbsent(configValue.name(), configValue));
-
-    TransactionIsolationMode transactionIsolationMode =
-            TransactionIsolationMode.valueOf(
-                    this.getString(TRANSACTION_ISOLATION_MODE_CONFIG)
-            );
-    if (transactionIsolationMode == TransactionIsolationMode.SQL_SERVER_SNAPSHOT) {
-      DatabaseDialect dialect;
-      final String dialectName = this.getString(JdbcSourceConnectorConfig.DIALECT_NAME_CONFIG);
-      if (dialectName != null && !dialectName.trim().isEmpty()) {
-        dialect = DatabaseDialects.create(dialectName, this);
-      } else {
-        dialect = DatabaseDialects.findBestFor(this.getString(CONNECTION_URL_CONFIG), this);
-      }
-      if (!dialect.name().equals(
-              DatabaseDialects.create(
-                      SqlServerDatabaseDialectName, this
-              ).name()
-      )
-      ) {
-        configValues
-            .get(JdbcSourceConnectorConfig.TRANSACTION_ISOLATION_MODE_CONFIG)
-            .addErrorMessage(
-                "Isolation mode of `"
-                    + TransactionIsolationMode.SQL_SERVER_SNAPSHOT.name()
-                    + "` can only be configured with a Sql Server Dialect");
-        LOG.warn(
-            "Isolation mode of '{}' can only be configured with a Sql Server Dialect",
-            TransactionIsolationMode.SQL_SERVER_SNAPSHOT.name());
-      }
-    }
-
-    return config;
-  }
-
+  @SuppressWarnings("checkstyle:MethodLength")
   private static final void addDatabaseOptions(ConfigDef config) {
     int orderInGroup = 0;
+    orderInGroup = addConnectionOptions(config, orderInGroup);
+    orderInGroup = addTableFilteringOptions(config, orderInGroup);
+    addSchemaAndDialectOptions(config, orderInGroup);
+  }
+
+  private static int addConnectionOptions(ConfigDef config, int orderInGroup) {
     config.define(
         CONNECTION_URL_CONFIG,
         Type.STRING,
@@ -456,6 +673,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Width.SHORT,
         CONNECTION_PASSWORD_DISPLAY
     ).define(
+        CREDENTIALS_PROVIDER_CLASS_CONFIG,
+        Type.CLASS,
+        CREDENTIALS_PROVIDER_CLASS_DEFAULT,
+        new JdbcCredentialsProviderValidator(),
+        Importance.LOW,
+        CREDENTIALS_PROVIDER_CLASS_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        CREDENTIALS_PROVIDER_CLASS_DISPLAY
+    ).define(
         CONNECTION_ATTEMPTS_CONFIG,
         Type.INT,
         CONNECTION_ATTEMPTS_DEFAULT,
@@ -476,7 +704,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.SHORT,
         CONNECTION_BACKOFF_DISPLAY
-    ).define(
+    );
+    return orderInGroup;
+  }
+
+  private static int addTableFilteringOptions(ConfigDef config, int orderInGroup) {
+    config.define(
         TABLE_WHITELIST_CONFIG,
         Type.LIST,
         TABLE_WHITELIST_DEFAULT,
@@ -497,6 +730,33 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Width.LONG,
         TABLE_BLACKLIST_DISPLAY
     ).define(
+        TABLE_INCLUDE_LIST_CONFIG,
+        Type.LIST,
+        Arrays.asList(),
+        regexListValidator(),
+        Importance.MEDIUM,
+        TABLE_INCLUDE_LIST_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        TABLE_INCLUDE_LIST_DISPLAY
+    ).define(
+        TABLE_EXCLUDE_LIST_CONFIG,
+        Type.LIST,
+        Arrays.asList(),
+        regexListValidator(),
+        Importance.MEDIUM,
+        TABLE_EXCLUDE_LIST_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        TABLE_EXCLUDE_LIST_DISPLAY
+    );
+    return orderInGroup;
+  }
+
+  private static void addSchemaAndDialectOptions(ConfigDef config, int orderInGroup) {
+    config.define(
         CATALOG_PATTERN_CONFIG,
         Type.STRING,
         CATALOG_PATTERN_DEFAULT,
@@ -549,7 +809,18 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.LONG,
         DIALECT_NAME_DISPLAY,
-        DatabaseDialectRecommender.INSTANCE);
+        DatabaseDialectRecommender.INSTANCE
+    ).define(
+        DATE_CALENDAR_SYSTEM_CONFIG,
+        Type.STRING,
+        DATE_CALENDAR_SYSTEM_DEFAULT,
+        ConfigDef.ValidString.in(DateCalendarSystem.getValidConfigValues()),
+        Importance.LOW,
+        DATE_CALENDAR_SYSTEM_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        DATE_CALENDAR_SYSTEM_DISPLAY);
   }
 
   private static final void addModeOptions(ConfigDef config) {
@@ -574,6 +845,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Arrays.asList(
             INCREMENTING_COLUMN_NAME_CONFIG,
             TIMESTAMP_COLUMN_NAME_CONFIG,
+            INCREMENTING_COLUMN_MAPPING_CONFIG,
+            TIMESTAMP_COLUMN_MAPPING_CONFIG,
             VALIDATE_NON_NULL_CONFIG
         )
     ).define(
@@ -597,6 +870,30 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.MEDIUM,
         TIMESTAMP_COLUMN_NAME_DISPLAY,
+        MODE_DEPENDENTS_RECOMMENDER
+    ).define(
+        TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        Type.LIST,
+        Arrays.asList(),
+        tableRegexToMultipleColumnsValidator(),
+        Importance.MEDIUM,
+        TIMESTAMP_COLUMN_MAPPING_DOC,
+        MODE_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        TIMESTAMP_COLUMN_MAPPING_DISPLAY,
+        MODE_DEPENDENTS_RECOMMENDER
+    ).define(
+        INCREMENTING_COLUMN_MAPPING_CONFIG,
+        Type.LIST,
+        Arrays.asList(),
+        tableRegexToSingleColumnValidator(),
+        Importance.MEDIUM,
+        INCREMENTING_COLUMN_MAPPING_DOC,
+        MODE_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        INCREMENTING_COLUMN_MAPPING_DISPLAY,
         MODE_DEPENDENTS_RECOMMENDER
     ).define(
         TIMESTAMP_INITIAL_CONFIG,
@@ -707,6 +1004,26 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.SHORT,
         BATCH_MAX_ROWS_DISPLAY
+    ).define(
+        MAX_BUFFER_SIZE_CONFIG,
+        Type.INT,
+        MAX_BUFFER_SIZE_DEFAULT,
+        Importance.LOW,
+        MAX_BUFFER_SIZE_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        MAX_BUFFER_SIZE_DISPLAY
+    ).define(
+        POLL_LINGER_MS_CONFIG,
+        Type.LONG,
+        POLL_LINGER_MS_DEFAULT,
+        Importance.LOW,
+        POLL_LINGER_MS_DOC,
+        CONNECTOR_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        POLL_LINGER_MS_DISPLAY
     ).defineInternal(
         TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_CONFIG,
         Type.LONG,
@@ -798,6 +1115,10 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     return getString(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG).trim();
   }
 
+  public DateCalendarSystem getDateCalendarSystem() {
+    return DateCalendarSystem.fromConfigValue(getString(DATE_CALENDAR_SYSTEM_CONFIG));
+  }
+
   /**
    * A recommender that caches values returned by a delegate, where the cache remains valid for a
    * specified duration and as long as the configuration remains unchanged.
@@ -874,23 +1195,40 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     @Override
     public boolean visible(String name, Map<String, Object> config) {
       String mode = (String) config.get(MODE_CONFIG);
+      return isVisibleForMode(name, mode);
+    }
+
+    private boolean isVisibleForMode(String name, String mode) {
       switch (mode) {
         case MODE_BULK:
           return false;
         case MODE_TIMESTAMP:
-          return name.equals(TIMESTAMP_COLUMN_NAME_CONFIG) || name.equals(VALIDATE_NON_NULL_CONFIG);
+          return isTimestampModeDependentField(name);
         case MODE_INCREMENTING:
-          return name.equals(INCREMENTING_COLUMN_NAME_CONFIG)
-                 || name.equals(VALIDATE_NON_NULL_CONFIG);
+          return isIncrementingModeDependentField(name);
         case MODE_TIMESTAMP_INCREMENTING:
-          return name.equals(TIMESTAMP_COLUMN_NAME_CONFIG)
-                 || name.equals(INCREMENTING_COLUMN_NAME_CONFIG)
-                 || name.equals(VALIDATE_NON_NULL_CONFIG);
+          return isTimestampIncrementingModeField(name);
         case MODE_UNSPECIFIED:
           throw new ConfigException("Query mode must be specified");
         default:
           throw new ConfigException("Invalid mode: " + mode);
       }
+    }
+
+    private boolean isTimestampModeDependentField(String name) {
+      return name.equals(TIMESTAMP_COLUMN_NAME_CONFIG) 
+             || name.equals(TIMESTAMP_COLUMN_MAPPING_CONFIG)
+             || name.equals(VALIDATE_NON_NULL_CONFIG);
+    }
+
+    private boolean isIncrementingModeDependentField(String name) {
+      return name.equals(INCREMENTING_COLUMN_NAME_CONFIG)
+             || name.equals(INCREMENTING_COLUMN_MAPPING_CONFIG)
+             || name.equals(VALIDATE_NON_NULL_CONFIG);
+    }
+
+    private boolean isTimestampIncrementingModeField(String name) {
+      return isTimestampModeDependentField(name) || isIncrementingModeDependentField(name);
     }
   }
 
@@ -932,6 +1270,29 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         (timestamp, tz) -> timestamp,
         (timestamp, tz) -> (Timestamp) timestamp),
 
+    MICROS_LONG(optional -> optional ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA,
+        (timestamp, tz) -> DateTimeUtils.toEpochMicros(timestamp),
+        (epochMicros, tz) -> DateTimeUtils.toMicrosTimestamp((Long) epochMicros)),
+
+    MICROS_STRING(optional -> optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA,
+        (timestamp, tz) -> DateTimeUtils.toEpochMicrosString(timestamp),
+        (epochMicrosString, tz) -> {
+          try {
+            return DateTimeUtils.toMicrosTimestamp((String) epochMicrosString);
+          } catch (NumberFormatException e) {
+            throw new ConnectException(
+                "Invalid value for timestamp column with micros-string granularity: "
+                    + epochMicrosString
+                    + e.getMessage());
+          }
+        }),
+
+    MICROS_ISO_DATETIME_STRING(optional -> optional
+        ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA,
+        DateTimeUtils::toIsoDateMicrosTimeString,
+        (toIsoDateMicrosTimeString, tz) ->
+            DateTimeUtils.toTimestampFromIsoDateMicrosTime((String) toIsoDateMicrosTimeString, tz)),
+
     NANOS_LONG(optional -> optional ? Schema.OPTIONAL_INT64_SCHEMA : Schema.INT64_SCHEMA,
         (timestamp, tz) -> DateTimeUtils.toEpochNanos(timestamp),
         (epochNanos, tz) -> DateTimeUtils.toTimestamp((Long) epochNanos)),
@@ -956,8 +1317,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
             DateTimeUtils.toTimestampFromIsoDateTime((String) isoDateTimeString, tz));
 
     public final Function<Boolean, Schema> schemaFunction;
-    public final BiFunction<Timestamp, TimeZone, Object> fromTimestamp;
-    public final BiFunction<Object, TimeZone, Timestamp> toTimestamp;
+    public final BiFunction<Timestamp, ZoneId, Object> fromTimestamp;
+    public final BiFunction<Object, ZoneId, Timestamp> toTimestamp;
 
     public static final String DEFAULT = CONNECT_LOGICAL.name().toLowerCase(Locale.ROOT);
 
@@ -974,8 +1335,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     }
 
     TimestampGranularity(Function<Boolean, Schema> schemaFunction,
-        BiFunction<Timestamp, TimeZone, Object> fromTimestamp,
-        BiFunction<Object, TimeZone, Timestamp> toTimestamp) {
+        BiFunction<Timestamp, ZoneId, Object> fromTimestamp,
+        BiFunction<Object, ZoneId, Timestamp> toTimestamp) {
       this.schemaFunction = schemaFunction;
       this.fromTimestamp = fromTimestamp;
       this.toTimestamp = toTimestamp;
@@ -1013,9 +1374,130 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     return NumericMapping.get(this);
   }
 
-  public TimeZone timeZone() {
+  public ZoneId zoneId() {
     String dbTimeZone = getString(JdbcSourceTaskConfig.DB_TIMEZONE_CONFIG);
-    return TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
+    ZoneId zoneId;
+    try {
+      zoneId = ZoneId.of(dbTimeZone);
+    } catch (Exception e) {
+      LOG.info("Falling back to short IDs for timezone: {}", dbTimeZone);
+      zoneId = ZoneId.of(dbTimeZone, ZoneId.SHORT_IDS);
+    }
+    return zoneId;
+  }
+
+  public int maxBatchSize() {
+    return getInt(BATCH_MAX_ROWS_CONFIG);
+  }
+
+  public int maxBufferSize() {
+    int bufferSize = getInt(MAX_BUFFER_SIZE_CONFIG);
+    if (bufferSize == 0) {
+      // Compute the default
+      bufferSize = maxBatchSize() * 4;
+    }
+    return bufferSize;
+  }
+
+  public Duration pollLingerMs() {
+    return Duration.ofMillis(getLong(POLL_LINGER_MS_CONFIG));
+  }
+
+
+  public List<String> tableIncludeListRegexes() {
+    return getList(TABLE_INCLUDE_LIST_CONFIG);
+  }
+
+  public List<String> tableExcludeListRegexes() {
+    return getList(TABLE_EXCLUDE_LIST_CONFIG);
+  }
+
+  public List<String> timestampColumnMapping() {
+    return getList(TIMESTAMP_COLUMN_MAPPING_CONFIG);
+  }
+
+  public List<String> incrementingColumnMapping() {
+    return getList(INCREMENTING_COLUMN_MAPPING_CONFIG);
+  }
+
+  public List<String> timestampColMappingRegexes() {
+    return timestampColumnMapping().stream()
+        .map(mapping -> mapping.split(":")[0].trim())
+        .collect(java.util.stream.Collectors.toList());
+  }
+
+  public List<String> incrementingColMappingRegexes() {
+    return incrementingColumnMapping().stream()
+        .map(mapping -> mapping.split(":")[0].trim())
+        .collect(java.util.stream.Collectors.toList());
+  }
+
+  public boolean modeUsesTimestampColumn() {
+    String mode = getString(MODE_CONFIG);
+    return Arrays.asList(MODE_TIMESTAMP, MODE_TIMESTAMP_INCREMENTING).contains(mode);
+  }
+
+  public boolean modeUsesIncrementingColumn() {
+    String mode = getString(MODE_CONFIG);
+    return Arrays.asList(MODE_INCREMENTING, MODE_TIMESTAMP_INCREMENTING).contains(mode);
+  }
+
+  // Helper methods for configuration access
+
+  /**
+   * Get table whitelist configuration as a set.
+   */
+  public Set<String> getTableWhitelistSet() {
+    return new HashSet<>(getList(TABLE_WHITELIST_CONFIG));
+  }
+
+  /**
+   * Get table blacklist configuration as a set.
+   */
+  public Set<String> getTableBlacklistSet() {
+    return new HashSet<>(getList(TABLE_BLACKLIST_CONFIG));
+  }
+
+  /**
+   * Get table include list configuration as a set.
+   */
+  public Set<String> getTableIncludeListSet() {
+    return new HashSet<>(tableIncludeListRegexes());
+  }
+
+  /**
+   * Get table exclude list configuration as a set.
+   */
+  public Set<String> getTableExcludeListSet() {
+    return new HashSet<>(tableExcludeListRegexes());
+  }
+
+  /**
+   * Get timestamp column name configuration.
+   */
+  public List<String> getTimestampColumnName() {
+    return getList(TIMESTAMP_COLUMN_NAME_CONFIG);
+  }
+
+  /**
+   * Get timestamp column mapping configuration.
+   */
+  public List<String> getTimestampColumnMapping() {
+    return timestampColumnMapping();
+  }
+
+  /**
+   * Get incrementing column name configuration.
+   */
+  public String getIncrementingColumnName() {
+    return getString(INCREMENTING_COLUMN_NAME_CONFIG);
+  }
+
+  /**
+   * Get incrementing column mapping configuration.
+   */
+  public List<String> getIncrementingColumnMapping() {
+    return incrementingColumnMapping();
   }
 
   public static void main(String[] args) {

@@ -133,6 +133,14 @@ public class JdbcSinkConfigTest {
     assertTableTypes(TableType.TABLE);
   }
 
+  @Test(expected = ConfigException.class)
+  public void shouldFailToCreateConfigWithInvalidCredentialsProviderClass() {
+    // Configuring SqliteHelper Class here which does not extends JdbcCredentialsProvider Interface
+    props.put(JdbcSinkConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG,
+        SqliteHelper.class.getName());
+    createConfig();
+  }
+
   protected void createConfig() {
     config = new JdbcSinkConfig(props);
   }

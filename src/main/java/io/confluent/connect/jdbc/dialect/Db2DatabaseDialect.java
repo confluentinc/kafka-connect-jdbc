@@ -15,12 +15,15 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.Collection;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
@@ -93,6 +96,17 @@ public class Db2DatabaseDialect extends GenericDatabaseDialect {
       case INT32:
         return "INTEGER";
       case INT64:
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
+          if (((JdbcSinkConfig) config).timestampPrecisionMode
+               == JdbcSinkConfig.TimestampPrecisionMode.MICROSECONDS) {
+            return "TIMESTAMP";
+          }
+          if (((JdbcSinkConfig) config).timestampPrecisionMode
+               == JdbcSinkConfig.TimestampPrecisionMode.NANOSECONDS) {
+            return "TIMESTAMP(9)";
+          }
+        }
         return "BIGINT";
       case FLOAT32:
         return "FLOAT";
@@ -101,6 +115,17 @@ public class Db2DatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "SMALLINT";
       case STRING:
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
+          if (((JdbcSinkConfig) config).timestampPrecisionMode
+               == JdbcSinkConfig.TimestampPrecisionMode.MICROSECONDS) {
+            return "TIMESTAMP";
+          }
+          if (((JdbcSinkConfig) config).timestampPrecisionMode
+               == JdbcSinkConfig.TimestampPrecisionMode.NANOSECONDS) {
+            return "TIMESTAMP(9)";
+          }
+        }
         return "VARCHAR(32672)";
       case BYTES:
         return "BLOB(64000)";
@@ -166,5 +191,10 @@ public class Db2DatabaseDialect extends GenericDatabaseDialect {
     // DB2 has semicolon delimited property name-value pairs
     return super.sanitizedUrl(url)
                 .replaceAll("(?i)([:;]password=)[^;]*", "$1****");
+  }
+
+  @Override
+  public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
+    throw new SQLException("DB2 does not support synonyms. Please use views instead.");
   }
 }

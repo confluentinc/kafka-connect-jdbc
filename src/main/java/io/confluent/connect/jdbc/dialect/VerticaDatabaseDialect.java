@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -25,6 +26,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.sql.Connection;
+import java.sql.SQLException;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
@@ -83,6 +86,10 @@ public class VerticaDatabaseDialect extends GenericDatabaseDialect {
       case INT32:
         return "INT";
       case INT64:
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
+          return "TIMESTAMP";
+        }
         return "INT";
       case FLOAT32:
         return "FLOAT";
@@ -91,6 +98,10 @@ public class VerticaDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "BOOLEAN";
       case STRING:
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
+          return "TIMESTAMP";
+        }
         return "VARCHAR(1024)";
       case BYTES:
         return "VARBINARY(1024)";
@@ -109,5 +120,10 @@ public class VerticaDatabaseDialect extends GenericDatabaseDialect {
       queries.addAll(super.buildAlterTable(table, Collections.singleton(field)));
     }
     return queries;
+  }
+
+  @Override
+  public String resolveSynonym(Connection connection, String tableId) throws SQLException {
+    throw new SQLException("Vertica does not support synonyms. Please use views instead.");
   }
 }

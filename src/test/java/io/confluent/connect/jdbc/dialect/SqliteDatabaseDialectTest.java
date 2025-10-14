@@ -28,9 +28,9 @@ import org.junit.Test;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Calendar;
-import java.util.TimeZone;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.time.ZoneId;
+import com.google.re2j.Matcher;
+import com.google.re2j.Pattern;
 
 import io.confluent.connect.jdbc.sink.SqliteHelper;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
@@ -290,13 +290,13 @@ public class SqliteDatabaseDialectTest extends BaseDialectTest<SqliteDatabaseDia
 
   @Test
   public void useCurrentTimestampValue() throws SQLException {
-    Calendar cal = DateTimeUtils.getTimeZoneCalendar(TimeZone.getTimeZone("UTC"));
+    Calendar cal = DateTimeUtils.getZoneIdCalendar(ZoneId.of("UTC"));
 
     //Regular expression to check if the timestamp is of the format %Y-%m-%d %H:%M:%S.%f
-    Pattern p = Pattern.compile("(\\p{Nd}++)\\Q-\\E(\\p{Nd}++)\\Q-\\E(\\p{Nd}++)\\Q \\E(\\p{Nd}++)"
-        + "\\Q:\\E(\\p{Nd}++)"
+    Pattern p = Pattern.compile("(\\p{Nd}+)\\Q-\\E(\\p{Nd}+)\\Q-\\E(\\p{Nd}+)\\Q \\E(\\p{Nd}+)"
+        + "\\Q:\\E(\\p{Nd}+)"
         + "\\Q:\\E"
-        + "(\\p{Nd}++)\\Q.\\E(\\p{Nd}++)");
+        + "(\\p{Nd}+)\\Q.\\E(\\p{Nd}+)");
 
     java.util.Date timeOnDB = dialect.currentTimeOnDB(sqliteHelper.connection, cal);
     java.util.Date currentTime = new java.util.Date();

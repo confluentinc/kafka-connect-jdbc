@@ -30,7 +30,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.TimeZone;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 
@@ -75,14 +75,14 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   private final List<ColumnId> timestampColumns;
   private String incrementingColumnName;
   private final long timestampDelay;
-  private final TimeZone timeZone;
+  private final ZoneId zoneId;
 
   public TimestampIncrementingTableQuerier(DatabaseDialect dialect, QueryMode mode, String name,
                                            String topicPrefix,
                                            List<String> timestampColumnNames,
                                            String incrementingColumnName,
                                            Map<String, Object> offsetMap, Long timestampDelay,
-                                           TimeZone timeZone, String suffix,
+                                           ZoneId zoneId, String suffix,
                                            TimestampGranularity timestampGranularity) {
     super(dialect, mode, name, topicPrefix, suffix);
     this.incrementingColumnName = incrementingColumnName;
@@ -113,11 +113,11 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
         throw new ConnectException("Unexpected query mode: " + mode);
     }
 
-    this.timeZone = timeZone;
+    this.zoneId = zoneId;
     this.timestampGranularity = timestampGranularity;
     log.trace(
-        "TimestampIncrementingTableQuerier initialized with timeZone: {}, timestampGranularity: {}",
-        timeZone,
+        "TimestampIncrementingTableQuerier initialized with zoneId: {}, timestampGranularity: {}",
+        zoneId,
         timestampGranularity);
   }
 
@@ -171,7 +171,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
       ResultSetMetaData metadata = resultSet.getMetaData();
       dialect.validateSpecificColumnTypes(metadata, timestampColumns);
       schemaMapping = SchemaMapping.create(schemaName, metadata, dialect);
-      log.info("Current Result is null. Executing query.");
+      log.debug("Current Result is null. Executing query.");
     } else {
       log.trace("Current ResultSet {} isn't null. Continuing to seek.", resultSet.hashCode());
     }
@@ -257,7 +257,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   public Timestamp endTimestampValue()  throws SQLException {
     final long currentDbTime = dialect.currentTimeOnDB(
         stmt.getConnection(),
-        DateTimeUtils.getTimeZoneCalendar(timeZone)
+        DateTimeUtils.getZoneIdCalendar(zoneId)
     ).getTime();
     return new Timestamp(currentDbTime - timestampDelay);
   }

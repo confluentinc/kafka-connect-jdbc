@@ -17,7 +17,7 @@ package io.confluent.connect.jdbc.source;
 
 import java.util.ArrayList;
 import java.util.Map;
-import java.util.TimeZone;
+import java.time.ZoneId;
 
 import io.confluent.connect.jdbc.util.LruCache;
 import org.apache.kafka.connect.data.Decimal;
@@ -39,6 +39,7 @@ import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
+import io.confluent.connect.jdbc.util.DateCalendarSystem;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 
 public class TimestampIncrementingCriteria {
@@ -78,21 +79,38 @@ public class TimestampIncrementingCriteria {
   protected final Logger log = LoggerFactory.getLogger(getClass());
   protected final List<ColumnId> timestampColumns;
   protected final ColumnId incrementingColumn;
-  protected final TimeZone timeZone;
+  protected final ZoneId zoneId;
+  protected final DateCalendarSystem dateCalendarSystem;
   private final LruCache<Schema, List<String>> caseAdjustedTimestampColumns;
 
 
   public TimestampIncrementingCriteria(
       ColumnId incrementingColumn,
       List<ColumnId> timestampColumns,
-      TimeZone timeZone
+      ZoneId zoneId
   ) {
     this.timestampColumns =
         timestampColumns != null ? timestampColumns : Collections.<ColumnId>emptyList();
     this.incrementingColumn = incrementingColumn;
-    this.timeZone = timeZone;
+    this.zoneId = zoneId;
     this.caseAdjustedTimestampColumns =
         timestampColumns != null ? new LruCache<>(16) : null;
+    this.dateCalendarSystem = DateCalendarSystem.LEGACY;
+  }
+
+  public TimestampIncrementingCriteria(
+      ColumnId incrementingColumn,
+      List<ColumnId> timestampColumns,
+      ZoneId zoneId,
+      DateCalendarSystem dateCalendarSystem
+  ) {
+    this.timestampColumns =
+        timestampColumns != null ? timestampColumns : Collections.<ColumnId>emptyList();
+    this.incrementingColumn = incrementingColumn;
+    this.zoneId = zoneId;
+    this.caseAdjustedTimestampColumns =
+        timestampColumns != null ? new LruCache<>(16) : null;
+    this.dateCalendarSystem = dateCalendarSystem;
   }
 
   protected boolean hasTimestampColumns() {
@@ -146,14 +164,14 @@ public class TimestampIncrementingCriteria {
     Timestamp beginTime = values.beginTimestampValue();
     Timestamp endTime = values.endTimestampValue();
     Long incOffset = values.lastIncrementedValue();
-    stmt.setTimestamp(1, endTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
-    stmt.setTimestamp(2, beginTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
+    stmt.setTimestamp(1, endTime, DateTimeUtils.getZoneIdCalendar(zoneId));
+    stmt.setTimestamp(2, beginTime, DateTimeUtils.getZoneIdCalendar(zoneId));
     stmt.setLong(3, incOffset);
-    stmt.setTimestamp(4, beginTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
+    stmt.setTimestamp(4, beginTime, DateTimeUtils.getZoneIdCalendar(zoneId));
     log.debug(
         "Executing prepared statement with start time value = {} end time = {} and incrementing"
-        + " value = {}", DateTimeUtils.formatTimestamp(beginTime, timeZone),
-        DateTimeUtils.formatTimestamp(endTime, timeZone), incOffset
+        + " value = {}",         DateTimeUtils.formatTimestamp(beginTime, zoneId),
+        DateTimeUtils.formatTimestamp(endTime, zoneId), incOffset
     );
   }
 
@@ -172,11 +190,11 @@ public class TimestampIncrementingCriteria {
   ) throws SQLException {
     Timestamp beginTime = values.beginTimestampValue();
     Timestamp endTime = values.endTimestampValue();
-    stmt.setTimestamp(1, beginTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
-    stmt.setTimestamp(2, endTime, DateTimeUtils.getTimeZoneCalendar(timeZone));
+    stmt.setTimestamp(1, beginTime, DateTimeUtils.getZoneIdCalendar(zoneId));
+    stmt.setTimestamp(2, endTime, DateTimeUtils.getZoneIdCalendar(zoneId));
     log.debug("Executing prepared statement with timestamp value = {} end time = {}",
-        DateTimeUtils.formatTimestamp(beginTime, timeZone),
-        DateTimeUtils.formatTimestamp(endTime, timeZone)
+        DateTimeUtils.formatTimestamp(beginTime, zoneId),
+        DateTimeUtils.formatTimestamp(endTime, zoneId)
     );
   }
 
@@ -230,7 +248,10 @@ public class TimestampIncrementingCriteria {
   ) {
     caseAdjustedTimestampColumns.computeIfAbsent(schema, this::findCaseSensitiveTimestampColumns);
     for (String timestampColumn : caseAdjustedTimestampColumns.get(schema)) {
-      Timestamp ts = timestampGranularity.toTimestamp.apply(record.get(timestampColumn), timeZone);
+      Timestamp ts = timestampGranularity.toTimestamp.apply(record.get(timestampColumn), zoneId);
+      if (dateCalendarSystem.isModern()) {
+        ts = DateTimeUtils.convertToLegacyTimestamp(ts, zoneId);
+      }
       if (ts != null) {
         return ts;
       }

@@ -15,12 +15,15 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -96,6 +99,10 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
       case INT32:
         return "INTEGER";
       case INT64:
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
+          return "TIMESTAMP";
+        }
         return "BIGINT";
       case FLOAT32:
         return "REAL";
@@ -104,6 +111,10 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
       case BOOLEAN:
         return "BOOLEAN";
       case STRING:
+        if (config instanceof JdbcSinkConfig
+             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
+          return "TIMESTAMP";
+        }
         return "VARCHAR(1000)";
       case BYTES:
         return "BLOB";
@@ -156,5 +167,12 @@ public class SapHanaDatabaseDialect extends GenericDatabaseDialect {
     builder.append(")");
     builder.append(" WITH PRIMARY KEY");
     return builder.toString();
+  }
+
+  @Override
+  public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
+    throw new SQLException(
+        "Kafka JDBC Connector doesn't support Synonym Types on SAP Hana. "
+         + "Please use other table types instead.");
   }
 }

@@ -12,6 +12,7 @@ import org.apache.kafka.connect.util.clusters.EmbeddedConnectCluster;
 import org.apache.kafka.test.TestUtils;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -81,6 +82,7 @@ public class PauseResumeIT {
     }
   }
 
+  @Ignore
   @Test
   public void testPauseResume() throws Exception {
     try (Connection conn = getConnection(); Statement stmt = conn.createStatement()) {

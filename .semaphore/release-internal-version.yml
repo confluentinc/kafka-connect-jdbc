@@ -23,4 +23,3 @@ blocks:
             - . assume-iam-role arn:aws:iam::519856050701:role/semaphore-oidc
             - chmod +x scripts/release-internal-version.sh
             - ./scripts/release-internal-version.sh
-

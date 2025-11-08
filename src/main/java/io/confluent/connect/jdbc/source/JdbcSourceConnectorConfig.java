@@ -39,6 +39,9 @@ import io.confluent.connect.jdbc.util.JdbcCredentialsProviderValidator;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TimeZoneValidator;
 import io.confluent.connect.jdbc.util.DateCalendarSystem;
+import io.confluent.connect.jdbc.util.ConfigDefMutator;
+import io.confluent.connect.jdbc.util.DefaultConfigDefMutator;
+import io.confluent.connect.jdbc.util.ConfigDefMutatorValidator;
 
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -417,6 +420,23 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "chain to use for authentication to database. By default the connector uses ``"
       + DefaultJdbcCredentialsProvider.class.getName() + "``.";
 
+  /**
+   * The configuration key for the ConfigDefMutator class.
+   */
+  public static final String CONFIG_DEF_MUTATOR_CLASS_CONFIG = "config.def.mutator.class";
+  public static final Class<? extends ConfigDefMutator> CONFIG_DEF_MUTATOR_CLASS_DEFAULT =
+      DefaultConfigDefMutator.class;
+
+  public static final String CONFIG_DEF_MUTATOR_CLASS_DISPLAY = "ConfigDef Mutator Class";
+
+  public static final String CONFIG_DEF_MUTATOR_CLASS_DOC = "A class that implements the "
+      + "ConfigDefMutator interface to customize the configuration definitions. "
+      + "This allows for runtime modifications of configuration properties such as changing "
+      + "a STRING type to PASSWORD type for enhanced security. By default, the connector uses ``"
+      + DefaultConfigDefMutator.class.getName() + "`` which performs no mutations. "
+      + "Users can implement their own mutator class, package it with the connector, "
+      + "and specify it here to apply custom configuration transformations.";
+
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
 
@@ -632,6 +652,52 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     return config;
   }
 
+  /**
+   * Creates a ConfigDef with mutation applied based on the mutator class specified in props.
+   * This allows for runtime customization of configuration definitions.
+   *
+   * @param props the configuration properties containing the mutator class name
+   * @return the mutated ConfigDef
+   */
+  public static ConfigDef baseConfigDefWithMutation(Map<String, ?> props) {
+    ConfigDef config = baseConfigDef();
+    
+    if (props == null || !props.containsKey(CONFIG_DEF_MUTATOR_CLASS_CONFIG)) {
+      return config;
+    }
+
+    try {
+      Object mutatorClassValue = props.get(CONFIG_DEF_MUTATOR_CLASS_CONFIG);
+      Class<?> mutatorClass;
+      
+      if (mutatorClassValue instanceof Class) {
+        mutatorClass = (Class<?>) mutatorClassValue;
+      } else if (mutatorClassValue instanceof String) {
+        mutatorClass = Class.forName((String) mutatorClassValue);
+      } else {
+        LOG.warn("Invalid type for {}: {}. Using default mutator.", 
+            CONFIG_DEF_MUTATOR_CLASS_CONFIG, mutatorClassValue);
+        return config;
+      }
+      
+      if (!ConfigDefMutator.class.isAssignableFrom(mutatorClass)) {
+        throw new ConfigException(
+            CONFIG_DEF_MUTATOR_CLASS_CONFIG,
+            mutatorClassValue,
+            "Class must implement ConfigDefMutator interface"
+        );
+      }
+      
+      @SuppressWarnings("unchecked")
+      ConfigDefMutator mutator = ((Class<? extends ConfigDefMutator>) mutatorClass).newInstance();
+      return mutator.mutate(config);
+      
+    } catch (ClassNotFoundException | IllegalAccessException | InstantiationException e) {
+      throw new ConnectException(
+          "Invalid class for: " + CONFIG_DEF_MUTATOR_CLASS_CONFIG, e);
+    }
+  }
+
   @SuppressWarnings("checkstyle:MethodLength")
   private static final void addDatabaseOptions(ConfigDef config) {
     int orderInGroup = 0;
@@ -683,6 +749,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.LONG,
         CREDENTIALS_PROVIDER_CLASS_DISPLAY
+    ).define(
+        CONFIG_DEF_MUTATOR_CLASS_CONFIG,
+        Type.CLASS,
+        CONFIG_DEF_MUTATOR_CLASS_DEFAULT,
+        new ConfigDefMutatorValidator(),
+        Importance.LOW,
+        CONFIG_DEF_MUTATOR_CLASS_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        CONFIG_DEF_MUTATOR_CLASS_DISPLAY
     ).define(
         CONNECTION_ATTEMPTS_CONFIG,
         Type.INT,
@@ -1108,7 +1185,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final ConfigDef CONFIG_DEF = baseConfigDef();
 
   public JdbcSourceConnectorConfig(Map<String, ?> props) {
-    super(CONFIG_DEF, props);
+    super(baseConfigDefWithMutation(props), props);
   }
 
   public String topicPrefix() {

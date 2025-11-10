@@ -77,8 +77,9 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
           + "For SQL Server (Driver 10.2.4+) - TLS encryption is recommended."
           + "Use ``encrypt=true;trustServerCertificate=false`` for secure connections, "
           + "In order to bypass certificate validation (not recommended for production), "
-          + "use ``encrypt=true;trustServerCertificate=true`` and in order to disable TLS encryption "
-          + "entirely, use ``encrypt=false`` (not recommended for production).";
+          + "use ``encrypt=true;trustServerCertificate=true`` and in order to disable  "
+          + "TLS encryption entirely, use ``encrypt=false`` "
+          + "(not recommended for production).";
 
   private static final String CONNECTION_URL_DISPLAY = "JDBC URL";
   private static final String CONNECTION_URL_DEFAULT = "";

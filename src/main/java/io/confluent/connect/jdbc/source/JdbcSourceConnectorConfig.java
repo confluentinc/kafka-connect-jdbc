@@ -73,7 +73,9 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
           + "For example: ``jdbc:oracle:thin:@localhost:1521:orclpdb1``, "
           + "``jdbc:mysql://localhost/db_name``, "
           + "``jdbc:sqlserver://localhost;instance=SQLEXPRESS;"
-          + "databaseName=db_name``";
+          + "databaseName=db_name``\n"
+          + "For SQL Server (Driver 10.2.4+) - TLS encryption is recommended. "
+          + "Use ``encrypt=true;trustServerCertificate=false`` for secure connections.";
   private static final String CONNECTION_URL_DISPLAY = "JDBC URL";
   private static final String CONNECTION_URL_DEFAULT = "";
 

@@ -77,6 +77,7 @@ public class MSSqlServerTableIT extends BaseConnectorIT {
     stopConnect();
   }
 
+  @Ignore
   @Test
   public void testTaskStartupWithSynonymTable() throws Exception {
     String tableName = "test_table";

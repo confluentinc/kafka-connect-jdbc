@@ -117,7 +117,7 @@ public class JdbcSourceConnector extends SourceConnector {
     List<String> excludeList = config.tableExcludeListRegexes();
     Set<String> excludeListSet = excludeList.isEmpty() ? null : new HashSet<>(excludeList);
 
-    String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
+    String query = config.getQuery();
     if (!query.isEmpty()) {
       if (whitelistSet != null || blacklistSet != null 
           || includeListSet != null || excludeListSet != null) {
@@ -170,7 +170,7 @@ public class JdbcSourceConnector extends SourceConnector {
   @Override
   public List<Map<String, String>> taskConfigs(int maxTasks) {
     log.info("Starting with the task Configuration method.");
-    String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
+    String query = config.getQuery();
     List<Map<String, String>> taskConfigs;
     if (!query.isEmpty()) {
       log.info("Custom query provided, generating task configuration for the query");

@@ -80,7 +80,8 @@ public class JdbcSourceConnectorValidation {
       }
 
       boolean validationResult = validateMultiConfigs()
-          && validateLegacyNewConfigCompatibility();
+          && validateLegacyNewConfigCompatibility()
+          && validateQueryConfigs();
 
       if (validationResult && isUsingNewConfigs()) {
         validationResult = validateTableInclusionConfigs()
@@ -302,6 +303,35 @@ public class JdbcSourceConnectorValidation {
       return false;
     }
     
+    return true;
+  }
+
+    /**
+   * Validate that only one of query or query.masked configs is set at a time.
+   * Both configs should not be set simultaneously to avoid ambiguity.
+   */
+  private boolean validateQueryConfigs() {
+    String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
+    org.apache.kafka.common.config.types.Password queryMasked =
+        config.getPassword(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG);
+
+    boolean hasQuery = query != null && !query.isEmpty();
+    boolean hasQueryMasked = queryMasked != null
+        && queryMasked.value() != null
+        && !queryMasked.value().isEmpty();
+
+    if (hasQuery && hasQueryMasked) {
+      String msg = "Both 'query' and 'query.masked' configs cannot be set at the same time. "
+          + "Please use only one of them. Use 'query.masked' (Type.PASSWORD) if you want to hide "
+          + "the query value from being visible, or use 'query' (Type.STRING) for regular usage.";
+
+      addConfigError(JdbcSourceConnectorConfig.QUERY_CONFIG, msg);
+      addConfigError(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG, msg);
+
+      log.error("Validation failed: Both query and query.masked configs are set");
+      return false;
+    }
+
     return true;
   }
 

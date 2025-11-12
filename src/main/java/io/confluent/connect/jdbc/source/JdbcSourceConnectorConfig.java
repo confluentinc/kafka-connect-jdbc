@@ -54,6 +54,7 @@ import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -335,6 +336,19 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "handle incremental queries itself.";
   public static final String QUERY_DEFAULT = "";
   private static final String QUERY_DISPLAY = "Query";
+
+  public static final String QUERY_MASKED_CONFIG = "query.masked";
+  private static final String QUERY_MASKED_DOC =
+      "If specified, the query to perform to select new or updated rows. This is the same as "
+      + "'query' config but with Type.PASSWORD to mask the query value from being visible to users. "
+      + "Use this setting when your query contains sensitive information. If used, this connector "
+      + "will only copy data using this query -- whole-table copying will be disabled. Different "
+      + "query modes may still be used for incremental updates, but in order to properly construct "
+      + "the incremental query, it must be possible to append a WHERE clause to this query (i.e. no "
+      + "WHERE clauses may be used). If you use a WHERE clause, it must handle incremental queries "
+      + "itself. Note: Only one of 'query' or 'query.masked' should be set, not both.";
+  private static final String QUERY_MASKED_DISPLAY = "Query (Masked)";
+
 
   public static final String TOPIC_PREFIX_CONFIG = "topic.prefix";
   private static final String TOPIC_PREFIX_DOC =
@@ -928,6 +942,16 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Width.SHORT,
         QUERY_DISPLAY
     ).define(
+        QUERY_MASKED_CONFIG,
+        Type.PASSWORD,
+        QUERY_DEFAULT,
+        Importance.MEDIUM,
+        QUERY_MASKED_DOC,
+        MODE_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        QUERY_MASKED_DISPLAY
+    ).define(
         QUOTE_SQL_IDENTIFIERS_CONFIG,
         Type.STRING,
         QUOTE_SQL_IDENTIFIERS_DEFAULT,
@@ -1430,6 +1454,22 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     return incrementingColumnMapping().stream()
         .map(mapping -> mapping.split(":")[0].trim())
         .collect(java.util.stream.Collectors.toList());
+  }
+
+  /**
+   * Get query string from either query.masked (Type.PASSWORD) or query (Type.STRING) config.
+   * Prioritizes query.masked if set, otherwise falls back to query config for backward compatibility.
+   *
+   * @return The query string from whichever config is set, or empty string if neither is set.
+   */
+  public String getQuery() {
+    // First check if query.masked is set
+    org.apache.kafka.common.config.types.Password maskedQuery = getPassword(QUERY_MASKED_CONFIG);
+    if (maskedQuery != null && maskedQuery.value() != null && !maskedQuery.value().isEmpty()) {
+      return maskedQuery.value();
+    }
+
+    return getString(QUERY_CONFIG);
   }
 
   public boolean modeUsesTimestampColumn() {

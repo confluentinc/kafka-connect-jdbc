@@ -306,7 +306,7 @@ public class JdbcSourceConnectorValidation {
     return true;
   }
 
-    /**
+  /**
    * Validate that only one of query or query.masked configs is set at a time.
    * Both configs should not be set simultaneously to avoid ambiguity.
    */

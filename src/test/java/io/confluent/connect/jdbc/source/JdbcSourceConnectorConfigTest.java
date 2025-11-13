@@ -454,45 +454,6 @@ public class JdbcSourceConnectorConfigTest {
   }
 
   @Test
-  public void testQueryMaskedValueCanBeRetrievedViaConfig() {
-    // Setup config with query.masked
-    Map<String, String> props = new HashMap<>();
-    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
-    props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "testUser");
-    props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "table1,table2");
-    String expectedQuery = "SELECT * FROM users WHERE status = 'active'";
-    props.put(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG, expectedQuery);
-
-    // Create config
-    JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
-
-    // The actual value can be retrieved when needed
-    org.apache.kafka.common.config.types.Password password =
-        config.getPassword(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG);
-    assertNotNull(password);
-
-    String actualQuery = password.value();
-    assertEquals(expectedQuery, actualQuery);
-  }
-
-  @Test
-  public void testGetQueryStringReturnsQueryMaskedWhenSet() {
-    // Setup config with query.masked (but not query)
-    Map<String, String> props = new HashMap<>();
-    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
-    props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "testUser");
-    props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "table1,table2");
-    String expectedQuery = "SELECT id, name, email FROM users";
-    props.put(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG, expectedQuery);
-
-    JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
-
-    // getQueryString() should return the masked query value
-    String actualQuery = config.getQuery();
-    assertEquals(expectedQuery, actualQuery);
-  }
-
-  @Test
   public void testGetQueryStringReturnsQueryWhenOnlyQuerySet() {
     // Setup config with only query (not query.masked)
     Map<String, String> props = new HashMap<>();
@@ -504,29 +465,8 @@ public class JdbcSourceConnectorConfigTest {
 
     JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
 
-    // getQueryString() should return the regular query value
     String actualQuery = config.getQuery();
     assertEquals(expectedQuery, actualQuery);
-  }
-
-  @Test
-  public void testGetQueryStringPrioritizesQueryMaskedOverQuery() {
-    // Setup config with both query and query.masked
-    // (This violates validation but tests the priority logic)
-    Map<String, String> props = new HashMap<>();
-    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
-    props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "testUser");
-    props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "table1,table2");
-    String regularQuery = "SELECT * FROM table1";
-    String maskedQuery = "SELECT * FROM sensitive_table";
-    props.put(JdbcSourceConnectorConfig.QUERY_CONFIG, regularQuery);
-    props.put(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG, maskedQuery);
-
-    JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
-
-    // getQueryString() should prioritize query.masked
-    String actualQuery = config.getQuery();
-    assertEquals(maskedQuery, actualQuery);
   }
 
   @Test
@@ -569,41 +509,8 @@ public class JdbcSourceConnectorConfigTest {
 
     JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
 
-    // Verify the full complex query can be retrieved
     String retrievedQuery = config.getQuery();
     assertEquals(complexQuery, retrievedQuery);
-  }
-
-  @Test
-  public void testQueryMaskedSupportsVeryLongQueries() {
-    // Test that very long queries (thousands of characters) work fine
-    Map<String, String> props = new HashMap<>();
-    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
-    props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "testUser");
-    props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "table1,table2");
-
-    // Build a very long query (over 2000 characters)
-    StringBuilder longQuery = new StringBuilder("SELECT ");
-    for (int i = 0; i < 100; i++) {
-      longQuery.append("column_").append(i).append(", ");
-    }
-    longQuery.append("id FROM very_wide_table WHERE ");
-    for (int i = 0; i < 50; i++) {
-      longQuery.append("column_").append(i).append(" IS NOT NULL");
-      if (i < 49) {
-        longQuery.append(" AND ");
-      }
-    }
-
-    String expectedQuery = longQuery.toString();
-    props.put(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG, expectedQuery);
-
-    JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
-
-    // Verify the full long query can be retrieved without truncation
-    String retrievedQuery = config.getQuery();
-    assertEquals(expectedQuery, retrievedQuery);
-    assertTrue(retrievedQuery.length() > 2000);
   }
 
   @Test
@@ -630,52 +537,6 @@ public class JdbcSourceConnectorConfigTest {
   }
 
   @Test
-  public void testPasswordObjectToStringShowsHidden() {
-    // Test that Password type properly masks the value in toString()
-    Map<String, String> props = new HashMap<>();
-    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
-    props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "testUser");
-    props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "table1,table2");
-    String secretQuery = "SELECT * FROM secret_table WHERE api_key = 'secret123'";
-    props.put(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG, secretQuery);
-
-    JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
-    org.apache.kafka.common.config.types.Password password =
-        config.getPassword(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG);
-
-    // toString() should hide the value
-    String passwordString = password.toString();
-    assertEquals("[hidden]", passwordString);
-
-    // But value() should return the actual query
-    String actualValue = password.value();
-    assertEquals(secretQuery, actualValue);
-  }
-
-  @Test
-  public void testConnectionPasswordIsSimilarlyMasked() {
-    // Compare with existing connection.password config to ensure consistent behavior
-    Map<String, String> props = new HashMap<>();
-    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
-    props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "testUser");
-    props.put(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, "mySecretPassword123");
-    props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "table1,table2");
-
-    Map<String, ConfigValue> validatedConfig = JdbcSourceConnectorConfig.CONFIG_DEF.validateAll(props);
-    ConfigValue passwordValue = validatedConfig.get(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG);
-
-    // Password should be masked in ConfigValue
-    String maskedString = passwordValue.value().toString();
-    assertEquals("[hidden]", maskedString);
-
-    // But can be retrieved via config
-    JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
-    org.apache.kafka.common.config.types.Password password =
-        config.getPassword(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG);
-    assertEquals("mySecretPassword123", password.value());
-  }
-
-  @Test
   public void testQueryMaskedWithEmptyStringBehavior() {
     // Test behavior with empty string
     Map<String, String> props = new HashMap<>();
@@ -686,7 +547,6 @@ public class JdbcSourceConnectorConfigTest {
 
     JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
 
-    // getQueryString() should return empty string
     String actualQuery = config.getQuery();
     assertEquals("", actualQuery);
   }

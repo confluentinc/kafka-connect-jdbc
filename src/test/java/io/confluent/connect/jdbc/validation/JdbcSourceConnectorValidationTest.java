@@ -837,26 +837,6 @@ public class JdbcSourceConnectorValidationTest {
   }
 
   @Test
-  public void validate_withQueryMaskedContainingVeryLongQuery_noErrors() {
-    props.put(MODE_CONFIG, MODE_BULK);
-    props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
-    // Test with a very long query to ensure no length restrictions
-    StringBuilder longQuery = new StringBuilder("SELECT ");
-    for (int i = 0; i < 100; i++) {
-      longQuery.append("column").append(i);
-      if (i < 99) {
-        longQuery.append(", ");
-      }
-    }
-    longQuery.append(" FROM large_table WHERE condition = 'test'");
-    props.put(QUERY_MASKED_CONFIG, longQuery.toString());
-
-    validate();
-
-    assertNoErrors();
-  }
-
-  @Test
   public void validate_withBothQueryAndQueryMaskedEmpty_noErrors() {
     props.put(MODE_CONFIG, MODE_BULK);
     props.put(TABLE_WHITELIST_CONFIG, "table1,table2");

@@ -95,7 +95,7 @@ public class JdbcSourceTask extends SourceTask {
 
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
     Boolean tablesFetched = config.getBoolean(JdbcSourceTaskConfig.TABLES_FETCHED);
-    String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
+    String query = config.getQuery();
     List<String> tableType = config.getList(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG);
 
     if ((tables.isEmpty() && query.isEmpty())) {

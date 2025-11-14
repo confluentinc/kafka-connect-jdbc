@@ -435,6 +435,20 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
 
+  private static final ConfigDef.Recommender HIDDEN_RECOMMENDER =
+      new ConfigDef.Recommender() {
+        @Override
+        public java.util.List<Object> validValues(
+            String name, java.util.Map<String, Object> parsedConfig) {
+          return java.util.Collections.emptyList();
+        }
+
+        @Override
+        public boolean visible(String name, java.util.Map<String, Object> parsedConfig) {
+          return false;
+        }
+      };
+
   public static final String DATABASE_GROUP = "Database";
   public static final String MODE_GROUP = "Mode";
   public static final String CONNECTOR_GROUP = "Connector";
@@ -964,11 +978,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Type.PASSWORD,
         QUERY_DEFAULT,
         Importance.MEDIUM,
-        QUERY_MASKED_DOC,
+        QUERY_DOC,
         MODE_GROUP,
         ++orderInGroup,
         Width.SHORT,
-        QUERY_MASKED_DISPLAY
+        QUERY_DISPLAY,
+        HIDDEN_RECOMMENDER
     ).define(
         QUOTE_SQL_IDENTIFIERS_CONFIG,
         Type.STRING,

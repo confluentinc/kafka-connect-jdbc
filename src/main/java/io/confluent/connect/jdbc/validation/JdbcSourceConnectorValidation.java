@@ -21,6 +21,7 @@ import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIsolationMode;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigValue;
+import org.apache.kafka.common.config.types.Password;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -151,6 +152,16 @@ public class JdbcSourceConnectorValidation {
     return true;
   }
 
+  private boolean hasAnyQueryConfig() {
+    String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
+    Password queryMasked =
+        config.getPassword(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG);
+    boolean hasQuery = query != null && !query.trim().isEmpty();
+    boolean hasQueryMasked =
+        queryMasked != null && queryMasked.value() != null && !queryMasked.value().trim().isEmpty();
+    return hasQuery || hasQueryMasked;
+  }
+
   /**
    * Validate legacy/new config compatibility and requirements.
    * Implements the pattern: legacyKeys vs newKeys with early returns.
@@ -159,6 +170,11 @@ public class JdbcSourceConnectorValidation {
     // Define legacy and new config keys
     boolean usingLegacyConfigs = isUsingLegacyConfigs();
     boolean usingNewConfigs = isUsingNewConfigs();
+    boolean hasQuery = hasAnyQueryConfig();
+
+    if (hasQuery) {
+      return true;
+    }
 
     if (usingLegacyConfigs && usingNewConfigs) {
       return addConfigErrorsForLegacyAndNewConfigConflict();
@@ -274,6 +290,9 @@ public class JdbcSourceConnectorValidation {
    * Validate that at least one configuration is provided.
    */
   private boolean addConfigErrorsForNoConfigProvided() {
+    if (hasAnyQueryConfig()) {
+      return true;
+    }
     String msg = "At least one table filtering configuration is required. "
         + "Provide one of: " + JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + ", "
         + JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG + ", "
@@ -312,7 +331,7 @@ public class JdbcSourceConnectorValidation {
    */
   private boolean validateQueryConfigs() {
     String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
-    org.apache.kafka.common.config.types.Password queryMasked =
+    Password queryMasked =
         config.getPassword(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG);
 
     boolean hasQuery = query != null && !query.isEmpty();
@@ -322,13 +341,26 @@ public class JdbcSourceConnectorValidation {
 
     if (hasQuery && hasQueryMasked) {
       String msg = "Both 'query' and 'query.masked' configs cannot be set at the same time. "
-          + "Please use only one of them. Use 'query.masked' (Type.PASSWORD) if you want to hide "
-          + "the query value from being visible, or use 'query' (Type.STRING) for regular usage.";
+          + "Please use only one of them.";
 
       addConfigError(JdbcSourceConnectorConfig.QUERY_CONFIG, msg);
       addConfigError(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG, msg);
 
       log.error("Validation failed: Both query and query.masked configs are set");
+      return false;
+    }
+
+    if ((hasQuery || hasQueryMasked) && (isUsingLegacyConfigs() || isUsingNewConfigs())) {
+      String msg =
+          "Do not specify table filtering configs with 'query' or 'query.masked'. "
+              + "Remove table.whitelist / table.blacklist / table.include.list / "
+              + "table.exclude.list.";
+      addConfigError(JdbcSourceConnectorConfig.QUERY_CONFIG, msg);
+      addConfigError(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG, msg);
+      addConfigError(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, msg);
+      addConfigError(JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG, msg);
+      addConfigError(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG, msg);
+      addConfigError(JdbcSourceConnectorConfig.TABLE_EXCLUDE_LIST_CONFIG, msg);
       return false;
     }
 

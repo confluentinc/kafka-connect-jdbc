@@ -54,6 +54,7 @@ import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -341,7 +342,21 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "to this query (i.e. no WHERE clauses may be used). If you use a WHERE clause, it must "
       + "handle incremental queries itself.";
   public static final String QUERY_DEFAULT = "";
-  private static final String QUERY_DISPLAY = "Query";
+  private static final String QUERY_DISPLAY = "Query (Deprecated)";
+
+  public static final String QUERY_MASKED_CONFIG = "query.masked";
+  private static final String QUERY_MASKED_DOC =
+      "If specified, the query to perform to select new or updated rows. This is the same as "
+          + "'query' config but with Type.PASSWORD to mask the query value from being visible "
+          + "to users. Use this setting when your query contains sensitive information. "
+          + "If used, this connector will only copy data using this query -- whole-table "
+          + "copying will be disabled. Different query modes may still be used for "
+          + "incremental updates, but in order to properly construct the incremental query,"
+          + " it must be possible to append a WHERE clause to this query (i.e. no "
+          + "WHERE clauses may be used). If you use a WHERE clause, it must handle "
+          + "incremental queries itself. Note: Only one of 'query' or 'query.masked' "
+          + "should be set, not both.";
+  private static final String QUERY_MASKED_DISPLAY = "Query (Masked)";
 
   public static final String TOPIC_PREFIX_CONFIG = "topic.prefix";
   private static final String TOPIC_PREFIX_DOC =
@@ -426,6 +441,20 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
+
+  private static final ConfigDef.Recommender HIDDEN_RECOMMENDER =
+      new ConfigDef.Recommender() {
+        @Override
+        public java.util.List<Object> validValues(
+            String name, java.util.Map<String, Object> parsedConfig) {
+          return java.util.Collections.emptyList();
+        }
+
+        @Override
+        public boolean visible(String name, java.util.Map<String, Object> parsedConfig) {
+          return false;
+        }
+      };
 
   public static final String DATABASE_GROUP = "Database";
   public static final String MODE_GROUP = "Mode";
@@ -832,6 +861,13 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   private static final void addModeOptions(ConfigDef config) {
     int orderInGroup = 0;
+    orderInGroup = defineModeConfig(config, orderInGroup);
+    orderInGroup = defineIncrementTimestampConfigs(config, orderInGroup);
+    orderInGroup = defineQueryAndQuoteConfigs(config, orderInGroup);
+    defineTransactionAndRetryConfigs(config, orderInGroup);
+  }
+
+  private static int defineModeConfig(ConfigDef config, int orderInGroup) {
     config.define(
         MODE_CONFIG,
         Type.STRING,
@@ -856,7 +892,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
             TIMESTAMP_COLUMN_MAPPING_CONFIG,
             VALIDATE_NON_NULL_CONFIG
         )
-    ).define(
+    );
+    return orderInGroup;
+  }
+
+  private static int defineIncrementTimestampConfigs(ConfigDef config, int orderInGroup) {
+    config.define(
         INCREMENTING_COLUMN_NAME_CONFIG,
         Type.STRING,
         INCREMENTING_COLUMN_NAME_DEFAULT,
@@ -924,7 +965,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Width.SHORT,
         VALIDATE_NON_NULL_DISPLAY,
         MODE_DEPENDENTS_RECOMMENDER
-    ).define(
+    );
+    return orderInGroup;
+  }
+
+  private static int defineQueryAndQuoteConfigs(ConfigDef config, int orderInGroup) {
+    config.define(
         QUERY_CONFIG,
         Type.STRING,
         QUERY_DEFAULT,
@@ -934,6 +980,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.SHORT,
         QUERY_DISPLAY
+    ).define(
+        QUERY_MASKED_CONFIG,
+        Type.PASSWORD,
+        QUERY_DEFAULT,
+        Importance.MEDIUM,
+        QUERY_DOC,
+        MODE_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        QUERY_DISPLAY,
+        HIDDEN_RECOMMENDER
     ).define(
         QUOTE_SQL_IDENTIFIERS_CONFIG,
         Type.STRING,
@@ -955,7 +1012,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.MEDIUM,
         QUERY_SUFFIX_DISPLAY
-    ).define(
+    );
+    return orderInGroup;
+  }
+
+  private static void defineTransactionAndRetryConfigs(ConfigDef config, int orderInGroup) {
+    config.define(
         TRANSACTION_ISOLATION_MODE_CONFIG,
         Type.STRING,
         TRANSACTION_ISOLATION_MODE_DEFAULT,
@@ -1437,6 +1499,22 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     return incrementingColumnMapping().stream()
         .map(mapping -> mapping.split(":")[0].trim())
         .collect(java.util.stream.Collectors.toList());
+  }
+
+  /**
+   * Get query string from either query.masked (Type.PASSWORD) or query (Type.STRING) config.
+   * Prioritizes query.masked if set, otherwise falls back to query config for backward
+   * compatibility.
+   *
+   * @return The query string from whichever config is set, or empty string if neither is set.
+   */
+  public String getQuery() {
+    Password maskedQuery = getPassword(QUERY_MASKED_CONFIG);
+    if (maskedQuery != null && maskedQuery.value() != null && !maskedQuery.value().isEmpty()) {
+      return maskedQuery.value();
+    }
+
+    return getString(QUERY_CONFIG);
   }
 
   public boolean modeUsesTimestampColumn() {

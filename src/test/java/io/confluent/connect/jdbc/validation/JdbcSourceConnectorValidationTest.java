@@ -799,7 +799,6 @@ public class JdbcSourceConnectorValidationTest {
   @Test
   public void validate_withOnlyQuery_noErrors() {
     props.put(MODE_CONFIG, MODE_BULK);
-    props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
     props.put(QUERY_CONFIG, "SELECT * FROM users WHERE active = true");
 
     validate();
@@ -810,7 +809,6 @@ public class JdbcSourceConnectorValidationTest {
   @Test
   public void validate_withOnlyQueryMasked_noErrors() {
     props.put(MODE_CONFIG, MODE_BULK);
-    props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
     props.put(QUERY_MASKED_CONFIG, "SELECT * FROM users WHERE active = true");
 
     validate();
@@ -821,7 +819,6 @@ public class JdbcSourceConnectorValidationTest {
   @Test
   public void validate_withQueryMaskedContainingComplexQuery_noErrors() {
     props.put(MODE_CONFIG, MODE_BULK);
-    props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
     // Test with a complex query containing multiple joins
     String complexQuery = "SELECT a.id, a.name, b.email, c.address, d.phone " +
         "FROM users a " +

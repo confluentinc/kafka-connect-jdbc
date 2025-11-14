@@ -335,20 +335,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "to this query (i.e. no WHERE clauses may be used). If you use a WHERE clause, it must "
       + "handle incremental queries itself.";
   public static final String QUERY_DEFAULT = "";
-  private static final String QUERY_DISPLAY = "Query (Deprecated)";
+  private static final String QUERY_DISPLAY = "Query";
 
   public static final String QUERY_MASKED_CONFIG = "query.masked";
   private static final String QUERY_MASKED_DOC =
-      "If specified, the query to perform to select new or updated rows. This is the same as "
-          + "'query' config but with Type.PASSWORD to mask the query value from being visible "
-          + "to users. Use this setting when your query contains sensitive information. "
-          + "If used, this connector will only copy data using this query -- whole-table "
-          + "copying will be disabled. Different query modes may still be used for "
-          + "incremental updates, but in order to properly construct the incremental query,"
-          + " it must be possible to append a WHERE clause to this query (i.e. no "
-          + "WHERE clauses may be used). If you use a WHERE clause, it must handle "
-          + "incremental queries itself. Note: Only one of 'query' or 'query.masked' "
-          + "should be set, not both.";
+      "Same as 'query' configuration but the query string is masked"
+      + "Use this config to prevent sensitive information from being logged.";
   private static final String QUERY_MASKED_DISPLAY = "Query (Masked)";
 
   public static final String TOPIC_PREFIX_CONFIG = "topic.prefix";
@@ -439,12 +431,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       new ConfigDef.Recommender() {
         @Override
         public java.util.List<Object> validValues(
-            String name, java.util.Map<String, Object> parsedConfig) {
+            String name, Map<String, Object> config) {
           return java.util.Collections.emptyList();
         }
 
         @Override
-        public boolean visible(String name, java.util.Map<String, Object> parsedConfig) {
+        public boolean visible(String name, Map<String, Object> config) {
           return false;
         }
       };
@@ -978,11 +970,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Type.PASSWORD,
         QUERY_DEFAULT,
         Importance.MEDIUM,
-        QUERY_DOC,
+        QUERY_MASKED_DOC,
         MODE_GROUP,
         ++orderInGroup,
         Width.SHORT,
-        QUERY_DISPLAY,
+        QUERY_MASKED_DISPLAY,
         HIDDEN_RECOMMENDER
     ).define(
         QUOTE_SQL_IDENTIFIERS_CONFIG,

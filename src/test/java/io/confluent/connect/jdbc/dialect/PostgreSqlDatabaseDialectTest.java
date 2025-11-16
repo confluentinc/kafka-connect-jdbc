@@ -464,6 +464,13 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
+  public void bindFieldStringValueWithNulls() throws SQLException {
+    int index = ThreadLocalRandom.current().nextInt();
+    verifyBindField(++index, Schema.STRING_SCHEMA, "y\u0000ep\u0000\u0000").setString(index, "yep");
+    verifyBindField(++index, Schema.STRING_SCHEMA, null).setObject(index, null);
+  }
+
+  @Test
   public void shouldGracefullyHandleErrorWhenComputingMaxTableNameLength() throws Exception {
     Statement statement = mock(Statement.class);
     when(statement.executeQuery("SELECT length(repeat('1234567890', 1000)::NAME);"))

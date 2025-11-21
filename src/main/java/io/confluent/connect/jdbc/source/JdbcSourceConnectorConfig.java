@@ -19,14 +19,7 @@ import java.sql.Connection;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.ZoneId;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.microsoft.sqlserver.jdbc.SQLServerConnection;
@@ -1487,19 +1480,23 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   }
 
   /**
-   * Get query string from either query.masked (Type.PASSWORD) or query (Type.STRING) config.
-   * Prioritizes query.masked if set, otherwise falls back to query config for backward
-   * compatibility.
-   *
-   * @return The query string from whichever config is set, or empty string if neither is set.
-   */
-  public String getQuery() {
+ * Get the query string from either query or query.masked config.
+ * Prioritizes query.masked over query if both are set (though validation should prevent this).
+ *
+ * @return Optional containing the query string if present, empty Optional otherwise.
+ */
+  public Optional<String> getQuery() {
     Password maskedQuery = getPassword(QUERY_MASKED_CONFIG);
     if (maskedQuery != null && maskedQuery.value() != null && !maskedQuery.value().isEmpty()) {
-      return maskedQuery.value();
+      return Optional.of(maskedQuery.value());
     }
 
-    return getString(QUERY_CONFIG);
+    String query = getString(QUERY_CONFIG);
+    if (query != null && !query.isEmpty()) {
+      return Optional.of(query);
+    }
+
+    return Optional.empty();
   }
 
   public boolean modeUsesTimestampColumn() {

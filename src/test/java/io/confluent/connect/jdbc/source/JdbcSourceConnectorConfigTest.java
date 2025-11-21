@@ -465,8 +465,8 @@ public class JdbcSourceConnectorConfigTest {
 
     JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
 
-    String actualQuery = config.getQuery();
-    assertEquals(expectedQuery, actualQuery);
+    assertTrue(config.getQuery().isPresent());
+    assertEquals(expectedQuery, config.getQuery().get());
   }
 
   @Test
@@ -479,9 +479,8 @@ public class JdbcSourceConnectorConfigTest {
 
     JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
 
-    // getQueryString() should return empty string
-    String actualQuery = config.getQuery();
-    assertEquals("", actualQuery);
+    // getQuery() should return empty Optional
+    assertFalse(config.getQuery().isPresent());
   }
 
   @Test
@@ -509,8 +508,8 @@ public class JdbcSourceConnectorConfigTest {
 
     JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
 
-    String retrievedQuery = config.getQuery();
-    assertEquals(complexQuery, retrievedQuery);
+    assertTrue(config.getQuery().isPresent());
+    assertEquals(complexQuery, config.getQuery().get());
   }
 
   @Test
@@ -532,8 +531,8 @@ public class JdbcSourceConnectorConfigTest {
     JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
 
     // Verify special characters are preserved
-    String retrievedQuery = config.getQuery();
-    assertEquals(queryWithSpecialChars, retrievedQuery);
+    assertTrue(config.getQuery().isPresent());
+    assertEquals(queryWithSpecialChars, config.getQuery().get());
   }
 
   @Test
@@ -547,7 +546,7 @@ public class JdbcSourceConnectorConfigTest {
 
     JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
 
-    String actualQuery = config.getQuery();
-    assertEquals("", actualQuery);
+    // Empty string should return empty Optional
+    assertFalse(config.getQuery().isPresent());
   }
 }

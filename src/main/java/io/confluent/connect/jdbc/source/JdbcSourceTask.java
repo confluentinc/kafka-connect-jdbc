@@ -146,8 +146,8 @@ public class JdbcSourceTask extends SourceTask {
                             )
                     )
     );
-    TableQuerier.QueryMode queryMode = config.getQuery().isPresent() ? TableQuerier.QueryMode.QUERY :
-                                       TableQuerier.QueryMode.TABLE;
+    TableQuerier.QueryMode queryMode =
+        config.getQuery().isPresent() ? TableQuerier.QueryMode.QUERY : TableQuerier.QueryMode.TABLE;
     final List<String> tablesOrQuery = queryMode == TableQuerier.QueryMode.QUERY
                                  ? Collections.singletonList(config.getQuery().get()) : tables;
 

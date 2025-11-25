@@ -817,6 +817,17 @@ public class JdbcSourceConnectorValidationTest {
   }
 
   @Test
+  public void validate_withQueryMaskedAndIncrementingColumn_noErrors() {
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM users");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");
+
+    validate();
+
+    assertNoErrors();
+  }
+
+  @Test
   public void validate_withQueryMaskedContainingComplexQuery_noErrors() {
     props.put(MODE_CONFIG, MODE_BULK);
     // Test with a complex query containing multiple joins

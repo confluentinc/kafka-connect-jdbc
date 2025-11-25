@@ -340,7 +340,7 @@ public class JdbcSourceConnectorValidation {
       return false;
     }
 
-    if (config.getQuery().isPresent() && (isUsingLegacyConfigs() || isUsingNewConfigs())) {
+    if (config.getQuery().isPresent() && isUsingTableFilteringConfigs()) {
       String msg =
           "Do not specify table filtering configs with 'query' or 'query.masked'. "
               + "Remove table.whitelist / table.blacklist / table.include.list / "
@@ -348,10 +348,18 @@ public class JdbcSourceConnectorValidation {
               + " or 'query' / 'query.masked' when using table filtering mode.";
       addConfigError(JdbcSourceConnectorConfig.QUERY_CONFIG, msg);
       addConfigError(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG, msg);
-      addConfigError(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, msg);
-      addConfigError(JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG, msg);
-      addConfigError(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG, msg);
-      addConfigError(JdbcSourceConnectorConfig.TABLE_EXCLUDE_LIST_CONFIG, msg);
+      if (!config.getTableWhitelistSet().isEmpty()) {
+        addConfigError(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, msg);
+      }
+      if (!config.getTableBlacklistSet().isEmpty()) {
+        addConfigError(JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG, msg);
+      }
+      if (!config.getTableIncludeListSet().isEmpty()) {
+        addConfigError(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG, msg);
+      }
+      if (!config.getTableExcludeListSet().isEmpty()) {
+        addConfigError(JdbcSourceConnectorConfig.TABLE_EXCLUDE_LIST_CONFIG, msg);
+      }
       return false;
     }
 
@@ -493,6 +501,16 @@ public class JdbcSourceConnectorValidation {
         .filter(cv -> cv.name().equals(configName))
         .findFirst()
         .ifPresent(cv -> cv.addErrorMessage(errorMessage));
+  }
+
+  /**
+   * Determine whether any table filtering configurations are in use.
+   */
+  private boolean isUsingTableFilteringConfigs() {
+    return !config.getTableWhitelistSet().isEmpty()
+        || !config.getTableBlacklistSet().isEmpty()
+        || !config.getTableIncludeListSet().isEmpty()
+        || !config.getTableExcludeListSet().isEmpty();
   }
 
 }

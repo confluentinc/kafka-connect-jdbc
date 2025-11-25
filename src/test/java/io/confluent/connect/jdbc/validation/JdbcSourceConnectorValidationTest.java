@@ -777,5 +777,84 @@ public class JdbcSourceConnectorValidationTest {
     assertErrors(MODE_CONFIG, 1);
     assertErrorMatches(MODE_CONFIG, ".*Incrementing column configurations should not be provided.*");
   }
+
+  // ========== Query and Query.Masked Config Tests ==========
+
+  @Test
+  public void validate_withBothQueryAndQueryMasked_setsError() {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
+    props.put(QUERY_CONFIG, "SELECT * FROM users");
+    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM sensitive_data");
+
+    validate();
+
+    assertErrors(2);
+    assertErrors(QUERY_CONFIG, 1);
+    assertErrors(QUERY_MASKED_CONFIG, 1);
+    assertErrorMatches(QUERY_CONFIG, ".*Both 'query' and 'query.masked' configs cannot be set.*");
+    assertErrorMatches(QUERY_MASKED_CONFIG, ".*Both 'query' and 'query.masked' configs cannot be set.*");
+  }
+
+  @Test
+  public void validate_withOnlyQuery_noErrors() {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM users WHERE active = true");
+
+    validate();
+
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_withOnlyQueryMasked_noErrors() {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM users WHERE active = true");
+
+    validate();
+
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_withQueryMaskedAndIncrementingColumn_noErrors() {
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM users");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");
+
+    validate();
+
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_withQueryMaskedContainingComplexQuery_noErrors() {
+    props.put(MODE_CONFIG, MODE_BULK);
+    // Test with a complex query containing multiple joins
+    String complexQuery = "SELECT a.id, a.name, b.email, c.address, d.phone " +
+        "FROM users a " +
+        "INNER JOIN emails b ON a.id = b.user_id " +
+        "LEFT JOIN addresses c ON a.id = c.user_id " +
+        "LEFT JOIN phones d ON a.id = d.user_id " +
+        "WHERE a.created_at > '2024-01-01' AND a.status = 'active'";
+    props.put(QUERY_MASKED_CONFIG, complexQuery);
+
+    validate();
+
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_withBothQueryAndQueryMaskedEmpty_noErrors() {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
+    // Both empty should be fine as it's equivalent to neither being set
+    props.put(QUERY_CONFIG, "");
+    props.put(QUERY_MASKED_CONFIG, "");
+
+    validate();
+
+    assertNoErrors();
+  }
   
 }

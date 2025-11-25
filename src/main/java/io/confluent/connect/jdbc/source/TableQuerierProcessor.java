@@ -95,8 +95,7 @@ public class TableQuerierProcessor {
     // If the call to get tables has not completed we will not do anything.
     // This is only valid in table mode.
     Boolean tablesFetched = config.getBoolean(JdbcSourceTaskConfig.TABLES_FETCHED);
-    String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
-    return !query.isEmpty() || tablesFetched;
+    return config.getQuery().isPresent() || tablesFetched;
   }
 
   private void processQuerier(RecordDestination<SourceRecord> destination, TableQuerier querier)

@@ -95,10 +95,9 @@ public class JdbcSourceTask extends SourceTask {
 
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
     Boolean tablesFetched = config.getBoolean(JdbcSourceTaskConfig.TABLES_FETCHED);
-    String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
     List<String> tableType = config.getList(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG);
 
-    if ((tables.isEmpty() && query.isEmpty())) {
+    if ((tables.isEmpty() && !config.getQuery().isPresent())) {
       // We are still waiting for the tables call to complete.
       // Start task but do nothing.
       if (!tablesFetched) {
@@ -115,7 +114,7 @@ public class JdbcSourceTask extends SourceTask {
               + " table name.");
     }
 
-    if ((!tables.isEmpty() && !query.isEmpty())) {
+    if ((!tables.isEmpty() && config.getQuery().isPresent())) {
       throw new ConfigException("Invalid configuration: a JdbcSourceTask"
               + " cannot have both a table and a query assigned to it");
     }
@@ -147,10 +146,10 @@ public class JdbcSourceTask extends SourceTask {
                             )
                     )
     );
-    TableQuerier.QueryMode queryMode = !query.isEmpty() ? TableQuerier.QueryMode.QUERY :
-                                       TableQuerier.QueryMode.TABLE;
+    TableQuerier.QueryMode queryMode =
+        config.getQuery().isPresent() ? TableQuerier.QueryMode.QUERY : TableQuerier.QueryMode.TABLE;
     final List<String> tablesOrQuery = queryMode == TableQuerier.QueryMode.QUERY
-                                 ? Collections.singletonList(query) : tables;
+                                 ? Collections.singletonList(config.getQuery().get()) : tables;
 
     String mode = config.getString(JdbcSourceTaskConfig.MODE_CONFIG);
     //used only in table mode

@@ -424,4 +424,129 @@ public class JdbcSourceConnectorConfigTest {
     assertTrue(includeList.contains("schema1\\.users"));
     assertTrue(includeList.contains("schema2\\.orders"));
   }
+
+  @Test
+  public void testQueryMaskedValueIsMaskedInConfigValue() {
+    // Setup config with query.masked
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "testUser");
+    props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "table1,table2");
+    String sensitiveQuery = "SELECT * FROM sensitive_table WHERE secret_column = 'confidential'";
+    props.put(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG, sensitiveQuery);
+
+    // Validate and get config values
+    Map<String, ConfigValue> validatedConfig = JdbcSourceConnectorConfig.CONFIG_DEF.validateAll(props);
+    ConfigValue queryMaskedValue = validatedConfig.get(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG);
+
+    assertNotNull(queryMaskedValue);
+
+    // The value should be masked (shown as [hidden] or Password object)
+    Object maskedValue = queryMaskedValue.value();
+    assertNotNull(maskedValue);
+
+    // When converted to string, Password objects show as "[hidden]"
+    String maskedString = maskedValue.toString();
+    assertEquals("[hidden]", maskedString);
+
+    // The actual query should NOT be visible in the string representation
+    assertFalse(maskedString.contains(sensitiveQuery));
+  }
+
+  @Test
+  public void testGetQueryStringReturnsQueryWhenOnlyQuerySet() {
+    // Setup config with only query (not query.masked)
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "testUser");
+    props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "table1,table2");
+    String expectedQuery = "SELECT * FROM public_table";
+    props.put(JdbcSourceConnectorConfig.QUERY_CONFIG, expectedQuery);
+
+    JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
+
+    assertTrue(config.getQuery().isPresent());
+    assertEquals(expectedQuery, config.getQuery().get());
+  }
+
+  @Test
+  public void testGetQueryStringReturnsEmptyWhenNeitherSet() {
+    // Setup config without query or query.masked
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "testUser");
+    props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "table1,table2");
+
+    JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
+
+    // getQuery() should return empty Optional
+    assertFalse(config.getQuery().isPresent());
+  }
+
+  @Test
+  public void testQueryMaskedSupportsComplexQueryWithMultipleJoins() {
+    // Test that complex queries work fine with query.masked
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "testUser");
+    props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "table1,table2");
+
+    String complexQuery = "SELECT u.id, u.username, u.email, " +
+        "p.profile_pic, a.street, a.city, a.country, " +
+        "o.order_id, o.order_date, o.total_amount " +
+        "FROM users u " +
+        "INNER JOIN profiles p ON u.id = p.user_id " +
+        "LEFT JOIN addresses a ON u.id = a.user_id " +
+        "LEFT JOIN orders o ON u.id = o.user_id " +
+        "WHERE u.status = 'active' " +
+        "AND u.created_at >= '2024-01-01' " +
+        "AND o.total_amount > 100.00 " +
+        "ORDER BY o.order_date DESC " +
+        "LIMIT 1000";
+
+    props.put(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG, complexQuery);
+
+    JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
+
+    assertTrue(config.getQuery().isPresent());
+    assertEquals(complexQuery, config.getQuery().get());
+  }
+
+  @Test
+  public void testQueryMaskedSupportsSpecialCharacters() {
+    // Test that queries with special characters work fine
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "testUser");
+    props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "table1,table2");
+
+    String queryWithSpecialChars = "SELECT * FROM users " +
+        "WHERE name LIKE '%O''Brien%' " +
+        "AND email = 'test@example.com' " +
+        "AND description LIKE '%Line1\nLine2%' " +
+        "AND data LIKE '%Tab\tSeparated%'";
+
+    props.put(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG, queryWithSpecialChars);
+
+    JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
+
+    // Verify special characters are preserved
+    assertTrue(config.getQuery().isPresent());
+    assertEquals(queryWithSpecialChars, config.getQuery().get());
+  }
+
+  @Test
+  public void testQueryMaskedWithEmptyStringBehavior() {
+    // Test behavior with empty string
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "testUser");
+    props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "table1,table2");
+    props.put(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG, "");
+
+    JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
+
+    // Empty string should return empty Optional
+    assertFalse(config.getQuery().isPresent());
+  }
 }

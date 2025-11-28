@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Validation class for JDBC Source Connector configurations.
@@ -38,6 +39,8 @@ import java.util.Set;
 public class JdbcSourceConnectorValidation {
 
   private static final Logger log = LoggerFactory.getLogger(JdbcSourceConnectorValidation.class);
+  private static final Pattern SELECT_STATEMENT_PATTERN =
+      Pattern.compile("(?is)^SELECT\\b");
   protected JdbcSourceConnectorConfig config;
   protected Config validationResult;
   private final Map<String, String> connectorConfigs;
@@ -363,6 +366,16 @@ public class JdbcSourceConnectorValidation {
       return false;
     }
 
+    if (hasQuery
+        && !validateSelectStatement(query, JdbcSourceConnectorConfig.QUERY_CONFIG)) {
+      return false;
+    }
+    if (hasQueryMasked
+        && !validateSelectStatement(
+            queryMaskedValue, JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG)) {
+      return false;
+    }
+
     return true;
   }
 
@@ -501,6 +514,22 @@ public class JdbcSourceConnectorValidation {
         .filter(cv -> cv.name().equals(configName))
         .findFirst()
         .ifPresent(cv -> cv.addErrorMessage(errorMessage));
+  }
+
+  /** Validate that provided query strings start with a SELECT statement. */
+  private boolean validateSelectStatement(String statement, String configKey) {
+    String trimmedStatement = statement.trim();
+    if (!SELECT_STATEMENT_PATTERN.matcher(trimmedStatement).find()) {
+      String msg =
+          String.format(
+              "Only SELECT statements are supported for '%s'. Please provide "
+              + "a statement that starts with SELECT.",
+              configKey);
+      addConfigError(configKey, msg);
+      log.error(msg);
+      return false;
+    }
+    return true;
   }
 
   /**

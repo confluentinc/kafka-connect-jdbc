@@ -72,9 +72,11 @@ public class TimestampIncrementingTableQuerierTest {
   @Mock
   private SchemaMapping schemaMapping;
   private DatabaseDialect dialect;
+  private JdbcSourceTaskConfig taskConfigMock;
 
   @Before
   public void setUp() {
+    taskConfigMock = mock(JdbcSourceTaskConfig.class);
     dialect = mock(DatabaseDialect.class);
     mockStatic(SchemaMapping.class);
   }
@@ -90,6 +92,7 @@ public class TimestampIncrementingTableQuerierTest {
     replay(dialect);
 
     return new TimestampIncrementingTableQuerier(
+        taskConfigMock,
         dialect,
         TableQuerier.QueryMode.TABLE,
         tableName,

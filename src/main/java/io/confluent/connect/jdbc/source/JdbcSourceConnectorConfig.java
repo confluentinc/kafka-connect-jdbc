@@ -408,6 +408,9 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
           "Number of times to retry SQL exceptions encountered when executing queries.";
   public static final String QUERY_RETRIES_DISPLAY = "Query Retry Attempts";
 
+  public static final String TRIM_SENSITIVE_LOG_ENABLED = "trim.sensitive.log";
+  private static final String TRIM_SENSITIVE_LOG_ENABLED_DEFAULT = "true";
+
   /**
    * The properties that begin with this prefix will be used to configure a class, specified by
    * {@code jdbc.credentials.provider.class} if it implements {@link Configurable}.
@@ -1084,6 +1087,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Type.LONG,
         TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_DEFAULT,
         Importance.LOW
+    ).defineInternal(
+        TRIM_SENSITIVE_LOG_ENABLED,
+        ConfigDef.Type.BOOLEAN,
+        TRIM_SENSITIVE_LOG_ENABLED_DEFAULT,
+        ConfigDef.Importance.LOW
     ).define(
         TABLE_POLL_INTERVAL_MS_CONFIG,
         Type.LONG,

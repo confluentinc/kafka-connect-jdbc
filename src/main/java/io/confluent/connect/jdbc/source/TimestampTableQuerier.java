@@ -54,7 +54,9 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
   private PendingRecord nextRecord;
   private Timestamp latestCommittableTimestamp;
 
+  @SuppressWarnings("checkstyle:ParameterNumber")
   public TimestampTableQuerier(
+      JdbcSourceTaskConfig config,
       DatabaseDialect dialect,
       QueryMode mode,
       String name,
@@ -67,6 +69,7 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
       TimestampGranularity timestampGranularity
   ) {
     super(
+        config,
         dialect,
         mode,
         name,

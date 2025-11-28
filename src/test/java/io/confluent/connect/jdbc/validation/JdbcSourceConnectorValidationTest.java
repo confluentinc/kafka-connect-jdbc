@@ -817,6 +817,18 @@ public class JdbcSourceConnectorValidationTest {
   }
 
   @Test
+  public void validate_withQueryStartingWithUpdate_setsError() {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "UPDATE users SET active = false");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(QUERY_CONFIG, 1);
+    assertErrorMatches(QUERY_CONFIG, ".*Only SELECT statements are supported for 'query'.*");
+  }
+
+  @Test
   public void validate_withQueryMaskedAndIncrementingColumn_noErrors() {
     props.put(MODE_CONFIG, MODE_INCREMENTING);
     props.put(QUERY_MASKED_CONFIG, "SELECT * FROM users");

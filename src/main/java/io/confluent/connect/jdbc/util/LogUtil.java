@@ -23,8 +23,10 @@ import java.sql.SQLException;
  * error information to investigate incidents while at the same time avoid logging sensitive data.
  */
 public class LogUtil {
+  private static final String REDACTED_VALUE = "<redacted>";
+
   public static SQLException trimSensitiveData(SQLException e) {
-    return (SQLException) trimSensitiveData((Throwable)e);
+    return (SQLException) trimSensitiveData((Throwable) e);
   }
 
   public static Throwable trimSensitiveData(Throwable t) {
@@ -36,9 +38,14 @@ public class LogUtil {
 
     if (!(t instanceof BatchUpdateException)) {
       // t is a SQLException, but not BatchUpdateException.
-      SQLException oldSqe = (SQLException)t;
-      SQLException newSqe = new SQLException(oldSqe.getLocalizedMessage());
+      SQLException oldSqe = (SQLException) t;
+      SQLException newSqe = new SQLException(
+          REDACTED_VALUE,
+          oldSqe.getSQLState(),
+          oldSqe.getErrorCode()
+      );
       newSqe.setNextException(trimSensitiveData(oldSqe.getNextException()));
+      newSqe.setStackTrace(oldSqe.getStackTrace());
       return newSqe;
     }
 
@@ -78,5 +85,12 @@ public class LogUtil {
 
     String msg2 = errMsg.substring(errorStartIdx, errorEndIdx);
     return msg1 + msg2;
+  }
+
+  public static String sensitiveLog(boolean trimSensitiveLogsEnabled, Object msg) {
+    if (trimSensitiveLogsEnabled) {
+      return REDACTED_VALUE;
+    }
+    return String.valueOf(msg);
   }
 }

@@ -79,8 +79,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     this.lastUpdate = 0;
     this.suffix = suffix;
     this.attemptedRetries = 0;
-    this.shouldTrimSensitiveLogs = config.getBoolean(
-        JdbcSourceConnectorConfig.TRIM_SENSITIVE_LOG_ENABLED);
+    this.shouldTrimSensitiveLogs = config.isQueryMasked();
   }
 
   public long getLastUpdate() {

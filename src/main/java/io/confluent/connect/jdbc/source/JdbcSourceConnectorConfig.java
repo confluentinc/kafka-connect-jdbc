@@ -409,7 +409,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String QUERY_RETRIES_DISPLAY = "Query Retry Attempts";
 
   public static final String TRIM_SENSITIVE_LOG_ENABLED = "trim.sensitive.log";
-  private static final String TRIM_SENSITIVE_LOG_ENABLED_DEFAULT = "true";
+  private static final String TRIM_SENSITIVE_LOG_ENABLED_DEFAULT = "false";
 
   /**
    * The properties that begin with this prefix will be used to configure a class, specified by
@@ -1513,6 +1513,13 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     }
 
     return Optional.empty();
+  }
+
+  public boolean isQueryMasked() {
+    Password maskedQuery = getPassword(QUERY_MASKED_CONFIG);
+    return maskedQuery != null
+        && maskedQuery.value() != null
+        && !maskedQuery.value().isEmpty();
   }
 
   public boolean modeUsesTimestampColumn() {

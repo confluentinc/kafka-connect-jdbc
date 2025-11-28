@@ -484,6 +484,31 @@ public class JdbcSourceConnectorConfigTest {
   }
 
   @Test
+  public void testIsQueryMaskedTrueWhenMaskedQueryPresent() {
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "testUser");
+    props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "table1");
+    props.put(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG, "SELECT * FROM sensitive_table");
+
+    JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
+
+    assertTrue(config.isQueryMasked());
+  }
+
+  @Test
+  public void testIsQueryMaskedFalseWhenMaskedQueryMissing() {
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "testUser");
+    props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "table1");
+
+    JdbcSourceConnectorConfig config = new JdbcSourceConnectorConfig(props);
+
+    assertFalse(config.isQueryMasked());
+  }
+
+  @Test
   public void testQueryMaskedSupportsComplexQueryWithMultipleJoins() {
     // Test that complex queries work fine with query.masked
     Map<String, String> props = new HashMap<>();

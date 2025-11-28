@@ -8,7 +8,6 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.LogUtil;
 import io.confluent.connect.jdbc.util.RecordDestination;
-import io.confluent.connect.jdbc.util.RetryUtils;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -44,8 +43,7 @@ public class TableQuerierProcessor {
     this.tableQueue = tableQueue;
     this.cachedConnectionProvider = cachedConnectionProvider;
     this.maxRetriesPerQuerier = config.getInt(JdbcSourceConnectorConfig.QUERY_RETRIES_CONFIG);
-    this.shouldTrimSensitiveLogs = config.getBoolean(
-        JdbcSourceConnectorConfig.TRIM_SENSITIVE_LOG_ENABLED);
+    this.shouldTrimSensitiveLogs = config.isQueryMasked();
   }
 
   public long process(RecordDestination<SourceRecord> destination) {
@@ -150,16 +148,12 @@ public class TableQuerierProcessor {
     SQLException trimmedException = shouldTrimSensitiveLogs
               ? LogUtil.trimSensitiveData(sqle) : sqle;
     String querierLog = getQuerierLogString(querier);
-    if (!RetryUtils.shouldRetry(sqle)) {
-      log.error(
-          "Non-retriable SQL exception while running query for table: {}. Failing task.",
-          querierLog,
-          trimmedException
-      );
-      resetAndRequeueHead(querier, true);
-      destination.failWith(new ConnectException("Non-retriable SQL exception", trimmedException));
-      return;
-    }
+    log.error(
+        "Non-retriable SQL exception while running query for table: {}. Failing task.",
+        querierLog,
+        trimmedException);
+    resetAndRequeueHead(querier, true);
+    destination.failWith(new ConnectException("Non-retriable SQL exception", trimmedException));
 
     log.error(
         "SQL exception while running query for table: {}. Attempting retry {} of {} attempts.",

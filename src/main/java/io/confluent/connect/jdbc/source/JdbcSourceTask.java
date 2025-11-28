@@ -463,9 +463,7 @@ public class JdbcSourceTask extends SourceTask {
           String tableOrQuery,
           Map<String, Object> partitionOffset,
           ZoneId zoneId) {
-    Boolean shouldTrimSensitiveLogs =
-        config.getBoolean(JdbcSourceConnectorConfig.TRIM_SENSITIVE_LOG_ENABLED);
-    if (shouldTrimSensitiveLogs) {
+    if (config.isQueryMasked()) {
       tableOrQuery = LogUtil.sensitiveLog(true, tableOrQuery);
     }
     if (!(partitionOffset == null)) {

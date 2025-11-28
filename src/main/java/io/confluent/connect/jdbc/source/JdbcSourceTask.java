@@ -15,6 +15,14 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.util.LogUtil;
+import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.util.TableCollectionUtils;
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.CachedConnectionProvider;
+import io.confluent.connect.jdbc.util.RecordQueue;
+import io.confluent.connect.jdbc.util.Version;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -43,13 +51,6 @@ import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
-import io.confluent.connect.jdbc.util.CachedConnectionProvider;
-import io.confluent.connect.jdbc.util.ColumnDefinition;
-import io.confluent.connect.jdbc.util.ColumnId;
-import io.confluent.connect.jdbc.util.RecordQueue;
-import io.confluent.connect.jdbc.util.TableCollectionUtils;
-import io.confluent.connect.jdbc.util.TableId;
-import io.confluent.connect.jdbc.util.Version;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIsolationMode;
 
 /**
@@ -95,10 +96,9 @@ public class JdbcSourceTask extends SourceTask {
 
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
     Boolean tablesFetched = config.getBoolean(JdbcSourceTaskConfig.TABLES_FETCHED);
-    String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
     List<String> tableType = config.getList(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG);
 
-    if ((tables.isEmpty() && query.isEmpty())) {
+    if ((tables.isEmpty() && !config.getQuery().isPresent())) {
       // We are still waiting for the tables call to complete.
       // Start task but do nothing.
       if (!tablesFetched) {
@@ -115,7 +115,7 @@ public class JdbcSourceTask extends SourceTask {
               + " table name.");
     }
 
-    if ((!tables.isEmpty() && !query.isEmpty())) {
+    if ((!tables.isEmpty() && config.getQuery().isPresent())) {
       throw new ConfigException("Invalid configuration: a JdbcSourceTask"
               + " cannot have both a table and a query assigned to it");
     }
@@ -147,10 +147,10 @@ public class JdbcSourceTask extends SourceTask {
                             )
                     )
     );
-    TableQuerier.QueryMode queryMode = !query.isEmpty() ? TableQuerier.QueryMode.QUERY :
-                                       TableQuerier.QueryMode.TABLE;
+    TableQuerier.QueryMode queryMode =
+        config.getQuery().isPresent() ? TableQuerier.QueryMode.QUERY : TableQuerier.QueryMode.TABLE;
     final List<String> tablesOrQuery = queryMode == TableQuerier.QueryMode.QUERY
-                                 ? Collections.singletonList(query) : tables;
+                                 ? Collections.singletonList(config.getQuery().get()) : tables;
 
     String mode = config.getString(JdbcSourceTaskConfig.MODE_CONFIG);
     //used only in table mode
@@ -288,6 +288,7 @@ public class JdbcSourceTask extends SourceTask {
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(
             new BulkTableQuerier(
+                config,
                 dialect, 
                 queryMode, 
                 tableOrQuery, 
@@ -298,6 +299,7 @@ public class JdbcSourceTask extends SourceTask {
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)) {
         tableQueue.add(
             new TimestampIncrementingTableQuerier(
+                config,
                 dialect,
                 queryMode,
                 tableOrQuery,
@@ -314,6 +316,7 @@ public class JdbcSourceTask extends SourceTask {
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
         tableQueue.add(
             new TimestampTableQuerier(
+                config,
                 dialect,
                 queryMode,
                 tableOrQuery,
@@ -329,6 +332,7 @@ public class JdbcSourceTask extends SourceTask {
       } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
         tableQueue.add(
             new TimestampIncrementingTableQuerier(
+                config,
                 dialect,
                 queryMode,
                 tableOrQuery,
@@ -459,6 +463,11 @@ public class JdbcSourceTask extends SourceTask {
           String tableOrQuery,
           Map<String, Object> partitionOffset,
           ZoneId zoneId) {
+    Boolean shouldTrimSensitiveLogs =
+        config.getBoolean(JdbcSourceConnectorConfig.TRIM_SENSITIVE_LOG_ENABLED);
+    if (shouldTrimSensitiveLogs) {
+      tableOrQuery = LogUtil.sensitiveLog(true, tableOrQuery);
+    }
     if (!(partitionOffset == null)) {
       log.info("Partition offset for '{}' is not null. Using existing offset.", tableOrQuery);
       return partitionOffset;

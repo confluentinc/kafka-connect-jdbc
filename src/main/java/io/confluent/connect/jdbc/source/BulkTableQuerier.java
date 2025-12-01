@@ -40,14 +40,14 @@ public class BulkTableQuerier extends TableQuerier {
   private static final Logger log = LoggerFactory.getLogger(BulkTableQuerier.class);
 
   public BulkTableQuerier(
-      JdbcSourceTaskConfig config,
       DatabaseDialect dialect,
       QueryMode mode,
       String name,
       String topicPrefix,
-      String suffix
+      String suffix,
+      Boolean isQueryMasked
   ) {
-    super(config, dialect, mode, name, topicPrefix, suffix);
+    super(dialect, mode, name, topicPrefix, suffix, isQueryMasked);
   }
 
   @Override
@@ -69,9 +69,10 @@ public class BulkTableQuerier extends TableQuerier {
     addSuffixIfPresent(builder);
     
     String queryStr = builder.toString();
+    String queryForLog = getQuerierLogString(queryStr);
 
     recordQuery(queryStr);
-    log.trace("{} prepared SQL query: {}", this, queryStr);
+    log.trace("{} prepared SQL query: {}", this, queryForLog);
     stmt = dialect.createPreparedStatement(db, queryStr);
   }
 
@@ -117,7 +118,8 @@ public class BulkTableQuerier extends TableQuerier {
 
   @Override
   public String toString() {
-    return "BulkTableQuerier{" + "table='" + tableId + '\'' + ", query='" + query + '\''
+    String queryForLog = getQuerierLogString(query);
+    return "BulkTableQuerier{" + "table='" + tableId + '\'' + ", query='" + queryForLog + '\''
            + ", topicPrefix='" + topicPrefix + '\'' + '}';
   }
 

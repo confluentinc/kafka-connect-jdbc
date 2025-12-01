@@ -40,7 +40,6 @@ public class TableQuerierTest {
   private static final Long TIMESTAMP_DELAY = 0l;
   private static final String QUERY = "SELECT * FROM name";
 
-  JdbcSourceTaskConfig taskConfigMock;
   DatabaseDialect databaseDialectMock;
 
   
@@ -49,7 +48,6 @@ public class TableQuerierTest {
   @Before
   public void init()
   {
-    taskConfigMock = mock(JdbcSourceTaskConfig.class);
     databaseDialectMock = mock(DatabaseDialect.class);
     when(databaseDialectMock.parseTableIdentifier(Matchers.anyString()))
       .thenReturn(new TableId(null,null,TABLE_NAME));	  
@@ -64,7 +62,6 @@ public class TableQuerierTest {
   @Test
   public void testTimestampIncrementingTableQuerierInTableModeWithSuffix() throws SQLException {
     TimestampIncrementingTableQuerier querier = new TimestampIncrementingTableQuerier(
-                                                    taskConfigMock,
                                                     databaseDialectMock,
                                                     QueryMode.TABLE, 
                                                     TABLE_NAME, 
@@ -75,7 +72,8 @@ public class TableQuerierTest {
                                                     TIMESTAMP_DELAY,
                                                     null,
                                                     SUFFIX,
-                                                    JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL
+                                                    JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL,
+                                                    false
                                                 );
       
     querier.createPreparedStatement(connectionMock);
@@ -86,7 +84,6 @@ public class TableQuerierTest {
   @Test
   public void testTimestampIncrementingTableQuerierInQueryModeWithSuffix() throws SQLException {	    
     TimestampIncrementingTableQuerier querier = new TimestampIncrementingTableQuerier(
-                                                    taskConfigMock,
                                                     databaseDialectMock,
                                                     QueryMode.QUERY, 
                                                     QUERY, 
@@ -97,7 +94,8 @@ public class TableQuerierTest {
                                                     TIMESTAMP_DELAY, 
                                                     null, 
                                                     SUFFIX,
-                                                    JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL
+                                                    JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL,
+                                                    false
                                                 );
       
     querier.createPreparedStatement(connectionMock);
@@ -108,12 +106,12 @@ public class TableQuerierTest {
   @Test
   public void testBulkTableQuerierInTableModeWithSuffix() throws SQLException {	    
     BulkTableQuerier querier = new BulkTableQuerier(
-                                   taskConfigMock,
                                    databaseDialectMock,
                                    QueryMode.TABLE, 
                                    TABLE_NAME, 
                                    null, 
-                                   SUFFIX
+                                   SUFFIX,
+                                   false
                                );
       
     querier.createPreparedStatement(connectionMock);
@@ -124,12 +122,12 @@ public class TableQuerierTest {
   @Test
   public void testBulkTableQuerierInQueryModeWithSuffix() throws SQLException {
 	BulkTableQuerier querier = new BulkTableQuerier(
-                                   taskConfigMock,
                                    databaseDialectMock, 
                                    QueryMode.QUERY,
                                    QUERY, 
                                    null, 
-                                   SUFFIX
+                                   SUFFIX,
+                                   false
                                );
       
     querier.createPreparedStatement(connectionMock);
@@ -140,12 +138,12 @@ public class TableQuerierTest {
   @Test
   public void testBulkTableQuerierInQueryModeWithoutSuffix() throws SQLException {
     BulkTableQuerier querier = new BulkTableQuerier(
-                                   taskConfigMock,
                                    databaseDialectMock, 
                                    QueryMode.QUERY, 
                                    QUERY, 
                                    null, 
-                                   "" /* default value */
+                                   "", /* default value */
+                                   false
                                );
       
     querier.createPreparedStatement(connectionMock);

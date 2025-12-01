@@ -42,7 +42,6 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
 
   private final Logger log = LoggerFactory.getLogger(TableQuerier.class);
 
-  protected final JdbcSourceTaskConfig config;
   protected final DatabaseDialect dialect;
   protected final QueryMode mode;
   protected final String query;
@@ -63,14 +62,13 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   private int attemptedRetries;
 
   public TableQuerier(
-      JdbcSourceTaskConfig config,
       DatabaseDialect dialect,
       QueryMode mode,
       String nameOrQuery,
       String topicPrefix,
-      String suffix
+      String suffix,
+      Boolean isQueryMasked
   ) {
-    this.config = config;
     this.dialect = dialect;
     this.mode = mode;
     this.tableId = mode.equals(QueryMode.TABLE) ? dialect.parseTableIdentifier(nameOrQuery) : null;
@@ -79,7 +77,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     this.lastUpdate = 0;
     this.suffix = suffix;
     this.attemptedRetries = 0;
-    this.shouldTrimSensitiveLogs = config.isQueryMasked();
+    this.shouldTrimSensitiveLogs = isQueryMasked;
   }
 
   public long getLastUpdate() {
@@ -191,9 +189,9 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     }
   }
 
-  private String getQuerierLogString(String query) {
+  protected String getQuerierLogString(String query) {
     return shouldTrimSensitiveLogs
-        ? LogUtil.sensitiveLog(true, query)
+        ? LogUtil.sensitiveLog(shouldTrimSensitiveLogs, query)
         : query;
   }
 

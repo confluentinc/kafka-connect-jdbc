@@ -15,6 +15,10 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.util.DateTimeUtils;
+import io.confluent.connect.jdbc.util.ExpressionBuilder;
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.ColumnId;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
@@ -38,10 +42,6 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TimestampGranularity;
 import io.confluent.connect.jdbc.source.SchemaMapping.FieldSetter;
 import io.confluent.connect.jdbc.source.TimestampIncrementingCriteria.CriteriaValues;
-import io.confluent.connect.jdbc.util.ColumnDefinition;
-import io.confluent.connect.jdbc.util.ColumnId;
-import io.confluent.connect.jdbc.util.DateTimeUtils;
-import io.confluent.connect.jdbc.util.ExpressionBuilder;
 
 /**
  * <p>
@@ -78,7 +78,6 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   private final ZoneId zoneId;
 
   public TimestampIncrementingTableQuerier(
-      JdbcSourceTaskConfig config,
       DatabaseDialect dialect,
       QueryMode mode,
       String name,
@@ -89,8 +88,9 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
       Long timestampDelay,
       ZoneId zoneId,
       String suffix,
-      TimestampGranularity timestampGranularity) {
-    super(config, dialect, mode, name, topicPrefix, suffix);
+      TimestampGranularity timestampGranularity,
+      Boolean isQueryMasked) {
+    super(dialect, mode, name, topicPrefix, suffix, isQueryMasked);
     this.incrementingColumnName = incrementingColumnName;
     this.timestampColumnNames = timestampColumnNames != null
         ? timestampColumnNames : Collections.emptyList();
@@ -275,9 +275,10 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
 
   @Override
   public String toString() {
+    String queryForLog = getQuerierLogString(query);
     return "TimestampIncrementingTableQuerier{"
            + "table=" + tableId
-           + ", query='" + query + '\''
+           + ", query='" + queryForLog + '\''
            + ", topicPrefix='" + topicPrefix + '\''
            + ", incrementingColumn='" + (incrementingColumnName != null
                                         ? incrementingColumnName

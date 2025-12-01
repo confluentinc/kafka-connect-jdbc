@@ -56,7 +56,6 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
 
   @SuppressWarnings("checkstyle:ParameterNumber")
   public TimestampTableQuerier(
-      JdbcSourceTaskConfig config,
       DatabaseDialect dialect,
       QueryMode mode,
       String name,
@@ -66,10 +65,10 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
       Long timestampDelay,
       ZoneId zoneId,
       String suffix,
-      TimestampGranularity timestampGranularity
+      TimestampGranularity timestampGranularity,
+      Boolean isQueryMasked
   ) {
     super(
-        config,
         dialect,
         mode,
         name,
@@ -80,7 +79,8 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
         timestampDelay,
         zoneId,
         suffix,
-        timestampGranularity
+        timestampGranularity,
+        isQueryMasked
     );
 
     this.latestCommittableTimestamp = this.offset.getTimestampOffset();
@@ -179,9 +179,10 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
 
   @Override
   public String toString() {
+    String queryForLog = getQuerierLogString(query);
     return "TimestampTableQuerier{"
         + "table=" + tableId
-        + ", query='" + query + '\''
+        + ", query='" + queryForLog + '\''
         + ", topicPrefix='" + topicPrefix + '\''
         + ", timestampColumns=" + timestampColumnNames
         + '}';

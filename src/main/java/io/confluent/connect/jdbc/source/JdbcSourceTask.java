@@ -225,6 +225,7 @@ public class JdbcSourceTask extends SourceTask {
         = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
     ZoneId zoneId = config.zoneId();
     String suffix = config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG).trim();
+    Boolean queryMasked = config.isQueryMasked();
 
     if (queryMode.equals(TableQuerier.QueryMode.TABLE)) {
       validateColumnsExist(
@@ -288,18 +289,17 @@ public class JdbcSourceTask extends SourceTask {
       if (mode.equals(JdbcSourceTaskConfig.MODE_BULK)) {
         tableQueue.add(
             new BulkTableQuerier(
-                config,
                 dialect, 
                 queryMode, 
                 tableOrQuery, 
                 topicPrefix, 
-                suffix
+                suffix,
+                queryMasked
             )
         );
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)) {
         tableQueue.add(
             new TimestampIncrementingTableQuerier(
-                config,
                 dialect,
                 queryMode,
                 tableOrQuery,
@@ -310,13 +310,13 @@ public class JdbcSourceTask extends SourceTask {
                 timestampDelayInterval,
                 zoneId,
                 suffix,
-                timestampGranularity
+                timestampGranularity,
+                queryMasked
             )
         );
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
         tableQueue.add(
             new TimestampTableQuerier(
-                config,
                 dialect,
                 queryMode,
                 tableOrQuery,
@@ -326,13 +326,13 @@ public class JdbcSourceTask extends SourceTask {
                 timestampDelayInterval,
                 zoneId,
                 suffix,
-                timestampGranularity
+                timestampGranularity,
+                queryMasked
             )
         );
       } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
         tableQueue.add(
             new TimestampIncrementingTableQuerier(
-                config,
                 dialect,
                 queryMode,
                 tableOrQuery,
@@ -343,7 +343,8 @@ public class JdbcSourceTask extends SourceTask {
                 timestampDelayInterval,
                 zoneId,
                 suffix,
-                timestampGranularity
+                timestampGranularity,
+                queryMasked
             )
         );
       }

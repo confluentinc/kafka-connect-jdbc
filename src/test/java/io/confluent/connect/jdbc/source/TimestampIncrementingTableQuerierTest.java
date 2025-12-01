@@ -72,11 +72,9 @@ public class TimestampIncrementingTableQuerierTest {
   @Mock
   private SchemaMapping schemaMapping;
   private DatabaseDialect dialect;
-  private JdbcSourceTaskConfig taskConfigMock;
 
   @Before
   public void setUp() {
-    taskConfigMock = mock(JdbcSourceTaskConfig.class);
     dialect = mock(DatabaseDialect.class);
     mockStatic(SchemaMapping.class);
   }
@@ -92,7 +90,6 @@ public class TimestampIncrementingTableQuerierTest {
     replay(dialect);
 
     return new TimestampIncrementingTableQuerier(
-        taskConfigMock,
         dialect,
         TableQuerier.QueryMode.TABLE,
         tableName,
@@ -103,7 +100,8 @@ public class TimestampIncrementingTableQuerierTest {
         10211197100L, // Timestamp delay
         ZoneId.of("UTC"),
         "",
-        JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL
+        JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL,
+        false
     );
   }
 

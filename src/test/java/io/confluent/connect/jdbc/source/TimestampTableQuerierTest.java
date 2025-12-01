@@ -73,11 +73,9 @@ public class TimestampTableQuerierTest {
   @Mock
   private SchemaMapping schemaMapping;
   private DatabaseDialect dialect;
-  private JdbcSourceTaskConfig config;
 
   @Before
   public void setUp() {
-    config = mock(JdbcSourceTaskConfig.class);
     dialect = mock(DatabaseDialect.class);
     mockStatic(SchemaMapping.class);
   }
@@ -90,7 +88,6 @@ public class TimestampTableQuerierTest {
     replay(dialect);
 
     return new TimestampTableQuerier(
-        config,
         dialect,
         TableQuerier.QueryMode.TABLE,
         tableName,
@@ -100,7 +97,8 @@ public class TimestampTableQuerierTest {
         10211197100L, // Timestamp delay
         ZoneId.of("UTC"),
         "",
-        JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL
+        JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL,
+        false
     );
   }
 

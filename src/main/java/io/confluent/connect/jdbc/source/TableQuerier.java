@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.util.LogUtil;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,6 +42,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
 
   private final Logger log = LoggerFactory.getLogger(TableQuerier.class);
 
+  protected final JdbcSourceTaskConfig config;
   protected final DatabaseDialect dialect;
   protected final QueryMode mode;
   protected final String query;
@@ -56,16 +58,19 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected ResultSet resultSet;
   protected SchemaMapping schemaMapping;
   private String loggedQueryString;
+  private final Boolean shouldTrimSensitiveLogs;
 
   private int attemptedRetries;
 
   public TableQuerier(
+      JdbcSourceTaskConfig config,
       DatabaseDialect dialect,
       QueryMode mode,
       String nameOrQuery,
       String topicPrefix,
       String suffix
   ) {
+    this.config = config;
     this.dialect = dialect;
     this.mode = mode;
     this.tableId = mode.equals(QueryMode.TABLE) ? dialect.parseTableIdentifier(nameOrQuery) : null;
@@ -74,6 +79,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     this.lastUpdate = 0;
     this.suffix = suffix;
     this.attemptedRetries = 0;
+    this.shouldTrimSensitiveLogs = config.isQueryMasked();
   }
 
   public long getLastUpdate() {
@@ -178,10 +184,17 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   
   protected void recordQuery(String query) {
     if (query != null && !query.equals(loggedQueryString)) {
+      String querierLog = getQuerierLogString(query);
       // For usability, log the statement at INFO level only when it changes
-      log.info("Begin using SQL query: {}", query);
+      log.info("Begin using SQL query: {}", querierLog);
       loggedQueryString = query;
     }
+  }
+
+  private String getQuerierLogString(String query) {
+    return shouldTrimSensitiveLogs
+        ? LogUtil.sensitiveLog(true, query)
+        : query;
   }
 
   @Override

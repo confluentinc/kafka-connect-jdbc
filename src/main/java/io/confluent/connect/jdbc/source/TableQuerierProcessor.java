@@ -7,6 +7,7 @@ package io.confluent.connect.jdbc.source;
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.RecordDestination;
+import io.confluent.connect.jdbc.util.RetryUtil;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
@@ -140,6 +141,16 @@ public class TableQuerierProcessor {
 
   private void handleSqlException(RecordDestination<SourceRecord> destination, 
                                   TableQuerier querier, SQLException sqle) {
+    if (!RetryUtil.shouldRetry(sqle)) {
+      log.error(
+          "Non-retriable SQL exception while running query for table: {}. Failing task.",
+          querier,
+          sqle
+      );
+      resetAndRequeueHead(querier, true);
+      destination.failWith(new ConnectException("Non-retriable SQL exception", sqle));
+      return;
+    }
     log.error(
         "SQL exception while running query for table: {}."
             + " Attempting retry {} of {} attempts.",

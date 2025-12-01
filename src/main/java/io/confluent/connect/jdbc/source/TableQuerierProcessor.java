@@ -215,8 +215,6 @@ public class TableQuerierProcessor {
   }
 
   private String getQuerierLogString(TableQuerier querier) {
-    return shouldTrimSensitiveLogs
-        ? LogUtil.sensitiveLog(true, querier.toString())
-        : querier.toString();
+    return LogUtil.sensitiveLog(shouldTrimSensitiveLogs, querier.toString());
   }
 }

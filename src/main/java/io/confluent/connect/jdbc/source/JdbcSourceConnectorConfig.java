@@ -431,6 +431,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
 
+  /**
+   * A recommender that hides configuration parameters from being displayed in config list
+   * This is used for sensitive or internal configurations that should not be exposed
+   * to users through standard configuration interfaces.
+   */
   private static final ConfigDef.Recommender HIDDEN_RECOMMENDER =
       new ConfigDef.Recommender() {
         @Override
@@ -1497,7 +1502,6 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   /**
  * Get the query string from either query or query.masked config.
- * Prioritizes query.masked over query if both are set (though validation should prevent this).
  *
  * @return Optional containing the query string if present, empty Optional otherwise.
  */

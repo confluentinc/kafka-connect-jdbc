@@ -26,6 +26,7 @@ import java.sql.SQLException;
 import static org.junit.Assert.assertEquals;
 
 public class LogUtilTest {
+  private static final String REDACTED = "<redacted>";
 
   @Test
   public void testNonSqlThrowable() {
@@ -37,7 +38,8 @@ public class LogUtilTest {
   public void testSqlExceptionNoNested() {
     SQLException e = new SQLException("e");
     SQLException trimmed = LogUtil.trimSensitiveData(e);
-    assertEqualsSQLException(e, trimmed);
+    SQLException expectedTrimmed = new SQLException(REDACTED);
+    assertEqualsSQLException(expectedTrimmed, trimmed);
   }
 
   @Test
@@ -47,7 +49,9 @@ public class LogUtilTest {
     e1.setNextException(e2);
 
     SQLException trimmed = LogUtil.trimSensitiveData(e1);
-    assertEqualsSQLException(e1, trimmed);
+    SQLException expectedTrimmed = new SQLException(REDACTED);
+    expectedTrimmed.setNextException(new SQLException(REDACTED));
+    assertEqualsSQLException(expectedTrimmed, trimmed);
   }
 
   @Test
@@ -59,7 +63,11 @@ public class LogUtilTest {
     e2.setNextException(e3);
 
     SQLException trimmed = LogUtil.trimSensitiveData(e1);
-    assertEqualsSQLException(e1, trimmed);
+    SQLException expectedTrimmed = new SQLException(REDACTED);
+    SQLException expectedNext = new SQLException(REDACTED);
+    expectedNext.setNextException(new SQLException(REDACTED));
+    expectedTrimmed.setNextException(expectedNext);
+    assertEqualsSQLException(expectedTrimmed, trimmed);
   }
 
   @Test
@@ -91,7 +99,9 @@ public class LogUtilTest {
     e1.setNextException(e2);
 
     SQLException trimmed = LogUtil.trimSensitiveData(e1);
-    assertEqualsSQLException(e1, trimmed);
+    SQLException expectedTrimmed = new SQLException(REDACTED);
+    expectedTrimmed.setNextException(e2);
+    assertEqualsSQLException(expectedTrimmed, trimmed);
   }
 
   @Test
@@ -103,7 +113,7 @@ public class LogUtilTest {
             new int[0]);
     e1.setNextException(e2);
 
-    SQLException expectedTrimmed = new SQLException("e1");
+    SQLException expectedTrimmed = new SQLException(REDACTED);
     BatchUpdateException e3 = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\"): " +
             "ERROR: null value in column \"c4\" violates not-null constraint",
             new int[0]);
@@ -121,7 +131,7 @@ public class LogUtilTest {
             new int[0]);
     e1.setNextException(e2);
 
-    SQLException expectedTrimmed = new SQLException("e1");
+    SQLException expectedTrimmed = new SQLException(REDACTED);
     BatchUpdateException e3 = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\")",
             new int[0]);
     expectedTrimmed.setNextException(e3);
@@ -138,7 +148,7 @@ public class LogUtilTest {
             new int[0]);
     e1.setNextException(e2);
 
-    SQLException expectedTrimmed = new SQLException("e1");
+    SQLException expectedTrimmed = new SQLException(REDACTED);
     BatchUpdateException e3 = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\")",
             new int[0]);
     expectedTrimmed.setNextException(e3);
@@ -159,7 +169,7 @@ public class LogUtilTest {
     e2.setNextException(p1);
     e1.setNextException(e2);
 
-    SQLException expectedTrimmed = new SQLException("e1");
+    SQLException expectedTrimmed = new SQLException(REDACTED);
     BatchUpdateException e3 = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\")",
         new int[0]);
     expectedTrimmed.setNextException(e3);

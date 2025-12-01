@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.util.LogUtil;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,6 +57,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected ResultSet resultSet;
   protected SchemaMapping schemaMapping;
   private String loggedQueryString;
+  private final Boolean shouldTrimSensitiveLogs;
 
   private int attemptedRetries;
 
@@ -64,7 +66,8 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
       QueryMode mode,
       String nameOrQuery,
       String topicPrefix,
-      String suffix
+      String suffix,
+      Boolean isQueryMasked
   ) {
     this.dialect = dialect;
     this.mode = mode;
@@ -74,6 +77,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     this.lastUpdate = 0;
     this.suffix = suffix;
     this.attemptedRetries = 0;
+    this.shouldTrimSensitiveLogs = isQueryMasked;
   }
 
   public long getLastUpdate() {
@@ -178,10 +182,17 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   
   protected void recordQuery(String query) {
     if (query != null && !query.equals(loggedQueryString)) {
+      String querierLog = getQuerierLogString(query);
       // For usability, log the statement at INFO level only when it changes
-      log.info("Begin using SQL query: {}", query);
+      log.info("Begin using SQL query: {}", querierLog);
       loggedQueryString = query;
     }
+  }
+
+  protected String getQuerierLogString(String query) {
+    return shouldTrimSensitiveLogs
+        ? LogUtil.sensitiveLog(shouldTrimSensitiveLogs, query)
+        : query;
   }
 
   @Override

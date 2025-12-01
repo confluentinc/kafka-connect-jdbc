@@ -117,8 +117,7 @@ public class JdbcSourceConnector extends SourceConnector {
     List<String> excludeList = config.tableExcludeListRegexes();
     Set<String> excludeListSet = excludeList.isEmpty() ? null : new HashSet<>(excludeList);
 
-    String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
-    if (!query.isEmpty()) {
+    if (config.getQuery().isPresent()) {
       if (whitelistSet != null || blacklistSet != null 
           || includeListSet != null || excludeListSet != null) {
         log.error(
@@ -145,7 +144,7 @@ public class JdbcSourceConnector extends SourceConnector {
         excludeListSet,    // New
         Time.SYSTEM
     );
-    if (query.isEmpty()) {
+    if (!config.getQuery().isPresent()) {
       tableMonitorThread.start();
       log.info("Starting Table Monitor Thread");
     }
@@ -170,9 +169,8 @@ public class JdbcSourceConnector extends SourceConnector {
   @Override
   public List<Map<String, String>> taskConfigs(int maxTasks) {
     log.info("Starting with the task Configuration method.");
-    String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
     List<Map<String, String>> taskConfigs;
-    if (!query.isEmpty()) {
+    if (config.getQuery().isPresent()) {
       log.info("Custom query provided, generating task configuration for the query");
       Map<String, String> taskProps = new HashMap<>(configProperties);
       taskProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");

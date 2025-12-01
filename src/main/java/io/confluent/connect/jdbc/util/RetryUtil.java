@@ -51,19 +51,6 @@ public final class RetryUtil {
           "57033"  // connection ended (DB2)
       )));
 
-  private static final Set<String> RETRIABLE_MESSAGE_TOKENS =
-      Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
-          "ORA-01466", // Oracle definition changed
-          "ORA-01284", // Oracle file cannot be opened
-          "ORA-03113", // end-of-file communication channel
-          "ORA-03114", // not connected to ORACLE
-          "ORA-12541", // TNS no listener
-          "ORA-12545", // TNS host or object not known
-          "DEADLOCK DETECTED",
-          "LOCK REQUEST TIMEOUT", // SQL Server
-          "SQLCODE=-911" // DB2 deadlock/timeout
-      )));
-
   private static final Set<Integer> RETRIABLE_ERROR_CODES =
       Collections.synchronizedSet(new HashSet<>(Arrays.asList(
           1466, 1284, 3113, 3114, 4068, // Oracle
@@ -100,8 +87,7 @@ public final class RetryUtil {
   private static boolean canRetry(SQLException se) {
     return isRecoverableAndNotClosed(se)
         || (se instanceof SQLTransientException)
-        || hasRetriableErrorCodeOrState(se)
-        || messageHasRetriableTokens(se);
+        || hasRetriableErrorCodeOrState(se);
   }
 
   private static boolean hasRetriableErrorCodeOrState(SQLException se) {
@@ -133,13 +119,5 @@ public final class RetryUtil {
     return sqlState.length() >= 2
         && RETRIABLE_SQLSTATE_PREFIXES.contains(
             sqlState.substring(0, 2).toUpperCase(Locale.ROOT));
-  }
-
-  private static boolean messageHasRetriableTokens(SQLException se) {
-    String message = se.getMessage();
-    return message != null
-        && !message.isEmpty()
-        && RETRIABLE_MESSAGE_TOKENS.stream()
-            .anyMatch(token -> message.toUpperCase(Locale.ROOT).contains(token));
   }
 }

@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.util.LogUtil;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
@@ -69,7 +70,7 @@ public class BulkTableQuerier extends TableQuerier {
     addSuffixIfPresent(builder);
     
     String queryStr = builder.toString();
-    String queryForLog = getQuerierLogString(queryStr);
+    String queryForLog = LogUtil.sensitiveLog(shouldTrimSensitiveLogs, query);
 
     recordQuery(queryStr);
     log.trace("{} prepared SQL query: {}", this, queryForLog);
@@ -118,7 +119,7 @@ public class BulkTableQuerier extends TableQuerier {
 
   @Override
   public String toString() {
-    String queryForLog = getQuerierLogString(query);
+    String queryForLog = LogUtil.sensitiveLog(shouldTrimSensitiveLogs, query);
     return "BulkTableQuerier{" + "table='" + tableId + '\'' + ", query='" + queryForLog + '\''
            + ", topicPrefix='" + topicPrefix + '\'' + '}';
   }

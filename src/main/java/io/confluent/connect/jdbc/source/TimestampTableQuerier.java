@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.source;
 
 import java.time.ZoneId;
 
+import io.confluent.connect.jdbc.util.LogUtil;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -179,7 +180,7 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
 
   @Override
   public String toString() {
-    String queryForLog = getQuerierLogString(query);
+    String queryForLog = LogUtil.sensitiveLog(shouldTrimSensitiveLogs, query);
     return "TimestampTableQuerier{"
         + "table=" + tableId
         + ", query='" + queryForLog + '\''

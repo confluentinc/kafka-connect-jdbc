@@ -57,7 +57,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected ResultSet resultSet;
   protected SchemaMapping schemaMapping;
   private String loggedQueryString;
-  private final Boolean shouldTrimSensitiveLogs;
+  protected final Boolean shouldTrimSensitiveLogs;
 
   private int attemptedRetries;
 
@@ -182,17 +182,11 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   
   protected void recordQuery(String query) {
     if (query != null && !query.equals(loggedQueryString)) {
-      String querierLog = getQuerierLogString(query);
+      String querierLog = LogUtil.sensitiveLog(shouldTrimSensitiveLogs, query);
       // For usability, log the statement at INFO level only when it changes
       log.info("Begin using SQL query: {}", querierLog);
       loggedQueryString = query;
     }
-  }
-
-  protected String getQuerierLogString(String query) {
-    return shouldTrimSensitiveLogs
-        ? LogUtil.sensitiveLog(shouldTrimSensitiveLogs, query)
-        : query;
   }
 
   @Override

@@ -868,5 +868,38 @@ public class JdbcSourceConnectorValidationTest {
 
     assertNoErrors();
   }
+
+  @Test
+  public void validate_withQueryAndTableFilteringConfigs_setsError() {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
+    props.put(QUERY_CONFIG, "SELECT * FROM users");
+
+    validate();
+
+    assertErrors(3);
+    assertErrors(QUERY_CONFIG, 1);
+    assertErrors(QUERY_MASKED_CONFIG, 1);
+    assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
+    assertErrorMatches(
+        QUERY_CONFIG,
+        "Do not specify table filtering configs with 'query'"
+    );
+  }
+
+  @Test
+  public void validate_withQueryMaskedStartingWithUpdate_setsError() {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_MASKED_CONFIG, "UPDATE users SET active = false");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(QUERY_MASKED_CONFIG, 1);
+    assertErrorMatches(
+        QUERY_MASKED_CONFIG,
+        "Only SELECT statements are supported for 'query.masked'"
+    );
+  }
   
 }

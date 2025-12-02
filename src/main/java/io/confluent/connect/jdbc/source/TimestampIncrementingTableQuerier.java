@@ -15,10 +15,7 @@
 
 package io.confluent.connect.jdbc.source;
 
-import io.confluent.connect.jdbc.util.DateTimeUtils;
-import io.confluent.connect.jdbc.util.ExpressionBuilder;
-import io.confluent.connect.jdbc.util.ColumnDefinition;
-import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.*;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
@@ -275,7 +272,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
 
   @Override
   public String toString() {
-    String queryForLog = getQuerierLogString(query);
+    String queryForLog = LogUtil.sensitiveLog(shouldTrimSensitiveLogs, query);
     return "TimestampIncrementingTableQuerier{"
            + "table=" + tableId
            + ", query='" + queryForLog + '\''

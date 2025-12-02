@@ -141,6 +141,20 @@ public class LogUtilTest {
   }
 
   @Test
+  public void testSensitiveLogWithTrimEnabled() {
+    String sensitiveMessage = "SELECT * FROM users WHERE password='secret123'";
+    String result = LogUtil.sensitiveLog(true, sensitiveMessage);
+    assertEquals(REDACTED, result);
+  }
+
+  @Test
+  public void testSensitiveLogWithTrimDisabled() {
+    String message = "SELECT * FROM users WHERE id=1";
+    String result = LogUtil.sensitiveLog(false, message);
+    assertEquals(message, result);
+  }
+
+  @Test
   public void testSecondLevelNestedBatchUpdateSensitiveNoDetails() {
     SQLException e1 = new SQLException("e1");
     BatchUpdateException e2 = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\") " +

@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.source;
 
 import java.time.ZoneId;
 
+import io.confluent.connect.jdbc.util.LogUtil;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -54,6 +55,7 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
   private PendingRecord nextRecord;
   private Timestamp latestCommittableTimestamp;
 
+  @SuppressWarnings("checkstyle:ParameterNumber")
   public TimestampTableQuerier(
       DatabaseDialect dialect,
       QueryMode mode,
@@ -64,7 +66,8 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
       Long timestampDelay,
       ZoneId zoneId,
       String suffix,
-      TimestampGranularity timestampGranularity
+      TimestampGranularity timestampGranularity,
+      Boolean isQueryMasked
   ) {
     super(
         dialect,
@@ -77,7 +80,8 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
         timestampDelay,
         zoneId,
         suffix,
-        timestampGranularity
+        timestampGranularity,
+        isQueryMasked
     );
 
     this.latestCommittableTimestamp = this.offset.getTimestampOffset();
@@ -176,9 +180,10 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
 
   @Override
   public String toString() {
+    String queryForLog = LogUtil.sensitiveLog(shouldTrimSensitiveLogs, query);
     return "TimestampTableQuerier{"
         + "table=" + tableId
-        + ", query='" + query + '\''
+        + ", query='" + queryForLog + '\''
         + ", topicPrefix='" + topicPrefix + '\''
         + ", timestampColumns=" + timestampColumnNames
         + '}';

@@ -15,14 +15,6 @@
 
 package io.confluent.connect.jdbc.source;
 
-import io.confluent.connect.jdbc.util.LogUtil;
-import io.confluent.connect.jdbc.util.TableId;
-import io.confluent.connect.jdbc.util.TableCollectionUtils;
-import io.confluent.connect.jdbc.util.ColumnDefinition;
-import io.confluent.connect.jdbc.util.ColumnId;
-import io.confluent.connect.jdbc.util.CachedConnectionProvider;
-import io.confluent.connect.jdbc.util.RecordQueue;
-import io.confluent.connect.jdbc.util.Version;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -51,6 +43,14 @@ import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
+import io.confluent.connect.jdbc.util.CachedConnectionProvider;
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.RecordQueue;
+import io.confluent.connect.jdbc.util.TableCollectionUtils;
+import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.util.Version;
+import io.confluent.connect.jdbc.util.LogUtil;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIsolationMode;
 
 /**

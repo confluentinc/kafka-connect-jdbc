@@ -193,7 +193,7 @@ public class TableQuerierProcessor {
   }
 
   private synchronized void resetAndRequeueHead(TableQuerier expectedHead, boolean resetOffset) {
-    log.debug("Resetting querier {}", expectedHead);
+    log.debug("Resetting querier {}", expectedHead.toString());
     TableQuerier removedQuerier = tableQueue.poll();
     assert removedQuerier == expectedHead;
     expectedHead.reset(time.milliseconds(), resetOffset);
@@ -201,4 +201,6 @@ public class TableQuerierProcessor {
       tableQueue.add(expectedHead);
     }
   }
+
+
 }

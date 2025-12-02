@@ -60,11 +60,7 @@ public class LogUtilTest {
     e2.setNextException(e3);
 
     SQLException trimmed = LogUtil.trimSensitiveData(e1);
-    SQLException expectedTrimmed = new SQLException(REDACTED);
-    SQLException expectedNext = new SQLException(REDACTED);
-    expectedNext.setNextException(new SQLException(REDACTED));
-    expectedTrimmed.setNextException(expectedNext);
-    assertEqualsSQLException(expectedTrimmed, trimmed);
+    assertEqualsSQLException(e1, trimmed);
   }
 
   @Test
@@ -199,7 +195,7 @@ public class LogUtilTest {
             new int[0]);
     e1.setNextException(e2);
 
-    SQLException expectedTrimmed = new SQLException(REDACTED);
+    SQLException expectedTrimmed = new SQLException("e1");
     BatchUpdateException e3 = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\")",
             new int[0]);
     expectedTrimmed.setNextException(e3);
@@ -220,7 +216,7 @@ public class LogUtilTest {
     e2.setNextException(p1);
     e1.setNextException(e2);
 
-    SQLException expectedTrimmed = new SQLException(REDACTED);
+    SQLException expectedTrimmed = new SQLException("e1");
     BatchUpdateException e3 = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\")",
         new int[0]);
     expectedTrimmed.setNextException(e3);

@@ -41,6 +41,7 @@ public class TableQuerierTest {
   private static final String QUERY = "SELECT * FROM name";
 
   DatabaseDialect databaseDialectMock;
+
   
   Connection connectionMock;
   
@@ -61,7 +62,7 @@ public class TableQuerierTest {
   @Test
   public void testTimestampIncrementingTableQuerierInTableModeWithSuffix() throws SQLException {
     TimestampIncrementingTableQuerier querier = new TimestampIncrementingTableQuerier(
-                                                    databaseDialectMock, 
+                                                    databaseDialectMock,
                                                     QueryMode.TABLE, 
                                                     TABLE_NAME, 
                                                     null, 
@@ -71,7 +72,8 @@ public class TableQuerierTest {
                                                     TIMESTAMP_DELAY,
                                                     null,
                                                     SUFFIX,
-                                                    JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL
+                                                    JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL,
+                                                    false
                                                 );
       
     querier.createPreparedStatement(connectionMock);
@@ -82,7 +84,7 @@ public class TableQuerierTest {
   @Test
   public void testTimestampIncrementingTableQuerierInQueryModeWithSuffix() throws SQLException {	    
     TimestampIncrementingTableQuerier querier = new TimestampIncrementingTableQuerier(
-                                                    databaseDialectMock, 
+                                                    databaseDialectMock,
                                                     QueryMode.QUERY, 
                                                     QUERY, 
                                                     null, 
@@ -92,7 +94,8 @@ public class TableQuerierTest {
                                                     TIMESTAMP_DELAY, 
                                                     null, 
                                                     SUFFIX,
-                                                    JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL
+                                                    JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL,
+                                                    false
                                                 );
       
     querier.createPreparedStatement(connectionMock);
@@ -107,7 +110,8 @@ public class TableQuerierTest {
                                    QueryMode.TABLE, 
                                    TABLE_NAME, 
                                    null, 
-                                   SUFFIX
+                                   SUFFIX,
+                                   false
                                );
       
     querier.createPreparedStatement(connectionMock);
@@ -122,7 +126,8 @@ public class TableQuerierTest {
                                    QueryMode.QUERY,
                                    QUERY, 
                                    null, 
-                                   SUFFIX
+                                   SUFFIX,
+                                   false
                                );
       
     querier.createPreparedStatement(connectionMock);
@@ -137,7 +142,8 @@ public class TableQuerierTest {
                                    QueryMode.QUERY, 
                                    QUERY, 
                                    null, 
-                                   "" /* default value */
+                                   "", /* default value */
+                                   false
                                );
       
     querier.createPreparedStatement(connectionMock);

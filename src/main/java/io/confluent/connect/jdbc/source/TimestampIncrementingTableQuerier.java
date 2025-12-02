@@ -42,6 +42,7 @@ import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
+import io.confluent.connect.jdbc.util.LogUtil;
 
 /**
  * <p>
@@ -77,14 +78,20 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   private final long timestampDelay;
   private final ZoneId zoneId;
 
-  public TimestampIncrementingTableQuerier(DatabaseDialect dialect, QueryMode mode, String name,
-                                           String topicPrefix,
-                                           List<String> timestampColumnNames,
-                                           String incrementingColumnName,
-                                           Map<String, Object> offsetMap, Long timestampDelay,
-                                           ZoneId zoneId, String suffix,
-                                           TimestampGranularity timestampGranularity) {
-    super(dialect, mode, name, topicPrefix, suffix);
+  public TimestampIncrementingTableQuerier(
+      DatabaseDialect dialect,
+      QueryMode mode,
+      String name,
+      String topicPrefix,
+      List<String> timestampColumnNames,
+      String incrementingColumnName,
+      Map<String, Object> offsetMap,
+      Long timestampDelay,
+      ZoneId zoneId,
+      String suffix,
+      TimestampGranularity timestampGranularity,
+      Boolean isQueryMasked) {
+    super(dialect, mode, name, topicPrefix, suffix, isQueryMasked);
     this.incrementingColumnName = incrementingColumnName;
     this.timestampColumnNames = timestampColumnNames != null
         ? timestampColumnNames : Collections.emptyList();
@@ -270,13 +277,19 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   @Override
   public String toString() {
     return "TimestampIncrementingTableQuerier{"
-           + "table=" + tableId
-           + ", query='" + query + '\''
-           + ", topicPrefix='" + topicPrefix + '\''
-           + ", incrementingColumn='" + (incrementingColumnName != null
-                                        ? incrementingColumnName
-                                        : "") + '\''
-           + ", timestampColumns=" + timestampColumnNames
-           + '}';
+        + "table="
+        + tableId
+        + ", query='"
+        + LogUtil.sensitiveLog(shouldTrimSensitiveLogs, query)
+        + '\''
+        + ", topicPrefix='"
+        + topicPrefix
+        + '\''
+        + ", incrementingColumn='"
+        + (incrementingColumnName != null ? incrementingColumnName : "")
+        + '\''
+        + ", timestampColumns="
+        + timestampColumnNames
+        + '}';
   }
 }

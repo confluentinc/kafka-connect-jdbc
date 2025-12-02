@@ -180,12 +180,17 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
 
   @Override
   public String toString() {
-    String queryForLog = LogUtil.sensitiveLog(shouldTrimSensitiveLogs, query);
     return "TimestampTableQuerier{"
-        + "table=" + tableId
-        + ", query='" + queryForLog + '\''
-        + ", topicPrefix='" + topicPrefix + '\''
-        + ", timestampColumns=" + timestampColumnNames
+        + "table="
+        + tableId
+        + ", query='"
+        + LogUtil.sensitiveLog(shouldTrimSensitiveLogs, query)
+        + '\''
+        + ", topicPrefix='"
+        + topicPrefix
+        + '\''
+        + ", timestampColumns="
+        + timestampColumnNames
         + '}';
   }
 

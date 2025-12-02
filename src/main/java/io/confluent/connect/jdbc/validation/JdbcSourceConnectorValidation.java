@@ -281,9 +281,6 @@ public class JdbcSourceConnectorValidation {
    * Validate that at least one configuration is provided.
    */
   private boolean addConfigErrorsForNoConfigProvided() {
-    if (config.getQuery().isPresent()) {
-      return true;
-    }
     String msg = "At least one table filtering configuration is required. "
         + "Provide one of: " + JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + ", "
         + JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG + ", "
@@ -345,10 +342,10 @@ public class JdbcSourceConnectorValidation {
 
     if (config.getQuery().isPresent() && isUsingTableFilteringConfigs()) {
       String msg =
-          "Do not specify table filtering configs with 'query' or 'query.masked'. "
+          "Do not specify table filtering configs with 'query'. "
               + "Remove table.whitelist / table.blacklist / table.include.list / "
               + "table.exclude.list when using query mode"
-              + " or 'query' / 'query.masked' when using table filtering mode.";
+              + " or 'query' when using table filtering mode.";
       addConfigError(JdbcSourceConnectorConfig.QUERY_CONFIG, msg);
       addConfigError(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG, msg);
       if (!config.getTableWhitelistSet().isEmpty()) {

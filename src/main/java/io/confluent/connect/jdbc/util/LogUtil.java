@@ -38,14 +38,9 @@ public class LogUtil {
 
     if (!(t instanceof BatchUpdateException)) {
       // t is a SQLException, but not BatchUpdateException.
-      SQLException oldSqe = (SQLException) t;
-      SQLException newSqe = new SQLException(
-          REDACTED_VALUE,
-          oldSqe.getSQLState(),
-          oldSqe.getErrorCode()
-      );
+      SQLException oldSqe = (SQLException)t;
+      SQLException newSqe = new SQLException(oldSqe.getLocalizedMessage());
       newSqe.setNextException(trimSensitiveData(oldSqe.getNextException()));
-      newSqe.setStackTrace(oldSqe.getStackTrace());
       return newSqe;
     }
 
@@ -53,6 +48,40 @@ public class LogUtil {
     BatchUpdateException e = (BatchUpdateException)t;
     return new BatchUpdateException(getNonSensitiveErrorMessage(e.getLocalizedMessage()),
         e.getUpdateCounts());
+  }
+
+  public static SQLException redactSensitiveData(SQLException e) {
+    return (SQLException) redactSensitiveData((Throwable) e);
+  }
+
+  public static Throwable redactSensitiveData(Throwable t) {
+    if (!(t instanceof SQLException)) {
+      return t;
+    }
+
+    if (!(t instanceof BatchUpdateException)) {
+      // t is a SQLException, but not BatchUpdateException.
+      SQLException oldSqlException = (SQLException) t;
+      SQLException newSqlException =
+          new SQLException(
+              REDACTED_VALUE, oldSqlException.getSQLState(), oldSqlException.getErrorCode());
+      newSqlException.setNextException(redactSensitiveData(oldSqlException.getNextException()));
+      newSqlException.setStackTrace(oldSqlException.getStackTrace());
+      return newSqlException;
+    }
+
+    // At this point t is BatchUpdateException; redact its message too.
+    BatchUpdateException oldBatchUpdateException = (BatchUpdateException) t;
+    BatchUpdateException newBatchUpdateException =
+        new BatchUpdateException(
+            REDACTED_VALUE,
+            oldBatchUpdateException.getSQLState(),
+            oldBatchUpdateException.getErrorCode(),
+            oldBatchUpdateException.getUpdateCounts());
+    newBatchUpdateException.setNextException(
+        redactSensitiveData(oldBatchUpdateException.getNextException()));
+    newBatchUpdateException.setStackTrace(oldBatchUpdateException.getStackTrace());
+    return newBatchUpdateException;
   }
 
   // This implementation assumes it to be Postgres, see toString() of ServerErrorMessage.java

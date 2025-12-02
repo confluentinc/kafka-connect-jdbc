@@ -182,9 +182,8 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   
   protected void recordQuery(String query) {
     if (query != null && !query.equals(loggedQueryString)) {
-      String querierLog = LogUtil.sensitiveLog(shouldTrimSensitiveLogs, query);
       // For usability, log the statement at INFO level only when it changes
-      log.info("Begin using SQL query: {}", querierLog);
+      log.info("Begin using SQL query: {}", LogUtil.sensitiveLog(shouldTrimSensitiveLogs, query));
       loggedQueryString = query;
     }
   }

@@ -38,8 +38,7 @@ public class LogUtilTest {
   public void testSqlExceptionNoNested() {
     SQLException e = new SQLException("e");
     SQLException trimmed = LogUtil.trimSensitiveData(e);
-    SQLException expectedTrimmed = new SQLException(REDACTED);
-    assertEqualsSQLException(expectedTrimmed, trimmed);
+    assertEqualsSQLException(e, trimmed);
   }
 
   @Test
@@ -49,9 +48,7 @@ public class LogUtilTest {
     e1.setNextException(e2);
 
     SQLException trimmed = LogUtil.trimSensitiveData(e1);
-    SQLException expectedTrimmed = new SQLException(REDACTED);
-    expectedTrimmed.setNextException(new SQLException(REDACTED));
-    assertEqualsSQLException(expectedTrimmed, trimmed);
+    assertEqualsSQLException(e1, trimmed);
   }
 
   @Test
@@ -99,9 +96,7 @@ public class LogUtilTest {
     e1.setNextException(e2);
 
     SQLException trimmed = LogUtil.trimSensitiveData(e1);
-    SQLException expectedTrimmed = new SQLException(REDACTED);
-    expectedTrimmed.setNextException(e2);
-    assertEqualsSQLException(expectedTrimmed, trimmed);
+    assertEqualsSQLException(e1, trimmed);
   }
 
   @Test
@@ -113,7 +108,7 @@ public class LogUtilTest {
             new int[0]);
     e1.setNextException(e2);
 
-    SQLException expectedTrimmed = new SQLException(REDACTED);
+    SQLException expectedTrimmed = new SQLException("e1");
     BatchUpdateException e3 = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\"): " +
             "ERROR: null value in column \"c4\" violates not-null constraint",
             new int[0]);
@@ -131,7 +126,7 @@ public class LogUtilTest {
             new int[0]);
     e1.setNextException(e2);
 
-    SQLException expectedTrimmed = new SQLException(REDACTED);
+    SQLException expectedTrimmed = new SQLException("e1");
     BatchUpdateException e3 = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\")",
             new int[0]);
     expectedTrimmed.setNextException(e3);
@@ -152,6 +147,48 @@ public class LogUtilTest {
     String message = "SELECT * FROM users WHERE id=1";
     String result = LogUtil.sensitiveLog(false, message);
     assertEquals(message, result);
+  }
+
+  @Test
+  public void testRedactSensitiveDataWithNonSqlThrowable() {
+    Throwable t = new RuntimeException("secret");
+    Assert.assertSame(t, LogUtil.redactSensitiveData(t));
+  }
+
+  @Test
+  public void testRedactSensitiveDataWithSqlExceptionChain() {
+    SQLException e1 = new SQLException("sensitive-message-e1", "42000", 10);
+    SQLException e2 = new SQLException("sensitive-message-e2", "42001", 20);
+    e1.setNextException(e2);
+
+    SQLException expected = new SQLException(REDACTED, "42000", 10);
+    SQLException expectedChild = new SQLException(REDACTED, "42001", 20);
+    expected.setNextException(expectedChild);
+
+    SQLException redacted = LogUtil.redactSensitiveData(e1);
+
+    assertEqualsSQLException(expected, redacted);
+  }
+
+  @Test
+  public void testRedactSensitiveDataWithBatchUpdateException() {
+    BatchUpdateException e1 =
+        new BatchUpdateException("sensitive message-e1", "42002", 30, new int[0]);
+
+    SQLException e2 = new SQLException("sensitive message-e2", "42003", 40);
+    e1.setNextException(e2);
+
+    BatchUpdateException expected =
+        new BatchUpdateException(REDACTED, "42002", 30, new int[0]);
+    SQLException expectedChild = new SQLException(REDACTED, "42003", 40);
+    expected.setNextException(expectedChild);
+
+    SQLException actual = LogUtil.redactSensitiveData(e1);
+    Assert.assertTrue(actual instanceof BatchUpdateException);
+    Assert.assertArrayEquals(
+        expected.getUpdateCounts(), ((BatchUpdateException) actual).getUpdateCounts());
+
+    assertEqualsSQLException(expected, actual);
   }
 
   @Test

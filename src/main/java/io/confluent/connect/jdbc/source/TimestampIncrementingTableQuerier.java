@@ -276,15 +276,20 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
 
   @Override
   public String toString() {
-    String queryForLog = LogUtil.sensitiveLog(shouldTrimSensitiveLogs, query);
     return "TimestampIncrementingTableQuerier{"
-           + "table=" + tableId
-           + ", query='" + queryForLog + '\''
-           + ", topicPrefix='" + topicPrefix + '\''
-           + ", incrementingColumn='" + (incrementingColumnName != null
-                                        ? incrementingColumnName
-                                        : "") + '\''
-           + ", timestampColumns=" + timestampColumnNames
-           + '}';
+        + "table="
+        + tableId
+        + ", query='"
+        + LogUtil.sensitiveLog(shouldTrimSensitiveLogs, query)
+        + '\''
+        + ", topicPrefix='"
+        + topicPrefix
+        + '\''
+        + ", incrementingColumn='"
+        + (incrementingColumnName != null ? incrementingColumnName : "")
+        + '\''
+        + ", timestampColumns="
+        + timestampColumnNames
+        + '}';
   }
 }

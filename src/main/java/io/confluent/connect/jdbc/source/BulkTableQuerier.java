@@ -70,10 +70,10 @@ public class BulkTableQuerier extends TableQuerier {
     addSuffixIfPresent(builder);
     
     String queryStr = builder.toString();
-    String queryForLog = LogUtil.sensitiveLog(shouldTrimSensitiveLogs, query);
 
     recordQuery(queryStr);
-    log.trace("{} prepared SQL query: {}", this, queryForLog);
+    log.trace(
+        "{} prepared SQL query: {}", this, LogUtil.sensitiveLog(shouldTrimSensitiveLogs, query));
     stmt = dialect.createPreparedStatement(db, queryStr);
   }
 
@@ -119,9 +119,17 @@ public class BulkTableQuerier extends TableQuerier {
 
   @Override
   public String toString() {
-    String queryForLog = LogUtil.sensitiveLog(shouldTrimSensitiveLogs, query);
-    return "BulkTableQuerier{" + "table='" + tableId + '\'' + ", query='" + queryForLog + '\''
-           + ", topicPrefix='" + topicPrefix + '\'' + '}';
+    return "BulkTableQuerier{"
+        + "table='"
+        + tableId
+        + '\''
+        + ", query='"
+        + LogUtil.sensitiveLog(shouldTrimSensitiveLogs, query)
+        + '\''
+        + ", topicPrefix='"
+        + topicPrefix
+        + '\''
+        + '}';
   }
 
 }

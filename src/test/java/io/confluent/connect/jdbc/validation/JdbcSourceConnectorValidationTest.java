@@ -778,8 +778,6 @@ public class JdbcSourceConnectorValidationTest {
     assertErrorMatches(MODE_CONFIG, ".*Incrementing column configurations should not be provided.*");
   }
 
-  // ========== Query and Query.Masked Config Tests ==========
-
   @Test
   public void validate_withBothQueryAndQueryMasked_setsError() {
     props.put(MODE_CONFIG, MODE_BULK);
@@ -817,6 +815,19 @@ public class JdbcSourceConnectorValidationTest {
   }
 
   @Test
+  public void validate_withBothQueryAndQueryMaskedEmpty_noErrors() {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
+    // Both empty should be fine as it's equivalent to neither being set
+    props.put(QUERY_CONFIG, "");
+    props.put(QUERY_MASKED_CONFIG, "");
+
+    validate();
+
+    assertNoErrors();
+  }
+
+  @Test
   public void validate_withQueryStartingWithUpdate_setsError() {
     props.put(MODE_CONFIG, MODE_BULK);
     props.put(QUERY_CONFIG, "UPDATE users SET active = false");
@@ -826,6 +837,21 @@ public class JdbcSourceConnectorValidationTest {
     assertErrors(1);
     assertErrors(QUERY_CONFIG, 1);
     assertErrorMatches(QUERY_CONFIG, ".*Only SELECT statements are supported for 'query'.*");
+  }
+
+  @Test
+  public void validate_withQueryMaskedStartingWithUpdate_setsError() {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_MASKED_CONFIG, "UPDATE users SET active = false");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(QUERY_MASKED_CONFIG, 1);
+    assertErrorMatches(
+        QUERY_MASKED_CONFIG,
+        "Only SELECT statements are supported for 'query.masked'"
+    );
   }
 
   @Test
@@ -857,19 +883,6 @@ public class JdbcSourceConnectorValidationTest {
   }
 
   @Test
-  public void validate_withBothQueryAndQueryMaskedEmpty_noErrors() {
-    props.put(MODE_CONFIG, MODE_BULK);
-    props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
-    // Both empty should be fine as it's equivalent to neither being set
-    props.put(QUERY_CONFIG, "");
-    props.put(QUERY_MASKED_CONFIG, "");
-
-    validate();
-
-    assertNoErrors();
-  }
-
-  @Test
   public void validate_withQueryAndTableFilteringConfigs_setsError() {
     props.put(MODE_CONFIG, MODE_BULK);
     props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
@@ -884,21 +897,6 @@ public class JdbcSourceConnectorValidationTest {
     assertErrorMatches(
         QUERY_CONFIG,
         "Do not specify table filtering configs with 'query'"
-    );
-  }
-
-  @Test
-  public void validate_withQueryMaskedStartingWithUpdate_setsError() {
-    props.put(MODE_CONFIG, MODE_BULK);
-    props.put(QUERY_MASKED_CONFIG, "UPDATE users SET active = false");
-
-    validate();
-
-    assertErrors(1);
-    assertErrors(QUERY_MASKED_CONFIG, 1);
-    assertErrorMatches(
-        QUERY_MASKED_CONFIG,
-        "Only SELECT statements are supported for 'query.masked'"
     );
   }
   

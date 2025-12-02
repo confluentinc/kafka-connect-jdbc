@@ -26,7 +26,7 @@ public class LogUtil {
   private static final String REDACTED_VALUE = "<redacted>";
 
   public static SQLException trimSensitiveData(SQLException e) {
-    return (SQLException) trimSensitiveData((Throwable) e);
+    return (SQLException) trimSensitiveData((Throwable)e);
   }
 
   public static Throwable trimSensitiveData(Throwable t) {

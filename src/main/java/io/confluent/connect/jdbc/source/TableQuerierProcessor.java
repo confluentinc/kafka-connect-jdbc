@@ -133,30 +133,30 @@ public class TableQuerierProcessor {
 
   private void handleNonTransientException(RecordDestination<SourceRecord> destination, 
                                            TableQuerier querier, SQLNonTransientException sqle) {
-    SQLException trimmedException = shouldRedactSensitiveLogs
+    SQLException redactedException = shouldRedactSensitiveLogs
               ? LogUtil.redactSensitiveData(sqle) : sqle;
     log.error("Non-transient SQL exception while running query for table: {}",
-        querier, trimmedException);
+        querier, redactedException);
     resetAndRequeueHead(querier, true);
     // This task has failed, report failure to destination
-    destination.failWith(new ConnectException(trimmedException));
+    destination.failWith(new ConnectException(redactedException));
   }
 
   private void handleSqlException(RecordDestination<SourceRecord> destination,
                                   TableQuerier querier, SQLException sqle) {
-    SQLException trimmedException = shouldRedactSensitiveLogs
+    SQLException redactedException = shouldRedactSensitiveLogs
               ? LogUtil.redactSensitiveData(sqle) : sqle;
     log.error(
         "SQL exception while running query for table: {}." + " Attempting retry {} of {} attempts.",
         querier,
         querier.getAttemptedRetryCount() + 1,
         maxRetriesPerQuerier,
-        trimmedException);
+        redactedException);
 
     resetAndRequeueHead(querier, false);
     if (maxRetriesPerQuerier > 0 && querier.getAttemptedRetryCount() >= maxRetriesPerQuerier) {
       destination.failWith(
-          new ConnectException("Failed to query table after retries", trimmedException));
+          new ConnectException("Failed to query table after retries", redactedException));
       return;
     }
     querier.incrementRetryCount();

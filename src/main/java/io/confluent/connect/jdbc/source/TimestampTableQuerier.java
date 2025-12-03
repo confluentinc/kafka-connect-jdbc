@@ -184,7 +184,7 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
         + "table="
         + tableId
         + ", query='"
-        + LogUtil.maybeRedact(shouldTrimSensitiveLogs, query)
+        + LogUtil.maybeRedact(shouldRedactSensitiveLogs, query)
         + '\''
         + ", topicPrefix='"
         + topicPrefix

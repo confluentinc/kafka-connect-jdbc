@@ -73,7 +73,7 @@ public class BulkTableQuerier extends TableQuerier {
 
     recordQuery(queryStr);
     log.trace(
-        "{} prepared SQL query: {}", this, LogUtil.maybeRedact(shouldTrimSensitiveLogs, query));
+        "{} prepared SQL query: {}", this, LogUtil.maybeRedact(shouldRedactSensitiveLogs, query));
     stmt = dialect.createPreparedStatement(db, queryStr);
   }
 
@@ -124,7 +124,7 @@ public class BulkTableQuerier extends TableQuerier {
         + tableId
         + '\''
         + ", query='"
-        + LogUtil.maybeRedact(shouldTrimSensitiveLogs, query)
+        + LogUtil.maybeRedact(shouldRedactSensitiveLogs, query)
         + '\''
         + ", topicPrefix='"
         + topicPrefix

@@ -26,7 +26,7 @@ public class TableQuerierProcessor {
   private final JdbcSourceTaskConfig config;
   private final Time time;
   private final PriorityQueue<TableQuerier> tableQueue;
-  private final Boolean shouldTrimSensitiveLogs;
+  private final Boolean shouldRedactSensitiveLogs;
   private CachedConnectionProvider cachedConnectionProvider;
   private final int maxRetriesPerQuerier;
   private final Duration timeout = Duration.ofSeconds(90);
@@ -43,7 +43,7 @@ public class TableQuerierProcessor {
     this.tableQueue = tableQueue;
     this.cachedConnectionProvider = cachedConnectionProvider;
     this.maxRetriesPerQuerier = config.getInt(JdbcSourceConnectorConfig.QUERY_RETRIES_CONFIG);
-    this.shouldTrimSensitiveLogs = config.isQueryMasked();
+    this.shouldRedactSensitiveLogs = config.isQueryMasked();
   }
 
   public long process(RecordDestination<SourceRecord> destination) {
@@ -133,8 +133,8 @@ public class TableQuerierProcessor {
 
   private void handleNonTransientException(RecordDestination<SourceRecord> destination, 
                                            TableQuerier querier, SQLNonTransientException sqle) {
-    SQLException trimmedException = shouldTrimSensitiveLogs
-              ? LogUtil.trimSensitiveData(sqle) : sqle;
+    SQLException trimmedException = shouldRedactSensitiveLogs
+              ? LogUtil.redactSensitiveData(sqle) : sqle;
     log.error("Non-transient SQL exception while running query for table: {}",
         querier, trimmedException);
     resetAndRequeueHead(querier, true);
@@ -144,8 +144,8 @@ public class TableQuerierProcessor {
 
   private void handleSqlException(RecordDestination<SourceRecord> destination,
                                   TableQuerier querier, SQLException sqle) {
-    SQLException trimmedException = shouldTrimSensitiveLogs
-              ? LogUtil.trimSensitiveData(sqle) : sqle;
+    SQLException trimmedException = shouldRedactSensitiveLogs
+              ? LogUtil.redactSensitiveData(sqle) : sqle;
     log.error(
         "SQL exception while running query for table: {}." + " Attempting retry {} of {} attempts.",
         querier,

@@ -57,7 +57,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected ResultSet resultSet;
   protected SchemaMapping schemaMapping;
   private String loggedQueryString;
-  protected final Boolean shouldTrimSensitiveLogs;
+  protected final Boolean shouldRedactSensitiveLogs;
 
   private int attemptedRetries;
 
@@ -77,7 +77,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     this.lastUpdate = 0;
     this.suffix = suffix;
     this.attemptedRetries = 0;
-    this.shouldTrimSensitiveLogs = isQueryMasked;
+    this.shouldRedactSensitiveLogs = isQueryMasked;
   }
 
   public long getLastUpdate() {
@@ -183,7 +183,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected void recordQuery(String query) {
     if (query != null && !query.equals(loggedQueryString)) {
       // For usability, log the statement at INFO level only when it changes
-      log.info("Begin using SQL query: {}", LogUtil.maybeRedact(shouldTrimSensitiveLogs, query));
+      log.info("Begin using SQL query: {}", LogUtil.maybeRedact(shouldRedactSensitiveLogs, query));
       loggedQueryString = query;
     }
   }

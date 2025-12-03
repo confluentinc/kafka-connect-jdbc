@@ -465,7 +465,7 @@ public class JdbcSourceTask extends SourceTask {
           Map<String, Object> partitionOffset,
           ZoneId zoneId) {
     if (config.isQueryMasked()) {
-      tableOrQuery = LogUtil.sensitiveLog(true, tableOrQuery);
+      tableOrQuery = LogUtil.maybeRedact(true, tableOrQuery);
     }
     if (!(partitionOffset == null)) {
       log.info("Partition offset for '{}' is not null. Using existing offset.", tableOrQuery);

@@ -116,7 +116,7 @@ public class LogUtil {
     return msg1 + msg2;
   }
 
-  public static String sensitiveLog(boolean trimSensitiveLogsEnabled, String msg) {
+  public static String maybeRedact(boolean trimSensitiveLogsEnabled, String msg) {
     if (trimSensitiveLogsEnabled) {
       return REDACTED_VALUE;
     }

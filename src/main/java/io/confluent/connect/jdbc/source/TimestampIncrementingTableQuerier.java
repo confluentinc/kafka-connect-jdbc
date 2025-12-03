@@ -280,7 +280,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
         + "table="
         + tableId
         + ", query='"
-        + LogUtil.sensitiveLog(shouldTrimSensitiveLogs, query)
+        + LogUtil.maybeRedact(shouldTrimSensitiveLogs, query)
         + '\''
         + ", topicPrefix='"
         + topicPrefix

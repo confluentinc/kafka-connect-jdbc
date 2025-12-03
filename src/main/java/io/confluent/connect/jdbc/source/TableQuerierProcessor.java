@@ -6,6 +6,7 @@ package io.confluent.connect.jdbc.source;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
+import io.confluent.connect.jdbc.util.LogUtil;
 import io.confluent.connect.jdbc.util.RecordDestination;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -25,6 +26,7 @@ public class TableQuerierProcessor {
   private final JdbcSourceTaskConfig config;
   private final Time time;
   private final PriorityQueue<TableQuerier> tableQueue;
+  private final Boolean shouldTrimSensitiveLogs;
   private CachedConnectionProvider cachedConnectionProvider;
   private final int maxRetriesPerQuerier;
   private final Duration timeout = Duration.ofSeconds(90);
@@ -41,6 +43,7 @@ public class TableQuerierProcessor {
     this.tableQueue = tableQueue;
     this.cachedConnectionProvider = cachedConnectionProvider;
     this.maxRetriesPerQuerier = config.getInt(JdbcSourceConnectorConfig.QUERY_RETRIES_CONFIG);
+    this.shouldTrimSensitiveLogs = config.isQueryMasked();
   }
 
   public long process(RecordDestination<SourceRecord> destination) {
@@ -95,8 +98,7 @@ public class TableQuerierProcessor {
     // If the call to get tables has not completed we will not do anything.
     // This is only valid in table mode.
     Boolean tablesFetched = config.getBoolean(JdbcSourceTaskConfig.TABLES_FETCHED);
-    String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
-    return !query.isEmpty() || tablesFetched;
+    return config.getQuery().isPresent() || tablesFetched;
   }
 
   private void processQuerier(RecordDestination<SourceRecord> destination, TableQuerier querier)
@@ -131,28 +133,30 @@ public class TableQuerierProcessor {
 
   private void handleNonTransientException(RecordDestination<SourceRecord> destination, 
                                            TableQuerier querier, SQLNonTransientException sqle) {
+    SQLException trimmedException = shouldTrimSensitiveLogs
+              ? LogUtil.trimSensitiveData(sqle) : sqle;
     log.error("Non-transient SQL exception while running query for table: {}",
-        querier, sqle);
+        querier, trimmedException);
     resetAndRequeueHead(querier, true);
     // This task has failed, report failure to destination
-    destination.failWith(new ConnectException(sqle));
+    destination.failWith(new ConnectException(trimmedException));
   }
 
-  private void handleSqlException(RecordDestination<SourceRecord> destination, 
+  private void handleSqlException(RecordDestination<SourceRecord> destination,
                                   TableQuerier querier, SQLException sqle) {
+    SQLException trimmedException = shouldTrimSensitiveLogs
+              ? LogUtil.trimSensitiveData(sqle) : sqle;
     log.error(
-        "SQL exception while running query for table: {}."
-            + " Attempting retry {} of {} attempts.",
+        "SQL exception while running query for table: {}." + " Attempting retry {} of {} attempts.",
         querier,
         querier.getAttemptedRetryCount() + 1,
         maxRetriesPerQuerier,
-        sqle
-    );
+        trimmedException);
 
     resetAndRequeueHead(querier, false);
-    if (maxRetriesPerQuerier > 0
-        && querier.getAttemptedRetryCount() >= maxRetriesPerQuerier) {
-      destination.failWith(new ConnectException("Failed to Query table after retries", sqle));
+    if (maxRetriesPerQuerier > 0 && querier.getAttemptedRetryCount() >= maxRetriesPerQuerier) {
+      destination.failWith(
+          new ConnectException("Failed to query table after retries", trimmedException));
       return;
     }
     querier.incrementRetryCount();

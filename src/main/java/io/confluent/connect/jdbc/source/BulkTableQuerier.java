@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.util.LogUtil;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
@@ -44,9 +45,10 @@ public class BulkTableQuerier extends TableQuerier {
       QueryMode mode,
       String name,
       String topicPrefix,
-      String suffix
+      String suffix,
+      Boolean isQueryMasked
   ) {
-    super(dialect, mode, name, topicPrefix, suffix);
+    super(dialect, mode, name, topicPrefix, suffix, isQueryMasked);
   }
 
   @Override
@@ -70,7 +72,8 @@ public class BulkTableQuerier extends TableQuerier {
     String queryStr = builder.toString();
 
     recordQuery(queryStr);
-    log.trace("{} prepared SQL query: {}", this, queryStr);
+    log.trace(
+        "{} prepared SQL query: {}", this, LogUtil.maybeRedact(shouldTrimSensitiveLogs, query));
     stmt = dialect.createPreparedStatement(db, queryStr);
   }
 
@@ -116,8 +119,17 @@ public class BulkTableQuerier extends TableQuerier {
 
   @Override
   public String toString() {
-    return "BulkTableQuerier{" + "table='" + tableId + '\'' + ", query='" + query + '\''
-           + ", topicPrefix='" + topicPrefix + '\'' + '}';
+    return "BulkTableQuerier{"
+        + "table='"
+        + tableId
+        + '\''
+        + ", query='"
+        + LogUtil.maybeRedact(shouldTrimSensitiveLogs, query)
+        + '\''
+        + ", topicPrefix='"
+        + topicPrefix
+        + '\''
+        + '}';
   }
 
 }

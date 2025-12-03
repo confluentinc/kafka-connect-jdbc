@@ -50,6 +50,7 @@ import io.confluent.connect.jdbc.util.RecordQueue;
 import io.confluent.connect.jdbc.util.TableCollectionUtils;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.Version;
+import io.confluent.connect.jdbc.util.LogUtil;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIsolationMode;
 
 /**
@@ -95,10 +96,9 @@ public class JdbcSourceTask extends SourceTask {
 
     List<String> tables = config.getList(JdbcSourceTaskConfig.TABLES_CONFIG);
     Boolean tablesFetched = config.getBoolean(JdbcSourceTaskConfig.TABLES_FETCHED);
-    String query = config.getString(JdbcSourceTaskConfig.QUERY_CONFIG);
     List<String> tableType = config.getList(JdbcSourceConnectorConfig.TABLE_TYPE_CONFIG);
 
-    if ((tables.isEmpty() && query.isEmpty())) {
+    if ((tables.isEmpty() && !config.getQuery().isPresent())) {
       // We are still waiting for the tables call to complete.
       // Start task but do nothing.
       if (!tablesFetched) {
@@ -115,7 +115,7 @@ public class JdbcSourceTask extends SourceTask {
               + " table name.");
     }
 
-    if ((!tables.isEmpty() && !query.isEmpty())) {
+    if ((!tables.isEmpty() && config.getQuery().isPresent())) {
       throw new ConfigException("Invalid configuration: a JdbcSourceTask"
               + " cannot have both a table and a query assigned to it");
     }
@@ -147,10 +147,10 @@ public class JdbcSourceTask extends SourceTask {
                             )
                     )
     );
-    TableQuerier.QueryMode queryMode = !query.isEmpty() ? TableQuerier.QueryMode.QUERY :
-                                       TableQuerier.QueryMode.TABLE;
+    TableQuerier.QueryMode queryMode =
+        config.getQuery().isPresent() ? TableQuerier.QueryMode.QUERY : TableQuerier.QueryMode.TABLE;
     final List<String> tablesOrQuery = queryMode == TableQuerier.QueryMode.QUERY
-                                 ? Collections.singletonList(query) : tables;
+                                 ? Collections.singletonList(config.getQuery().get()) : tables;
 
     String mode = config.getString(JdbcSourceTaskConfig.MODE_CONFIG);
     //used only in table mode
@@ -225,6 +225,7 @@ public class JdbcSourceTask extends SourceTask {
         = config.getBoolean(JdbcSourceTaskConfig.VALIDATE_NON_NULL_CONFIG);
     ZoneId zoneId = config.zoneId();
     String suffix = config.getString(JdbcSourceTaskConfig.QUERY_SUFFIX_CONFIG).trim();
+    Boolean queryMasked = config.isQueryMasked();
 
     if (queryMode.equals(TableQuerier.QueryMode.TABLE)) {
       validateColumnsExist(
@@ -292,7 +293,8 @@ public class JdbcSourceTask extends SourceTask {
                 queryMode, 
                 tableOrQuery, 
                 topicPrefix, 
-                suffix
+                suffix,
+                queryMasked
             )
         );
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_INCREMENTING)) {
@@ -308,7 +310,8 @@ public class JdbcSourceTask extends SourceTask {
                 timestampDelayInterval,
                 zoneId,
                 suffix,
-                timestampGranularity
+                timestampGranularity,
+                queryMasked
             )
         );
       } else if (mode.equals(JdbcSourceTaskConfig.MODE_TIMESTAMP)) {
@@ -323,7 +326,8 @@ public class JdbcSourceTask extends SourceTask {
                 timestampDelayInterval,
                 zoneId,
                 suffix,
-                timestampGranularity
+                timestampGranularity,
+                queryMasked
             )
         );
       } else if (mode.endsWith(JdbcSourceTaskConfig.MODE_TIMESTAMP_INCREMENTING)) {
@@ -339,7 +343,8 @@ public class JdbcSourceTask extends SourceTask {
                 timestampDelayInterval,
                 zoneId,
                 suffix,
-                timestampGranularity
+                timestampGranularity,
+                queryMasked
             )
         );
       }
@@ -459,6 +464,9 @@ public class JdbcSourceTask extends SourceTask {
           String tableOrQuery,
           Map<String, Object> partitionOffset,
           ZoneId zoneId) {
+    if (config.isQueryMasked()) {
+      tableOrQuery = LogUtil.maybeRedact(true, tableOrQuery);
+    }
     if (!(partitionOffset == null)) {
       log.info("Partition offset for '{}' is not null. Using existing offset.", tableOrQuery);
       return partitionOffset;

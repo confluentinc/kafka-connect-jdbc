@@ -738,4 +738,12 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
     assertEquals(username, basicJdbcCredentials.getUsername());
     assertEquals(password, basicJdbcCredentials.getPassword());
   }
+
+  @Test
+  public void testRetryErrorCodesReturnsEmptySetByDefault() {
+    // Generic dialect should return an empty set of retry error codes
+    Set<Integer> errorCodes = dialect.retryErrorCodes();
+    assertNotNull(errorCodes);
+    assertTrue(errorCodes.isEmpty());
+  }
 }

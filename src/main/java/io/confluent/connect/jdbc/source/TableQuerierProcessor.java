@@ -6,6 +6,7 @@ package io.confluent.connect.jdbc.source;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
+import io.confluent.connect.jdbc.util.ExceptionRetryUtils;
 import io.confluent.connect.jdbc.util.LogUtil;
 import io.confluent.connect.jdbc.util.RecordDestination;
 import org.apache.kafka.common.utils.Time;
@@ -17,7 +18,11 @@ import org.slf4j.LoggerFactory;
 import java.sql.SQLException;
 import java.sql.SQLNonTransientException;
 import java.time.Duration;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Optional;
 import java.util.PriorityQueue;
+import java.util.Set;
 
 public class TableQuerierProcessor {
 
@@ -30,6 +35,7 @@ public class TableQuerierProcessor {
   private CachedConnectionProvider cachedConnectionProvider;
   private final int maxRetriesPerQuerier;
   private final Duration timeout = Duration.ofSeconds(90);
+  private final DatabaseDialect dialect;
 
   public TableQuerierProcessor(
       JdbcSourceTaskConfig config,
@@ -44,6 +50,7 @@ public class TableQuerierProcessor {
     this.cachedConnectionProvider = cachedConnectionProvider;
     this.maxRetriesPerQuerier = config.getInt(JdbcSourceConnectorConfig.QUERY_RETRIES_CONFIG);
     this.shouldRedactSensitiveLogs = config.isQueryMasked();
+    this.dialect = dialect;
   }
 
   public long process(RecordDestination<SourceRecord> destination) {
@@ -146,6 +153,16 @@ public class TableQuerierProcessor {
                                   TableQuerier querier, SQLException sqle) {
     SQLException redactedException = shouldRedactSensitiveLogs
               ? LogUtil.redactSensitiveData(sqle) : sqle;
+    if (!ExceptionRetryUtils.shouldRetry(sqle, getAllRetryErrorCodes())) {
+      log.error(
+          "Non-retriable SQL exception while running query for table: {}. Failing task.",
+          querier,
+          redactedException
+      );
+      resetAndRequeueHead(querier, true);
+      destination.failWith(new ConnectException("Non-retriable SQL exception", redactedException));
+      return;
+    }
     log.error(
         "SQL exception while running query for table: {}." + " Attempting retry {} of {} attempts.",
         querier,
@@ -191,6 +208,20 @@ public class TableQuerierProcessor {
       }
     }
   }
+
+  /**
+   * Get all retry error codes by combining:
+   * 1. Error codes from the configuration (user-specified)
+   * 2. Error codes from the database dialect (database-specific)
+   *
+   * @return a set of all retry error codes
+   */
+  private Set<Integer> getAllRetryErrorCodes() {
+    Set<Integer> codes = new HashSet<>(Optional.ofNullable(config.getRetryErrorCodes())
+                                               .orElse(Collections.emptySet()));
+    if (dialect!= null) codes.addAll(dialect.retryErrorCodes());
+    return codes;
+}
 
   private synchronized void resetAndRequeueHead(TableQuerier expectedHead, boolean resetOffset) {
     log.debug("Resetting querier {}", expectedHead.toString());

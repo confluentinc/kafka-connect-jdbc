@@ -24,11 +24,15 @@ import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Set;
 
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDialect> {
 
@@ -254,5 +258,16 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
         + "db?password=****&key1=value1&key2=value2&key3=value3&"
         + "user=smith&password=****&other=value"
     );
+  }
+
+  @Test
+  public void testRetryErrorCodesReturnsExpectedMySqlErrorCodes() {
+    Set<Integer> errorCodes = dialect.retryErrorCodes();
+    assertNotNull(errorCodes);
+    assertFalse(errorCodes.isEmpty());
+
+    // Verify key MySQL error codes are present
+    assertTrue(errorCodes.contains(1205));
+    assertTrue(errorCodes.contains(1213));
   }
 }

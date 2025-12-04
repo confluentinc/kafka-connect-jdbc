@@ -43,6 +43,8 @@ import io.confluent.connect.jdbc.util.DateCalendarSystem;
 
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.stream.Collectors;
+
 import com.google.re2j.Pattern;
 import com.google.re2j.PatternSyntaxException;
 
@@ -414,6 +416,14 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String QUERY_RETRIES_DOC =
           "Number of times to retry SQL exceptions encountered when executing queries.";
   public static final String QUERY_RETRIES_DISPLAY = "Query Retry Attempts";
+
+  public static final String RETRY_ERROR_CODES_CONFIG = "retry.error.codes";
+  private static final String RETRY_ERROR_CODES_DISPLAY = "Retry SQL Exception Error Codes";
+  private static final String RETRY_ERROR_CODES_DOC =
+          "Comma-separated list of SQL Exception error codes (e.g. 12505, 1433) that will be retried by "
+          + "the connector, up to number of retries defined by ``"
+          + QUERY_RETRIES_CONFIG + "`` configuration. By default, the connector retries in case "
+          + "of a recoverable or transient SQL exception and on certain error codes.";
 
   /**
    * The properties that begin with this prefix will be used to configure a class, specified by
@@ -1036,6 +1046,16 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.MEDIUM,
         QUERY_RETRIES_DISPLAY
+    ).define(
+        RETRY_ERROR_CODES_CONFIG,
+        Type.LIST,
+        Arrays.asList(),
+        Importance.LOW,
+        RETRY_ERROR_CODES_DOC,
+        MODE_GROUP,
+        ++orderInGroup,
+        Width.MEDIUM,
+        RETRY_ERROR_CODES_DISPLAY
     );
   }
 
@@ -1523,6 +1543,14 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     return maskedQuery != null
         && maskedQuery.value() != null
         && !maskedQuery.value().isEmpty();
+  }
+
+  /**
+   * Get the list of retry error codes as integers.
+   */
+  public Set<Integer> getRetryErrorCodes() {
+    return getList(RETRY_ERROR_CODES_CONFIG).stream().map(Integer::parseInt)
+      .collect(Collectors.toSet());
   }
 
   public boolean modeUsesTimestampColumn() {

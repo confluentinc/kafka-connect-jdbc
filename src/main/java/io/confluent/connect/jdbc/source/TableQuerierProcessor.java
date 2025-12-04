@@ -147,7 +147,7 @@ public class TableQuerierProcessor {
                                   TableQuerier querier, SQLException sqle) {
     SQLException redactedException = shouldRedactSensitiveLogs
               ? LogUtil.redactSensitiveData(sqle) : sqle;
-    if (!ExceptionRetryUtils.shouldRetry(sqle)) {
+    if (!ExceptionRetryUtils.shouldRetry(sqle, config.getRetryErrorCodes())) {
       log.error(
           "Non-retriable SQL exception while running query for table: {}. Failing task.",
           querier,

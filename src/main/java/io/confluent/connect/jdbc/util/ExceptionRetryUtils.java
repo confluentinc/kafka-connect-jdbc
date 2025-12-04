@@ -23,10 +23,7 @@ import java.sql.SQLException;
 import java.sql.SQLNonTransientException;
 import java.sql.SQLRecoverableException;
 import java.sql.SQLTransientException;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Utility class for determining whether SQL exceptions should be retried.
@@ -52,6 +49,13 @@ public final class ExceptionRetryUtils {
           -911 // DB2 deadlock/timeout when reported via error code
       )));
 
+  public static void addRetriableErrorCodes(Collection<Integer> errorCodes) {
+    if (errorCodes == null || errorCodes.isEmpty()) {
+      return;
+    }
+    RETRIABLE_ERROR_CODES.addAll(errorCodes);
+  }
+
   /**
    * Ordered decision:
    * - Traverse throwable cause chain in order; for each SQLException, traverse
@@ -63,9 +67,12 @@ public final class ExceptionRetryUtils {
    *   - Non-transient exceptions take precedence over retriable ones.
    * - If no qualifying SQL is found => do not retry (false).
    */
-  public static boolean shouldRetry(Throwable throwable) {
+  public static boolean shouldRetry(Throwable throwable, Set<Integer> additionalRetriableErrorCodes) {
     if (throwable == null) {
       return false;
+    }
+    if (additionalRetriableErrorCodes != null) {
+      addRetriableErrorCodes(additionalRetriableErrorCodes);
     }
     for (Throwable t : ExceptionUtils.getThrowableList(throwable)) {
       if (t instanceof SQLException) {
@@ -83,7 +90,7 @@ public final class ExceptionRetryUtils {
         }
       }
     }
-    return true;
+    return false;
   }
 
   private static boolean canRetry(SQLException se) {

@@ -42,6 +42,9 @@ import org.apache.kafka.connect.data.Timestamp;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
@@ -422,5 +425,17 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       }
     }
     return null;
+  }
+
+  /** Oracle-specific error codes that should trigger a retry. */
+  @Override
+  public Set<Integer> retryErrorCodes() {
+    return Stream.of(
+            1034, // Oracle not available
+            1284, // IO error during logon
+            1466, // Resource busy and acquire with NOWAIT specified or timeout expired
+            60 // Deadlock detected while waiting for resource
+            )
+        .collect(Collectors.toSet());
   }
 }

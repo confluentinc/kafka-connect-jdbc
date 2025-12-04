@@ -24,8 +24,10 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Calendar;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
@@ -705,4 +707,18 @@ public interface DatabaseDialect extends ConnectionProvider {
    * @throws SQLException if there is an error accessing the metadata
    */
   String resolveSynonym(Connection connection, String synonymName) throws SQLException;
+
+  /**
+   * Return a set of database-specific error codes that should be considered retriable.
+   * These error codes represent transient conditions that may succeed on retry,
+   * such as connection timeouts, deadlocks, or temporary resource unavailability.
+   *
+   * <p>Each dialect can override this method to provide database-specific error codes.
+   * The default implementation returns an empty set.
+   *
+   * @return a set of error codes that should trigger a retry; never null
+   */
+  default Set<Integer> retryErrorCodes() {
+    return Collections.emptySet();
+  }
 }

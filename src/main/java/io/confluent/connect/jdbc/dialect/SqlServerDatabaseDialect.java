@@ -43,6 +43,9 @@ import java.util.Calendar;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode;
@@ -644,5 +647,16 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       }
     }
     return null;
+  }
+
+  /**
+   * SQL Server-specific error codes that should trigger a retry.
+  */
+  @Override
+  public Set<Integer> retryErrorCodes() {
+    return Stream.of(
+        1205,   // Transaction was deadlocked
+        64     // Host unreachable
+    ).collect(Collectors.toSet());
   }
 }

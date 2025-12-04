@@ -676,4 +676,13 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return defn.scale();
   }
 
+  /** * <p>Note: PostgreSQL uses SQLSTATE codes (strings) rather than numeric error codes.
+   * We return empty set here as PostgreSQL errors are handled via SQLSTATE prefixes
+   * in ExceptionRetryUtils.
+   */
+  @Override
+  public Set<Integer> retryErrorCodes() {
+    return Collections.emptySet();
+  }
+
 }

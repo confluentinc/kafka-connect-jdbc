@@ -23,7 +23,11 @@ import java.sql.SQLException;
 import java.sql.SQLNonTransientException;
 import java.sql.SQLRecoverableException;
 import java.sql.SQLTransientException;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Utility class for determining whether SQL exceptions should be retried.
@@ -33,6 +37,10 @@ public final class ExceptionRetryUtils {
   private static final String CONNECTION_CLOSED_MSG = "CONNECTION IS CLOSED";
   private static final Logger log = LoggerFactory.getLogger(ExceptionRetryUtils.class);
 
+  /**
+    * PostgreSQL do not use SQL Error Codes which always returns 0.
+    * Define retriable SQLState prefixes based on SQL standard.
+  */
   private static final Set<String> RETRIABLE_SQLSTATE_PREFIXES =
       Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
           "08", // connection exception
@@ -41,13 +49,9 @@ public final class ExceptionRetryUtils {
           "57" // process/query issues (PostgreSQL, DB2)
       )));
 
-  // *
+
   private static final Set<Integer> RETRIABLE_ERROR_CODES =
-      Collections.synchronizedSet(new HashSet<>(Arrays.asList(
-          1466, 1284, 3113, 3114, 4068, // Oracle
-          1205, 1213, // MySQL and SQL Server deadlock/timeouts
-          -911 // DB2 deadlock/timeout when reported via error code
-      )));
+      Collections.synchronizedSet(new HashSet<>());
 
   public static void addRetriableErrorCodes(Collection<Integer> errorCodes) {
     if (errorCodes == null || errorCodes.isEmpty()) {
@@ -57,17 +61,15 @@ public final class ExceptionRetryUtils {
   }
 
   /**
-   * Ordered decision:
-   * - Traverse throwable cause chain in order; for each SQLException, traverse
-   *   its next-exception chain in order.
-   * - The first qualifying SQL decides:
-   *   - retriable (recoverable/transient/whitelisted) => retry (true)
-   *   - non-transient => do not retry (false)
-   * - If the first qualifying SQL seen is non-transient => do not retry (false).
-   *   - Non-transient exceptions take precedence over retriable ones.
-   * - If no qualifying SQL is found => do not retry (false).
+   * Ordered decision: - Traverse throwable cause chain in order; for each SQLException, traverse
+   * its next-exception chain in order. - The first qualifying SQL decides: - retriable
+   * (recoverable/transient/whitelisted) => retry (true) - non-transient => do not retry (false) -
+   * If the first qualifying SQL seen is non-transient => do not retry (false). - Non-transient
+   * exceptions take precedence over retriable ones. - If no qualifying SQL is found => do not retry
+   * (false).
    */
-  public static boolean shouldRetry(Throwable throwable, Set<Integer> additionalRetriableErrorCodes) {
+  public static boolean shouldRetry(
+      Throwable throwable, Set<Integer> additionalRetriableErrorCodes) {
     if (throwable == null) {
       return false;
     }
@@ -77,10 +79,6 @@ public final class ExceptionRetryUtils {
     for (Throwable t : ExceptionUtils.getThrowableList(throwable)) {
       if (t instanceof SQLException) {
         for (SQLException se = (SQLException) t; se != null; se = se.getNextException()) {
-          log.info("Evaluating SQLException for retry: SQLState={}, ErrorCode={}, Message={}",
-              se.getSQLState(), se.getErrorCode(), se.getMessage());
-          log.info("Full SQLException: ", se);
-          log.info("Next SQLException in chain: ", se.getNextException());
           if (canRetry(se)) {
             return true;
           }

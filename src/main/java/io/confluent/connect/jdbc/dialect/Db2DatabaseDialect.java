@@ -25,6 +25,9 @@ import org.apache.kafka.connect.data.Timestamp;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Collection;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
@@ -196,5 +199,19 @@ public class Db2DatabaseDialect extends GenericDatabaseDialect {
   @Override
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
     throw new SQLException("DB2 does not support synonyms. Please use views instead.");
+  }
+
+  /**
+   * DB2-specific error codes that should trigger a retry.
+  */
+  @Override
+  public Set<Integer> retryErrorCodes() {
+    return Stream.of(
+        -911,   // Deadlock or timeout rollback
+        -923,   // Connection not established
+        -924,   // DB2 connection internal error
+        -927,   // Connection handle was not valid
+        -1229   // Database is in use
+    ).collect(Collectors.toSet());
   }
 }

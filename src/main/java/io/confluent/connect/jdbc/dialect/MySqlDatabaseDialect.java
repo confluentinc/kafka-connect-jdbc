@@ -27,6 +27,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collection;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
@@ -182,5 +185,17 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
   @Override
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
     throw new SQLException("MySQL does not support synonyms. Please use views instead.");
+  }
+
+  /**
+   * MySQL-specific error codes that should trigger a retry.
+  */
+  @Override
+  public Set<Integer> retryErrorCodes() {
+    return Stream.of(
+        1205,  // Lock wait timeout exceeded
+        1213,  // Deadlock found when trying to get lock
+        1614  // Transaction branch was rolled back (XA)
+    ).collect(Collectors.toSet());
   }
 }

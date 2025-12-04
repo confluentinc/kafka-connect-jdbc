@@ -23,6 +23,7 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
 import io.confluent.connect.jdbc.util.ColumnDefinition;
@@ -42,6 +43,9 @@ import io.confluent.connect.jdbc.util.TableId;
 import org.mockito.Mockito;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -487,5 +491,16 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
 
     dialect.bindField(stmtNvarchar, index, schema, value, colDefNvarchar, field);
     verify(stmtNvarchar, times(1)).setNString(index, value);
+  }
+
+  @Test
+  public void testRetryErrorCodesReturnsExpectedSqlServerErrorCodes() {
+    Set<Integer> errorCodes = dialect.retryErrorCodes();
+    assertNotNull(errorCodes);
+    assertFalse(errorCodes.isEmpty());
+
+    // Verify key SQL Server error codes are present
+    assertTrue(errorCodes.contains(1205));
+    assertTrue(errorCodes.contains(1222));
   }
 }

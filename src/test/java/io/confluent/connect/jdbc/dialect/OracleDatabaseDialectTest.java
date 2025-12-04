@@ -40,7 +40,12 @@ import io.confluent.connect.jdbc.util.TableId;
 
 import oracle.jdbc.OraclePreparedStatement;
 
+import java.util.Set;
+
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
@@ -473,5 +478,17 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
 
     dialect.bindField(statement, index, schema, value, colDef, field);
     return verify(statement, times(1));
+  }
+
+  @Test
+  public void testRetryErrorCodesReturnsExpectedOracleErrorCodes() {
+    Set<Integer> errorCodes = dialect.retryErrorCodes();
+    assertNotNull(errorCodes);
+    assertFalse(errorCodes.isEmpty());
+
+    // Verify key Oracle error codes are present
+    assertTrue(errorCodes.contains(60));
+    assertTrue(errorCodes.contains(1466));
+    assertTrue(errorCodes.contains(1284));
   }
 }

@@ -2134,4 +2134,13 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     }
     return null;
   }
+
+  /**
+   * The generic implementation returns an empty set. Specific database dialects
+   * should override this method to provide database-specific retriable error codes.
+   */
+  @Override
+  public Set<Integer> retryErrorCodes() {
+    return Collections.emptySet();
+  }
 }

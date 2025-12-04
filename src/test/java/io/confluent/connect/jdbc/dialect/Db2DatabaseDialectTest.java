@@ -24,12 +24,15 @@ import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Set;
 
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> {
 
@@ -365,5 +368,18 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
   @Test
   public void testCheckConnectionQuery() {
     assertFalse(dialect.checkConnectionQuery().contains(";"));
+  }
+
+  @Test
+  public void testRetryErrorCodesReturnsExpectedDb2ErrorCodes() {
+    Set<Integer> errorCodes = dialect.retryErrorCodes();
+    assertNotNull(errorCodes);
+    assertFalse(errorCodes.isEmpty());
+
+    // Verify key DB2 error codes are present
+    assertTrue(errorCodes.contains(-911));
+    assertTrue(errorCodes.contains(-923));
+    assertTrue(errorCodes.contains(-924));
+    assertTrue(errorCodes.contains(-1229));
   }
 }

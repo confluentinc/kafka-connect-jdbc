@@ -6,6 +6,7 @@ package io.confluent.connect.jdbc.source;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
+import io.confluent.connect.jdbc.util.ExceptionRetryUtils;
 import io.confluent.connect.jdbc.util.LogUtil;
 import io.confluent.connect.jdbc.util.RecordDestination;
 import org.apache.kafka.common.utils.Time;
@@ -146,6 +147,16 @@ public class TableQuerierProcessor {
                                   TableQuerier querier, SQLException sqle) {
     SQLException redactedException = shouldRedactSensitiveLogs
               ? LogUtil.redactSensitiveData(sqle) : sqle;
+    if (!ExceptionRetryUtils.shouldRetry(sqle)) {
+      log.error(
+          "Non-retriable SQL exception while running query for table: {}. Failing task.",
+          querier,
+          redactedException
+      );
+      resetAndRequeueHead(querier, true);
+      destination.failWith(new ConnectException("Non-retriable SQL exception", redactedException));
+      return;
+    }
     log.error(
         "SQL exception while running query for table: {}." + " Attempting retry {} of {} attempts.",
         querier,

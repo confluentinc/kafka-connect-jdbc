@@ -193,10 +193,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   protected void initializePreparedStatement(PreparedStatement stmt) throws SQLException {
     super.initializePreparedStatement(stmt);
 
-    log.trace("Initializing PreparedStatement fetch direction to FETCH_FORWARD for '{}'", stmt);
+    log.trace(
+        "Initializing PreparedStatement fetch direction to FETCH_FORWARD for '{}'",
+        shouldRedactSensitiveLogs(stmt.toString()));
     stmt.setFetchDirection(ResultSet.FETCH_FORWARD);
   }
-
 
   @Override
   public String addFieldToSchema(

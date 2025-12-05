@@ -94,6 +94,7 @@ import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.JdbcCredentials;
 import io.confluent.connect.jdbc.util.JdbcCredentialsProvider;
 import io.confluent.connect.jdbc.util.JdbcDriverInfo;
+import io.confluent.connect.jdbc.util.LogUtil;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.StringUtils;
 import io.confluent.connect.jdbc.util.TableDefinition;
@@ -391,7 +392,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       Connection db,
       String query
   ) throws SQLException {
-    glog.trace("Creating a PreparedStatement '{}'", query);
+    glog.trace(
+        "Creating a PreparedStatement '{}'", shouldRedactSensitiveLogs(query));
     PreparedStatement stmt = db.prepareStatement(query);
     initializePreparedStatement(stmt);
     return stmt;
@@ -2114,6 +2116,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   @Override
   public String identifier() {
     return name() + " database " + sanitizedUrl(jdbcUrl);
+  }
+
+  public String shouldRedactSensitiveLogs(String queryString) {
+    if (config instanceof JdbcSourceConnectorConfig) {
+      return LogUtil.maybeRedact(
+          config.getPassword(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG) != null, queryString);
+    }
+    return queryString;
   }
 
   @Override

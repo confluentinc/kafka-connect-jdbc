@@ -393,9 +393,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       String query
   ) throws SQLException {
     glog.trace(
-        "Creating a PreparedStatement '{}'",
-        LogUtil.maybeRedact(
-            config.getPassword(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG) != null, query));
+        "Creating a PreparedStatement '{}'", shouldRedactSensitiveLogs(query));
     PreparedStatement stmt = db.prepareStatement(query);
     initializePreparedStatement(stmt);
     return stmt;
@@ -2118,6 +2116,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   @Override
   public String identifier() {
     return name() + " database " + sanitizedUrl(jdbcUrl);
+  }
+
+  public String shouldRedactSensitiveLogs(String queryString) {
+    if (config instanceof JdbcSourceConnectorConfig) {
+      return LogUtil.maybeRedact(
+          config.getPassword(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG) != null, queryString);
+    }
+    return queryString;
   }
 
   @Override

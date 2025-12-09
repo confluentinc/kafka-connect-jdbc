@@ -1526,15 +1526,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   }
 
   public static boolean shouldLog(Map<String, ?> props) {
-    Object masked = props.get(QUERY_MASKED_CONFIG);
-    if (masked == null) {
-      return true;
-    }
-    if (masked instanceof Password) {
-      String v = ((Password) masked).value();
-      return v == null || v.isEmpty();
-    }
-    return masked.toString().isEmpty();
+    return !props.containsKey(QUERY_MASKED_CONFIG);
   }
 
   public boolean modeUsesTimestampColumn() {

@@ -2121,7 +2121,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   public String shouldRedactSensitiveLogs(String queryString) {
     if (config instanceof JdbcSourceConnectorConfig) {
       return LogUtil.maybeRedact(
-          config.getPassword(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG) != null, queryString);
+          ((JdbcSourceConnectorConfig) config).isQueryMasked(), queryString);
     }
     return queryString;
   }

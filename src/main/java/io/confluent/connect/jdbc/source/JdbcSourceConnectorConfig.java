@@ -1175,7 +1175,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final ConfigDef CONFIG_DEF = baseConfigDef();
 
   public JdbcSourceConnectorConfig(Map<String, ?> props) {
-    super(CONFIG_DEF, props);
+    super(CONFIG_DEF, props, shouldLog(props));
   }
 
   public String topicPrefix() {
@@ -1434,7 +1434,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
 
   protected JdbcSourceConnectorConfig(ConfigDef subclassConfigDef, Map<String, String> props) {
-    super(subclassConfigDef, props);
+    super(subclassConfigDef, props, shouldLog(props));
   }
 
   public NumericMapping numericMapping() {
@@ -1523,6 +1523,10 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     return maskedQuery != null
         && maskedQuery.value() != null
         && !maskedQuery.value().isEmpty();
+  }
+
+  public static boolean shouldLog(Map<String, ?> props) {
+    return !props.containsKey(QUERY_MASKED_CONFIG);
   }
 
   public boolean modeUsesTimestampColumn() {

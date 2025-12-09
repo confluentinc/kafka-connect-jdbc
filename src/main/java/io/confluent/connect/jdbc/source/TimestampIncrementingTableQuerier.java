@@ -77,6 +77,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   private String incrementingColumnName;
   private final long timestampDelay;
   private final ZoneId zoneId;
+  private final Boolean shoudlRedactSensitiveLogs;
 
   public TimestampIncrementingTableQuerier(
       DatabaseDialect dialect,
@@ -97,7 +98,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
         ? timestampColumnNames : Collections.emptyList();
     this.timestampDelay = timestampDelay;
     this.committedOffset = this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
-
+    this.shoudlRedactSensitiveLogs = isQueryMasked;
     this.timestampColumns = new ArrayList<>();
     for (String timestampColumn : this.timestampColumnNames) {
       if (timestampColumn != null && !timestampColumn.isEmpty()) {
@@ -164,7 +165,10 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     
     String queryString = builder.toString();
     recordQuery(queryString);
-    log.trace("{} prepared SQL query: {}", this, queryString);
+    log.trace(
+        "{} prepared SQL query: {}",
+        this,
+        LogUtil.maybeRedact(shouldRedactSensitiveLogs, queryString));
     stmt = dialect.createPreparedStatement(db, queryString);
   }
 
@@ -223,7 +227,9 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   @Override
   protected ResultSet executeQuery() throws SQLException {
     criteria.setQueryParameters(stmt, this);
-    log.trace("Statement to execute: {}", stmt.toString());
+    log.trace(
+        "Statement to execute: {}",
+        LogUtil.maybeRedact(shouldRedactSensitiveLogs, stmt.toString()));
     return stmt.executeQuery();
   }
 

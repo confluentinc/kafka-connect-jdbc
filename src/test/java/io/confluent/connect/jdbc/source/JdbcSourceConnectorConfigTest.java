@@ -574,4 +574,52 @@ public class JdbcSourceConnectorConfigTest {
     // Empty string should return empty Optional
     assertFalse(config.getQuery().isPresent());
   }
+
+  @Test
+  public void testShouldLogConfigReturnsTrueWhenQueryMaskedNotSet() {
+    // When query.masked is not set, config values should be logged
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "testUser");
+    props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "table1,table2");
+
+    assertTrue(JdbcSourceConnectorConfig.shouldLog(props));
+  }
+
+  @Test
+  public void testShouldLogConfigReturnsFalseWhenQueryMaskedIsSet() {
+    // When query.masked is set, config values should NOT be logged
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "testUser");
+    props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "table1,table2");
+    props.put(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG, "SELECT * FROM sensitive_table");
+
+   assertTrue(JdbcSourceConnectorConfig.shouldLog(props));
+  }
+
+  @Test
+  public void testShouldLogConfigReturnsTrueWhenQueryMaskedIsNull() {
+    // When query.masked is explicitly null, config values should be logged
+    Map<String, Object> props = new HashMap<>();
+    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "testUser");
+    props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "table1,table2");
+    props.put(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG, null);
+
+    assertTrue(JdbcSourceConnectorConfig.shouldLog(props));
+  }
+
+  @Test
+  public void testShouldLogConfigReturnsTrueWhenQueryAndQueryMaskedAreSet() {
+    // When query.masked and query are both set, config values should not be logged
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "testUser");
+    props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "table1,table2");
+    props.put(JdbcSourceConnectorConfig.QUERY_CONFIG, "SELECT * FROM public_table");
+    props.put(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG, "SELECT * FROM sensitive_table");
+
+    assertFalse(JdbcSourceConnectorConfig.shouldLog(props));
+  }
 }

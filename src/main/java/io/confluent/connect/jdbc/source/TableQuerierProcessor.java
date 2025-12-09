@@ -154,7 +154,7 @@ public class TableQuerierProcessor {
         redactedException);
 
     resetAndRequeueHead(querier, false);
-    if (maxRetriesPerQuerier > 0 && querier.getAttemptedRetryCount() >= maxRetriesPerQuerier) {
+    if (maxRetriesPerQuerier > 0 && querier.getAttemptedRetryCount() + 1 >= maxRetriesPerQuerier) {
       destination.failWith(
           new ConnectException("Failed to query table after retries", redactedException));
       return;

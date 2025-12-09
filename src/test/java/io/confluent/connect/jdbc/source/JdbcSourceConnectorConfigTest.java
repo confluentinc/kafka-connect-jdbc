@@ -595,7 +595,7 @@ public class JdbcSourceConnectorConfigTest {
     props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "table1,table2");
     props.put(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG, "SELECT * FROM sensitive_table");
 
-   assertTrue(JdbcSourceConnectorConfig.shouldLog(props));
+   assertFalse(JdbcSourceConnectorConfig.shouldLog(props));
   }
 
   @Test

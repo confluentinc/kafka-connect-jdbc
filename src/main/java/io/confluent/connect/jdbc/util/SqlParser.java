@@ -39,9 +39,9 @@ public class SqlParser {
   private static final String REDACTED_NUMBER = "0";
   private static final String REDACTED_VALUE = "<redacted>";
 
-  public static String redact(String sql) {
+  public static String redactSensitiveData(String sql) {
     if (sql == null || sql.trim().isEmpty()) {
-        return "";
+      return "";
     }
 
     try {

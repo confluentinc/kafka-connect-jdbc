@@ -135,8 +135,9 @@ public class LogUtilTest {
   public void testSensitiveLogWithTrimEnabled() {
     String sensitiveMessage = "SELECT * FROM users WHERE password='secret123'";
     String result = LogUtil.maybeRedact(true, sensitiveMessage);
-    Assert.assertTrue("Should contain redacted literal", result.contains("'********'"));
-    Assert.assertTrue("Should preserve structure", result.toUpperCase().startsWith("SELECT * FROM USERS WHERE PASSWORD ="));
+    String expected = "SELECT * FROM users WHERE password = '********'";
+
+    assertEquals(expected, result);
   }
 
   @Test

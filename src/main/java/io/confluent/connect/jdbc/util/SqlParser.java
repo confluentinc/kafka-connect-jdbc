@@ -17,10 +17,12 @@ package io.confluent.connect.jdbc.util;
 
 import net.sf.jsqlparser.JSQLParserException;
 import net.sf.jsqlparser.expression.ArrayExpression;
+import net.sf.jsqlparser.expression.CollateExpression;
 import net.sf.jsqlparser.expression.DateValue;
 import net.sf.jsqlparser.expression.DateTimeLiteralExpression;
 import net.sf.jsqlparser.expression.DoubleValue;
 import net.sf.jsqlparser.expression.HexValue;
+import net.sf.jsqlparser.expression.IntervalExpression;
 import net.sf.jsqlparser.expression.JdbcParameter;
 import net.sf.jsqlparser.expression.LongValue;
 import net.sf.jsqlparser.expression.StringValue;
@@ -29,6 +31,7 @@ import net.sf.jsqlparser.expression.TimeValue;
 import net.sf.jsqlparser.expression.TimestampValue;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
+import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.util.deparser.ExpressionDeParser;
 import net.sf.jsqlparser.util.deparser.SelectDeParser;
 import net.sf.jsqlparser.util.deparser.StatementDeParser;
@@ -58,7 +61,19 @@ public class SqlParser {
       statement.accept(statementDeParser);
       return buffer.toString();
     } catch (JSQLParserException e) {
+      System.out.println(e.getMessage());
       return REDACTED_VALUE;
+    }
+  }
+
+  private static class OracleAwareSelectDeParser extends SelectDeParser {
+    public OracleAwareSelectDeParser(ExpressionDeParser expressionDeParser, StringBuilder buffer) {
+      super(expressionDeParser, buffer);
+    }
+
+    @Override
+    public void visit(PlainSelect plainSelect) {
+      super.visit(plainSelect);
     }
   }
 
@@ -121,6 +136,23 @@ public class SqlParser {
       } else {
         getBuffer().append(signedExpression.getSign());
         signedExpression.getExpression().accept(this);
+      }
+    }
+
+    @Override
+    public void visit(CollateExpression collateExpression) {
+      collateExpression.getLeftExpression().accept(this);
+      getBuffer().append(" COLLATE ");
+      getBuffer().append(collateExpression.getCollate());
+    }
+
+    @Override
+    public void visit(IntervalExpression intervalExpression) {
+      getBuffer().append("INTERVAL ");
+      getBuffer().append(REDACTED_NUMBER);
+      if (intervalExpression.getIntervalType() != null) {
+        getBuffer().append(" ");
+        getBuffer().append(intervalExpression.getIntervalType());
       }
     }
   }

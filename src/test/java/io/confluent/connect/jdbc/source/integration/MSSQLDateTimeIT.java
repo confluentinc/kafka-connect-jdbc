@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.kafka.connect.storage.StringConverter;
 import org.testcontainers.containers.FixedHostPortGenericContainer;
 
-import org.apache.kafka.test.IntegrationTest;
+import io.confluent.connect.jdbc.integration.IntegrationTest;
 
 import org.junit.After;
 import org.junit.Before;

@@ -15,21 +15,6 @@
 
 package io.confluent.connect.jdbc.sink;
 
-import org.apache.kafka.common.config.ConfigException;
-import io.confluent.connect.jdbc.util.ColumnDefinition;
-import io.confluent.connect.jdbc.util.TableDefinition;
-
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.SchemaBuilder;
-import org.apache.kafka.connect.data.Struct;
-import org.apache.kafka.connect.errors.ConnectException;
-import org.apache.kafka.connect.sink.SinkRecord;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import org.mockito.Matchers;
-import org.mockito.Mockito;
-
 import java.io.IOException;
 import java.sql.BatchUpdateException;
 import java.sql.Connection;
@@ -43,18 +28,31 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.SchemaBuilder;
+import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.sink.SinkRecord;
+import org.junit.After;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
+import org.junit.Before;
+import org.junit.Test;
+import org.mockito.ArgumentMatchers;
+import static org.mockito.ArgumentMatchers.any;
+import org.mockito.Mockito;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.dialect.SqliteDatabaseDialect;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
+import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThrows;
-import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 public class BufferedRecordsTest {
 
@@ -473,10 +471,10 @@ public class BufferedRecordsTest {
 
 
     final DbStructure dbStructureMock = mock(DbStructure.class);
-    when(dbStructureMock.createOrAmendIfNecessary(Matchers.any(JdbcSinkConfig.class),
-                                                  Matchers.any(Connection.class),
-                                                  Matchers.any(TableId.class),
-                                                  Matchers.any(FieldsMetadata.class)))
+    when(dbStructureMock.createOrAmendIfNecessary(ArgumentMatchers.any(JdbcSinkConfig.class),
+                                                  ArgumentMatchers.any(Connection.class),
+                                                  ArgumentMatchers.any(TableId.class),
+                                                  ArgumentMatchers.any(FieldsMetadata.class)))
         .thenReturn(true);
     when(dbStructureMock.tableDefinition(any(), any())).thenReturn(tabDefMock);
 
@@ -484,7 +482,7 @@ public class BufferedRecordsTest {
     when(preparedStatementMock.executeBatch()).thenReturn(batchResponse);
 
     Connection connectionMock = mock(Connection.class);
-    when(connectionMock.prepareStatement(Matchers.anyString())).thenReturn(preparedStatementMock);
+    when(connectionMock.prepareStatement(ArgumentMatchers.anyString())).thenReturn(preparedStatementMock);
 
     final TableId tableId = new TableId(null, null, "dummy");
     final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect,
@@ -513,10 +511,10 @@ public class BufferedRecordsTest {
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
     assertTrue(dbDialect instanceof SqliteDatabaseDialect);
     final DbStructure dbStructureMock = mock(DbStructure.class);
-    when(dbStructureMock.createOrAmendIfNecessary(Matchers.any(JdbcSinkConfig.class),
-                                                  Matchers.any(Connection.class),
-                                                  Matchers.any(TableId.class),
-                                                  Matchers.any(FieldsMetadata.class)))
+    when(dbStructureMock.createOrAmendIfNecessary(ArgumentMatchers.any(JdbcSinkConfig.class),
+                                                  ArgumentMatchers.any(Connection.class),
+                                                  ArgumentMatchers.any(TableId.class),
+                                                  ArgumentMatchers.any(FieldsMetadata.class)))
         .thenReturn(true);
 
     final Connection connectionMock = mock(Connection.class);
@@ -534,7 +532,7 @@ public class BufferedRecordsTest {
     Mockito.verify(
         connectionMock,
         Mockito.times(1)
-    ).prepareStatement(Matchers.eq("UPDATE \"dummy\" SET \"name\" = ?"));
+    ).prepareStatement(ArgumentMatchers.eq("UPDATE \"dummy\" SET \"name\" = ?"));
 
   }
 

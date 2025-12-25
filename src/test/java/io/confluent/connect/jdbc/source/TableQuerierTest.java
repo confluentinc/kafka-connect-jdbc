@@ -15,23 +15,22 @@
 
 package io.confluent.connect.jdbc.source;
 
-import io.confluent.connect.jdbc.dialect.DatabaseDialect;
-import io.confluent.connect.jdbc.source.TableQuerier.QueryMode;
-import io.confluent.connect.jdbc.util.ColumnId;
-import io.confluent.connect.jdbc.util.ExpressionBuilder;
-import io.confluent.connect.jdbc.util.TableId;
-
 import java.sql.Connection;
 import java.sql.SQLException;
 
 import org.junit.Before;
 import org.junit.Test;
-import org.mockito.Matchers;
-
+import org.mockito.ArgumentMatchers;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.source.TableQuerier.QueryMode;
+import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.ExpressionBuilder;
+import io.confluent.connect.jdbc.util.TableId;
 
 public class TableQuerierTest {  
   private static final String TABLE_NAME = "name";
@@ -49,11 +48,11 @@ public class TableQuerierTest {
   public void init()
   {
     databaseDialectMock = mock(DatabaseDialect.class);
-    when(databaseDialectMock.parseTableIdentifier(Matchers.anyString()))
+    when(databaseDialectMock.parseTableIdentifier(ArgumentMatchers.anyString()))
       .thenReturn(new TableId(null,null,TABLE_NAME));	  
     when(databaseDialectMock.expressionBuilder())
       .thenReturn(ExpressionBuilder.create());
-    when(databaseDialectMock.criteriaFor(Matchers.any(ColumnId.class), Matchers.anyListOf(ColumnId.class)))
+    when(databaseDialectMock.criteriaFor(ArgumentMatchers.any(ColumnId.class), ArgumentMatchers.anyList()))
       .thenReturn(new TimestampIncrementingCriteria(new ColumnId(new TableId(null,null,TABLE_NAME),INCREMENTING_COLUMN_NAME), null,null));
 	    
     connectionMock = mock(Connection.class);	  
@@ -78,7 +77,7 @@ public class TableQuerierTest {
       
     querier.createPreparedStatement(connectionMock);
 
-    verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM \"name\" WHERE \"name\".\"column\" > ? ORDER BY \"name\".\"column\" ASC /* SUFFIX */"));
+    verify(databaseDialectMock, times(1)).createPreparedStatement(ArgumentMatchers.any(),ArgumentMatchers.eq("SELECT * FROM \"name\" WHERE \"name\".\"column\" > ? ORDER BY \"name\".\"column\" ASC /* SUFFIX */"));
   }
 
   @Test
@@ -100,7 +99,7 @@ public class TableQuerierTest {
       
     querier.createPreparedStatement(connectionMock);
 
-    verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM name WHERE \"name\".\"column\" > ? ORDER BY \"name\".\"column\" ASC /* SUFFIX */"));
+    verify(databaseDialectMock, times(1)).createPreparedStatement(ArgumentMatchers.any(),ArgumentMatchers.eq("SELECT * FROM name WHERE \"name\".\"column\" > ? ORDER BY \"name\".\"column\" ASC /* SUFFIX */"));
   }
   
   @Test
@@ -116,7 +115,7 @@ public class TableQuerierTest {
       
     querier.createPreparedStatement(connectionMock);
 
-    verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM \"name\" /* SUFFIX */"));
+    verify(databaseDialectMock, times(1)).createPreparedStatement(ArgumentMatchers.any(),ArgumentMatchers.eq("SELECT * FROM \"name\" /* SUFFIX */"));
   }
 
   @Test
@@ -132,7 +131,7 @@ public class TableQuerierTest {
       
     querier.createPreparedStatement(connectionMock);
 
-    verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM name /* SUFFIX */"));
+    verify(databaseDialectMock, times(1)).createPreparedStatement(ArgumentMatchers.any(),ArgumentMatchers.eq("SELECT * FROM name /* SUFFIX */"));
   }
 
   @Test
@@ -148,6 +147,6 @@ public class TableQuerierTest {
       
     querier.createPreparedStatement(connectionMock);
 
-    verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM name"));
+    verify(databaseDialectMock, times(1)).createPreparedStatement(ArgumentMatchers.any(),ArgumentMatchers.eq("SELECT * FROM name"));
   }  
 }

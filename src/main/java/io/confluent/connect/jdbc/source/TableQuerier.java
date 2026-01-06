@@ -203,7 +203,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     if (query != null) {
       return SqlParser.redactSensitiveData(query);
     }
-    return "redacted";
+    return null;
   }
 
   @Override

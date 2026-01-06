@@ -19,7 +19,9 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIsolationMode;
+import io.confluent.connect.jdbc.util.SqlParser;
 import org.apache.kafka.common.config.Config;
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.ConfigValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -345,11 +347,11 @@ public class JdbcSourceConnectorValidation {
     }
 
     if (hasQuery
-        && !validateSelectStatement(query, JdbcSourceConnectorConfig.QUERY_CONFIG)) {
+        && !validateSqlQueryStatement(query, JdbcSourceConnectorConfig.QUERY_CONFIG)) {
       return false;
     }
     if (hasQueryMasked
-        && !validateSelectStatement(
+        && !validateSqlQueryStatement(
             queryMaskedValue, JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG)) {
       return false;
     }
@@ -488,13 +490,25 @@ public class JdbcSourceConnectorValidation {
   }
 
   /** Validate that provided query strings start with a SELECT statement. */
-  private boolean validateSelectStatement(String statement, String configKey) {
+  private boolean validateSqlQueryStatement(String statement, String configKey) {
     String trimmedStatement = statement.trim();
     if (!SELECT_STATEMENT_PATTERN.matcher(trimmedStatement).find()) {
       String msg =
           String.format(
               "Only SELECT statements are supported for '%s'. Please provide "
               + "a statement that starts with SELECT.",
+              configKey);
+      addConfigError(configKey, msg);
+      log.error(msg);
+      return false;
+    }
+    try {
+      SqlParser.redactSensitiveData(trimmedStatement);
+    } catch (ConfigException e) {
+      String msg =
+          String.format(
+              "Invalid SQL syntax for '%s'. Please provide a syntactically correct "
+                  + "SELECT statement.",
               configKey);
       addConfigError(configKey, msg);
       log.error(msg);

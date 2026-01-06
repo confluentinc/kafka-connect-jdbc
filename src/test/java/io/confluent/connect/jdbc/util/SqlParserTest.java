@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.util;
 
+import org.apache.kafka.common.config.ConfigException;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -174,7 +175,7 @@ public class SqlParserTest {
   @Test
   public void testInvalidSql() {
     String sql = "This is not a SQL query";
-    assertEquals("<redacted>", SqlParser.redactSensitiveData(sql));
+    assertThrows(ConfigException.class, () -> SqlParser.redactSensitiveData(sql));
   }
 
   @Test

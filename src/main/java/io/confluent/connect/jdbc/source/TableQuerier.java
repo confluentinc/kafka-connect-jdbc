@@ -197,6 +197,9 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
    * @return the query with sensitive data redacted, or null if no query is available
    */
   public String getParsedQueryString() {
+    if (!shouldRedactSensitiveLogs) {
+      return null;
+    }
     if (loggedQueryString != null) {
       return SqlParser.redactSensitiveData(loggedQueryString);
     }

@@ -118,7 +118,7 @@ public class LogUtil {
 
   public static String maybeRedact(boolean shouldRedactSensitiveLogs, String msg) {
     if (shouldRedactSensitiveLogs) {
-      return SqlParser.redactSensitiveData(msg);
+      return REDACTED_VALUE;
     }
     return String.valueOf(msg);
   }

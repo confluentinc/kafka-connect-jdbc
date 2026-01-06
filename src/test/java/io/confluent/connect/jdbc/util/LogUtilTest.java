@@ -135,7 +135,7 @@ public class LogUtilTest {
   public void testSensitiveLogWithTrimEnabled() {
     String sensitiveMessage = "SELECT * FROM users WHERE password='secret123'";
     String result = LogUtil.maybeRedact(true, sensitiveMessage);
-    String expected = "SELECT * FROM users WHERE password = '********'";
+    String expected = REDACTED;
 
     assertEquals(expected, result);
   }

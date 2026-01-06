@@ -31,7 +31,6 @@ import net.sf.jsqlparser.expression.TimeValue;
 import net.sf.jsqlparser.expression.TimestampValue;
 import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.statement.Statement;
-import net.sf.jsqlparser.statement.select.PlainSelect;
 import net.sf.jsqlparser.util.deparser.ExpressionDeParser;
 import net.sf.jsqlparser.util.deparser.SelectDeParser;
 import net.sf.jsqlparser.util.deparser.StatementDeParser;
@@ -63,17 +62,6 @@ public class SqlParser {
     } catch (JSQLParserException e) {
       System.out.println(e.getMessage());
       return REDACTED_VALUE;
-    }
-  }
-
-  private static class OracleAwareSelectDeParser extends SelectDeParser {
-    public OracleAwareSelectDeParser(ExpressionDeParser expressionDeParser, StringBuilder buffer) {
-      super(expressionDeParser, buffer);
-    }
-
-    @Override
-    public void visit(PlainSelect plainSelect) {
-      super.visit(plainSelect);
     }
   }
 

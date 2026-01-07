@@ -20,8 +20,8 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIsolationMode;
 import io.confluent.connect.jdbc.util.SqlParser;
+import net.sf.jsqlparser.JSQLParserException;
 import org.apache.kafka.common.config.Config;
-import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.ConfigValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -504,12 +504,12 @@ public class JdbcSourceConnectorValidation {
     }
     try {
       SqlParser.validateSqlSyntax(trimmedStatement);
-    } catch (ConfigException e) {
+    } catch (JSQLParserException e) {
       String msg =
           String.format(
               "Invalid SQL syntax for '%s'. Please provide a syntactically correct "
                   + "SELECT statement.", configKey);
-      addConfigError(configKey,msg);
+      addConfigError(configKey, msg);
       log.error(
           "SQL syntax validation failed for '{}': {}",
           configKey,

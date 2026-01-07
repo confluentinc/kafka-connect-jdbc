@@ -15,7 +15,7 @@
 
 package io.confluent.connect.jdbc.util;
 
-import org.apache.kafka.common.config.ConfigException;
+import net.sf.jsqlparser.JSQLParserException;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -23,24 +23,24 @@ import static org.junit.Assert.*;
 public class SqlParserTest {
 
   @Test
-  public void testValidateSqlSyntaxNullNoThrow() {
+  public void testValidateSqlSyntaxNullNoThrow() throws JSQLParserException {
     SqlParser.validateSqlSyntax(null);
   }
 
   @Test
-  public void testValidateSqlSyntaxEmptyNoThrow() {
+  public void testValidateSqlSyntaxEmptyNoThrow() throws JSQLParserException {
     SqlParser.validateSqlSyntax("");
     SqlParser.validateSqlSyntax("   ");
   }
 
   @Test
-  public void testValidateSqlSyntaxValidSelectNoThrow() {
+  public void testValidateSqlSyntaxValidSelectNoThrow() throws JSQLParserException {
     SqlParser.validateSqlSyntax("SELECT 1");
     SqlParser.validateSqlSyntax("SELECT * FROM users WHERE id = 1");
   }
 
-  @Test(expected = ConfigException.class)
-  public void testValidateSqlSyntaxInvalidSqlThrowsConfigException() {
+  @Test(expected = JSQLParserException.class)
+  public void testValidateSqlSyntaxInvalidSqlThrowsJSQLParserException() throws JSQLParserException {
     // Intentionally malformed SQL (common user mistake)
     SqlParser.validateSqlSyntax("SELECT FROM");
   }

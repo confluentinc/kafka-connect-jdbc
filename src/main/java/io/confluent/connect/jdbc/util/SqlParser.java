@@ -34,7 +34,6 @@ import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.util.deparser.ExpressionDeParser;
 import net.sf.jsqlparser.util.deparser.SelectDeParser;
 import net.sf.jsqlparser.util.deparser.StatementDeParser;
-import org.apache.kafka.common.config.ConfigException;
 
 public class SqlParser {
 
@@ -145,14 +144,10 @@ public class SqlParser {
     }
   }
 
-  public static void validateSqlSyntax(String sql) {
+  public static void validateSqlSyntax(String sql) throws JSQLParserException {
     if (sql == null || sql.trim().isEmpty()) {
       return;
     }
-    try {
-      CCJSqlParserUtil.parse(sql);
-    } catch (JSQLParserException e) {
-      throw new ConfigException("Invalid SQL syntax: unable to parse provided statement.");
-    }
+    CCJSqlParserUtil.parse(sql);
   }
 }

@@ -28,8 +28,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Matchers;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -164,13 +163,27 @@ public class TableQuerierTest {
         query,
         null,
         "",
-        false
+        true
     );
 
     String result = querier.getParsedQueryString();
     String expected = "SELECT * FROM users WHERE id = 0 AND name = " + REDACTED_STRING;
 
     assertEquals(expected, result);
+  }
 
+  @Test
+  public void testGetParsedQueryStringReturnsNullWhenRedactionDisabled() {
+    String query = "SELECT * FROM users WHERE id = 12345 AND name = 'John Doe'";
+    BulkTableQuerier querier = new BulkTableQuerier(
+        databaseDialectMock,
+        QueryMode.QUERY,
+        query,
+        null,
+        "",
+        false
+    );
+
+    assertNull(querier.getParsedQueryString());
   }
 }

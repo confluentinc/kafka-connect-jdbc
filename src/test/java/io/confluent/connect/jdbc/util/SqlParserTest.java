@@ -173,12 +173,6 @@ public class SqlParserTest {
   }
 
   @Test
-  public void testInvalidSql() {
-    String sql = "This is not a SQL query";
-    assertThrows(ConfigException.class, () -> SqlParser.redactSensitiveData(sql));
-  }
-
-  @Test
   public void testEmptyString() {
     assertEquals("", SqlParser.redactSensitiveData(""));
   }

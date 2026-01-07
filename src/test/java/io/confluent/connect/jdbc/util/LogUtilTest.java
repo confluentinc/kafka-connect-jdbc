@@ -135,16 +135,14 @@ public class LogUtilTest {
   public void testSensitiveLogWithTrimEnabled() {
     String sensitiveMessage = "SELECT * FROM users WHERE password='secret123'";
     String result = LogUtil.maybeRedact(true, sensitiveMessage);
-    String expected = REDACTED;
-
-    assertEquals(expected, result);
+    assertEquals(REDACTED, result);
   }
 
   @Test
-  public void testSensitiveLogWithTrimEnabledNonSql() {
-    String sensitiveMessage = "This is not SQL";
-    String result = LogUtil.maybeRedact(true, sensitiveMessage);
-    assertEquals(REDACTED, result);
+  public void testSensitiveLogWithTrimDisabled() {
+    String message = "SELECT * FROM users WHERE id=1";
+    String result = LogUtil.maybeRedact(false, message);
+    assertEquals(message, result);
   }
 
   @Test

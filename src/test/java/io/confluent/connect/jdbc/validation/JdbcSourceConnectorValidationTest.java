@@ -1005,9 +1005,8 @@ public class JdbcSourceConnectorValidationTest {
 
     validate();
 
-    assertErrors(3);
+    assertErrors(2);
     assertErrors(QUERY_CONFIG, 1);
-    assertErrors(QUERY_MASKED_CONFIG, 1);
     assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
     assertErrorMatches(
         QUERY_CONFIG,

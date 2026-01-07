@@ -26,11 +26,7 @@ import org.apache.kafka.common.config.ConfigValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.regex.Pattern;
 
 /**
@@ -330,7 +326,6 @@ public class JdbcSourceConnectorValidation {
               + "table.exclude.list when using query mode"
               + " or 'query' when using table filtering mode.";
       addConfigError(JdbcSourceConnectorConfig.QUERY_CONFIG, msg);
-      addConfigError(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG, msg);
       if (!config.getTableWhitelistSet().isEmpty()) {
         addConfigError(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, msg);
       }
@@ -346,17 +341,8 @@ public class JdbcSourceConnectorValidation {
       return false;
     }
 
-    if (hasQuery
-        && !validateSqlQueryStatement(query, JdbcSourceConnectorConfig.QUERY_CONFIG)) {
-      return false;
-    }
-    if (hasQueryMasked
-        && !validateSqlQueryStatement(
-            queryMaskedValue, JdbcSourceConnectorConfig.QUERY_CONFIG)) {
-      return false;
-    }
-
-    return true;
+   return !config.getQuery().isPresent()
+           || validateSqlQueryStatement(config.getQuery().get());
   }
 
   /**
@@ -490,15 +476,13 @@ public class JdbcSourceConnectorValidation {
   }
 
   /** Validate that provided query strings start with a SELECT statement. */
-  private boolean validateSqlQueryStatement(String statement, String configKey) {
+  private boolean validateSqlQueryStatement(String statement) {
     String trimmedStatement = statement.trim();
     if (!SELECT_STATEMENT_PATTERN.matcher(trimmedStatement).find()) {
       String msg =
-          String.format(
-              "Only SELECT statements are supported for '%s'. Please provide "
-              + "a statement that starts with SELECT.",
-              configKey);
-      addConfigError(configKey, msg);
+       "Only SELECT statements are supported for 'query' config value. "
+       + "Please provide a statement that starts with SELECT.";
+      addConfigError("query", msg);
       log.error(msg);
       return false;
     }
@@ -506,13 +490,11 @@ public class JdbcSourceConnectorValidation {
       SqlParser.validateSqlSyntax(trimmedStatement);
     } catch (JSQLParserException e) {
       String msg =
-          String.format(
-              "Invalid SQL syntax for '%s'. Please provide a syntactically correct "
-                  + "SELECT statement.", configKey);
-      addConfigError(configKey, msg);
+       "Invalid SQL syntax for 'query' config value. Please provide "
+           + "a syntactically correct SELECT statement.";
+      addConfigError("query", msg);
       log.error(
-          "SQL syntax validation failed for '{}': {}",
-          configKey,
+          "SQL syntax validation failed for 'query' config: {}",
           msg
       );
       return false;

@@ -190,12 +190,12 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   }
 
   /**
-   * Returns the query string with sensitive data redacted using SQL parsing.
-   * This method preserves the query structure while masking literal values,
-   * which is useful for troubleshooting during exceptions.
+   * Returns the query string with sensitive data redacted using SQL parsing. This method preserves
+   * the query structure while masking literal values, which is useful for troubleshooting during
+   * exceptions.
    *
-   * @return the query with sensitive data redacted, or
-   * null if query.masked is not configured or no query is available
+   * @return the query with sensitive data redacted, or null if query.masked is not configured or no
+   *     query is available
    */
   public String getParsedQueryString() {
     if (!shouldRedactSensitiveLogs) {

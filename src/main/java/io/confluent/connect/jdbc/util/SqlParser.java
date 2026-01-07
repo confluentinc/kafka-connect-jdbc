@@ -61,8 +61,7 @@ public class SqlParser {
       statement.accept(statementDeParser);
       return buffer.toString();
     } catch (JSQLParserException e) {
-      throw new ConfigException("Invalid SQL syntax: unable to parse "
-                                + "provided statement.");
+      return REDACTED_VALUE;
     }
   }
 
@@ -143,6 +142,17 @@ public class SqlParser {
         getBuffer().append(" ");
         getBuffer().append(intervalExpression.getIntervalType());
       }
+    }
+  }
+
+  public static void validateSqlSyntax(String sql) {
+    if (sql == null || sql.trim().isEmpty()) {
+      return;
+    }
+    try {
+      CCJSqlParserUtil.parse(sql);
+    } catch (JSQLParserException e) {
+      throw new ConfigException("Invalid SQL syntax: unable to parse provided statement.");
     }
   }
 }

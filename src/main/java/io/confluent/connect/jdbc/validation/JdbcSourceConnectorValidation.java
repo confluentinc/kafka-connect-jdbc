@@ -503,15 +503,15 @@ public class JdbcSourceConnectorValidation {
       return false;
     }
     try {
-      SqlParser.redactSensitiveData(trimmedStatement);
+      SqlParser.validateSqlSyntax(trimmedStatement);
     } catch (ConfigException e) {
       String msg =
           String.format(
               "Invalid SQL syntax for '%s'. Please provide a syntactically correct "
                   + "SELECT statement.",
               configKey);
-      addConfigError(configKey, msg);
-      log.error(msg);
+      addConfigError(configKey,msg);
+      log.error("SQL syntax validation failed for '{}': {}", configKey, msg);
       return false;
     }
     return true;

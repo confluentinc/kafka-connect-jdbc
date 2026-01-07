@@ -19,9 +19,6 @@ import java.sql.SQLNonTransientException;
 import java.time.Duration;
 import java.util.PriorityQueue;
 
-import static java.lang.Boolean.FALSE;
-import static java.lang.Boolean.TRUE;
-
 public class TableQuerierProcessor {
 
   private static final Logger log = LoggerFactory.getLogger(TableQuerierProcessor.class);
@@ -139,13 +136,10 @@ public class TableQuerierProcessor {
     SQLException redactedException = shouldRedactSensitiveLogs
               ? LogUtil.redactSensitiveData(sqle) : sqle;
     log.error(
-        "Non-transient SQL exception while running query for table: {}. Query: {} "
-            + "Query parseable: {}, sqlState: {}, vendorCode: {}.",
+        "Non-transient SQL exception while running query for table: {}. Query: {}"
+            + ", sqlState: {}, vendorCode: {}.",
         querier,
-        querier.getParsedQueryString(),
-        querier.getParsedQueryString() != null
-            ? querier.getParsedQueryString().equals("redacted") ? FALSE : TRUE
-            : null,
+        querier.getRedactedQueryString(),
         sqle.getSQLState(),
         sqle.getErrorCode(),
         redactedException);
@@ -159,14 +153,11 @@ public class TableQuerierProcessor {
     SQLException redactedException = shouldRedactSensitiveLogs
               ? LogUtil.redactSensitiveData(sqle) : sqle;
     log.error(
-        "SQL exception while running query for table: {}. Query: {}. "
-            + "Query parseable: {}, sqlState: {}, vendorCode: {}."
+        "SQL exception while running query for table: {}. Query: {},"
+            + " sqlState: {}, vendorCode: {}."
             + " Attempting retry {} of {} attempts.",
         querier,
-        querier.getParsedQueryString(),
-        querier.getParsedQueryString() != null
-            ? querier.getParsedQueryString().equals("redacted") ? FALSE : TRUE
-            : null,
+        querier.getRedactedQueryString(),
         sqle.getSQLState(),
         sqle.getErrorCode(),
         querier.getAttemptedRetryCount() + 1,
@@ -184,13 +175,9 @@ public class TableQuerierProcessor {
 
   private void handleInterruptedException(TableQuerier querier, InterruptedException e) {
     log.error(
-        "Interrupted while running query for table: {}. Query: {} "
-            + "Query parseable: {}",
+        "Interrupted while running query for table: {}. Query: {}",
         querier,
-        querier.getParsedQueryString(),
-        querier.getParsedQueryString() != null
-            ? querier.getParsedQueryString().equals("redacted") ? FALSE : TRUE
-            : null,
+        querier.getRedactedQueryString(),
         e);
     resetAndRequeueHead(querier, true);
     // Interruption should not be treated as a failure, just stop processing
@@ -200,16 +187,10 @@ public class TableQuerierProcessor {
   private void handleThrowable(RecordDestination<SourceRecord> destination, 
                                TableQuerier querier, Throwable t) {
     log.error(
-        "Failed to run query for table: {}. Query: {}"
-            + "Query parseable: {}",
+        "Failed to run query for table: {}. Query: {}",
         querier,
-        querier.getParsedQueryString(),
-        querier.getParsedQueryString() != null
-            ? querier.getParsedQueryString().equals("redacted") ? FALSE : TRUE
-            : null,
+        querier.getRedactedQueryString(),
         t);
-    log.error(
-        "Failed to run query for table: {}. Query: {}", querier, querier.getParsedQueryString(), t);
     resetAndRequeueHead(querier, true);
     // This task has failed, report failure to destination
     destination.failWith(new ConnectException("Error while processing table querier", t));

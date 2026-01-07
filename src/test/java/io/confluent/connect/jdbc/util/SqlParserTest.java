@@ -26,6 +26,29 @@ public class SqlParserTest {
   private static final String REDACTED_NUMBER = "0";
 
   @Test
+  public void testValidateSqlSyntaxNullNoThrow() {
+    SqlParser.validateSqlSyntax(null);
+  }
+
+  @Test
+  public void testValidateSqlSyntaxEmptyNoThrow() {
+    SqlParser.validateSqlSyntax("");
+    SqlParser.validateSqlSyntax("   ");
+  }
+
+  @Test
+  public void testValidateSqlSyntaxValidSelectNoThrow() {
+    SqlParser.validateSqlSyntax("SELECT 1");
+    SqlParser.validateSqlSyntax("SELECT * FROM users WHERE id = 1");
+  }
+
+  @Test(expected = ConfigException.class)
+  public void testValidateSqlSyntaxInvalidSqlThrowsConfigException() {
+    // Intentionally malformed SQL (common user mistake)
+    SqlParser.validateSqlSyntax("SELECT FROM");
+  }
+
+  @Test
   public void testRedactStringLiteral() {
     String sql = "SELECT * FROM users WHERE name = 'John Doe'";
     String expected = "SELECT * FROM users WHERE name = " + REDACTED_STRING;

@@ -847,10 +847,10 @@ public class JdbcSourceConnectorValidationTest {
     validate();
 
     assertErrors(1);
-    assertErrors(QUERY_MASKED_CONFIG, 1);
+    assertErrors(QUERY_CONFIG, 1);
     assertErrorMatches(
-        QUERY_MASKED_CONFIG,
-        "Only SELECT statements are supported for 'query.masked'"
+        QUERY_CONFIG,
+        "Only SELECT statements are supported for 'query'"
     );
   }
 
@@ -869,19 +869,104 @@ public class JdbcSourceConnectorValidationTest {
     );
   }
 
-  @Test
+   @Test
   public void validate_withInvalidQueryMaskedSyntax_setsError() {
+    // Test 1: Missing columns after SELECT
     props.put(MODE_CONFIG, MODE_BULK);
-    props.put(QUERY_MASKED_CONFIG, "SELECT FROM");
-
+    props.put(QUERY_MASKED_CONFIG, "SELECT FROM users");
     validate();
-
     assertErrors(1);
-    assertErrors(QUERY_MASKED_CONFIG, 1);
-    assertErrorMatches(
-        QUERY_MASKED_CONFIG,
-        ".*Invalid SQL syntax for 'query\\.masked'.*"
-    );
+    assertErrors(QUERY_CONFIG, 1);
+    assertErrorMatches(QUERY_CONFIG, ".*Invalid SQL syntax for 'query'.*");
+
+    // Test 2: Missing table name after FROM
+    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM");
+    validate();
+    assertErrors(1);
+    assertErrors(QUERY_CONFIG, 1);
+    assertErrorMatches(QUERY_CONFIG, ".*Invalid SQL syntax for 'query'.*");
+
+    // Test 3: Incomplete WHERE clause
+    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM users WHERE");
+    validate();
+    assertErrors(1);
+    assertErrors(QUERY_CONFIG, 1);
+    assertErrorMatches(QUERY_CONFIG, ".*Invalid SQL syntax for 'query'.*");
+
+    // Test 4: Incomplete condition in WHERE clause
+    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM users WHERE id =");
+    validate();
+    assertErrors(1);
+    assertErrors(QUERY_CONFIG, 1);
+    assertErrorMatches(QUERY_CONFIG, ".*Invalid SQL syntax for 'query'.*");
+
+    // Test 5: Incomplete ORDER BY clause
+    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM users ORDER BY");
+    validate();
+    assertErrors(1);
+    assertErrors(QUERY_CONFIG, 1);
+    assertErrorMatches(QUERY_CONFIG, ".*Invalid SQL syntax for 'query'.*");
+
+    // Test 6: Trailing comma in column list
+    props.put(QUERY_MASKED_CONFIG, "SELECT id, name, FROM users");
+    validate();
+    assertErrors(1);
+    assertErrors(QUERY_CONFIG, 1);
+    assertErrorMatches(QUERY_CONFIG, ".*Invalid SQL syntax for 'query'.*");
+
+    // Test 7: Missing table name in JOIN
+    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM users JOIN ON id = order_id");
+    validate();
+    assertErrors(1);
+    assertErrors(QUERY_CONFIG, 1);
+    assertErrorMatches(QUERY_CONFIG, ".*Invalid SQL syntax for 'query'.*");
+
+    // Test 8: Unbalanced parentheses
+    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM users WHERE (id = 1");
+    validate();
+    assertErrors(1);
+    assertErrors(QUERY_CONFIG, 1);
+    assertErrorMatches(QUERY_CONFIG, ".*Invalid SQL syntax for 'query'.*");
+
+    // Test 9: Missing GROUP BY column
+    props.put(QUERY_MASKED_CONFIG, "SELECT COUNT(*) FROM users GROUP BY");
+    validate();
+    assertErrors(1);
+    assertErrors(QUERY_CONFIG, 1);
+    assertErrorMatches(QUERY_CONFIG, ".*Invalid SQL syntax for 'query'.*");
+
+    // Test 10: Basic SELECT * query
+    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM users");
+    validate();
+    assertNoErrors();
+
+    // Test 11: SELECT with specific columns
+    props.put(QUERY_MASKED_CONFIG, "SELECT id, name, email FROM users");
+    validate();
+    assertNoErrors();
+
+
+    // Test 12: SELECT with WHERE clause
+    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM users WHERE active = true");
+    validate();
+    assertNoErrors();
+
+    // Test 13: SELECT with ORDER BY clause
+    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM orders ORDER BY created_at DESC");
+    validate();
+    assertNoErrors();
+
+    // Test 14: SELECT with JOIN and aliases
+    props.put(QUERY_MASKED_CONFIG,
+        "SELECT u.id, u.name, o.total FROM users u INNER JOIN orders o ON u.id = o.user_id");
+    validate();
+    assertNoErrors();
+
+    // Test 15: SELECT with subquery
+    props.put(QUERY_MASKED_CONFIG,
+        "SELECT * FROM users WHERE id IN (SELECT user_id FROM orders WHERE total > 100);");
+    validate();
+    assertNoErrors();
   }
 
   @Test

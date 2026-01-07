@@ -166,7 +166,7 @@ public class TableQuerierTest {
         true
     );
 
-    String result = querier.getParsedQueryString();
+    String result = querier.getRedactedQueryString();
     String expected = "SELECT * FROM users WHERE id = 0 AND name = " + REDACTED_STRING;
 
     assertEquals(expected, result);
@@ -184,6 +184,6 @@ public class TableQuerierTest {
         false
     );
 
-    assertNull(querier.getParsedQueryString());
+    assertNull(querier.getRedactedQueryString());
   }
 }

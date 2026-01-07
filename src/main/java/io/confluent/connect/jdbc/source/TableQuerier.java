@@ -197,7 +197,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
    * @return the query with sensitive data redacted, or null if query.masked is not configured or no
    *     query is available
    */
-  public String getParsedQueryString() {
+  public String getRedactedQueryString() {
     if (!shouldRedactSensitiveLogs) {
       return null;
     }

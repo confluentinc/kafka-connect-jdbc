@@ -497,8 +497,8 @@ public class JdbcSourceConnectorValidation {
           String.format(
               "Only SELECT statements are supported for '%s'. Please provide "
               + "a statement that starts with SELECT.",
-              configKey);
-      addConfigError(configKey, msg);
+              JdbcSourceConnectorConfig.QUERY_CONFIG);
+      addConfigError(JdbcSourceConnectorConfig.QUERY_CONFIG, msg);
       log.error(msg);
       return false;
     }
@@ -509,9 +509,13 @@ public class JdbcSourceConnectorValidation {
           String.format(
               "Invalid SQL syntax for '%s'. Please provide a syntactically correct "
                   + "SELECT statement.",
-              configKey);
-      addConfigError(configKey,msg);
-      log.error("SQL syntax validation failed for '{}': {}", configKey, msg);
+              JdbcSourceConnectorConfig.QUERY_CONFIG);
+      addConfigError(JdbcSourceConnectorConfig.QUERY_CONFIG,msg);
+      log.error(
+          "SQL syntax validation failed for '{}': {}",
+          JdbcSourceConnectorConfig.QUERY_CONFIG,
+          msg
+      );
       return false;
     }
     return true;

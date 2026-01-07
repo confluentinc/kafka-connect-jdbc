@@ -26,7 +26,11 @@ import org.apache.kafka.common.config.ConfigValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -341,7 +345,7 @@ public class JdbcSourceConnectorValidation {
       return false;
     }
 
-   return !config.getQuery().isPresent()
+    return !config.getQuery().isPresent()
            || validateSqlQueryStatement(config.getQuery().get());
   }
 
@@ -480,8 +484,8 @@ public class JdbcSourceConnectorValidation {
     String trimmedStatement = statement.trim();
     if (!SELECT_STATEMENT_PATTERN.matcher(trimmedStatement).find()) {
       String msg =
-       "Only SELECT statements are supported for 'query' config value. "
-       + "Please provide a statement that starts with SELECT.";
+          "Only SELECT statements are supported for query config value. "
+          + "Please provide a statement that starts with SELECT.";
       addConfigError("query", msg);
       log.error(msg);
       return false;
@@ -490,11 +494,11 @@ public class JdbcSourceConnectorValidation {
       SqlParser.validateSqlSyntax(trimmedStatement);
     } catch (JSQLParserException e) {
       String msg =
-       "Invalid SQL syntax for 'query' config value. Please provide "
+          "Invalid SQL syntax for query config value. Please provide "
            + "a syntactically correct SELECT statement.";
       addConfigError("query", msg);
       log.error(
-          "SQL syntax validation failed for 'query' config: {}",
+          "SQL syntax validation failed for query config: {}",
           msg
       );
       return false;

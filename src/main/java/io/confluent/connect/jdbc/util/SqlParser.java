@@ -38,8 +38,8 @@ import org.apache.kafka.common.config.ConfigException;
 
 public class SqlParser {
 
-  private static final String REDACTED_STRING = "'********'";
-  private static final String REDACTED_NUMBER = "0";
+  public static final String REDACTED_STRING = "'********'";
+  public static final String REDACTED_NUMBER = "0";
   private static final String REDACTED_VALUE = "<redacted>";
 
   public static String redactSensitiveData(String sql) {

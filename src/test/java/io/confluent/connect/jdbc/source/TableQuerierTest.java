@@ -19,6 +19,7 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.source.TableQuerier.QueryMode;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
+import io.confluent.connect.jdbc.util.SqlParser;
 import io.confluent.connect.jdbc.util.TableId;
 
 import java.sql.Connection;
@@ -40,8 +41,6 @@ public class TableQuerierTest {
   private static final String SUFFIX = "/* SUFFIX */";   
   private static final Long TIMESTAMP_DELAY = 0l;
   private static final String QUERY = "SELECT * FROM name";
-  private static final String REDACTED_STRING = "'********'";
-  private static final String REDACTED_NUMBER = "0";
 
   DatabaseDialect databaseDialectMock;
 
@@ -167,7 +166,7 @@ public class TableQuerierTest {
     );
 
     String result = querier.getRedactedQueryString();
-    String expected = "SELECT * FROM users WHERE id = 0 AND name = " + REDACTED_STRING;
+    String expected = "SELECT * FROM users WHERE id = 0 AND name = " + SqlParser.REDACTED_STRING;
 
     assertEquals(expected, result);
   }

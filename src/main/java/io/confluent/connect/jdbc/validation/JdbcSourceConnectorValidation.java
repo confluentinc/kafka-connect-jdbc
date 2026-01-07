@@ -352,7 +352,7 @@ public class JdbcSourceConnectorValidation {
     }
     if (hasQueryMasked
         && !validateSqlQueryStatement(
-            queryMaskedValue, JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG)) {
+            queryMaskedValue, JdbcSourceConnectorConfig.QUERY_CONFIG)) {
       return false;
     }
 
@@ -497,8 +497,8 @@ public class JdbcSourceConnectorValidation {
           String.format(
               "Only SELECT statements are supported for '%s'. Please provide "
               + "a statement that starts with SELECT.",
-              JdbcSourceConnectorConfig.QUERY_CONFIG);
-      addConfigError(JdbcSourceConnectorConfig.QUERY_CONFIG, msg);
+              configKey);
+      addConfigError(configKey, msg);
       log.error(msg);
       return false;
     }
@@ -508,12 +508,11 @@ public class JdbcSourceConnectorValidation {
       String msg =
           String.format(
               "Invalid SQL syntax for '%s'. Please provide a syntactically correct "
-                  + "SELECT statement.",
-              JdbcSourceConnectorConfig.QUERY_CONFIG);
-      addConfigError(JdbcSourceConnectorConfig.QUERY_CONFIG,msg);
+                  + "SELECT statement.", configKey);
+      addConfigError(configKey,msg);
       log.error(
           "SQL syntax validation failed for '{}': {}",
-          JdbcSourceConnectorConfig.QUERY_CONFIG,
+          configKey,
           msg
       );
       return false;

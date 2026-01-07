@@ -28,6 +28,8 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Matchers;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -39,6 +41,8 @@ public class TableQuerierTest {
   private static final String SUFFIX = "/* SUFFIX */";   
   private static final Long TIMESTAMP_DELAY = 0l;
   private static final String QUERY = "SELECT * FROM name";
+  private static final String REDACTED_STRING = "'********'";
+  private static final String REDACTED_NUMBER = "0";
 
   DatabaseDialect databaseDialectMock;
 
@@ -149,5 +153,24 @@ public class TableQuerierTest {
     querier.createPreparedStatement(connectionMock);
 
     verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM name"));
-  }  
+  }
+
+  @Test
+  public void testGetParsedQueryStringRedactsSensitiveValuesWhenRedactionDisabled() {
+    String query = "SELECT * FROM users WHERE id = 12345 AND name = 'John Doe'";
+    BulkTableQuerier querier = new BulkTableQuerier(
+        databaseDialectMock,
+        QueryMode.QUERY,
+        query,
+        null,
+        "",
+        false
+    );
+
+    String result = querier.getParsedQueryString();
+    String expected = "SELECT * FROM users WHERE id = 0 AND name = " + REDACTED_STRING;
+
+    assertEquals(expected, result);
+
+  }
 }

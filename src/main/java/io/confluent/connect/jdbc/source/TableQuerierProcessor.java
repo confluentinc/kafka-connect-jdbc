@@ -135,8 +135,14 @@ public class TableQuerierProcessor {
                                            TableQuerier querier, SQLNonTransientException sqle) {
     SQLException redactedException = shouldRedactSensitiveLogs
               ? LogUtil.redactSensitiveData(sqle) : sqle;
-    log.error("Non-transient SQL exception while running query for table: {}",
-        querier, redactedException);
+    log.error(
+        "Non-transient SQL exception while running query for table: {}. Query: {}"
+            + ", sqlState: {}, vendorCode: {}.",
+        querier,
+        querier.getRedactedQueryString(),
+        sqle.getSQLState(),
+        sqle.getErrorCode(),
+        redactedException);
     resetAndRequeueHead(querier, true);
     // This task has failed, report failure to destination
     destination.failWith(new ConnectException(redactedException));
@@ -147,8 +153,13 @@ public class TableQuerierProcessor {
     SQLException redactedException = shouldRedactSensitiveLogs
               ? LogUtil.redactSensitiveData(sqle) : sqle;
     log.error(
-        "SQL exception while running query for table: {}." + " Attempting retry {} of {} attempts.",
+        "SQL exception while running query for table: {}. Query: {},"
+            + " sqlState: {}, vendorCode: {}."
+            + " Attempting retry {} of {} attempts.",
         querier,
+        querier.getRedactedQueryString(),
+        sqle.getSQLState(),
+        sqle.getErrorCode(),
         querier.getAttemptedRetryCount() + 1,
         maxRetriesPerQuerier,
         redactedException);
@@ -163,6 +174,11 @@ public class TableQuerierProcessor {
   }
 
   private void handleInterruptedException(TableQuerier querier, InterruptedException e) {
+    log.error(
+        "Interrupted while running query for table: {}. Query: {}",
+        querier,
+        querier.getRedactedQueryString(),
+        e);
     resetAndRequeueHead(querier, true);
     // Interruption should not be treated as a failure, just stop processing
     Thread.currentThread().interrupt();
@@ -170,7 +186,11 @@ public class TableQuerierProcessor {
 
   private void handleThrowable(RecordDestination<SourceRecord> destination, 
                                TableQuerier querier, Throwable t) {
-    log.error("Failed to run query for table: {}", querier, t);
+    log.error(
+        "Failed to run query for table: {}. Query: {}",
+        querier,
+        querier.getRedactedQueryString(),
+        t);
     resetAndRequeueHead(querier, true);
     // This task has failed, report failure to destination
     destination.failWith(new ConnectException("Error while processing table querier", t));

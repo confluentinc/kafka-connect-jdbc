@@ -25,7 +25,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TimeZone;
 import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
@@ -40,6 +39,7 @@ import io.confluent.connect.jdbc.util.PrimaryKeyModeRecommender;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.StringUtils;
 import io.confluent.connect.jdbc.util.TableType;
+import io.confluent.connect.jdbc.util.DateCalendarSystem;
 import io.confluent.connect.jdbc.util.TimeZoneValidator;
 import org.apache.kafka.common.Configurable;
 import org.apache.kafka.common.config.AbstractConfig;
@@ -119,6 +119,21 @@ public class JdbcSinkConfig extends AbstractConfig {
       JdbcSourceConnectorConfig.CONNECTION_BACKOFF_DISPLAY;
   public static final long CONNECTION_BACKOFF_DEFAULT =
       JdbcSourceConnectorConfig.CONNECTION_BACKOFF_DEFAULT;
+
+  public static final String DATE_CALENDAR_SYSTEM_CONFIG = "date.calendar.system";
+  private static final String DATE_CALENDAR_SYSTEM_DOC =
+      "Conversion of time since epoch value in kafka topic record to DATE or TIMESTAMP "
+      + "depends on the calendar used to interpret it. If LEGACY is used, it will use the hybrid "
+      + "Gregorian/Julian calendar which was the default in the older java date time APIs. "
+      + "However, if 'PROLEPTIC_GREGORIAN' is used, then it will use the proleptic gregorian "
+      + "calendar which extends the Gregorian rules backward indefinitely and does not apply the "
+      + "1582 cutover. This matches the behavior of modern Java date/time APIs (java.time). This "
+      + "is defaulted to LEGACY for backward compatibility. The ideal setting for this depends on "
+      + "whether the values in source topic were populated using old or new java date time APIs. "
+      + "Changing this configuration on an existing connector might lead to a drift in the "
+      + "DATE/TIMESTAMP column's values populated in the sink database.";
+  public static final String DATE_CALENDAR_SYSTEM_DEFAULT = DateCalendarSystem.LEGACY.toString();
+  private static final String DATE_CALENDAR_SYSTEM_DISPLAY = "Date Calendar System";
 
   public static final String TABLE_NAME_FORMAT = "table.name.format";
   private static final String TABLE_NAME_FORMAT_DEFAULT = "${topic}";
@@ -579,6 +594,18 @@ public class JdbcSinkConfig extends AbstractConfig {
             TIMESTAMP_PRECISION_MODE_CONFIG_DISPLAY,
             TIMESTAMP_PRECISION_MODE_RECOMMENDER
         )
+        .define(
+            DATE_CALENDAR_SYSTEM_CONFIG,
+            ConfigDef.Type.STRING,
+            DATE_CALENDAR_SYSTEM_DEFAULT,
+            ConfigDef.ValidString.in(DateCalendarSystem.getValidConfigValues()),
+            ConfigDef.Importance.LOW,
+            DATE_CALENDAR_SYSTEM_DOC,
+            DATAMAPPING_GROUP,
+            9,
+            ConfigDef.Width.MEDIUM,
+            DATE_CALENDAR_SYSTEM_DISPLAY
+        )
         // DDL
         .define(
             AUTO_CREATE,
@@ -675,13 +702,14 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final Set<String> fieldsWhitelist;
   public final Set<String> timestampFieldsList;
   public final String dialectName;
-  public final TimeZone timeZone;
-  public final TimeZone dateTimeZone;
+  public final ZoneId zoneId;
+  public final ZoneId dateTimeZoneId;
   public final TimestampPrecisionMode timestampPrecisionMode;
   public final EnumSet<TableType> tableTypes;
   public final boolean useHoldlockInMerge;
 
   public final boolean trimSensitiveLogsEnabled;
+  public final DateCalendarSystem dateCalendarSystem;
 
   public JdbcSinkConfig(Map<?, ?> props) {
     super(CONFIG_DEF, props);
@@ -706,15 +734,16 @@ public class JdbcSinkConfig extends AbstractConfig {
     dialectName = getString(DIALECT_NAME_CONFIG);
     fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
     String dbTimeZone = getString(DB_TIMEZONE_CONFIG);
-    timeZone = TimeZone.getTimeZone(ZoneId.of(dbTimeZone));
+    zoneId = ZoneId.of(dbTimeZone);
     DateTimezone dateTimezoneConfig =
         DateTimezone.valueOf(getString(DATE_TIMEZONE_CONFIG).toUpperCase());
-    dateTimeZone = dateTimezoneConfig.equals(DateTimezone.UTC)
-        ? TimeZone.getTimeZone(ZoneOffset.UTC) : timeZone;
+    dateTimeZoneId = dateTimezoneConfig.equals(DateTimezone.UTC)
+        ? ZoneOffset.UTC : zoneId;
     timestampPrecisionMode =
         TimestampPrecisionMode.valueOf(getString(TIMESTAMP_PRECISION_MODE_CONFIG).toUpperCase());
     useHoldlockInMerge = getBoolean(MSSQL_USE_MERGE_HOLDLOCK);
     trimSensitiveLogsEnabled = getBoolean(TRIM_SENSITIVE_LOG_ENABLED);
+    dateCalendarSystem = DateCalendarSystem.fromConfigValue(getString(DATE_CALENDAR_SYSTEM_CONFIG));
     if (deleteEnabled && pkMode != PrimaryKeyMode.RECORD_KEY) {
       throw new ConfigException(
           "Primary key mode must be 'record_key' when delete support is enabled");

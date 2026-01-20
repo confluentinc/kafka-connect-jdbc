@@ -7,13 +7,13 @@
 <suppressions>
 
     <suppress checks="CyclomaticComplexity"
-              files="(BufferedRecords|DataConverter|DatabaseDialect|FieldsMetadata|HanaDialect|JdbcSourceTask|MySqlDatabaseDialect|OracleDatabaseDialect|PostgreSqlDatabaseDialect|PreparedStatementBinder|SqlServerDatabaseDialect|SqliteDatabaseDialect|TimestampIncrementingTableQuerier|GenericDatabaseDialect|SybaseDatabaseDialect|VerticaDatabaseDialect|SapHanaDatabaseDialect|TableId|ColumnDefinition|TableMonitorThread|JdbcSinkTask).java"/>
+              files="(BufferedRecords|DataConverter|DatabaseDialect|FieldsMetadata|HanaDialect|JdbcSourceTask|MySqlDatabaseDialect|OracleDatabaseDialect|PostgreSqlDatabaseDialect|PreparedStatementBinder|SqlServerDatabaseDialect|SqliteDatabaseDialect|TimestampIncrementingTableQuerier|GenericDatabaseDialect|SybaseDatabaseDialect|VerticaDatabaseDialect|SapHanaDatabaseDialect|TableId|ColumnDefinition|TableMonitorThread|JdbcSinkTask|RecordQueue|MySqlConnectionWrapper|TableQuerierProcessor|JdbcSourceConnector|JdbcSourceConnectorValidation).java"/>
 
     <suppress checks="ClassDataAbstractionCoupling"
-              files="(DbDialect|JdbcSourceTask|GenericDatabaseDialect).java"/>
+              files="(DbDialect|JdbcSourceTask|GenericDatabaseDialect|RecordQueue).java"/>
 
     <suppress checks="NPathComplexity"
-              files="(BufferedRecords|DataConverter|FieldsMetadata|JdbcSourceTask|GenericDatabaseDialect).java"/>
+              files="(BufferedRecords|DataConverter|FieldsMetadata|JdbcSourceTask|GenericDatabaseDialect|JdbcSourceConnector|JdbcSourceConnectorValidation).java"/>
 
     <suppress checks="JavaNCSS"
               files="(DataConverter|FieldsMetadata|JdbcSourceTask|GenericDatabaseDialect).java"/>
@@ -23,4 +23,13 @@
 
     <suppress checks="ParameterNumber"
               files="(ColumnDefinition|GenericDatabaseDialect|SqlServerDatabaseDialect|PostgreSqlDatabaseDialect|TimestampIncrementingTableQuerier).java"/>
+
+    <suppress checks="LineLength"
+              files="MySqlConnectionWrapper.java"/>
+
+    <suppress checks="OperatorWrap"
+              files="MySqlConnectionWrapper.java"/>
+
+    <suppress checks="BooleanExpressionComplexity"
+              files="JdbcSourceConnectorValidation.java"/>
 </suppressions>

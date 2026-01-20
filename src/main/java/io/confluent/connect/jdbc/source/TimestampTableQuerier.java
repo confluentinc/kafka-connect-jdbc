@@ -15,8 +15,9 @@
 
 package io.confluent.connect.jdbc.source;
 
-import java.util.TimeZone;
+import java.time.ZoneId;
 
+import io.confluent.connect.jdbc.util.LogUtil;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -54,6 +55,7 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
   private PendingRecord nextRecord;
   private Timestamp latestCommittableTimestamp;
 
+  @SuppressWarnings("checkstyle:ParameterNumber")
   public TimestampTableQuerier(
       DatabaseDialect dialect,
       QueryMode mode,
@@ -62,9 +64,10 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
       List<String> timestampColumnNames,
       Map<String, Object> offsetMap,
       Long timestampDelay,
-      TimeZone timeZone,
+      ZoneId zoneId,
       String suffix,
-      TimestampGranularity timestampGranularity
+      TimestampGranularity timestampGranularity,
+      Boolean isQueryMasked
   ) {
     super(
         dialect,
@@ -75,9 +78,10 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
         null,
         offsetMap,
         timestampDelay,
-        timeZone,
+        zoneId,
         suffix,
-        timestampGranularity
+        timestampGranularity,
+        isQueryMasked
     );
 
     this.latestCommittableTimestamp = this.offset.getTimestampOffset();
@@ -177,10 +181,16 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
   @Override
   public String toString() {
     return "TimestampTableQuerier{"
-        + "table=" + tableId
-        + ", query='" + query + '\''
-        + ", topicPrefix='" + topicPrefix + '\''
-        + ", timestampColumns=" + timestampColumnNames
+        + "table="
+        + tableId
+        + ", query='"
+        + LogUtil.maybeRedact(shouldRedactSensitiveLogs, query)
+        + '\''
+        + ", topicPrefix='"
+        + topicPrefix
+        + '\''
+        + ", timestampColumns="
+        + timestampColumnNames
         + '}';
   }
 

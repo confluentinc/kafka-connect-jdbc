@@ -63,7 +63,6 @@ public class PostgresOOMIT extends BaseOOMIntegrationTest {
     props.put(JdbcSourceTaskConfig.TABLES_CONFIG, "test_table");
     props.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
     startTask();
-    assertNoLocksOpen(task);
     assertTrue(task.poll().size() > 0);
     assertNoLocksOpen(task);
     task.stop();

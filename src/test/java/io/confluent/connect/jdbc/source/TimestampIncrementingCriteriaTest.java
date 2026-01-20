@@ -15,9 +15,9 @@
 
 package io.confluent.connect.jdbc.source;
 
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Collections;
-import java.util.TimeZone;
 
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 import org.apache.kafka.connect.data.Decimal;
@@ -64,14 +64,14 @@ public class TimestampIncrementingCriteriaTest {
   private TimestampIncrementingCriteria criteriaIncTs;
   private Schema schema;
   private Struct record;
-  private TimeZone utcTimeZone = TimeZone.getTimeZone(ZoneOffset.UTC);
+  private ZoneId utcZoneId = ZoneOffset.UTC;
 
   @Before
   public void beforeEach() {
-    criteria = new TimestampIncrementingCriteria(null, null, utcTimeZone);
-    criteriaInc = new TimestampIncrementingCriteria(INCREMENTING_COLUMN, null, utcTimeZone);
-    criteriaTs = new TimestampIncrementingCriteria(null, TS_COLUMNS, utcTimeZone);
-    criteriaIncTs = new TimestampIncrementingCriteria(INCREMENTING_COLUMN, TS_COLUMNS, utcTimeZone);
+    criteria = new TimestampIncrementingCriteria(null, null, utcZoneId);
+    criteriaInc = new TimestampIncrementingCriteria(INCREMENTING_COLUMN, null, utcZoneId);
+    criteriaTs = new TimestampIncrementingCriteria(null, TS_COLUMNS, utcZoneId);
+    criteriaIncTs = new TimestampIncrementingCriteria(INCREMENTING_COLUMN, TS_COLUMNS, utcZoneId);
     identifierQuoting = null;
     rules = null;
     builder = null;
@@ -248,8 +248,8 @@ public class TimestampIncrementingCriteriaTest {
               .field(TS2_COLUMN.name(), SchemaBuilder.STRING_SCHEMA)
               .build();
     record = new Struct(schema)
-              .put(TS1_COLUMN.name(), DateTimeUtils.toIsoDateMicrosTimeString(TS1, utcTimeZone))
-              .put(TS2_COLUMN.name(), DateTimeUtils.toIsoDateMicrosTimeString(TS2, utcTimeZone));
+              .put(TS1_COLUMN.name(), DateTimeUtils.toIsoDateMicrosTimeString(TS1, utcZoneId))
+              .put(TS2_COLUMN.name(), DateTimeUtils.toIsoDateMicrosTimeString(TS2, utcZoneId));
     assertExtractedOffset(-1, TS1, schema, record,
      TimestampGranularity.MICROS_ISO_DATETIME_STRING);
   }
@@ -261,8 +261,8 @@ public class TimestampIncrementingCriteriaTest {
         .field(TS2_COLUMN.name(), SchemaBuilder.STRING_SCHEMA)
         .build();
     record = new Struct(schema)
-        .put(TS1_COLUMN.name(), DateTimeUtils.toIsoDateTimeString(TS1, utcTimeZone))
-        .put(TS2_COLUMN.name(), DateTimeUtils.toIsoDateTimeString(TS2, utcTimeZone));
+        .put(TS1_COLUMN.name(), DateTimeUtils.toIsoDateTimeString(TS1, utcZoneId))
+        .put(TS2_COLUMN.name(), DateTimeUtils.toIsoDateTimeString(TS2, utcZoneId));
     assertExtractedOffset(-1, TS1, schema, record,
         TimestampGranularity.NANOS_ISO_DATETIME_STRING);
   }
@@ -353,8 +353,8 @@ public class TimestampIncrementingCriteriaTest {
               .field(TS2_COLUMN.name(), SchemaBuilder.STRING_SCHEMA)
               .build();
     record = new Struct(schema)
-              .put(TS1_COLUMN.name(), DateTimeUtils.toIsoDateMicrosTimeString(TS1, utcTimeZone))
-              .put(TS2_COLUMN.name(), DateTimeUtils.toIsoDateMicrosTimeString(TS2, utcTimeZone));
+              .put(TS1_COLUMN.name(), DateTimeUtils.toIsoDateMicrosTimeString(TS1, utcZoneId))
+              .put(TS2_COLUMN.name(), DateTimeUtils.toIsoDateMicrosTimeString(TS2, utcZoneId));
     assertExtractedOffset(-1, TS1, schema, record,
      TimestampGranularity.MICROS_STRING);
   }
@@ -366,8 +366,8 @@ public class TimestampIncrementingCriteriaTest {
         .field(TS2_COLUMN.name(), SchemaBuilder.STRING_SCHEMA)
         .build();
     record = new Struct(schema)
-        .put(TS1_COLUMN.name(), DateTimeUtils.toIsoDateTimeString(TS1, utcTimeZone))
-        .put(TS2_COLUMN.name(), DateTimeUtils.toIsoDateTimeString(TS2, utcTimeZone));
+        .put(TS1_COLUMN.name(), DateTimeUtils.toIsoDateTimeString(TS1, utcZoneId))
+        .put(TS2_COLUMN.name(), DateTimeUtils.toIsoDateTimeString(TS2, utcZoneId));
     assertExtractedOffset(-1, TS1, schema, record,
         TimestampGranularity.NANOS_STRING);
   }
@@ -428,7 +428,7 @@ public class TimestampIncrementingCriteriaTest {
     criteriaTs = new TimestampIncrementingCriteria(
         null,
         Collections.singletonList(new ColumnId(TABLE_ID, invalidColumnName)),
-        utcTimeZone
+        utcZoneId
     );
 
     schema = SchemaBuilder.struct()
@@ -449,7 +449,7 @@ public class TimestampIncrementingCriteriaTest {
     criteriaTs = new TimestampIncrementingCriteria(
         null,
         Collections.singletonList(new ColumnId(TABLE_ID, lowerCaseColumnName)),
-        utcTimeZone
+        utcZoneId
     );
 
     schema = SchemaBuilder.struct()

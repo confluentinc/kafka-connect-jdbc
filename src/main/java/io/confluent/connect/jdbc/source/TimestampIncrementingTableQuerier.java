@@ -30,7 +30,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.TimeZone;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 
@@ -42,6 +42,7 @@ import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
+import io.confluent.connect.jdbc.util.LogUtil;
 
 /**
  * <p>
@@ -75,22 +76,29 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   private final List<ColumnId> timestampColumns;
   private String incrementingColumnName;
   private final long timestampDelay;
-  private final TimeZone timeZone;
+  private final ZoneId zoneId;
+  private final Boolean shoudlRedactSensitiveLogs;
 
-  public TimestampIncrementingTableQuerier(DatabaseDialect dialect, QueryMode mode, String name,
-                                           String topicPrefix,
-                                           List<String> timestampColumnNames,
-                                           String incrementingColumnName,
-                                           Map<String, Object> offsetMap, Long timestampDelay,
-                                           TimeZone timeZone, String suffix,
-                                           TimestampGranularity timestampGranularity) {
-    super(dialect, mode, name, topicPrefix, suffix);
+  public TimestampIncrementingTableQuerier(
+      DatabaseDialect dialect,
+      QueryMode mode,
+      String name,
+      String topicPrefix,
+      List<String> timestampColumnNames,
+      String incrementingColumnName,
+      Map<String, Object> offsetMap,
+      Long timestampDelay,
+      ZoneId zoneId,
+      String suffix,
+      TimestampGranularity timestampGranularity,
+      Boolean isQueryMasked) {
+    super(dialect, mode, name, topicPrefix, suffix, isQueryMasked);
     this.incrementingColumnName = incrementingColumnName;
     this.timestampColumnNames = timestampColumnNames != null
         ? timestampColumnNames : Collections.emptyList();
     this.timestampDelay = timestampDelay;
     this.committedOffset = this.offset = TimestampIncrementingOffset.fromMap(offsetMap);
-
+    this.shoudlRedactSensitiveLogs = isQueryMasked;
     this.timestampColumns = new ArrayList<>();
     for (String timestampColumn : this.timestampColumnNames) {
       if (timestampColumn != null && !timestampColumn.isEmpty()) {
@@ -113,11 +121,11 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
         throw new ConnectException("Unexpected query mode: " + mode);
     }
 
-    this.timeZone = timeZone;
+    this.zoneId = zoneId;
     this.timestampGranularity = timestampGranularity;
     log.trace(
-        "TimestampIncrementingTableQuerier initialized with timeZone: {}, timestampGranularity: {}",
-        timeZone,
+        "TimestampIncrementingTableQuerier initialized with zoneId: {}, timestampGranularity: {}",
+        zoneId,
         timestampGranularity);
   }
 
@@ -157,7 +165,10 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
     
     String queryString = builder.toString();
     recordQuery(queryString);
-    log.trace("{} prepared SQL query: {}", this, queryString);
+    log.trace(
+        "{} prepared SQL query: {}",
+        this,
+        LogUtil.maybeRedact(shouldRedactSensitiveLogs, queryString));
     stmt = dialect.createPreparedStatement(db, queryString);
   }
 
@@ -171,7 +182,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
       ResultSetMetaData metadata = resultSet.getMetaData();
       dialect.validateSpecificColumnTypes(metadata, timestampColumns);
       schemaMapping = SchemaMapping.create(schemaName, metadata, dialect);
-      log.info("Current Result is null. Executing query.");
+      log.debug("Current Result is null. Executing query.");
     } else {
       log.trace("Current ResultSet {} isn't null. Continuing to seek.", resultSet.hashCode());
     }
@@ -216,7 +227,9 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   @Override
   protected ResultSet executeQuery() throws SQLException {
     criteria.setQueryParameters(stmt, this);
-    log.trace("Statement to execute: {}", stmt.toString());
+    log.trace(
+        "Statement to execute: {}",
+        LogUtil.maybeRedact(shouldRedactSensitiveLogs, stmt.toString()));
     return stmt.executeQuery();
   }
 
@@ -257,7 +270,7 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   public Timestamp endTimestampValue()  throws SQLException {
     final long currentDbTime = dialect.currentTimeOnDB(
         stmt.getConnection(),
-        DateTimeUtils.getTimeZoneCalendar(timeZone)
+        DateTimeUtils.getZoneIdCalendar(zoneId)
     ).getTime();
     return new Timestamp(currentDbTime - timestampDelay);
   }
@@ -270,13 +283,19 @@ public class TimestampIncrementingTableQuerier extends TableQuerier implements C
   @Override
   public String toString() {
     return "TimestampIncrementingTableQuerier{"
-           + "table=" + tableId
-           + ", query='" + query + '\''
-           + ", topicPrefix='" + topicPrefix + '\''
-           + ", incrementingColumn='" + (incrementingColumnName != null
-                                        ? incrementingColumnName
-                                        : "") + '\''
-           + ", timestampColumns=" + timestampColumnNames
-           + '}';
+        + "table="
+        + tableId
+        + ", query='"
+        + LogUtil.maybeRedact(shouldRedactSensitiveLogs, query)
+        + '\''
+        + ", topicPrefix='"
+        + topicPrefix
+        + '\''
+        + ", incrementingColumn='"
+        + (incrementingColumnName != null ? incrementingColumnName : "")
+        + '\''
+        + ", timestampColumns="
+        + timestampColumnNames
+        + '}';
   }
 }

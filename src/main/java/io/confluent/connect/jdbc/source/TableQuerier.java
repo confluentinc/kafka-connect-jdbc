@@ -15,6 +15,8 @@
 
 package io.confluent.connect.jdbc.source;
 
+import io.confluent.connect.jdbc.util.LogUtil;
+import io.confluent.connect.jdbc.util.SqlParser;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,6 +58,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected ResultSet resultSet;
   protected SchemaMapping schemaMapping;
   private String loggedQueryString;
+  protected final Boolean shouldRedactSensitiveLogs;
 
   private int attemptedRetries;
 
@@ -64,7 +67,8 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
       QueryMode mode,
       String nameOrQuery,
       String topicPrefix,
-      String suffix
+      String suffix,
+      Boolean isQueryMasked
   ) {
     this.dialect = dialect;
     this.mode = mode;
@@ -74,6 +78,7 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
     this.lastUpdate = 0;
     this.suffix = suffix;
     this.attemptedRetries = 0;
+    this.shouldRedactSensitiveLogs = isQueryMasked;
   }
 
   public long getLastUpdate() {
@@ -179,9 +184,30 @@ abstract class TableQuerier implements Comparable<TableQuerier> {
   protected void recordQuery(String query) {
     if (query != null && !query.equals(loggedQueryString)) {
       // For usability, log the statement at INFO level only when it changes
-      log.info("Begin using SQL query: {}", query);
+      log.info("Begin using SQL query: {}", LogUtil.maybeRedact(shouldRedactSensitiveLogs, query));
       loggedQueryString = query;
     }
+  }
+
+  /**
+   * Returns the query string with sensitive data redacted using SQL parsing. This method preserves
+   * the query structure while masking literal values, which is useful for troubleshooting during
+   * exceptions.
+   *
+   * @return the query with sensitive data redacted, or null if query.masked is not configured or no
+   *     query is available
+   */
+  public String getRedactedQueryString() {
+    if (!shouldRedactSensitiveLogs) {
+      return null;
+    }
+    if (loggedQueryString != null) {
+      return SqlParser.redactSensitiveData(loggedQueryString);
+    }
+    if (query != null) {
+      return SqlParser.redactSensitiveData(query);
+    }
+    return null;
   }
 
   @Override

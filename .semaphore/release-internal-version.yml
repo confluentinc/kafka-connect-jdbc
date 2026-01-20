@@ -1,0 +1,25 @@
+version: v1.0
+name: Release Internal Version
+agent:
+  machine:
+    type: s1-prod-ubuntu24-04-amd64-1
+
+global_job_config:
+  prologue:
+    commands:
+      - checkout
+      - sem-version java 8
+      - . cache-maven restore
+
+blocks:
+  - name: Release
+    dependencies: []
+    run:
+      when: "branch =~ '[0-9]+\\.[0-9]+\\.x'"
+    task:
+      jobs:
+        - name: Release
+          commands:
+            - . assume-iam-role arn:aws:iam::519856050701:role/semaphore-oidc
+            - chmod +x scripts/release-internal-version.sh
+            - ./scripts/release-internal-version.sh

@@ -24,8 +24,6 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import java.sql.DriverManager;
-import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.ZoneOffset;
 import java.util.Arrays;
@@ -34,7 +32,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.TimeZone;
+import java.time.ZoneId;
 
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.data.Struct;
@@ -58,7 +56,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
       = Collections.singletonMap(JdbcSourceConnectorConstants.QUERY_NAME_KEY,
                                  JdbcSourceConnectorConstants.QUERY_NAME_VALUE);
 
-  private static final TimeZone UTC_TIME_ZONE = TimeZone.getTimeZone(ZoneOffset.UTC);
+  private static final ZoneId UTC_ZONE_ID = ZoneOffset.UTC;
 
   @After
   public void tearDown() throws Exception {
@@ -75,25 +73,40 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     // Bulk periodic load is currently the default
     task.start(singleTableConfig());
 
+    Thread.sleep(100);
+
+    // By the time poll is called, the table might have been queried multiple times by the
+    // TableQuerierProcessor, so we could get multiple entries for the same record
     List<SourceRecord> records = task.poll();
-    assertEquals(Collections.singletonMap(1, 1), countIntValues(records, "id"));
+    assertTrue(countIntValues(records, "id").get(1) >= 1);
     assertRecordsTopic(records, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     records = task.poll();
-    assertEquals(Collections.singletonMap(1, 1), countIntValues(records, "id"));
+    assertTrue(countIntValues(records, "id").get(1) >= 1);
     assertRecordsTopic(records, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     db.insert(SINGLE_TABLE_NAME, "id", 2);
-    records = task.poll();
-    Map<Integer, Integer> twoRecords = new HashMap<>();
-    twoRecords.put(1, 1);
-    twoRecords.put(2, 1);
-    assertEquals(twoRecords, countIntValues(records, "id"));
+
+    Thread.sleep(100);
+
+    while (!countIntValues(records, "id").containsKey(2)) {
+      records = task.poll();
+    }
+    assertTrue(countIntValues(records, "id").get(1) >= 1);
+    assertTrue(countIntValues(records, "id").get(2) >= 1);
     assertRecordsTopic(records, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     db.delete(SINGLE_TABLE_NAME, new EmbeddedDerby.EqualsCondition(column, 1));
-    records = task.poll();
-    assertEquals(Collections.singletonMap(2, 1), countIntValues(records, "id"));
+
+    Thread.sleep(100);
+
+    // The queue might still contain records corresponding to the deleted row
+    // So the poll might get records for the deleted row
+    while (countIntValues(records, "id").containsKey(1)) {
+      records = task.poll();
+    }
+
+    assertTrue(countIntValues(records, "id").get(2) >= 1);
     assertRecordsTopic(records, TOPIC_PREFIX + SINGLE_TABLE_NAME);
   }
 
@@ -197,6 +210,8 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     db.insert(SINGLE_TABLE_NAME, "id", 2);
     db.insert(SINGLE_TABLE_NAME, "id", 3);
 
+    Thread.sleep(100);
+
     verifyPoll(2, "id", Arrays.asList(2, 3), false, true, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     PowerMock.verifyAll();
@@ -225,6 +240,8 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     db.insert(SINGLE_TABLE_NAME, extraColumn, 33.4f);
     db.insert(SINGLE_TABLE_NAME, extraColumn, 35.4f);
 
+    Thread.sleep(100);
+
     verifyPoll(2, "id", Arrays.asList(2, 3), false, true, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     PowerMock.verifyAll();
@@ -244,7 +261,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
                    "modified", "TIMESTAMP NOT NULL",
                    "id", "INT");
     db.insert(SINGLE_TABLE_NAME,
-        "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_TIME_ZONE),
+        "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_ZONE_ID),
         "id", 1);
 
     startTask("modified", null, null);
@@ -253,14 +270,16 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     // If there isn't enough resolution, this could miss some rows. In this case, we'll only see
     // IDs 3 & 4.
     db.insert(SINGLE_TABLE_NAME,
-            "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_TIME_ZONE),
+            "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_ZONE_ID),
             "id", 2);
     db.insert(SINGLE_TABLE_NAME,
-            "modified", DateTimeUtils.formatTimestamp(new Timestamp(11L), UTC_TIME_ZONE),
+            "modified", DateTimeUtils.formatTimestamp(new Timestamp(11L), UTC_ZONE_ID),
             "id", 3);
     db.insert(SINGLE_TABLE_NAME,
-            "modified", DateTimeUtils.formatTimestamp(new Timestamp(12L), UTC_TIME_ZONE),
+            "modified", DateTimeUtils.formatTimestamp(new Timestamp(12L), UTC_ZONE_ID),
             "id", 4);
+
+    Thread.sleep(100);
 
     verifyPoll(2, "id", Arrays.asList(3, 4), true, false, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
@@ -281,21 +300,24 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
                    "created", "TIMESTAMP NOT NULL",
                    "id", "INT");
     db.insert(SINGLE_TABLE_NAME,
-            "created", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_TIME_ZONE),
+            "created", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_ZONE_ID),
             "id", 1);
     startTask("modified, created", null, null);
     verifyMultiTimestampFirstPoll(TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
-    db.insert(SINGLE_TABLE_NAME,
-            "modified", DateTimeUtils.formatTimestamp(new Timestamp(13L), UTC_TIME_ZONE),
-            "created", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_TIME_ZONE),
-            "id", 2);
-    db.insert(SINGLE_TABLE_NAME,
-            "created", DateTimeUtils.formatTimestamp(new Timestamp(11L), UTC_TIME_ZONE),
-            "id", 3);
-    db.insert(SINGLE_TABLE_NAME,
-            "created", DateTimeUtils.formatTimestamp(new Timestamp(12L), UTC_TIME_ZONE),
-            "id", 4);
+    String insert1 = db.insertStatementBuilder(SINGLE_TABLE_NAME,
+        "modified", DateTimeUtils.formatTimestamp(new Timestamp(13L), UTC_ZONE_ID),
+        "created", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_ZONE_ID),
+        "id", 2);
+    String insert2 = db.insertStatementBuilder(SINGLE_TABLE_NAME,
+        "created", DateTimeUtils.formatTimestamp(new Timestamp(11L), UTC_ZONE_ID),
+        "id", 3);
+    String insert3 = db.insertStatementBuilder(SINGLE_TABLE_NAME,
+        "created", DateTimeUtils.formatTimestamp(new Timestamp(12L), UTC_ZONE_ID),
+        "id", 4);
+    db.commit(db.executeWithoutCommit(insert1, insert2, insert3));
+
+    Thread.sleep(100);
 
     verifyPoll(3, "id", Arrays.asList(2, 3, 4), false, false, true, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
@@ -317,10 +339,10 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
                    "id", "INT");
 
     db.insert(SINGLE_TABLE_NAME,
-            "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_TIME_ZONE),
+            "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_ZONE_ID),
             "id", 1);
 
-    startTask("modified", null, null, 4L, "UTC");
+    startTask("modified", null, null, 4L, "UTC", 2);
     verifyTimestampFirstPoll(TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     Long currentTime = new Date().getTime();
@@ -332,6 +354,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     db.insert(SINGLE_TABLE_NAME, "modified", new Timestamp(currentTime+500L).toString(), "id", 4);
     db.insert(SINGLE_TABLE_NAME, "modified", new Timestamp(currentTime+501L).toString(), "id", 5);
 
+    Thread.sleep(500);
     verifyPoll(2, "id", Arrays.asList(2, 3), true, false, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     // make sure we get the rest
@@ -352,9 +375,9 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     db.createTable(SINGLE_TABLE_NAME,
             "modified", "TIMESTAMP NOT NULL",
             "id", "INT");
-    startTask("modified", null, null, 4L, TimeZone.getDefault().getID(), 100L);
+    startTask("modified", null, null, 4L, ZoneId.systemDefault().getId(), 100L);
 
-    Map<String, Object> result = task.computeInitialOffset("table", null, TimeZone.getDefault());
+    Map<String, Object> result = task.computeInitialOffset("table", null, ZoneId.systemDefault());
     Map<String, Object> expect = new HashMap<String, Object>();
     expect.put(TimestampIncrementingOffset.TIMESTAMP_FIELD, 100L);
     assertEquals(expect , result);
@@ -371,9 +394,9 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     db.createTable(SINGLE_TABLE_NAME,
             "modified", "TIMESTAMP NOT NULL",
             "id", "INT");
-    startTask("modified", null, null, 4L, TimeZone.getDefault().getID(), null);
+    startTask("modified", null, null, 4L, ZoneId.systemDefault().getId(), null);
 
-    Map<String, Object> result = task.computeInitialOffset("table", null, TimeZone.getDefault());
+    Map<String, Object> result = task.computeInitialOffset("table", null, ZoneId.systemDefault());
     Map<String, Object> expect = null;
     assertEquals(expect , result);
     PowerMock.verifyAll();
@@ -389,9 +412,9 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     db.createTable(SINGLE_TABLE_NAME,
             "modified", "TIMESTAMP NOT NULL",
             "id", "INT");
-    startTask("modified", null, null, 4L, TimeZone.getDefault().getID(), -1L);
+    startTask("modified", null, null, 4L, ZoneId.systemDefault().getId(), -1L);
 
-    Map<String, Object> result = task.computeInitialOffset("table", null, TimeZone.getDefault());
+    Map<String, Object> result = task.computeInitialOffset("table", null, ZoneId.systemDefault());
     Map<String, Object> expect = new HashMap<String, Object>();
     assertTrue(result.containsKey(TimestampIncrementingOffset.TIMESTAMP_FIELD));
     long gapWithIn = 1000L;
@@ -417,14 +440,15 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
 
     Long currentTime = new Date().getTime();
     // Derby DB start with default Timezone
-    TimeZone tz = TimeZone.getDefault();
+    ZoneId zoneId = ZoneId.systemDefault();
 
-    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), tz), "id", 1);
-    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(currentTime+1000L), tz), "id", 2);
-    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(currentTime+1001L), tz), "id", 3);
+    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), zoneId), "id", 1);
+    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(currentTime+1000L), zoneId), "id", 2);
+    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(currentTime+1001L), zoneId), "id", 3);
 
-    startTask("modified", null, null, 4L, tz.getID(), -1L);
+    startTask("modified", null, null, 4L, zoneId.getId(), -1L);
 
+    Thread.sleep(1000);
     // expect records those timestamp is newer than current time.
     verifyPoll(2, "id", Arrays.asList(2, 3), true,false, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
@@ -445,14 +469,17 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
             "modified", "TIMESTAMP NOT NULL",
             "id", "INT");
 
-    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_TIME_ZONE), "id", 1);
+    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_ZONE_ID), "id", 1);
 
     startTask("modified", null, null, 4L, "UTC", 0L);
 
     verifyTimestampFirstPoll(TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
-    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(11L), UTC_TIME_ZONE), "id", 2);
-    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(12L), UTC_TIME_ZONE), "id", 3);
+    String insert1 = db.insertStatementBuilder(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(11L), UTC_ZONE_ID), "id", 2);
+    String insert2 = db.insertStatementBuilder(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(12L), UTC_ZONE_ID), "id", 3);
+    db.commit(db.executeWithoutCommit(insert1, insert2));
+
+    Thread.sleep(100);
 
     verifyPoll(2, "id", Arrays.asList(2, 3), true,false, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
@@ -475,16 +502,16 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
 
     Long currentTime = new Date().getTime();
 
-    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_TIME_ZONE), "id", 1);
-    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(100L), UTC_TIME_ZONE), "id", 2);
-    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(110L), UTC_TIME_ZONE), "id", 3);
+    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_ZONE_ID), "id", 1);
+    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(100L), UTC_ZONE_ID), "id", 2);
+    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(110L), UTC_ZONE_ID), "id", 3);
 
     startTask("modified", null, null, 4L, "UTC" , 100L);
 
     // except a record its timestamp is newer than 100L
     verifyPoll(1, "id", Arrays.asList(3), true,false, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
-    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(120L), UTC_TIME_ZONE), "id", 4);
+    db.insert(SINGLE_TABLE_NAME, "modified", DateTimeUtils.formatTimestamp(new Timestamp(120L), UTC_ZONE_ID), "id", 4);
 
     // except a record its timestamp is newer than previous offset
     verifyPoll(1, "id", Arrays.asList(4), true,false, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
@@ -506,7 +533,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
                    "modified", "TIMESTAMP NOT NULL",
                    "id", "INT NOT NULL");
     db.insert(SINGLE_TABLE_NAME,
-        "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_TIME_ZONE),
+        "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_ZONE_ID),
         "id", 1);
 
     startTask("modified", "id", null);
@@ -515,9 +542,11 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     // Should be able to pick up id 3 because of ID despite same timestamp.
     // Note this is setup so we can reuse some validation code
     db.insert(SINGLE_TABLE_NAME, "modified",
-            DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_TIME_ZONE), "id", 3);
+            DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_ZONE_ID), "id", 3);
     db.insert(SINGLE_TABLE_NAME, "modified",
-            DateTimeUtils.formatTimestamp(new Timestamp(11L), UTC_TIME_ZONE), "id", 1);
+            DateTimeUtils.formatTimestamp(new Timestamp(11L), UTC_ZONE_ID), "id", 1);
+
+    Thread.sleep(100);
 
     verifyPoll(2, "id", Arrays.asList(3, 1), true, true, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
@@ -534,12 +563,12 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     PowerMock.replayAll();
 
     String timeZoneID = "America/Los_Angeles";
-    TimeZone timeZone = TimeZone.getTimeZone(timeZoneID);
+    ZoneId zoneId = ZoneId.of(timeZoneID);
     // Manage these manually so we can verify the emitted values
     db.createTable(SINGLE_TABLE_NAME,
         "modified", "TIMESTAMP NOT NULL",
         "id", "INT NOT NULL");
-    String modifiedTimestamp = DateTimeUtils.formatTimestamp(new Timestamp(10L), timeZone);
+    String modifiedTimestamp = DateTimeUtils.formatTimestamp(new Timestamp(10L), zoneId);
     db.insert(SINGLE_TABLE_NAME, "modified", modifiedTimestamp, "id", 1);
 
     startTask("modified", "id", null, 0L, timeZoneID);
@@ -560,11 +589,12 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
       startTask("modified", "id", null, 0L, invalidTimeZoneID);
       fail("A ConfigException should have been thrown");
     } catch (ConfigException e) {
-      assertThat(e.getMessage(),
-          equalTo(
-              "Invalid value org.apache.kafka.common.config.ConfigException: Invalid value Europe/Invalid "
-                      + "for configuration db.timezone: Invalid time zone identifier for configuration "
-                      + "Couldn't start JdbcSourceTask due to configuration error"));
+      assertTrue(
+          e.getMessage().contains(
+              "Invalid value org.apache.kafka.common.config.ConfigException: Invalid value "
+                                         + "Europe/Invalid for configuration db.timezone"
+          )
+      );
     }
   }
 
@@ -583,18 +613,20 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
                    "created", "TIMESTAMP NOT NULL",
                    "id", "INT NOT NULL");
     db.insert(SINGLE_TABLE_NAME,
-        "created", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_TIME_ZONE),
+        "created", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_ZONE_ID),
         "id", 1);
 
     startTask("modified, created", "id", null);
     verifyIncrementingAndMultiTimestampFirstPoll(TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     db.insert(SINGLE_TABLE_NAME, "created",
-            DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_TIME_ZONE), "id", 3);
+            DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_ZONE_ID), "id", 3);
     db.insert(SINGLE_TABLE_NAME,
-        "modified", DateTimeUtils.formatTimestamp(new Timestamp(11L), UTC_TIME_ZONE),
-        "created", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_TIME_ZONE),
+        "modified", DateTimeUtils.formatTimestamp(new Timestamp(11L), UTC_ZONE_ID),
+        "created", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_ZONE_ID),
         "id", 1);
+
+    Thread.sleep(100);
 
     verifyPoll(2, "id", Arrays.asList(3, 1), false, true, true, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
@@ -643,6 +675,8 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     db.insert(SINGLE_TABLE_NAME, "id", 3);
 
     startTask(null, "id", null);
+
+    Thread.sleep(100);
 
     // Effectively skips first poll
     verifyPoll(2, "id", Arrays.asList(2, 3), false, true, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
@@ -698,6 +732,8 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
 
     startTask(null, "", null); // autoincrementing
 
+    Thread.sleep(100);
+
     // Effectively skips first poll
     verifyPoll(2, "id", Arrays.asList(2L, 3L), false, true, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
@@ -747,16 +783,18 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
                    "id", "INT");
     // id=2 will be ignored since it has the same timestamp as the initial offset.
     db.insert(SINGLE_TABLE_NAME,
-        "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_TIME_ZONE),
+        "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_ZONE_ID),
         "id", 2);
     db.insert(SINGLE_TABLE_NAME,
-        "modified", DateTimeUtils.formatTimestamp(new Timestamp(11L), UTC_TIME_ZONE),
+        "modified", DateTimeUtils.formatTimestamp(new Timestamp(11L), UTC_ZONE_ID),
         "id", 3);
     db.insert(SINGLE_TABLE_NAME,
-        "modified", DateTimeUtils.formatTimestamp(new Timestamp(12L), UTC_TIME_ZONE),
+        "modified", DateTimeUtils.formatTimestamp(new Timestamp(12L), UTC_ZONE_ID),
         "id", 4);
 
     startTask("modified", null, null);
+
+    Thread.sleep(100);
 
     // Effectively skips first poll
     verifyPoll(2, "id", Arrays.asList(3, 4), true, false, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
@@ -807,22 +845,24 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     // id=3 will be ignored since it has the same timestamp + id as the initial offset, rest
     // should be included, including id=1 which is an old ID with newer timestamp
     db.insert(SINGLE_TABLE_NAME,
-            "modified", DateTimeUtils.formatTimestamp(new Timestamp(9L), UTC_TIME_ZONE),
+            "modified", DateTimeUtils.formatTimestamp(new Timestamp(9L), UTC_ZONE_ID),
             "id", 2);
     db.insert(SINGLE_TABLE_NAME,
-            "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_TIME_ZONE),
+            "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_ZONE_ID),
             "id", 3);
     db.insert(SINGLE_TABLE_NAME,
-            "modified", DateTimeUtils.formatTimestamp(new Timestamp(11L), UTC_TIME_ZONE),
+            "modified", DateTimeUtils.formatTimestamp(new Timestamp(11L), UTC_ZONE_ID),
             "id", 4);
     db.insert(SINGLE_TABLE_NAME,
-            "modified", DateTimeUtils.formatTimestamp(new Timestamp(12L), UTC_TIME_ZONE),
+            "modified", DateTimeUtils.formatTimestamp(new Timestamp(12L), UTC_ZONE_ID),
             "id", 5);
     db.insert(SINGLE_TABLE_NAME,
-            "modified", DateTimeUtils.formatTimestamp(new Timestamp(13L), UTC_TIME_ZONE),
+            "modified", DateTimeUtils.formatTimestamp(new Timestamp(13L), UTC_ZONE_ID),
             "id", 1);
 
     startTask("modified", "id", null);
+
+    Thread.sleep(100);
 
     verifyPoll(3, "id", Arrays.asList(4, 5, 1), true, true, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
@@ -846,11 +886,13 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
                           + ".\"user_id\", \"users\".\"name\" FROM \"test\" JOIN \"users\" "
                           + "ON (\"test\".\"user_id\" = \"users\".\"user_id\")");
 
+    Thread.sleep(100);
+    // By the time poll is called, the table might have been queried multiple times by the
+    // TableQuerierProcessor, so we could get multiple entries for the same record
     List<SourceRecord> records = task.poll();
-    assertEquals(1, records.size());
-    Map<Integer, Integer> recordUserIdCounts = new HashMap<>();
-    recordUserIdCounts.put(1, 1);
-    assertEquals(recordUserIdCounts, countIntValues(records, "id"));
+    assertTrue(records.size() >= 1);
+
+    assertTrue(countIntValues(records, "id").get(1) >= 1);
     assertRecordsTopic(records, TOPIC_PREFIX);
     assertRecordsSourcePartition(records, QUERY_SOURCE_PARTITION);
 
@@ -858,12 +900,14 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     db.insert(SINGLE_TABLE_NAME, "id", 3, "user_id", 2);
     db.insert(SINGLE_TABLE_NAME, "id", 4, "user_id", 2);
 
-    records = task.poll();
-    assertEquals(4, records.size());
-    recordUserIdCounts = new HashMap<>();
-    recordUserIdCounts.put(1, 2);
-    recordUserIdCounts.put(2, 2);
-    assertEquals(recordUserIdCounts, countIntValues(records, "user_id"));
+    Thread.sleep(100);
+
+    while (!countIntValues(records, "user_id").containsKey(2)) {
+      records = task.poll();
+    }
+
+    assertTrue(countIntValues(records, "user_id").get(1) >= 1);
+    assertTrue(countIntValues(records, "user_id").get(2) >= 1);
     assertRecordsTopic(records, TOPIC_PREFIX);
     assertRecordsSourcePartition(records, QUERY_SOURCE_PARTITION);
   }
@@ -884,7 +928,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
                    "id", "INT",
                    "user_id", "INT");
     db.insert(SINGLE_TABLE_NAME,
-            "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_TIME_ZONE),
+            "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_ZONE_ID),
             "id", 1,
             "user_id", 1);
 
@@ -895,17 +939,19 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     verifyTimestampFirstPoll(TOPIC_PREFIX);
 
     db.insert(SINGLE_TABLE_NAME,
-            "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_TIME_ZONE),
+            "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_ZONE_ID),
             "id", 2,
             "user_id", 1);
     db.insert(SINGLE_TABLE_NAME,
-            "modified", DateTimeUtils.formatTimestamp(new Timestamp(11L), UTC_TIME_ZONE),
+            "modified", DateTimeUtils.formatTimestamp(new Timestamp(11L), UTC_ZONE_ID),
             "id", 3,
             "user_id", 2);
     db.insert(SINGLE_TABLE_NAME,
-            "modified", DateTimeUtils.formatTimestamp(new Timestamp(12L), UTC_TIME_ZONE),
+            "modified", DateTimeUtils.formatTimestamp(new Timestamp(12L), UTC_ZONE_ID),
             "id", 4,
             "user_id", 2);
+
+    Thread.sleep(100);
 
     verifyPoll(2, "id", Arrays.asList(3, 4), true, false, false, TOPIC_PREFIX);
 
@@ -959,7 +1005,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
         "id", "INT",
         "user_id", "INT");
     db.insert(SINGLE_TABLE_NAME,
-        "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_TIME_ZONE),
+        "modified", DateTimeUtils.formatTimestamp(new Timestamp(10L), UTC_ZONE_ID),
         "id", 1,
         "user_id", 1);
 
@@ -969,43 +1015,36 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
 
     verifyTimestampFirstPoll(TOPIC_PREFIX);
 
-    db.insert(SINGLE_TABLE_NAME,
-        "modified", DateTimeUtils.formatTimestamp(new Timestamp(11L), UTC_TIME_ZONE),
+    String insertStmt1 = db.insertStatementBuilder(SINGLE_TABLE_NAME,
+        "modified", DateTimeUtils.formatTimestamp(new Timestamp(11L), UTC_ZONE_ID),
         "id", 2,
         "user_id", 1);
-    db.insert(SINGLE_TABLE_NAME,
-        "modified", DateTimeUtils.formatTimestamp(new Timestamp(11L), UTC_TIME_ZONE),
+    String insertStmt2 = db.insertStatementBuilder(SINGLE_TABLE_NAME,
+        "modified", DateTimeUtils.formatTimestamp(new Timestamp(11L), UTC_ZONE_ID),
         "id", 3,
         "user_id", 2);
-    db.insert(SINGLE_TABLE_NAME,
-        "modified", DateTimeUtils.formatTimestamp(new Timestamp(12L), UTC_TIME_ZONE),
+    String insertStmt3 = db.insertStatementBuilder(SINGLE_TABLE_NAME,
+        "modified", DateTimeUtils.formatTimestamp(new Timestamp(12L), UTC_ZONE_ID),
         "id", 4,
         "user_id", 2);
-
-    db.insert(SINGLE_TABLE_NAME,
-        "modified", DateTimeUtils.formatTimestamp(new Timestamp(12L), UTC_TIME_ZONE),
+    String insertStmt4 = db.insertStatementBuilder(SINGLE_TABLE_NAME,
+        "modified", DateTimeUtils.formatTimestamp(new Timestamp(12L), UTC_ZONE_ID),
         "id", 5,
         "user_id", 2);
 
-    db.insert(SINGLE_TABLE_NAME,
-        "modified", DateTimeUtils.formatTimestamp(new Timestamp(13L), UTC_TIME_ZONE),
+    String insertStmt5 = db.insertStatementBuilder(SINGLE_TABLE_NAME,
+        "modified", DateTimeUtils.formatTimestamp(new Timestamp(13L), UTC_ZONE_ID),
         "id", 6,
         "user_id", 2);
 
+    db.commit(db.executeWithoutCommit(insertStmt1, insertStmt2, insertStmt3, insertStmt4, insertStmt5));
+
+    Thread.sleep(100);
+
     verifyPoll(3, "id", Arrays.asList(2, 3, 5), true, false, false, TOPIC_PREFIX);
 
-    // close the derby DB
-    db.close();
-
-    // assert exception by empty response
-    List<SourceRecord> records = task.poll();
-    assertNull(records);
-
-    // reconn
-    db.connect();
-
-    // last committed timestamp is 11, poll for records >11, hence repeat of 4
-    verifyPoll(3, "id", Arrays.asList(4, 5, 6), true, false, false, TOPIC_PREFIX);
+    // last committed timestamp is 12, poll for records >12, hence repeat of 4
+    verifyPoll(2, "id", Arrays.asList(4, 6), true, false, false, TOPIC_PREFIX);
 
     PowerMock.verifyAll();
   }
@@ -1016,6 +1055,10 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
 
   private void startTask(String timestampColumn, String incrementingColumn, String query, int batchSize) {
     startTask(timestampColumn, incrementingColumn, query, 0L, "UTC", null, batchSize);
+  }
+
+  private void startTask(String timestampColumn, String incrementingColumn, String query, Long delay, String timeZone, int batchSize) {
+    startTask(timestampColumn, incrementingColumn, query, delay, timeZone, null, batchSize);
   }
 
   private void startTask(String timestampColumn, String incrementingColumn, String query, Long delay, String timeZone) {

@@ -19,6 +19,7 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.source.TableQuerier.QueryMode;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
+import io.confluent.connect.jdbc.util.SqlParser;
 import io.confluent.connect.jdbc.util.TableId;
 
 import java.sql.Connection;
@@ -28,6 +29,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Matchers;
 
+import static org.junit.Assert.*;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -41,6 +43,7 @@ public class TableQuerierTest {
   private static final String QUERY = "SELECT * FROM name";
 
   DatabaseDialect databaseDialectMock;
+
   
   Connection connectionMock;
   
@@ -61,7 +64,7 @@ public class TableQuerierTest {
   @Test
   public void testTimestampIncrementingTableQuerierInTableModeWithSuffix() throws SQLException {
     TimestampIncrementingTableQuerier querier = new TimestampIncrementingTableQuerier(
-                                                    databaseDialectMock, 
+                                                    databaseDialectMock,
                                                     QueryMode.TABLE, 
                                                     TABLE_NAME, 
                                                     null, 
@@ -71,7 +74,8 @@ public class TableQuerierTest {
                                                     TIMESTAMP_DELAY,
                                                     null,
                                                     SUFFIX,
-                                                    JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL
+                                                    JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL,
+                                                    false
                                                 );
       
     querier.createPreparedStatement(connectionMock);
@@ -82,7 +86,7 @@ public class TableQuerierTest {
   @Test
   public void testTimestampIncrementingTableQuerierInQueryModeWithSuffix() throws SQLException {	    
     TimestampIncrementingTableQuerier querier = new TimestampIncrementingTableQuerier(
-                                                    databaseDialectMock, 
+                                                    databaseDialectMock,
                                                     QueryMode.QUERY, 
                                                     QUERY, 
                                                     null, 
@@ -92,7 +96,8 @@ public class TableQuerierTest {
                                                     TIMESTAMP_DELAY, 
                                                     null, 
                                                     SUFFIX,
-                                                    JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL
+                                                    JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL,
+                                                    false
                                                 );
       
     querier.createPreparedStatement(connectionMock);
@@ -107,7 +112,8 @@ public class TableQuerierTest {
                                    QueryMode.TABLE, 
                                    TABLE_NAME, 
                                    null, 
-                                   SUFFIX
+                                   SUFFIX,
+                                   false
                                );
       
     querier.createPreparedStatement(connectionMock);
@@ -122,7 +128,8 @@ public class TableQuerierTest {
                                    QueryMode.QUERY,
                                    QUERY, 
                                    null, 
-                                   SUFFIX
+                                   SUFFIX,
+                                   false
                                );
       
     querier.createPreparedStatement(connectionMock);
@@ -137,11 +144,45 @@ public class TableQuerierTest {
                                    QueryMode.QUERY, 
                                    QUERY, 
                                    null, 
-                                   "" /* default value */
+                                   "", /* default value */
+                                   false
                                );
       
     querier.createPreparedStatement(connectionMock);
 
     verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM name"));
-  }  
+  }
+
+  @Test
+  public void testGetParsedQueryStringRedactsSensitiveValuesWhenRedactionDisabled() {
+    String query = "SELECT * FROM users WHERE id = 12345 AND name = 'John Doe'";
+    BulkTableQuerier querier = new BulkTableQuerier(
+        databaseDialectMock,
+        QueryMode.QUERY,
+        query,
+        null,
+        "",
+        true
+    );
+
+    String result = querier.getRedactedQueryString();
+    String expected = "SELECT * FROM users WHERE id = 0 AND name = " + SqlParser.REDACTED_STRING;
+
+    assertEquals(expected, result);
+  }
+
+  @Test
+  public void testGetParsedQueryStringReturnsNullWhenRedactionDisabled() {
+    String query = "SELECT * FROM users WHERE id = 12345 AND name = 'John Doe'";
+    BulkTableQuerier querier = new BulkTableQuerier(
+        databaseDialectMock,
+        QueryMode.QUERY,
+        query,
+        null,
+        "",
+        false
+    );
+
+    assertNull(querier.getRedactedQueryString());
+  }
 }

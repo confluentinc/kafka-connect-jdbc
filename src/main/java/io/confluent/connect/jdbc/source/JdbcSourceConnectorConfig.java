@@ -1301,6 +1301,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     private boolean isTimestampIncrementingModeField(String name) {
       return isTimestampModeDependentField(name) || isIncrementingModeDependentField(name);
     }
+    
+    private boolean isChangeTrackingConfig(String name) {
+      return !name.equals(INCREMENTING_COLUMN_NAME_CONFIG)
+          && !name.equals(TIMESTAMP_COLUMN_NAME_CONFIG)
+          && !name.equals(VALIDATE_NON_NULL_CONFIG);
+    }
   }
 
   public enum NumericMapping {

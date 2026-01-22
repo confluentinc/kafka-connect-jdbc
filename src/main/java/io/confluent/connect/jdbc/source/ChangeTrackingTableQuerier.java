@@ -63,7 +63,7 @@ public class ChangeTrackingTableQuerier extends TableQuerier {
       Map<String, Object> offsetMap,
       String suffix
   ) {
-    super(dialect, mode, name, topicPrefix, suffix);
+    super(dialect, mode, name, topicPrefix, suffix, false);
     ChangeTrackingOffset initialOffset = ChangeTrackingOffset.fromMap(offsetMap);
     this.committedOffset = initialOffset;
     this.offset = initialOffset;

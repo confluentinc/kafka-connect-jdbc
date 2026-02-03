@@ -13,6 +13,8 @@ semaphore:
   extra_build_args: "-Dcloud -Pjenkins"
   run_pint_merge: true
   generate_connect_changelogs: true
+  github_write_targets:
+    - confluentinc/docs-kafka-connect-jdbc
 code_artifact:
   enable: true
   package_paths:

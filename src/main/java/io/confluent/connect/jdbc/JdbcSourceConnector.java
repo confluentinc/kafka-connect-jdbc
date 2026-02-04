@@ -162,6 +162,7 @@ public class JdbcSourceConnector extends SourceConnector {
 
   @Override
   public Config validate(Map<String, String> connectorConfigs) {
+    log.info("Validating JDBC Source connector configurations for testing");
     return new JdbcSourceConnectorValidation(connectorConfigs).validate();
   }
 

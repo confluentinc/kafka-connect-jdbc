@@ -63,14 +63,18 @@ public class JdbcSourceConnectorValidation {
    * Perform validation and return the Config object with any validation errors.
    */
   public Config validate() {
+    log.info("Starting testing validation process");
     try {
       // Run validateAll() if not already done
       if (validationResult == null && connectorConfigs != null) {
+        log.info("Running validateAll on connector configs");
         Map<String, ConfigValue> configValuesMap = JdbcSourceConnectorConfig.CONFIG_DEF
             .validateAll(connectorConfigs);
         List<ConfigValue> configValues = new ArrayList<>(configValuesMap.values());
         validationResult = new Config(configValues);
       }
+
+      log.info("Validation result after validateAll: {}", this.validationResult);
 
       boolean hasValidateAllErrors = validationResult.configValues().stream()
               .anyMatch(configValue -> !configValue.errorMessages().isEmpty());
@@ -81,6 +85,7 @@ public class JdbcSourceConnectorValidation {
       }
 
       if (config == null && connectorConfigs != null) {
+        log.info("Creating JdbcSourceConnectorConfig for further validation");
         config = new JdbcSourceConnectorConfig(connectorConfigs);
       }
 
@@ -88,10 +93,16 @@ public class JdbcSourceConnectorValidation {
           && validateLegacyNewConfigCompatibility()
           && validateQueryConfigs();
 
+      log.info("Validation result after multi-configs and legacy/new config compatibility: {}",
+          validationResult);
+
       if (validationResult && isUsingNewConfigs()) {
+        log.info("Using new configs only - performing new config specific validations");
         validationResult = validateTableInclusionConfigs()
                            && validateTsAndIncModeColumnRequirements();
       }
+
+      log.info("Validation result after core validations: {}", validationResult);
 
       validationResult = validationResult && validatePluginSpecificNeeds();
       if (!validationResult) {
@@ -102,6 +113,7 @@ public class JdbcSourceConnectorValidation {
     } catch (Exception e) {
       log.error("Error during validation", e);
     }
+    log.info("Final validation result: {}", this.validationResult);
     return this.validationResult;
   }
 
@@ -301,16 +313,25 @@ public class JdbcSourceConnectorValidation {
    * Both configs should not be set simultaneously to avoid ambiguity.
    */
   private boolean validateQueryConfigs() {
+    log.info("All config keys received: {}", config.originalsStrings().keySet());
+    log.info("Raw query.masked value: {}", config.originalsStrings().get("query.masked"));
+
     String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
+    log.info("Raw query value: {}", query);
     String queryMaskedValue = null;
     org.apache.kafka.common.config.types.Password queryMasked =
         config.getPassword(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG);
+    log.info("Retrieved query.masked Password object: {}", queryMasked);
     if (queryMasked != null && queryMasked.value() != null) {
       queryMaskedValue = queryMasked.value();
     }
 
+    log.info("Processed query.masked value: {}", queryMaskedValue);
+
     boolean hasQuery = query != null && !query.isEmpty();
     boolean hasQueryMasked = queryMaskedValue != null && !queryMaskedValue.isEmpty();
+
+    log.info("Has query: {}, Has query.masked: {}", hasQuery, hasQueryMasked);
 
     if (hasQuery && hasQueryMasked) {
       String msg = "Both 'query' and 'query.masked' configs cannot be set at the same time. "
@@ -320,10 +341,12 @@ public class JdbcSourceConnectorValidation {
       addConfigError(JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG, msg);
 
       log.error("Validation failed: Both query and query.masked configs are set");
+      log.info("Exiting validateQueryConfigs with failure");
       return false;
     }
 
     if (config.getQuery().isPresent() && isUsingTableFilteringConfigs()) {
+      log.info("Both query and table filtering configs are set");
       String msg =
           "Do not specify table filtering configs with 'query'. "
               + "Remove table.whitelist / table.blacklist / table.include.list / "
@@ -344,6 +367,7 @@ public class JdbcSourceConnectorValidation {
       }
       return false;
     }
+    log.info("Validating SQL query statement if query is present");
 
     return !config.getQuery().isPresent()
            || validateSqlQueryStatement(config.getQuery().get());
@@ -481,28 +505,40 @@ public class JdbcSourceConnectorValidation {
 
   /** Validate that provided query strings start with a SELECT statement. */
   private boolean validateSqlQueryStatement(String statement) {
+    log.info("Validating SQL query statement: {}", statement);
+    String configName = config.isQueryMasked()
+        ? JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG
+        : JdbcSourceConnectorConfig.QUERY_CONFIG;
+    log.info("Using config name for error reporting: {}", configName);
+
     String trimmedStatement = statement.trim();
     if (!SELECT_STATEMENT_PATTERN.matcher(trimmedStatement).find()) {
       String msg =
           "Only SELECT statements are supported for query config value. "
           + "Please provide a statement that starts with SELECT.";
-      addConfigError("query", msg);
+      addConfigError(configName, msg);
       log.error(msg);
+      log.info("Exiting validateSqlQueryStatement with failure");
       return false;
     }
     try {
+      log.info("Validating SQL syntax for statement");
       SqlParser.validateSqlSyntax(trimmedStatement);
+      log.info("SQL syntax validation succeeded for statement");
     } catch (JSQLParserException e) {
+      log.info("SQL syntax validation failed with exception: {}", e.getMessage());
       String msg =
           "Invalid SQL syntax for query config value. Please provide "
            + "a syntactically correct SELECT statement.";
-      addConfigError("query", msg);
+      addConfigError(configName, msg);
       log.error(
           "SQL syntax validation failed for query config: {}",
           msg
       );
+      log.info("Exiting validateSqlQueryStatement with failure");
       return false;
     }
+    log.info("Exiting validateSqlQueryStatement with success");
     return true;
   }
 

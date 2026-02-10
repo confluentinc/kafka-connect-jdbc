@@ -140,7 +140,7 @@ public class JdbcSourceConnectorValidationTest {
   public void validate_withValidModeTimestampWithTsCol_noErrors() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP);
     props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
-    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table.*:[ts_col1|ts_col2]");
 
     validate();
 
@@ -614,8 +614,8 @@ public class JdbcSourceConnectorValidationTest {
   public void validate_withWhitelistAndBothColumnMappings_setsError() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
     props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
-    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
-    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table.*:[ts_col1|ts_col2]");
+    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table.*:inc_col1");
     
     validate();
     
@@ -898,6 +898,125 @@ public class JdbcSourceConnectorValidationTest {
         QUERY_CONFIG,
         "Do not specify table filtering configs with 'query'"
     );
+  }
+
+  @Test
+  public void validate_withTimestampMappingNotMatchingIncludeList_setsError() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "test_table_1.test_schema_1");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*\\.test_table_1\\.test_schema_1.*:[col_1|col_2]");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*does not match any of the provided regexes.*");
+  }
+
+  @Test
+  public void validate_withTimestampMappingMatchingIncludeList_noErrors() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "test_table_1.test_schema_1");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*test_table_1.test_schema_1.*:[col_1|col_2]");
+
+    validate();
+
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_withIncrementingMappingNotMatchingIncludeList_setsError() {
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "test_schema_1.test_table_1");
+    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG,
+        ".*\\.test_schema_1\\.test_table_1.*:col_1");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(INCREMENTING_COLUMN_MAPPING_CONFIG,
+        ".*does not match any of the provided regexes.*");
+  }
+
+  @Test
+  public void validate_withMultipleIncludeListEntriesOneNotMatchingTsMapping_setsError() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "test_schema_1.test_table_1,test_schema_2.test_table_2");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*test_schema_1.test_table_1.*:[col_1]");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*test_schema_2.test_table_2.*does not match any of the provided regexes.*");
+  }
+
+  @Test
+  public void validate_withIncludeListEntryMatchingMultipleTsMappings_setsError() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "test_schema_1.test_table_1");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*test_schema_1.test_table_1.*:[col_1],.*test_table_1.*:[col_1]");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*matches more than one of the provided regexes.*");
+  }
+
+  @Test
+  public void validate_withMultipleIncludeListEntriesAllMatchExactlyOneTsMapping_noErrors() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "test_schema_1.test_table_1,test_schema_2.test_table_2");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*test_schema_1.test_table_1.*:[col_1],.*test_schema_2.test_table_2.*:[col_2]");
+
+    validate();
+
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_withBothMappingsNotMatchingIncludeList_setsErrorOnTimestamp() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "test_schema_1.test_table_1");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*\\.test_schema_1\\.test_table_1.*:[col_1]");
+    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG,
+        ".*\\.test_schema_1\\.test_table_1.*:col_2");
+
+    validate();
+
+    // Short-circuits on first failure (timestamp mapping)
+    assertErrors(1);
+    assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*does not match any of the provided regexes.*");
+  }
+
+  @Test
+  public void validate_withIncludeListMatchingTsMappingButNotIncMapping_setsError() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "test_schema_1.test_table_1");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*test_schema_1.test_table_1.*:[col_1]");
+    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG,
+        ".*\\.test_schema_1\\.test_table_1.*:col_2");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(INCREMENTING_COLUMN_MAPPING_CONFIG,
+        ".*does not match any of the provided regexes.*");
   }
   
 }

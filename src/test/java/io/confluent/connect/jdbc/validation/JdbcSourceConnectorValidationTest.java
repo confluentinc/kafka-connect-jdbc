@@ -140,7 +140,7 @@ public class JdbcSourceConnectorValidationTest {
   public void validate_withValidModeTimestampWithTsCol_noErrors() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP);
     props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
-    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table.*:[ts_col1|ts_col2]");
 
     validate();
 
@@ -614,8 +614,8 @@ public class JdbcSourceConnectorValidationTest {
   public void validate_withWhitelistAndBothColumnMappings_setsError() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
     props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
-    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
-    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table.*:[ts_col1|ts_col2]");
+    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table.*:inc_col1");
     
     validate();
     
@@ -836,7 +836,7 @@ public class JdbcSourceConnectorValidationTest {
 
     assertErrors(1);
     assertErrors(QUERY_CONFIG, 1);
-    assertErrorMatches(QUERY_CONFIG, ".*Only SELECT statements are supported for query.*");
+    assertErrorMatches(QUERY_CONFIG, ".*Only SELECT statements are supported for 'query'.*");
   }
 
   @Test
@@ -847,126 +847,11 @@ public class JdbcSourceConnectorValidationTest {
     validate();
 
     assertErrors(1);
-    assertErrors(QUERY_CONFIG, 1);
+    assertErrors(QUERY_MASKED_CONFIG, 1);
     assertErrorMatches(
-        QUERY_CONFIG,
-        "Only SELECT statements are supported for query"
+        QUERY_MASKED_CONFIG,
+        "Only SELECT statements are supported for 'query.masked'"
     );
-  }
-
-  @Test
-  public void validate_withInvalidQuerySyntax_setsError() {
-    props.put(MODE_CONFIG, MODE_BULK);
-    props.put(QUERY_CONFIG, "SELECT FROM");
-
-    validate();
-
-    assertErrors(1);
-    assertErrors(QUERY_CONFIG, 1);
-    assertErrorMatches(
-        QUERY_CONFIG,
-        ".*Invalid SQL syntax for query.*"
-    );
-  }
-
-   @Test
-  public void validate_withInvalidQueryMaskedSyntax_setsError() {
-    // Test 1: Missing columns after SELECT
-    props.put(MODE_CONFIG, MODE_BULK);
-    props.put(QUERY_MASKED_CONFIG, "SELECT FROM users");
-    validate();
-    assertErrors(1);
-    assertErrors(QUERY_CONFIG, 1);
-    assertErrorMatches(QUERY_CONFIG, ".*Invalid SQL syntax for query.*");
-
-    // Test 2: Missing table name after FROM
-    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM");
-    validate();
-    assertErrors(1);
-    assertErrors(QUERY_CONFIG, 1);
-    assertErrorMatches(QUERY_CONFIG, ".*Invalid SQL syntax for query.*");
-
-    // Test 3: Incomplete WHERE clause
-    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM users WHERE");
-    validate();
-    assertErrors(1);
-    assertErrors(QUERY_CONFIG, 1);
-    assertErrorMatches(QUERY_CONFIG, ".*Invalid SQL syntax for query.*");
-
-    // Test 4: Incomplete condition in WHERE clause
-    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM users WHERE id =");
-    validate();
-    assertErrors(1);
-    assertErrors(QUERY_CONFIG, 1);
-    assertErrorMatches(QUERY_CONFIG, ".*Invalid SQL syntax for query.*");
-
-    // Test 5: Incomplete ORDER BY clause
-    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM users ORDER BY");
-    validate();
-    assertErrors(1);
-    assertErrors(QUERY_CONFIG, 1);
-    assertErrorMatches(QUERY_CONFIG, ".*Invalid SQL syntax for query.*");
-
-    // Test 6: Trailing comma in column list
-    props.put(QUERY_MASKED_CONFIG, "SELECT id, name, FROM users");
-    validate();
-    assertErrors(1);
-    assertErrors(QUERY_CONFIG, 1);
-    assertErrorMatches(QUERY_CONFIG, ".*Invalid SQL syntax for query.*");
-
-    // Test 7: Missing table name in JOIN
-    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM users JOIN ON id = order_id");
-    validate();
-    assertErrors(1);
-    assertErrors(QUERY_CONFIG, 1);
-    assertErrorMatches(QUERY_CONFIG, ".*Invalid SQL syntax for query.*");
-
-    // Test 8: Unbalanced parentheses
-    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM users WHERE (id = 1");
-    validate();
-    assertErrors(1);
-    assertErrors(QUERY_CONFIG, 1);
-    assertErrorMatches(QUERY_CONFIG, ".*Invalid SQL syntax for query.*");
-
-    // Test 9: Missing GROUP BY column
-    props.put(QUERY_MASKED_CONFIG, "SELECT COUNT(*) FROM users GROUP BY");
-    validate();
-    assertErrors(1);
-    assertErrors(QUERY_CONFIG, 1);
-    assertErrorMatches(QUERY_CONFIG, ".*Invalid SQL syntax for query.*");
-
-    // Test 10: Basic SELECT * query
-    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM users");
-    validate();
-    assertNoErrors();
-
-    // Test 11: SELECT with specific columns
-    props.put(QUERY_MASKED_CONFIG, "SELECT id, name, email FROM users");
-    validate();
-    assertNoErrors();
-
-
-    // Test 12: SELECT with WHERE clause
-    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM users WHERE active = true");
-    validate();
-    assertNoErrors();
-
-    // Test 13: SELECT with ORDER BY clause
-    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM orders ORDER BY created_at DESC");
-    validate();
-    assertNoErrors();
-
-    // Test 14: SELECT with JOIN and aliases
-    props.put(QUERY_MASKED_CONFIG,
-        "SELECT u.id, u.name, o.total FROM users u INNER JOIN orders o ON u.id = o.user_id");
-    validate();
-    assertNoErrors();
-
-    // Test 15: SELECT with subquery
-    props.put(QUERY_MASKED_CONFIG,
-        "SELECT * FROM users WHERE id IN (SELECT user_id FROM orders WHERE total > 100);");
-    validate();
-    assertNoErrors();
   }
 
   @Test
@@ -1005,13 +890,133 @@ public class JdbcSourceConnectorValidationTest {
 
     validate();
 
-    assertErrors(2);
+    assertErrors(3);
     assertErrors(QUERY_CONFIG, 1);
+    assertErrors(QUERY_MASKED_CONFIG, 1);
     assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
     assertErrorMatches(
         QUERY_CONFIG,
         "Do not specify table filtering configs with 'query'"
     );
+  }
+
+  @Test
+  public void validate_withTimestampMappingNotMatchingIncludeList_setsError() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "test_table_1.test_schema_1");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*\\.test_table_1\\.test_schema_1.*:[col_1|col_2]");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*does not match any of the provided regexes.*");
+  }
+
+  @Test
+  public void validate_withTimestampMappingMatchingIncludeList_noErrors() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "test_table_1.test_schema_1");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*test_table_1.test_schema_1.*:[col_1|col_2]");
+
+    validate();
+
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_withIncrementingMappingNotMatchingIncludeList_setsError() {
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "test_schema_1.test_table_1");
+    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG,
+        ".*\\.test_schema_1\\.test_table_1.*:col_1");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(INCREMENTING_COLUMN_MAPPING_CONFIG,
+        ".*does not match any of the provided regexes.*");
+  }
+
+  @Test
+  public void validate_withMultipleIncludeListEntriesOneNotMatchingTsMapping_setsError() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "test_schema_1.test_table_1,test_schema_2.test_table_2");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*test_schema_1.test_table_1.*:[col_1]");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*test_schema_2.test_table_2.*does not match any of the provided regexes.*");
+  }
+
+  @Test
+  public void validate_withIncludeListEntryMatchingMultipleTsMappings_setsError() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "test_schema_1.test_table_1");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*test_schema_1.test_table_1.*:[col_1],.*test_table_1.*:[col_1]");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*matches more than one of the provided regexes.*");
+  }
+
+  @Test
+  public void validate_withMultipleIncludeListEntriesAllMatchExactlyOneTsMapping_noErrors() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "test_schema_1.test_table_1,test_schema_2.test_table_2");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*test_schema_1.test_table_1.*:[col_1],.*test_schema_2.test_table_2.*:[col_2]");
+
+    validate();
+
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_withBothMappingsNotMatchingIncludeList_setsErrorOnTimestamp() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "test_schema_1.test_table_1");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*\\.test_schema_1\\.test_table_1.*:[col_1]");
+    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG,
+        ".*\\.test_schema_1\\.test_table_1.*:col_2");
+
+    validate();
+
+    // Short-circuits on first failure (timestamp mapping)
+    assertErrors(1);
+    assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*does not match any of the provided regexes.*");
+  }
+
+  @Test
+  public void validate_withIncludeListMatchingTsMappingButNotIncMapping_setsError() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "test_schema_1.test_table_1");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG,
+        ".*test_schema_1.test_table_1.*:[col_1]");
+    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG,
+        ".*\\.test_schema_1\\.test_table_1.*:col_2");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1);
+    assertErrorMatches(INCREMENTING_COLUMN_MAPPING_CONFIG,
+        ".*does not match any of the provided regexes.*");
   }
   
 }

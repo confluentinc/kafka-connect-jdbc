@@ -20,6 +20,7 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIsolationMode;
 import io.confluent.connect.jdbc.util.SqlParser;
+import io.confluent.connect.jdbc.util.TableCollectionUtils;
 import net.sf.jsqlparser.JSQLParserException;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigValue;
@@ -90,7 +91,8 @@ public class JdbcSourceConnectorValidation {
 
       if (validationResult && isUsingNewConfigs()) {
         validationResult = validateTableInclusionConfigs()
-                           && validateTsAndIncModeColumnRequirements();
+                           && validateTsAndIncModeColumnRequirements()
+                           && validateTableIncludeListMatchesMappingRegexes();
       }
 
       validationResult = validationResult && validatePluginSpecificNeeds();
@@ -467,6 +469,72 @@ public class JdbcSourceConnectorValidation {
       }
     }
     return true;
+  }
+
+  /**
+   * Validate that each entry in table.include.list matches exactly one regex
+   * in the timestamp and incrementing column mapping configurations.
+   * This catches misconfigurations where the mapping regexes would not match
+   * any of the included tables at runtime.
+   */
+  private boolean validateTableIncludeListMatchesMappingRegexes() {
+    Set<String> includeListSet = config.getTableIncludeListSet();
+    if (includeListSet.isEmpty()) {
+      return true;
+    }
+
+    List<String> includeListEntries = new ArrayList<>(includeListSet);
+
+    if (config.modeUsesTimestampColumn()) {
+      List<String> tsRegexes = config.timestampColMappingRegexes();
+      if (!tsRegexes.isEmpty()
+          && !validateMappingRegexesMatchIncludeList(
+              includeListEntries, tsRegexes,
+              JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_MAPPING_CONFIG)) {
+        return false;
+      }
+    }
+
+    if (config.modeUsesIncrementingColumn()) {
+      List<String> incRegexes = config.incrementingColMappingRegexes();
+      if (!incRegexes.isEmpty()
+          && !validateMappingRegexesMatchIncludeList(
+              includeListEntries, incRegexes,
+              JdbcSourceConnectorConfig.INCREMENTING_COLUMN_MAPPING_CONFIG)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Validate that each table include list entry matches exactly one regex
+   * in the provided column mapping regexes.
+   */
+  private boolean validateMappingRegexesMatchIncludeList(
+      List<String> includeListEntries,
+      List<String> mappingRegexes,
+      String mappingConfigKey) {
+    if (includeListEntries == null || includeListEntries.isEmpty()
+            || mappingRegexes == null || mappingRegexes.isEmpty()) {
+      return true;
+    }
+    return TableCollectionUtils.validateEachTableMatchesExactlyOneRegex(
+        mappingRegexes,
+        includeListEntries,
+        entry -> entry,
+        problem -> {
+          String msg = String.format(
+              "%s in '%s'. Ensure that each entry in '%s' "
+              + "matches exactly one regex in '%s'.",
+              problem, mappingConfigKey,
+              JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG, mappingConfigKey
+          );
+          addConfigError(mappingConfigKey, msg);
+          log.error(msg);
+        }
+    );
   }
 
   /**

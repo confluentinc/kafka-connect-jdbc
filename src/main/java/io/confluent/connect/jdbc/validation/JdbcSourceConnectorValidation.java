@@ -516,6 +516,10 @@ public class JdbcSourceConnectorValidation {
       List<String> includeListEntries,
       List<String> mappingRegexes,
       String mappingConfigKey) {
+    if (includeListEntries == null || includeListEntries.isEmpty()
+            || mappingRegexes == null || mappingRegexes.isEmpty()) {
+      return true;
+    }
     return TableCollectionUtils.validateEachTableMatchesExactlyOneRegex(
         mappingRegexes,
         includeListEntries,

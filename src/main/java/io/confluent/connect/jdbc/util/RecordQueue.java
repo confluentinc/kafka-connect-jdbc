@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -28,6 +29,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.function.Supplier;
+
+import org.slf4j.MDC;
 
 /**
  * A concurrent and blocking queue for source records, with the ability to asynchronously execute
@@ -318,12 +321,15 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
     final RecordDestination<RecordT> cancellableDestination =
         this.withAdditionalRunningCondition(stillRun::get);
 
+    Map<String, String> callerMdc = MDC.getCopyOfContextMap();
+
     // Submit the function and use the cancellable destination
     Supplier<T> supplier = createLoggingSupplier(
         operationName,
         logContext,
         cancellableDestination,
-        generatorProcessor
+        generatorProcessor,
+        callerMdc
     );
     return CompletableFuture.supplyAsync(supplier, executor);
   }
@@ -465,9 +471,13 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
       String operationName,
       String logContext,
       RecordDestination<RecordT> destination,
-      Function<RecordDestination<RecordT>, T> generatorProcessor
+      Function<RecordDestination<RecordT>, T> generatorProcessor,
+      Map<String, String> callerMdc
   ) {
     return () -> {
+      if (callerMdc != null) {
+        MDC.setContextMap(callerMdc);
+      }
       try (ConnectLogContext context = new ConnectLogContext(logContext)) {
         try {
           log.debug("{}Starting {}", context.prefix(), operationName);
@@ -479,6 +489,8 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
         } finally {
           log.debug("{}Stopped {}", context.prefix(), operationName);
         }
+      } finally {
+        MDC.clear();
       }
     };
   }

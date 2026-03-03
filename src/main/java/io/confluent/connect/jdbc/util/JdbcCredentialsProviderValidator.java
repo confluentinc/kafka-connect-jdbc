@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.util;
 
+import io.confluent.credentialproviders.JdbcCredentialsProvider;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
 

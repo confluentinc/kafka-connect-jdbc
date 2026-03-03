@@ -33,7 +33,7 @@ import io.confluent.connect.jdbc.util.ConfigUtils;
 import io.confluent.connect.jdbc.util.DatabaseDialectRecommender;
 import io.confluent.connect.jdbc.util.DeleteEnabledRecommender;
 import io.confluent.connect.jdbc.util.EnumRecommender;
-import io.confluent.connect.jdbc.util.JdbcCredentialsProvider;
+import io.confluent.credentialproviders.JdbcCredentialsProvider;
 import io.confluent.connect.jdbc.util.JdbcCredentialsProviderValidator;
 import io.confluent.connect.jdbc.util.PrimaryKeyModeRecommender;
 import io.confluent.connect.jdbc.util.QuoteMethod;

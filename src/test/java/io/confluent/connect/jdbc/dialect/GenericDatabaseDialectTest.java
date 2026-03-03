@@ -59,8 +59,8 @@ import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.TableType;
 import io.confluent.connect.jdbc.util.DefaultJdbcCredentialsProvider;
-import io.confluent.connect.jdbc.util.JdbcCredentials;
-import io.confluent.connect.jdbc.util.JdbcCredentialsProvider;
+import io.confluent.credentialproviders.JdbcCredentials;
+import io.confluent.credentialproviders.JdbcCredentialsProvider;
 import io.confluent.connect.jdbc.util.TestConfigurableJdbcCredentialsProvider;
 import io.confluent.connect.jdbc.util.TestRefreshJdbcCredentialsProvider;
 
@@ -690,9 +690,9 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
     assertTrue(provider instanceof TestConfigurableJdbcCredentialsProvider);
 
     // Assert Username and password are returned from config provider instance correctly
-    JdbcCredentials basicJdbcCredentials = provider.getJdbcCredentials();
-    assertEquals(username, basicJdbcCredentials.getUsername());
-    assertEquals(password, basicJdbcCredentials.getPassword());
+    JdbcCredentials basicJdbcCredentials = provider.getJdbcCreds();
+    assertEquals(username, basicJdbcCredentials.user());
+    assertEquals(password, basicJdbcCredentials.password());
   }
 
   @Test
@@ -712,9 +712,9 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
     // Assert Username and password are returned from config provider instance correctly. Also
     // password field is rotated everytime password is fetched.
     for (int i = 0; i < 5; i++) {
-      JdbcCredentials basicJdbcCredentials = provider.getJdbcCredentials();
-      assertEquals("test-user", basicJdbcCredentials.getUsername());
-      assertEquals("test-password-" + i, basicJdbcCredentials.getPassword());
+      JdbcCredentials basicJdbcCredentials = provider.getJdbcCreds();
+      assertEquals("test-user", basicJdbcCredentials.user());
+      assertEquals("test-password-" + i, basicJdbcCredentials.password());
     }
   }
 
@@ -734,8 +734,8 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
 
     // Assert username and password are updated in provider class instance according to
     // connection.user and connection.password config values.
-    JdbcCredentials basicJdbcCredentials = provider.getJdbcCredentials();
-    assertEquals(username, basicJdbcCredentials.getUsername());
-    assertEquals(password, basicJdbcCredentials.getPassword());
+    JdbcCredentials basicJdbcCredentials = provider.getJdbcCreds();
+    assertEquals(username, basicJdbcCredentials.user());
+    assertEquals(password, basicJdbcCredentials.password());
   }
 }

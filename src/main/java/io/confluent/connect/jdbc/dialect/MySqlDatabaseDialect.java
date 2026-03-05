@@ -22,7 +22,11 @@ import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Collection;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
@@ -184,7 +188,7 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * <p>MySQL implementation uses {@code EXPLAIN} to validate the query. The
+   * MySQL implementation uses {@code EXPLAIN} to validate the query. The
    * {@code EXPLAIN} command analyzes the query execution plan without executing it,
    * which validates table/column existence, user permissions, and SQL correctness.
    */

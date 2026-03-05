@@ -1937,10 +1937,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           List<ColumnId> columns
   ) throws ConnectException { }
 
-   /**
-   * {@inheritDoc}
-   *
-   * <p>The default implementation uses {@link Connection#prepareStatement(String)} which
+  /**
+   * The default implementation uses {@link Connection#prepareStatement(String)} which
    * compiles the SQL without executing it. This validates syntax, table/column existence,
    * and user permissions on most databases. Subclasses should override this method to use
    * database-specific mechanisms like {@code EXPLAIN} for more thorough validation.

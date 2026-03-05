@@ -647,7 +647,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * <p>SQL Server implementation uses {@code SET NOEXEC ON} to compile the query without
+   * SQL Server implementation uses {@code SET NOEXEC ON} to compile the query without
    * executing it. This validates table/column existence, user permissions, and SQL
    * correctness. The {@code SET NOEXEC OFF} is always called in a finally block to
    * restore the connection to its normal state.

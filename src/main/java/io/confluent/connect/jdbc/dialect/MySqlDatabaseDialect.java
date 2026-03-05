@@ -22,10 +22,7 @@ import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 import java.util.Collection;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
@@ -184,5 +181,21 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
   @Override
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
     throw new SQLException("MySQL does not support synonyms. Please use views instead.");
+  }
+
+  /**
+   * <p>MySQL implementation uses {@code EXPLAIN} to validate the query. The
+   * {@code EXPLAIN} command analyzes the query execution plan without executing it,
+   * which validates table/column existence, user permissions, and SQL correctness.
+   */
+  @Override
+  public void validateQuery(Connection connection, String query) throws SQLException {
+    String explainQuery = "EXPLAIN " + query;
+    log.trace("Validating query via EXPLAIN: '{}'",
+        shouldRedactSensitiveLogs(query));
+    try (Statement stmt = connection.createStatement()) {
+      stmt.execute(explainQuery);
+      log.trace("Query validation via EXPLAIN successful");
+    }
   }
 }

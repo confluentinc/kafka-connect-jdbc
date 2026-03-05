@@ -39,11 +39,7 @@ import org.apache.kafka.connect.errors.DataException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Types;
+import java.sql.*;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -675,6 +671,23 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     }
 
     return defn.scale();
+  }
+
+  /**
+   * <p>PostgreSQL implementation uses {@code EXPLAIN} to validate the query. The
+   * {@code EXPLAIN} command parses and plans the query without executing it, which
+   * validates table/column existence, user permissions, and SQL correctness efficiently.
+   */
+  @Override
+  public void validateQuery(Connection connection, String query) throws SQLException {
+    String explainQuery = "EXPLAIN " + query;
+    log.trace("Validating query via EXPLAIN: '{}'",
+        shouldRedactSensitiveLogs(query));
+    try (Statement stmt = connection.createStatement()) {
+      stmt.execute(explainQuery);
+      log.trace("Query validation via EXPLAIN successful for '{}'",
+          shouldRedactSensitiveLogs(query));
+    }
   }
 
 }

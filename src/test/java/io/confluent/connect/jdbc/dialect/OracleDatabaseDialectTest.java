@@ -21,6 +21,8 @@ import java.io.ByteArrayInputStream;
 import java.io.StringReader;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
+import java.sql.Connection;
+import java.sql.Statement;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Types;
@@ -39,6 +41,7 @@ import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
 import oracle.jdbc.OraclePreparedStatement;
+import org.easymock.EasyMock;
 
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Matchers.any;
@@ -473,5 +476,74 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
 
     dialect.bindField(statement, index, schema, value, colDef, field);
     return verify(statement, times(1));
+}
+  // ========== validateQuery Tests ==========
+
+  @Test
+  public void validateQuery_shouldExecuteExplainPlanFor() throws SQLException {
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+    Statement mockStatement = EasyMock.createNiceMock(Statement.class);
+    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
+    EasyMock.expect(mockStatement.execute("EXPLAIN PLAN FOR SELECT * FROM users"))
+        .andReturn(true);
+
+    EasyMock.replay(mockConnection, mockStatement);
+    dialect.validateQuery(mockConnection, "SELECT * FROM users");
+    EasyMock.verify(mockConnection, mockStatement);
+  }
+
+  @Test
+  public void validateQuery_shouldPropagateExceptionForInvalidTable() throws SQLException {
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+    Statement mockStatement = EasyMock.createNiceMock(Statement.class);
+    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
+    EasyMock.expect(mockStatement.execute("EXPLAIN PLAN FOR SELECT * FROM nonexistent_table"))
+        .andThrow(new SQLException(
+            "ORA-00942: table or view does not exist", "42000", 942));
+
+    EasyMock.replay(mockConnection, mockStatement);
+    try {
+      dialect.validateQuery(mockConnection, "SELECT * FROM nonexistent_table");
+      org.junit.Assert.fail("Expected SQLException to be thrown");
+    } catch (SQLException e) {
+      assertEquals("42000", e.getSQLState());
+      assertEquals(942, e.getErrorCode());
+    }
+    EasyMock.verify(mockConnection, mockStatement);
+  }
+
+  @Test
+  public void validateQuery_shouldFallbackToPrepareStatementWhenPlanTableMissing()
+      throws SQLException {
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+    Statement mockStatement = EasyMock.createNiceMock(Statement.class);
+    PreparedStatement mockPreparedStatement = EasyMock.createNiceMock(PreparedStatement.class);
+
+    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
+    // ORA-02404: specified plan table not found
+    EasyMock.expect(mockStatement.execute("EXPLAIN PLAN FOR SELECT * FROM users"))
+        .andThrow(new SQLException(
+            "ORA-02404: specified plan table not found", "42000", 2404));
+    EasyMock.expect(mockConnection.prepareStatement("SELECT * FROM users"))
+        .andReturn(mockPreparedStatement);
+
+    EasyMock.replay(mockConnection, mockStatement, mockPreparedStatement);
+    dialect.validateQuery(mockConnection, "SELECT * FROM users");
+    EasyMock.verify(mockConnection, mockStatement, mockPreparedStatement);
+  }
+
+  @Test
+  public void validateQuery_shouldWorkWithComplexQuery() throws SQLException {
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+    Statement mockStatement = EasyMock.createNiceMock(Statement.class);
+    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
+    String complexQuery = "SELECT a.id, b.name FROM users a "
+        + "INNER JOIN orders b ON a.id = b.user_id";
+    EasyMock.expect(mockStatement.execute("EXPLAIN PLAN FOR " + complexQuery))
+        .andReturn(true);
+
+    EasyMock.replay(mockConnection, mockStatement);
+    dialect.validateQuery(mockConnection, complexQuery);
+    EasyMock.verify(mockConnection, mockStatement);
   }
 }

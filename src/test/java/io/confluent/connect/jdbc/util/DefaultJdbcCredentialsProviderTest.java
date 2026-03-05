@@ -26,21 +26,7 @@ public class DefaultJdbcCredentialsProviderTest {
   @Test
   public void testDatabaseCredsAreConfigurable() {
     // Assert username and password are configured to test values which is configured in setup method
-    assertEquals(testUsername, defaultCredentialsProvider.getJdbcCredentials().getUsername());
-    assertEquals(testPassword, defaultCredentialsProvider.getJdbcCredentials().getPassword());
-  }
-
-  // Test Default Refresh Functionality (which is NoOp)
-  @Test
-  public void testDefaultRefreshFunctionality() {
-
-    assertEquals(testUsername, defaultCredentialsProvider.getJdbcCredentials().getUsername());
-    assertEquals(testPassword, defaultCredentialsProvider.getJdbcCredentials().getPassword());
-
-    defaultCredentialsProvider.refresh();
-
-    // Assert username and password are same
-    assertEquals(testUsername, defaultCredentialsProvider.getJdbcCredentials().getUsername());
-    assertEquals(testPassword, defaultCredentialsProvider.getJdbcCredentials().getPassword());
+    assertEquals(testUsername, defaultCredentialsProvider.getJdbcCreds().user());
+    assertEquals(testPassword, defaultCredentialsProvider.getJdbcCreds().password());
   }
 }

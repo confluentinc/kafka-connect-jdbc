@@ -1,9 +1,14 @@
 package io.confluent.connect.jdbc.util;
 
+import io.confluent.credentialproviders.DefaultJdbcCredentials;
+import io.confluent.credentialproviders.JdbcCredentials;
+import io.confluent.credentialproviders.JdbcCredentialsProvider;
+import java.util.Map;
+
 /**
  * This is a test Class for JdbcCredentialsProvider Interface which is created to test the refresh
  * functionality. The password is updated everytime credentials are fetched through
- * 'getJdbcCredentials()' method.
+ * 'getJdbcCreds()' method.
  */
 public class TestRefreshJdbcCredentialsProvider implements JdbcCredentialsProvider {
 
@@ -16,14 +21,15 @@ public class TestRefreshJdbcCredentialsProvider implements JdbcCredentialsProvid
   }
 
   @Override
-  public JdbcCredentials getJdbcCredentials() {
-    refresh();
-    return new BasicJdbcCredentials(username, password);
+  public JdbcCredentials getJdbcCreds() {
+    // Rotate password on each call
+    password = "test-password-" + numRotations;
+    numRotations++;
+    return new DefaultJdbcCredentials(username, password);
   }
 
   @Override
-  public void refresh() {
-    password = "test-password-" + numRotations;
-    numRotations++;
+  public void configure(Map<String, String> map) {
+    // No configuration needed for this test class
   }
 }

@@ -15,10 +15,13 @@
 
 package io.confluent.connect.jdbc.util;
 
-import java.util.Map;
-import org.apache.kafka.common.Configurable;
+import io.confluent.credentialproviders.DefaultJdbcCredentials;
+import io.confluent.credentialproviders.JdbcCredentials;
+import io.confluent.credentialproviders.JdbcCredentialsProvider;
 
-public class DefaultJdbcCredentialsProvider implements JdbcCredentialsProvider, Configurable {
+import java.util.Map;
+
+public class DefaultJdbcCredentialsProvider implements JdbcCredentialsProvider {
 
   private static final String DB_USERNAME_CONFIG = "connection.user";
   private static final String DB_PASSWORD_CONFIG = "connection.password";
@@ -26,13 +29,13 @@ public class DefaultJdbcCredentialsProvider implements JdbcCredentialsProvider, 
   String password;
 
   @Override
-  public JdbcCredentials getJdbcCredentials() {
-    return new BasicJdbcCredentials(username, password);
+  public JdbcCredentials getJdbcCreds() {
+    return new DefaultJdbcCredentials(username, password);
   }
 
   @Override
-  public void configure(Map<String, ?> map) {
-    username = (String) map.get(DB_USERNAME_CONFIG);
-    password = (String) map.get(DB_PASSWORD_CONFIG);
+  public void configure(Map<String, String> map) {
+    username = map.get(DB_USERNAME_CONFIG);
+    password = map.get(DB_PASSWORD_CONFIG);
   }
 }

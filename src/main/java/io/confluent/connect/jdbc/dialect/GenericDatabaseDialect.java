@@ -18,7 +18,6 @@ package io.confluent.connect.jdbc.dialect;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 
-import org.apache.kafka.common.Configurable;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.types.Password;
@@ -91,8 +90,8 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.DateCalendarSystem;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
-import io.confluent.connect.jdbc.util.JdbcCredentials;
-import io.confluent.connect.jdbc.util.JdbcCredentialsProvider;
+import io.confluent.credentialproviders.JdbcCredentials;
+import io.confluent.credentialproviders.JdbcCredentialsProvider;
 import io.confluent.connect.jdbc.util.JdbcDriverInfo;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.StringUtils;
@@ -260,14 +259,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
   @Override
   public Connection getConnection() throws SQLException {
-    JdbcCredentials jdbcCredentials = jdbcCredentialsProvider.getJdbcCredentials();
+    JdbcCredentials jdbcCredentials = jdbcCredentialsProvider.getJdbcCreds();
 
     Properties properties = new Properties();
-    if (jdbcCredentials.getUsername() != null) {
-      properties.setProperty("user", jdbcCredentials.getUsername());
+    if (jdbcCredentials.user() != null) {
+      properties.setProperty("user", jdbcCredentials.user());
     }
-    if (jdbcCredentials.getPassword() != null) {
-      properties.setProperty("password", jdbcCredentials.getPassword());
+    if (jdbcCredentials.password() != null) {
+      properties.setProperty("password", jdbcCredentials.password());
     }
     properties = addConnectionProperties(properties);
     // Timeout is 40 seconds to be as long as possible for customer to have a long connection
@@ -2080,29 +2079,37 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     Password dbPassword = config.getPassword(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG);
 
     try {
-      JdbcCredentialsProvider provider = ((Class<? extends JdbcCredentialsProvider>)
+      final JdbcCredentialsProvider provider = ((Class<? extends JdbcCredentialsProvider>)
           config.getClass(JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG)
       ).newInstance();
 
-      if (provider instanceof Configurable) {
-        Map<String, Object> configs = config.originalsWithPrefix(
-            JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX
-        );
-        configs.remove(
-            JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG.substring(
-                JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX.length()
-            )
-        );
+      // Build config map for the provider
+      Map<String, Object> configObjects = config.originalsWithPrefix(
+          JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX
+      );
+      configObjects.remove(
+          JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG.substring(
+              JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX.length()
+          )
+      );
 
-        if (StringUtils.isNotBlank(username)) {
-          configs.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, username);
-        }
-        if (dbPassword != null && StringUtils.isNotBlank(dbPassword.value())) {
-          configs.put(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, dbPassword.value());
-        }
-
-        ((Configurable) provider).configure(configs);
+      if (StringUtils.isNotBlank(username)) {
+        configObjects.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, username);
       }
+      if (dbPassword != null && StringUtils.isNotBlank(dbPassword.value())) {
+        configObjects.put(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, dbPassword.value());
+      }
+
+      // Convert to Map<String, String> for the provider's configure method
+      Map<String, String> configs = new java.util.HashMap<>();
+      configObjects.forEach((k, v) -> {
+        if (v != null) {
+          configs.put(k, v.toString());
+        }
+      });
+
+      // All providers must implement configure method
+      provider.configure(configs);
 
       return provider;
     } catch (ClassCastException | IllegalAccessException | InstantiationException e) {

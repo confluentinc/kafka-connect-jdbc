@@ -645,4 +645,26 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     }
     return null;
   }
+
+  /**
+   * SQL Server implementation uses {@code SET NOEXEC ON} to compile the query without
+   * executing it. This validates table/column existence, user permissions, and SQL
+   * correctness. The {@code SET NOEXEC OFF} is always called in a finally block to
+   * restore the connection to its normal state.
+   */
+  @Override
+  public void validateQuery(Connection connection, String query) throws SQLException {
+    log.trace("Validating query via SET NOEXEC ON: '{}'",
+        shouldRedactSensitiveLogs(query));
+    try (Statement stmt = connection.createStatement()) {
+      stmt.execute("SET NOEXEC ON");
+      try {
+        stmt.execute(query);
+        log.trace("Query validation via SET NOEXEC successful for '{}'",
+            shouldRedactSensitiveLogs(query));
+      } finally {
+        stmt.execute("SET NOEXEC OFF");
+      }
+    }
+  }
 }

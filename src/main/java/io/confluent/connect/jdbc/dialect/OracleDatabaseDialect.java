@@ -31,7 +31,9 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Types;
+
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -422,5 +424,32 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       }
     }
     return null;
+  }
+
+  /**
+   * Oracle implementation uses {@code EXPLAIN PLAN FOR} to validate the query. This
+   * generates an execution plan without executing the query, which validates table/column
+   * existence, user permissions, and SQL correctness. If {@code EXPLAIN PLAN FOR} fails
+   * due to a missing PLAN_TABLE (ORA-02404), the method falls back to
+   * {@link Connection#prepareStatement(String)}.
+   */
+  @Override
+  public void validateQuery(Connection connection, String query) throws SQLException {
+    String explainQuery = "EXPLAIN PLAN FOR " + query;
+    log.trace("Validating query via EXPLAIN PLAN FOR: '{}'",
+        shouldRedactSensitiveLogs(query));
+    try (Statement stmt = connection.createStatement()) {
+      stmt.execute(explainQuery);
+      log.trace("Query validation via EXPLAIN PLAN FOR successful for '{}'",
+          shouldRedactSensitiveLogs(query));
+    } catch (SQLException e) {
+      // ORA-02404: specified plan table not found - fall back to prepareStatement
+      if (e.getErrorCode() == 2404) {
+        log.trace("PLAN_TABLE not found, falling back to prepareStatement validation");
+        super.validateQuery(connection, query);
+      } else {
+        throw e;
+      }
+    }
   }
 }

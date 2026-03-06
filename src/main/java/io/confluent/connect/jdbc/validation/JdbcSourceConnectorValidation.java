@@ -386,9 +386,9 @@ public class JdbcSourceConnectorValidation {
       }
       return true;
     } catch (SQLException e) {
-      String msg = "The configured query is not valid and with an database error with  "
-          + "the configured values. Please provide the correct query validating the "
-          + "syntax and the table/column names with the database being connected.";
+      String msg = "The configured query is not valid and has database/connection errors"
+          + ". Please provide the correct query by validating the "
+          + "query syntax and the existing table/column names with the database being connected";
       if (e.getSQLState() != null) {
         msg += " (SQLState: " + e.getSQLState() + ")";
       }

@@ -368,12 +368,12 @@ public class JdbcSourceConnectorValidation {
    * @return true if validation passes or no query is configured, false if validation fails
    */
   protected boolean validateQuerySemantics() {
-    Optional<String> queryOpt = config.getQuery();
-    if (!queryOpt.isPresent()) {
+    Optional<String> queryVal = config.getQuery();
+    if (!queryVal.isPresent()) {
       return true;
     }
 
-    String query = queryOpt.get();
+    String query = queryVal.get();
     String configKey = config.isQueryMasked()
         ? JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG
         : JdbcSourceConnectorConfig.QUERY_CONFIG;
@@ -386,8 +386,9 @@ public class JdbcSourceConnectorValidation {
       }
       return true;
     } catch (SQLException e) {
-      String msg = "The configured query is not valid and failed with the following "
-          + "Database error: " + e.getMessage() + ". Please provide the correct query";
+      String msg = "The configured query is not valid and with an database error with  "
+          + "the configured values. Please provide the correct query validating the "
+          + "syntax and the table/column names with the database being connected.";
       if (e.getSQLState() != null) {
         msg += " (SQLState: " + e.getSQLState() + ")";
       }
@@ -396,7 +397,7 @@ public class JdbcSourceConnectorValidation {
       return false;
     } catch (Exception e) {
       log.warn("Unable to validate query against the database. "
-          + "Skipping semantic validation: {}", e.getMessage(), e);
+          + "Skipping semantic validation");
       return true;
     } finally {
       if (dialect != null) {

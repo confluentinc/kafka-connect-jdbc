@@ -989,7 +989,7 @@ public class JdbcSourceConnectorValidationTest {
     assertErrors(1);
     assertErrors(QUERY_CONFIG, 1);
     assertErrorMatches(QUERY_CONFIG,
-        ".*configured query is not valid.*nonexistent_table.*");
+        ".*configured query is not valid.*SQLState: 42P01.*");
   }
 
   @Test
@@ -1011,7 +1011,7 @@ public class JdbcSourceConnectorValidationTest {
     assertErrors(1);
     assertErrors(QUERY_MASKED_CONFIG, 1);
     assertErrorMatches(QUERY_MASKED_CONFIG,
-        ".*configured query is not valid.*nonexistent_table.*");
+        ".*configured query is not valid.*SQLState: 42P01.*");
   }
 
   @Test
@@ -1032,7 +1032,7 @@ public class JdbcSourceConnectorValidationTest {
     assertErrors(1);
     assertErrors(QUERY_CONFIG, 1);
     assertErrorMatches(QUERY_CONFIG,
-        ".*configured query is not valid.*nonexistent_col.*");
+        ".*configured query is not valid.*SQLState: 42703.*");
   }
 
   @Test
@@ -1050,7 +1050,7 @@ public class JdbcSourceConnectorValidationTest {
     assertErrors(1);
     assertErrors(QUERY_CONFIG, 1);
     assertErrorMatches(QUERY_CONFIG,
-        ".*configured query is not valid.*password authentication failed.*");
+        ".*configured query is not valid.*SQLState: 28P01.*");
   }
 
   @Test
@@ -1069,7 +1069,7 @@ public class JdbcSourceConnectorValidationTest {
     assertErrors(1);
     assertErrors(QUERY_CONFIG, 1);
     assertErrorMatches(QUERY_CONFIG,
-        ".*configured query is not valid.*Connection refused.*");
+        ".*configured query is not valid.*SQLState: 08001.*");
   }
 
   @Test
@@ -1090,7 +1090,7 @@ public class JdbcSourceConnectorValidationTest {
     assertErrors(1);
     assertErrors(QUERY_CONFIG, 1);
     assertErrorMatches(QUERY_CONFIG,
-        ".*configured query is not valid.*permission denied.*");
+        ".*configured query is not valid.*SQLState: 42501.*");
   }
 
   @Test
@@ -1143,7 +1143,7 @@ public class JdbcSourceConnectorValidationTest {
     assertErrors(1);
     assertErrors(QUERY_CONFIG, 1);
     assertErrorMatches(QUERY_CONFIG,
-        ".*configured query is not valid.*Unknown error.*");
+        ".*configured query is not valid.*Please provide the correct query.*");
   }
 
   @Test

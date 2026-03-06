@@ -348,6 +348,11 @@
             <version>${zookeeper.version}</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>io.confluent</groupId>
+            <artifactId>provider-integration</artifactId>
+            <version>0.194.0</version>
+        </dependency>
     </dependencies>
 
     <build>

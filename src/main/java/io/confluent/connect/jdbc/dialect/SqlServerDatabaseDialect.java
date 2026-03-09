@@ -71,6 +71,7 @@ import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TIMESTA
 public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
 
   private static final Logger log = LoggerFactory.getLogger(SqlServerDatabaseDialect.class);
+  private static final int TYPE_SS_DIRECT_FORWARD_ONLY = 2003;
 
   /**
    * JDBC Type constant for SQL Server's custom data types.
@@ -647,6 +648,15 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
+   * SQL Server-specific result set type that forces the mssql-jdbc driver to send SQL
+   * as a raw TDS batch instead of using server-side cursors ({@code sp_cursoropen}).
+   *
+   * By default, the driver uses {@code sp_cursoropen} for SELECT statements when the
+   * result set type is {@code TYPE_FORWARD_ONLY} (1003). This causes {@code SET NOEXEC ON}
+   * validation to fail for valid queries because the cursor cannot be opened without
+   * actual execution. Using {@code TYPE_SS_DIRECT_FORWARD_ONLY} (2003) bypasses the
+   * cursor path entirely, allowing {@code SET NOEXEC ON} to work correctly — the server
+   * compiles the query without executing it, and returns a standard DONE token.
    * SQL Server implementation uses {@code SET NOEXEC ON} to compile the query without
    * executing it. This validates table/column existence, user permissions, and SQL
    * correctness. The {@code SET NOEXEC OFF} is always called in a finally block to
@@ -656,11 +666,12 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
   public void validateQuery(Connection connection, String query) throws SQLException {
     log.trace("Validating query via SET NOEXEC ON: '{}'",
         shouldRedactSensitiveLogs(query));
-    try (Statement stmt = connection.createStatement()) {
+    try (Statement stmt = connection.createStatement(
+            TYPE_SS_DIRECT_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)) {
       stmt.execute("SET NOEXEC ON");
       try {
         stmt.execute(query);
-        log.trace("Query validation via SET NOEXEC successful for '{}'",
+        log.trace("Query validation via SET NOEXEC ON successful for '{}'",
             shouldRedactSensitiveLogs(query));
       } finally {
         stmt.execute("SET NOEXEC OFF");

@@ -52,6 +52,9 @@ import static org.mockito.Mockito.when;
 
 public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatabaseDialect> {
 
+
+  private static final int TYPE_SS_DIRECT_FORWARD_ONLY = 2003;
+
   public class MockSqlServerDatabaseDialect extends SqlServerDatabaseDialect {
     public MockSqlServerDatabaseDialect(AbstractConfig config) {
       super(config);
@@ -490,17 +493,20 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
 
     dialect.bindField(stmtNvarchar, index, schema, value, colDefNvarchar, field);
     verify(stmtNvarchar, times(1)).setNString(index, value);
-}
-  // ========== validateQuery Tests ==========
+  }
 
   @Test
-  public void validateQuery_shouldUseSetNoexec() throws SQLException {
+  public void validateQuery_shouldUseSetNoexecOn() throws SQLException {
     Connection mockConnection = EasyMock.createMock(Connection.class);
-    Statement mockStatement = EasyMock.createNiceMock(Statement.class);
-    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
+    Statement mockStatement = EasyMock.createMock(Statement.class);
+    EasyMock.expect(mockConnection.createStatement(
+        TYPE_SS_DIRECT_FORWARD_ONLY, java.sql.ResultSet.CONCUR_READ_ONLY))
+        .andReturn(mockStatement);
     EasyMock.expect(mockStatement.execute("SET NOEXEC ON")).andReturn(false);
     EasyMock.expect(mockStatement.execute("SELECT * FROM users")).andReturn(false);
     EasyMock.expect(mockStatement.execute("SET NOEXEC OFF")).andReturn(false);
+    mockStatement.close();
+    EasyMock.expectLastCall();
 
     EasyMock.replay(mockConnection, mockStatement);
     dialect.validateQuery(mockConnection, "SELECT * FROM users");
@@ -508,22 +514,27 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
   }
 
   @Test
-  public void validateQuery_shouldRestoreNoexecOnFailure() throws SQLException {
+  public void validateQuery_shouldThrowOnInvalidQuery() throws SQLException {
     Connection mockConnection = EasyMock.createMock(Connection.class);
-    Statement mockStatement = EasyMock.createNiceMock(Statement.class);
-    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
+    Statement mockStatement = EasyMock.createMock(Statement.class);
+    EasyMock.expect(mockConnection.createStatement(
+        TYPE_SS_DIRECT_FORWARD_ONLY, java.sql.ResultSet.CONCUR_READ_ONLY))
+        .andReturn(mockStatement);
     EasyMock.expect(mockStatement.execute("SET NOEXEC ON")).andReturn(false);
     EasyMock.expect(mockStatement.execute("SELECT * FROM nonexistent_table"))
         .andThrow(new SQLException(
-            "Invalid object name 'nonexistent_table'.", "42S02"));
+            "Invalid object name 'nonexistent_table'.", "S0002"));
+    // SET NOEXEC OFF is still called in finally block
     EasyMock.expect(mockStatement.execute("SET NOEXEC OFF")).andReturn(false);
+    mockStatement.close();
+    EasyMock.expectLastCall();
 
     EasyMock.replay(mockConnection, mockStatement);
     try {
       dialect.validateQuery(mockConnection, "SELECT * FROM nonexistent_table");
       org.junit.Assert.fail("Expected SQLException to be thrown");
     } catch (SQLException e) {
-      assertEquals("42S02", e.getSQLState());
+      assertEquals("S0002", e.getSQLState());
     }
     EasyMock.verify(mockConnection, mockStatement);
   }
@@ -531,13 +542,17 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
   @Test
   public void validateQuery_shouldWorkWithComplexQuery() throws SQLException {
     Connection mockConnection = EasyMock.createMock(Connection.class);
-    Statement mockStatement = EasyMock.createNiceMock(Statement.class);
-    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
+    Statement mockStatement = EasyMock.createMock(Statement.class);
     String complexQuery = "SELECT a.id, b.name FROM users a "
         + "INNER JOIN orders b ON a.id = b.user_id";
+    EasyMock.expect(mockConnection.createStatement(
+        TYPE_SS_DIRECT_FORWARD_ONLY, java.sql.ResultSet.CONCUR_READ_ONLY))
+        .andReturn(mockStatement);
     EasyMock.expect(mockStatement.execute("SET NOEXEC ON")).andReturn(false);
     EasyMock.expect(mockStatement.execute(complexQuery)).andReturn(false);
     EasyMock.expect(mockStatement.execute("SET NOEXEC OFF")).andReturn(false);
+    mockStatement.close();
+    EasyMock.expectLastCall();
 
     EasyMock.replay(mockConnection, mockStatement);
     dialect.validateQuery(mockConnection, complexQuery);

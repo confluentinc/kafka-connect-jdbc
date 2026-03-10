@@ -28,6 +28,7 @@ import org.apache.kafka.connect.data.Timestamp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
@@ -644,5 +645,111 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       }
     }
     return null;
+  }
+
+  /**
+   * SQL Server-specific query validation using {@code sp_describe_first_result_set},
+   * which is SQL Server's equivalent of {@code EXPLAIN} in PostgreSQL/MySQL.
+   *
+   * <p>This stored procedure (available since SQL Server 2012) parses and resolves
+   * the query without executing it, validating syntax, table/column existence, and
+   * user permissions. It is a lightweight, compile-time-only operation that completes
+   * in milliseconds — equivalent in weight to the {@code EXPLAIN} commands used by
+   * the PostgreSQL and MySQL dialect implementations.</p>
+   *
+   * <p>The query is passed as a parameterized {@code NVARCHAR} value to avoid SQL
+   * injection risks from user-configured queries.</p>
+   *
+   * <p>This approach replaces the previous {@code SET NOEXEC ON} mechanism, which
+   * relied on the driver-specific {@code TYPE_SS_DIRECT_FORWARD_ONLY} (2003) result
+   * set type to bypass {@code sp_cursoropen}. That approach fails in managed and
+   * cloud environments where JDBC connection pools proxy the {@code Connection}
+   * object and may not pass through the non-standard result set type, causing the
+   * driver to fall back to {@code sp_cursoropen} — which cannot open a cursor in
+   * {@code NOEXEC} mode, resulting in false validation failures for valid queries.</p>
+   */
+  @Override
+  public void validateQuery(Connection connection, String query) throws SQLException {
+    String redactedQuery = shouldRedactSensitiveLogs(query);
+    log.info("SQL Server validateQuery: starting validation for query: '{}'", redactedQuery);
+
+    // Log connection details for troubleshooting
+    try {
+      log.info("SQL Server validateQuery: connection class = {}",
+          connection.getClass().getName());
+      log.info("SQL Server validateQuery: connection isClosed = {}",
+          connection.isClosed());
+      log.info("SQL Server validateQuery: connection catalog = {}",
+          connection.getCatalog());
+      log.info("SQL Server validateQuery: connection autoCommit = {}",
+          connection.getAutoCommit());
+      DatabaseMetaData dbMeta = connection.getMetaData();
+      log.info("SQL Server validateQuery: JDBC driver name = {}",
+          dbMeta.getDriverName());
+      log.info("SQL Server validateQuery: JDBC driver version = {}",
+          dbMeta.getDriverVersion());
+      log.info("SQL Server validateQuery: database product name = {}",
+          dbMeta.getDatabaseProductName());
+      log.info("SQL Server validateQuery: database product version = {}",
+          dbMeta.getDatabaseProductVersion());
+      log.info("SQL Server validateQuery: database major version = {}",
+          dbMeta.getDatabaseMajorVersion());
+      log.info("SQL Server validateQuery: database minor version = {}",
+          dbMeta.getDatabaseMinorVersion());
+    } catch (Exception e) {
+      log.warn("SQL Server validateQuery: unable to retrieve connection/driver metadata", e);
+    }
+
+    String callSql = "{call sp_describe_first_result_set(?, NULL, 0)}";
+    log.info("SQL Server validateQuery: preparing CallableStatement with sql: '{}'", callSql);
+
+    try (CallableStatement stmt = connection.prepareCall(callSql)) {
+      log.info("SQL Server validateQuery: CallableStatement created successfully, "
+          + "statement class = {}", stmt.getClass().getName());
+      log.info("SQL Server validateQuery: setting parameter 1 (NVARCHAR) to query: '{}'",
+          redactedQuery);
+      stmt.setNString(1, query);
+      log.info("SQL Server validateQuery: parameter set successfully, executing statement...");
+      boolean hasResultSet = stmt.execute();
+      log.info("SQL Server validateQuery: execute() returned hasResultSet = {}", hasResultSet);
+
+      if (hasResultSet) {
+        try (ResultSet rs = stmt.getResultSet()) {
+          ResultSetMetaData rsMeta = rs.getMetaData();
+          int columnCount = rsMeta.getColumnCount();
+          log.info("SQL Server validateQuery: result set has {} columns", columnCount);
+          for (int i = 1; i <= columnCount; i++) {
+            log.info("SQL Server validateQuery: result column {}: name='{}', type='{}'",
+                i, rsMeta.getColumnName(i), rsMeta.getColumnTypeName(i));
+          }
+        }
+      } else {
+        int updateCount = stmt.getUpdateCount();
+        log.info("SQL Server validateQuery: no result set returned, updateCount = {}",
+            updateCount);
+      }
+
+      log.info("SQL Server validateQuery: validation PASSED for query: '{}'", redactedQuery);
+    } catch (SQLException e) {
+      log.error("SQL Server validateQuery: validation FAILED for query: '{}'", redactedQuery);
+      log.error("SQL Server validateQuery: SQLException message = {}", e.getMessage());
+      log.error("SQL Server validateQuery: SQLException SQLState = {}", e.getSQLState());
+      log.error("SQL Server validateQuery: SQLException errorCode = {}", e.getErrorCode());
+      if (e.getCause() != null) {
+        log.error("SQL Server validateQuery: SQLException cause = {} - {}",
+            e.getCause().getClass().getName(), e.getCause().getMessage());
+      }
+      SQLException nextEx = e.getNextException();
+      int chainIdx = 1;
+      while (nextEx != null) {
+        log.error("SQL Server validateQuery: chained SQLException [{}]: message='{}', "
+                + "SQLState='{}', errorCode={}",
+            chainIdx, nextEx.getMessage(), nextEx.getSQLState(), nextEx.getErrorCode());
+        nextEx = nextEx.getNextException();
+        chainIdx++;
+      }
+      log.error("SQL Server validateQuery: full stack trace", e);
+      throw e;
+    }
   }
 }

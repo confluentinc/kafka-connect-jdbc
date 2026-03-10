@@ -650,7 +650,6 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
   /**
    * SQL Server-specific result set type that forces the mssql-jdbc driver to send SQL
    * as a raw TDS batch instead of using server-side cursors ({@code sp_cursoropen}).
-   *
    * By default, the driver uses {@code sp_cursoropen} for SELECT statements when the
    * result set type is {@code TYPE_FORWARD_ONLY} (1003). This causes {@code SET NOEXEC ON}
    * validation to fail for valid queries because the cursor cannot be opened without

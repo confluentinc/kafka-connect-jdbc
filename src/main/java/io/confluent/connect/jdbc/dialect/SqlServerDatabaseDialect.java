@@ -657,8 +657,17 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
    * in milliseconds — equivalent in weight to the {@code EXPLAIN} commands used by
    * the PostgreSQL and MySQL dialect implementations.</p>
    *
-   * <p>The query is passed as a parameterized {@code NVARCHAR} value to avoid SQL
-   * injection risks from user-configured queries.</p>
+   * <p>Three invocation strategies are attempted in order:</p>
+   * <ol>
+   *   <li><b>Plain Statement with EXEC</b> — bypasses both the TDS RPC pathway and
+   *       the {@code sp_prepexec} preparation layer. The query is safely escaped as
+   *       an {@code NVARCHAR} literal (single quotes doubled).</li>
+   *   <li><b>PreparedStatement with EXEC</b> — uses parameterized {@code NVARCHAR}
+   *       but the JDBC driver may wrap it in {@code sp_prepexec}, which can fail
+   *       for system stored procedures in some environments.</li>
+   *   <li><b>CallableStatement with {call}</b> — uses the JDBC escape syntax, which
+   *       maps to TDS RPC. Fails in managed/cloud environments with error 2809.</li>
+   * </ol>
    *
    * <p>This approach replaces the previous {@code SET NOEXEC ON} mechanism, which
    * relied on the driver-specific {@code TYPE_SS_DIRECT_FORWARD_ONLY} (2003) result
@@ -700,56 +709,137 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       log.warn("SQL Server validateQuery: unable to retrieve connection/driver metadata", e);
     }
 
+    // Attempt 1: Plain Statement with EXEC (no sp_prepexec, no RPC)
+    log.info("SQL Server validateQuery: === ATTEMPT 1: Plain Statement with EXEC ===");
+    try {
+      validateQueryViaStatement(connection, query, redactedQuery);
+      log.info("SQL Server validateQuery: ATTEMPT 1 PASSED");
+      return;
+    } catch (SQLException e) {
+      logSqlException("ATTEMPT 1", e);
+      log.info("SQL Server validateQuery: ATTEMPT 1 failed, trying ATTEMPT 2...");
+    }
+
+    // Attempt 2: PreparedStatement with EXEC (parameterized, uses sp_prepexec)
+    log.info("SQL Server validateQuery: === ATTEMPT 2: PreparedStatement with EXEC ===");
+    try {
+      validateQueryViaPreparedStatement(connection, query, redactedQuery);
+      log.info("SQL Server validateQuery: ATTEMPT 2 PASSED");
+      return;
+    } catch (SQLException e) {
+      logSqlException("ATTEMPT 2", e);
+      log.info("SQL Server validateQuery: ATTEMPT 2 failed, trying ATTEMPT 3...");
+    }
+
+    // Attempt 3: CallableStatement with {call} (RPC pathway)
+    log.info("SQL Server validateQuery: === ATTEMPT 3: CallableStatement with {call} ===");
+    validateQueryViaCallableStatement(connection, query, redactedQuery);
+    log.info("SQL Server validateQuery: ATTEMPT 3 PASSED");
+  }
+
+  private void validateQueryViaStatement(
+      Connection connection, String query, String redactedQuery
+  ) throws SQLException {
+    String escapedQuery = query.replace("'", "''");
+    String sql = "EXEC sp_describe_first_result_set "
+        + "@tsql = N'" + escapedQuery + "', @params = NULL, @browse_information_mode = 0";
+    log.info("SQL Server validateQuery: creating plain Statement");
+    log.info("SQL Server validateQuery: executing sql (query escaped): "
+        + "'EXEC sp_describe_first_result_set @tsql = N''<{}>'', "
+        + "@params = NULL, @browse_information_mode = 0'", redactedQuery);
+
+    try (Statement stmt = connection.createStatement()) {
+      log.info("SQL Server validateQuery: Statement created, class = {}",
+          stmt.getClass().getName());
+      boolean hasResultSet = stmt.execute(sql);
+      log.info("SQL Server validateQuery: execute() returned hasResultSet = {}", hasResultSet);
+      logResultSetDetails(stmt, hasResultSet);
+      log.info("SQL Server validateQuery: validation PASSED via plain Statement "
+          + "for query: '{}'", redactedQuery);
+    }
+  }
+
+  private void validateQueryViaPreparedStatement(
+      Connection connection, String query, String redactedQuery
+  ) throws SQLException {
+    String execSql = "EXEC sp_describe_first_result_set "
+        + "@tsql = ?, @params = NULL, @browse_information_mode = 0";
+    log.info("SQL Server validateQuery: preparing PreparedStatement with sql: '{}'", execSql);
+
+    try (PreparedStatement stmt = connection.prepareStatement(execSql)) {
+      log.info("SQL Server validateQuery: PreparedStatement created, class = {}",
+          stmt.getClass().getName());
+      log.info("SQL Server validateQuery: setting parameter 1 (NVARCHAR) to query: '{}'",
+          redactedQuery);
+      stmt.setNString(1, query);
+      log.info("SQL Server validateQuery: parameter set, executing statement...");
+      boolean hasResultSet = stmt.execute();
+      log.info("SQL Server validateQuery: execute() returned hasResultSet = {}", hasResultSet);
+      logResultSetDetails(stmt, hasResultSet);
+      log.info("SQL Server validateQuery: validation PASSED via PreparedStatement "
+          + "for query: '{}'", redactedQuery);
+    }
+  }
+
+  private void validateQueryViaCallableStatement(
+      Connection connection, String query, String redactedQuery
+  ) throws SQLException {
     String callSql = "{call sp_describe_first_result_set(?, NULL, 0)}";
     log.info("SQL Server validateQuery: preparing CallableStatement with sql: '{}'", callSql);
 
     try (CallableStatement stmt = connection.prepareCall(callSql)) {
-      log.info("SQL Server validateQuery: CallableStatement created successfully, "
-          + "statement class = {}", stmt.getClass().getName());
+      log.info("SQL Server validateQuery: CallableStatement created, class = {}",
+          stmt.getClass().getName());
       log.info("SQL Server validateQuery: setting parameter 1 (NVARCHAR) to query: '{}'",
           redactedQuery);
       stmt.setNString(1, query);
-      log.info("SQL Server validateQuery: parameter set successfully, executing statement...");
+      log.info("SQL Server validateQuery: parameter set, executing statement...");
       boolean hasResultSet = stmt.execute();
       log.info("SQL Server validateQuery: execute() returned hasResultSet = {}", hasResultSet);
-
-      if (hasResultSet) {
-        try (ResultSet rs = stmt.getResultSet()) {
-          ResultSetMetaData rsMeta = rs.getMetaData();
-          int columnCount = rsMeta.getColumnCount();
-          log.info("SQL Server validateQuery: result set has {} columns", columnCount);
-          for (int i = 1; i <= columnCount; i++) {
-            log.info("SQL Server validateQuery: result column {}: name='{}', type='{}'",
-                i, rsMeta.getColumnName(i), rsMeta.getColumnTypeName(i));
-          }
-        }
-      } else {
-        int updateCount = stmt.getUpdateCount();
-        log.info("SQL Server validateQuery: no result set returned, updateCount = {}",
-            updateCount);
-      }
-
-      log.info("SQL Server validateQuery: validation PASSED for query: '{}'", redactedQuery);
-    } catch (SQLException e) {
-      log.error("SQL Server validateQuery: validation FAILED for query: '{}'", redactedQuery);
-      log.error("SQL Server validateQuery: SQLException message = {}", e.getMessage());
-      log.error("SQL Server validateQuery: SQLException SQLState = {}", e.getSQLState());
-      log.error("SQL Server validateQuery: SQLException errorCode = {}", e.getErrorCode());
-      if (e.getCause() != null) {
-        log.error("SQL Server validateQuery: SQLException cause = {} - {}",
-            e.getCause().getClass().getName(), e.getCause().getMessage());
-      }
-      SQLException nextEx = e.getNextException();
-      int chainIdx = 1;
-      while (nextEx != null) {
-        log.error("SQL Server validateQuery: chained SQLException [{}]: message='{}', "
-                + "SQLState='{}', errorCode={}",
-            chainIdx, nextEx.getMessage(), nextEx.getSQLState(), nextEx.getErrorCode());
-        nextEx = nextEx.getNextException();
-        chainIdx++;
-      }
-      log.error("SQL Server validateQuery: full stack trace", e);
-      throw e;
+      logResultSetDetails(stmt, hasResultSet);
+      log.info("SQL Server validateQuery: validation PASSED via CallableStatement "
+          + "for query: '{}'", redactedQuery);
     }
+  }
+
+  private void logResultSetDetails(Statement stmt, boolean hasResultSet) throws SQLException {
+    if (hasResultSet) {
+      try (ResultSet rs = stmt.getResultSet()) {
+        ResultSetMetaData rsMeta = rs.getMetaData();
+        int columnCount = rsMeta.getColumnCount();
+        log.info("SQL Server validateQuery: result set has {} columns", columnCount);
+        for (int i = 1; i <= columnCount; i++) {
+          log.info("SQL Server validateQuery: result column {}: name='{}', type='{}'",
+              i, rsMeta.getColumnName(i), rsMeta.getColumnTypeName(i));
+        }
+      }
+    } else {
+      int updateCount = stmt.getUpdateCount();
+      log.info("SQL Server validateQuery: no result set returned, updateCount = {}",
+          updateCount);
+    }
+  }
+
+  private void logSqlException(String attempt, SQLException e) {
+    log.error("SQL Server validateQuery: {} FAILED", attempt);
+    log.error("SQL Server validateQuery: {} SQLException message = {}", attempt, e.getMessage());
+    log.error("SQL Server validateQuery: {} SQLException SQLState = {}",
+        attempt, e.getSQLState());
+    log.error("SQL Server validateQuery: {} SQLException errorCode = {}",
+        attempt, e.getErrorCode());
+    if (e.getCause() != null) {
+      log.error("SQL Server validateQuery: {} SQLException cause = {} - {}",
+          attempt, e.getCause().getClass().getName(), e.getCause().getMessage());
+    }
+    SQLException nextEx = e.getNextException();
+    int chainIdx = 1;
+    while (nextEx != null) {
+      log.error("SQL Server validateQuery: {} chained SQLException [{}]: message='{}', "
+              + "SQLState='{}', errorCode={}",
+          attempt, chainIdx, nextEx.getMessage(), nextEx.getSQLState(), nextEx.getErrorCode());
+      nextEx = nextEx.getNextException();
+      chainIdx++;
+    }
+    log.error("SQL Server validateQuery: {} full stack trace", attempt, e);
   }
 }

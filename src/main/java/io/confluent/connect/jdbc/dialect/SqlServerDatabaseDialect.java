@@ -645,4 +645,38 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     }
     return null;
   }
+
+  /**
+   * SQL Server-specific query validation using {@code sp_describe_first_result_set},
+   * which is SQL Server's equivalent of {@code EXPLAIN} in PostgreSQL/MySQL.
+   *
+   * <p>This stored procedure (available since SQL Server 2012) parses and resolves
+   * the query without executing it, validating syntax, table/column existence, and
+   * user permissions. It is a lightweight, compile-time-only operation that completes
+   * in milliseconds — equivalent in weight to the {@code EXPLAIN} commands used by
+   * the PostgreSQL and MySQL dialect implementations.</p>
+   *
+   * <p>The query is passed as a parameterized {@code NVARCHAR} value to avoid SQL
+   * injection risks from user-configured queries.</p>
+   *
+   * <p>This approach replaces the previous {@code SET NOEXEC ON} mechanism, which
+   * relied on the driver-specific {@code TYPE_SS_DIRECT_FORWARD_ONLY} (2003) result
+   * set type to bypass {@code sp_cursoropen}. That approach fails in managed and
+   * cloud environments where JDBC connection pools proxy the {@code Connection}
+   * object and may not pass through the non-standard result set type, causing the
+   * driver to fall back to {@code sp_cursoropen} — which cannot open a cursor in
+   * {@code NOEXEC} mode, resulting in false validation failures for valid queries.</p>
+   */
+  @Override
+  public void validateQuery(Connection connection, String query) throws SQLException {
+    log.trace("Validating query via sp_describe_first_result_set for SQL Server: '{}'",
+        shouldRedactSensitiveLogs(query));
+    try (PreparedStatement stmt = connection.prepareStatement(
+        "EXEC sp_describe_first_result_set @tsql = ?")) {
+      stmt.setNString(1, query);
+      stmt.execute();
+      log.trace("Query validation via sp_describe_first_result_set successful for '{}'",
+          shouldRedactSensitiveLogs(query));
+    }
+  }
 }

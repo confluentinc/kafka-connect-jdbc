@@ -494,17 +494,14 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
   }
 
   @Test
-  public void validateQuery_shouldUseSpDescribeFirstResultSet() throws SQLException {
+  public void validateQuery_shouldValidateWithPreparedStatement() throws SQLException {
     Connection mockConnection = EasyMock.createMock(Connection.class);
-    Statement mockStatement = EasyMock.createNiceMock(Statement.class);
+    PreparedStatement mockStatement = EasyMock.createNiceMock(PreparedStatement.class);
     String query = "SELECT * FROM users";
-    String expectedSql = "EXEC sp_describe_first_result_set "
-        + "@tsql = N'" + query + "', "
-        + "@params = NULL, "
-        + "@browse_information_mode = 0";
 
-    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
-    EasyMock.expect(mockStatement.execute(expectedSql)).andReturn(true);
+    EasyMock.expect(mockConnection.prepareStatement(query)).andReturn(mockStatement);
+    mockStatement.close();
+    EasyMock.expectLastCall();
 
     EasyMock.replay(mockConnection, mockStatement);
     dialect.validateQuery(mockConnection, query);
@@ -514,64 +511,35 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
   @Test
   public void validateQuery_shouldThrowOnInvalidQuery() throws SQLException {
     Connection mockConnection = EasyMock.createMock(Connection.class);
-    Statement mockStatement = EasyMock.createNiceMock(Statement.class);
     String query = "SELECT * FROM nonexistent_table";
-    String expectedSql = "EXEC sp_describe_first_result_set "
-        + "@tsql = N'" + query + "', "
-        + "@params = NULL, "
-        + "@browse_information_mode = 0";
 
-    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
-    EasyMock.expect(mockStatement.execute(expectedSql))
+    EasyMock.expect(mockConnection.prepareStatement(query))
         .andThrow(new SQLException(
             "Invalid object name 'nonexistent_table'.", "S0002"));
 
-    EasyMock.replay(mockConnection, mockStatement);
+    EasyMock.replay(mockConnection);
     try {
       dialect.validateQuery(mockConnection, query);
       org.junit.Assert.fail("Expected SQLException to be thrown");
     } catch (SQLException e) {
       assertEquals("S0002", e.getSQLState());
     }
-    EasyMock.verify(mockConnection, mockStatement);
+    EasyMock.verify(mockConnection);
   }
 
   @Test
   public void validateQuery_shouldWorkWithComplexQuery() throws SQLException {
     Connection mockConnection = EasyMock.createMock(Connection.class);
-    Statement mockStatement = EasyMock.createNiceMock(Statement.class);
+    PreparedStatement mockStatement = EasyMock.createNiceMock(PreparedStatement.class);
     String complexQuery = "SELECT a.id, b.name FROM users a "
         + "INNER JOIN orders b ON a.id = b.user_id";
-    String expectedSql = "EXEC sp_describe_first_result_set "
-        + "@tsql = N'" + complexQuery + "', "
-        + "@params = NULL, "
-        + "@browse_information_mode = 0";
 
-    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
-    EasyMock.expect(mockStatement.execute(expectedSql)).andReturn(true);
+    EasyMock.expect(mockConnection.prepareStatement(complexQuery)).andReturn(mockStatement);
+    mockStatement.close();
+    EasyMock.expectLastCall();
 
     EasyMock.replay(mockConnection, mockStatement);
     dialect.validateQuery(mockConnection, complexQuery);
-    EasyMock.verify(mockConnection, mockStatement);
-  }
-
-  @Test
-  public void validateQuery_shouldEscapeSingleQuotesInQuery() throws SQLException {
-    Connection mockConnection = EasyMock.createMock(Connection.class);
-    Statement mockStatement = EasyMock.createNiceMock(Statement.class);
-    String queryWithQuotes = "SELECT * FROM users WHERE name = 'John'";
-    // Single quotes should be doubled when escaped: 'John' becomes ''John''
-    String escapedQuery = "SELECT * FROM users WHERE name = ''John''";
-    String expectedSql = "EXEC sp_describe_first_result_set "
-        + "@tsql = N'" + escapedQuery + "', "
-        + "@params = NULL, "
-        + "@browse_information_mode = 0";
-
-    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
-    EasyMock.expect(mockStatement.execute(expectedSql)).andReturn(true);
-
-    EasyMock.replay(mockConnection, mockStatement);
-    dialect.validateQuery(mockConnection, queryWithQuotes);
     EasyMock.verify(mockConnection, mockStatement);
   }
 }

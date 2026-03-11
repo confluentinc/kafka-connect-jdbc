@@ -118,6 +118,20 @@ public class SqlParser {
       Pattern.compile("'(?:[^'\\\\]|\\\\.|'')*'");
 
   /**
+   * Regex pattern to match PostgreSQL dollar-quoted string literals.
+   * Dollar-quoting uses the syntax {@code $$content$$} or {@code $tag$content$tag$}
+   * where the tag is an optional identifier. JSqlParser 4.9 parses these but does NOT
+   * route them through the ExpressionVisitor as StringValue nodes, so they bypass
+   * Layer 1 (AST-based redaction) entirely. This pattern is applied in Layers 2, 3,
+   * and 4 to ensure dollar-quoted PII is always caught.
+   *
+   * <p>The pattern matches: {@code $} + optional tag (word chars) + {@code $} +
+   * content (non-greedy) + {@code $} + same tag + {@code $}.</p>
+   */
+  static final Pattern DOLLAR_QUOTED_PATTERN =
+      Pattern.compile("\\$(\\w*)\\$.*?\\$\\1\\$", Pattern.DOTALL);
+
+  /**
    * Regex pattern to match standalone numeric literals (integers and decimals).
    * Uses lookbehind/lookahead to avoid matching numbers that are part of identifiers
    * (e.g., 'table1', 'col_2'). This pattern is used only as a fallback when
@@ -166,9 +180,10 @@ public class SqlParser {
    *   <li><b>Layer 1 (AST-based):</b> Parses the SQL using JSqlParser and replaces all
    *       literal values (strings, numbers, dates, etc.) with redaction markers via the
    *       visitor pattern.</li>
-   *   <li><b>Layer 2 (Regex safety net):</b> After AST processing, applies a regex to catch
-   *       any remaining single-quoted string literals that may have leaked through expression
-   *       types that bypass the JSqlParser visitor pattern.</li>
+   *   <li><b>Layer 2 (Regex safety net):</b> After AST processing, applies regex patterns to
+   *       catch any remaining string literals that may have leaked through expression types
+   *       that bypass the JSqlParser visitor pattern. This covers both single-quoted literals
+   *       and PostgreSQL dollar-quoted literals ({@code $$...$$}, {@code $tag$...$tag$}).</li>
    *   <li><b>Layer 3 (Post-redaction verification):</b> Scans the redacted output for any
    *       unredacted string or numeric literals. String literals must all be '********'.
    *       Numeric literals must be 0 (redaction marker) or in a known structural context
@@ -227,9 +242,14 @@ public class SqlParser {
   }
 
   /**
-   * Redacts all single-quoted string literals in the SQL using regex.
-   * Used as a safety net after AST-based redaction to catch any literals that
-   * leaked through expression types that bypass the JSqlParser visitor pattern.
+   * Redacts all string literals in the SQL using regex, including both standard
+   * single-quoted literals and PostgreSQL dollar-quoted literals ({@code $$...$$},
+   * {@code $tag$...$tag$}). Used as a safety net after AST-based redaction to catch
+   * any literals that leaked through expression types that bypass the JSqlParser
+   * visitor pattern.
+   *
+   * <p>Dollar-quoted strings are redacted first to prevent interference with the
+   * single-quote pattern (dollar-quoted content may itself contain single quotes).</p>
    *
    * @param sql the SQL string to process
    * @return the SQL with all string literals replaced with the redaction marker
@@ -238,7 +258,10 @@ public class SqlParser {
     if (sql == null || sql.isEmpty()) {
       return sql;
     }
-    return STRING_LITERAL_PATTERN.matcher(sql).replaceAll(REDACTED_STRING);
+    // Redact dollar-quoted strings first (they may contain single quotes)
+    String result = DOLLAR_QUOTED_PATTERN.matcher(sql).replaceAll(REDACTED_STRING);
+    // Then redact standard single-quoted strings
+    return STRING_LITERAL_PATTERN.matcher(result).replaceAll(REDACTED_STRING);
   }
 
   /**
@@ -255,9 +278,11 @@ public class SqlParser {
       return REDACTED_VALUE;
     }
     try {
-      // First, redact string literals
-      String result = STRING_LITERAL_PATTERN.matcher(sql).replaceAll(REDACTED_STRING);
-      // Then, redact standalone numeric literals
+      // First, redact dollar-quoted strings (they may contain single quotes)
+      String result = DOLLAR_QUOTED_PATTERN.matcher(sql).replaceAll(REDACTED_STRING);
+      // Then, redact single-quoted string literals
+      result = STRING_LITERAL_PATTERN.matcher(result).replaceAll(REDACTED_STRING);
+      // Finally, redact standalone numeric literals
       result = NUMERIC_LITERAL_PATTERN.matcher(result).replaceAll(REDACTED_NUMBER);
       return result;
     } catch (Exception e) {
@@ -269,6 +294,11 @@ public class SqlParser {
   /**
    * Post-redaction verification: checks whether any literal values leaked through
    * the AST-based redaction process (Layer 1) and the regex safety net (Layer 2).
+   *
+   * <p><b>Dollar-quoted verification:</b> Scans for any remaining PostgreSQL
+   * dollar-quoted strings ({@code $$...$$}, {@code $tag$...$tag$}). These bypass
+   * the JSqlParser visitor pattern entirely and must be caught here if Layer 2
+   * did not remove them.</p>
    *
    * <p><b>String verification:</b> Scans the redacted output for any single-quoted string
    * that is not the redaction marker ('********'). This check has zero false positives
@@ -285,6 +315,12 @@ public class SqlParser {
   static boolean hasLeakedLiterals(String redactedSql) {
     if (redactedSql == null || redactedSql.isEmpty()) {
       return false;
+    }
+
+    // Check 0: Verify no dollar-quoted strings remain in the output.
+    // After Layer 2, all $$...$$ and $tag$...$tag$ should be redacted.
+    if (DOLLAR_QUOTED_PATTERN.matcher(redactedSql).find()) {
+      return true;
     }
 
     // Check 1: Verify all string literals in the output are properly redacted.

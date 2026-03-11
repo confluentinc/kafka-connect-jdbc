@@ -1346,6 +1346,105 @@ public class SqlParserTest {
   }
 
   @Test
+  public void testHasLeakedLiterals_dollarQuotedString() {
+    // Dollar-quoted strings should be detected as leaked literals
+    String leaked = "SELECT * FROM t WHERE data = $$secret_value$$";
+    assertTrue("Dollar-quoted string should be detected as leak",
+        SqlParser.hasLeakedLiterals(leaked));
+  }
+
+  @Test
+  public void testHasLeakedLiterals_taggedDollarQuotedString() {
+    String leaked = "SELECT * FROM t WHERE data = $tag$secret PII$tag$";
+    assertTrue("Tagged dollar-quoted string should be detected as leak",
+        SqlParser.hasLeakedLiterals(leaked));
+  }
+
+  // ========================================
+  // PostgreSQL Dollar-Quoted String Tests
+  // ========================================
+
+  @Test
+  public void testDollarQuotedStringSimple() {
+    String sql = "SELECT * FROM t WHERE data = $$secret_value$$";
+    String result = SqlParser.redactSensitiveData(sql);
+
+    assertFalse("Dollar-quoted PII should be redacted", result.contains("secret_value"));
+    assertFalse("Dollar signs should not remain as quoting", result.contains("$$"));
+    assertTrue("Should preserve query structure", result.contains("SELECT * FROM t WHERE data ="));
+  }
+
+  @Test
+  public void testDollarQuotedStringWithTag() {
+    String sql = "SELECT * FROM t WHERE data = $tag$secret PII data$tag$";
+    String result = SqlParser.redactSensitiveData(sql);
+
+    assertFalse("Tagged dollar-quoted PII should be redacted", result.contains("secret"));
+    assertFalse("Dollar-tag should not remain", result.contains("$tag$"));
+    assertTrue("Should preserve query structure", result.contains("SELECT * FROM t WHERE data ="));
+  }
+
+  @Test
+  public void testDollarQuotedStringWithSingleQuotesInside() {
+    // Dollar-quoting is often used specifically because the content contains single quotes
+    String sql = "SELECT * FROM t WHERE bio = $$John's SSN is 123-45-6789$$";
+    String result = SqlParser.redactSensitiveData(sql);
+
+    assertFalse("Name should be redacted", result.contains("John"));
+    assertFalse("SSN should be redacted", result.contains("123-45-6789"));
+  }
+
+  @Test
+  public void testDollarQuotedWithRegularString() {
+    // Mixed: dollar-quoted and regular single-quoted in same query
+    String sql = "SELECT * FROM t WHERE bio = $$secret$$ AND ssn = '123-45-6789'";
+    String result = SqlParser.redactSensitiveData(sql);
+
+    assertFalse("Dollar-quoted value should be redacted", result.contains("secret"));
+    assertFalse("Single-quoted SSN should be redacted", result.contains("123-45-6789"));
+    assertTrue("Should preserve query structure", result.contains("SELECT * FROM t"));
+  }
+
+  @Test
+  public void testDollarQuotedInSelectList() {
+    String sql = "SELECT id, name, $$admin_password$$ AS default_pass FROM users WHERE role = 'superadmin'";
+    String result = SqlParser.redactSensitiveData(sql);
+
+    assertFalse("Dollar-quoted password should be redacted", result.contains("admin_password"));
+    assertFalse("Role value should be redacted", result.contains("superadmin"));
+    assertTrue("Should preserve column names", result.contains("id, name"));
+  }
+
+  @Test
+  public void testDollarQuotedMultiline() {
+    // Dollar-quoting can span multiple lines (common in PostgreSQL functions)
+    String sql = "SELECT * FROM t WHERE data = $$line1\nline2\nSSN: 999-88-7777$$";
+    String result = SqlParser.redactSensitiveData(sql);
+
+    assertFalse("Multiline dollar-quoted content should be redacted", result.contains("999-88-7777"));
+    assertFalse("Multiline content should be redacted", result.contains("line1"));
+  }
+
+  @Test
+  public void testDollarQuotedEmptyContent() {
+    // Edge case: empty dollar-quoted string
+    String sql = "SELECT * FROM t WHERE data = $$$$";
+    String result = SqlParser.redactSensitiveData(sql);
+
+    assertFalse("Empty dollar-quoted string should be redacted", result.contains("$$$$"));
+  }
+
+  @Test
+  public void testDollarQuotedRegexFallback() {
+    // When JSqlParser fails to parse, the regex fallback should also handle dollar-quoting
+    String sql = "SELECT @@@custom_func($$secret_data$$) :::: FROM users";
+    String result = SqlParser.redactSensitiveData(sql);
+
+    assertFalse("Dollar-quoted string should be redacted in regex fallback",
+        result.contains("secret_data"));
+  }
+
+  @Test
   public void testLayer3TriggersFullRedactOnLeakedNumeric() {
     // Simulate a query where AST processing would miss a numeric literal
     // by verifying the entire flow — Layer 3 should catch it and fully redact

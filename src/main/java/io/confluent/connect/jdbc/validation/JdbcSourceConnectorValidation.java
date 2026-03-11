@@ -370,7 +370,7 @@ public class JdbcSourceConnectorValidation {
   protected boolean validateQuerySemantics() {
     Optional<String> queryVal = config.getQuery();
     if (!queryVal.isPresent()) {
-      log.info("validateQuerySemantics: no query configured, skipping semantic validation");
+      log.debug("No query configured, skipping semantic validation");
       return true;
     }
 
@@ -379,21 +379,14 @@ public class JdbcSourceConnectorValidation {
         ? JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG
         : JdbcSourceConnectorConfig.QUERY_CONFIG;
 
-    log.info("validateQuerySemantics: starting semantic validation for configKey='{}', "
-        + "queryLength={}", configKey, query.length());
+    log.debug("Validating query semantics for '{}'", configKey);
 
     DatabaseDialect dialect = null;
     try {
       dialect = createDialect();
-      log.info("validateQuerySemantics: created dialect class = {}",
-          dialect.getClass().getName());
-      log.info("validateQuerySemantics: obtaining connection from dialect...");
       try (Connection connection = dialect.getConnection()) {
-        log.info("validateQuerySemantics: connection obtained, class = {}",
-            connection.getClass().getName());
-        log.info("validateQuerySemantics: invoking dialect.validateQuery()...");
         dialect.validateQuery(connection, query);
-        log.info("validateQuerySemantics: validation PASSED");
+        log.debug("Query semantic validation successful for '{}'", configKey);
       }
       return true;
     } catch (SQLException e) {
@@ -404,16 +397,13 @@ public class JdbcSourceConnectorValidation {
         msg += " (SQLState: " + e.getSQLState() + ")";
       }
       addConfigError(configKey, msg);
-      log.error("validateQuerySemantics: validation FAILED with SQLException: "
-          + "message='{}', SQLState='{}', errorCode={}",
-          e.getMessage(), e.getSQLState(), e.getErrorCode());
-      log.error("validateQuerySemantics: full exception", e);
+      log.error("Query semantic validation failed for '{}': {}", configKey, e.getMessage());
+      log.debug("Query validation exception details", e);
       return false;
     } catch (Exception e) {
-      log.warn("validateQuerySemantics: unable to validate query against the database "
-          + "(exception class={}, message='{}'). Skipping semantic validation.",
-          e.getClass().getName(), e.getMessage());
-      log.warn("validateQuerySemantics: full exception", e);
+      log.warn("Unable to validate query against database ({}): {}. Skipping semantic validation.",
+          e.getClass().getSimpleName(), e.getMessage());
+      log.debug("Query validation non-SQL exception", e);
       return true;
     } finally {
       if (dialect != null) {

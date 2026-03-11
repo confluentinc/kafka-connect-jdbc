@@ -1207,4 +1207,113 @@ public class JdbcSourceConnectorValidationTest {
     EasyMock.verify(mockDialect, mockConnection);
   }
 
+  @Test
+  public void validate_semanticValidationPassesWithValidQuery() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT id, name FROM users WHERE active = true");
+
+    DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, "SELECT id, name FROM users WHERE active = true");
+    EasyMock.expectLastCall();
+    mockConnection.close();
+    EasyMock.expectLastCall();
+    mockDialect.close();
+    EasyMock.expectLastCall();
+
+    EasyMock.replay(mockDialect, mockConnection);
+    validateWithMockDialect(mockDialect);
+    EasyMock.verify(mockDialect, mockConnection);
+
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_semanticValidationFailsWithInvalidQuery() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM nonexistent_table");
+
+    DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, "SELECT * FROM nonexistent_table");
+    EasyMock.expectLastCall().andThrow(new SQLException(
+        "Table 'nonexistent_table' doesn't exist", "42S02"));
+    mockConnection.close();
+    EasyMock.expectLastCall();
+    mockDialect.close();
+    EasyMock.expectLastCall();
+
+    EasyMock.replay(mockDialect, mockConnection);
+    validateWithMockDialect(mockDialect);
+    EasyMock.verify(mockDialect, mockConnection);
+
+    assertErrors(QUERY_CONFIG, 1);
+    ConfigValue queryConfigValue = valueFor(QUERY_CONFIG);
+    assertTrue(queryConfigValue.errorMessages().get(0).contains("not valid"));
+    assertTrue(queryConfigValue.errorMessages().get(0).contains("SQLState: 42S02"));
+  }
+
+  @Test
+  public void validate_semanticValidationSkipsOnNonSqlException() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM users");
+
+    DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
+
+    EasyMock.expect(mockDialect.getConnection())
+        .andThrow(new RuntimeException("Connection pool unavailable"));
+    mockDialect.close();
+    EasyMock.expectLastCall();
+
+    EasyMock.replay(mockDialect);
+    validateWithMockDialect(mockDialect);
+    EasyMock.verify(mockDialect);
+
+    // Non-SQL exceptions are logged as warnings and validation passes
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_semanticValidationSkippedWhenNoQueryConfigured() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(TABLE_WHITELIST_CONFIG, "users,orders");
+    // No QUERY_CONFIG set
+
+    DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
+    // Dialect should never be called since no query is configured
+    EasyMock.replay(mockDialect);
+
+    validateWithMockDialect(mockDialect);
+
+    EasyMock.verify(mockDialect);
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_semanticValidationWithMaskedQuery() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM sensitive_data");
+
+    DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, "SELECT * FROM sensitive_data");
+    EasyMock.expectLastCall();
+    mockConnection.close();
+    EasyMock.expectLastCall();
+    mockDialect.close();
+    EasyMock.expectLastCall();
+
+    EasyMock.replay(mockDialect, mockConnection);
+    validateWithMockDialect(mockDialect);
+    EasyMock.verify(mockDialect, mockConnection);
+
+    assertNoErrors();
+  }
+
 }

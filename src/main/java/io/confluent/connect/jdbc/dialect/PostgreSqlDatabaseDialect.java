@@ -678,13 +678,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return defn.scale();
   }
 
-  /**
-   * PostgreSQL implementation uses {@code EXPLAIN} to validate the query. The
-   * {@code EXPLAIN} command parses and plans the query without executing it, which
-   * validates table/column existence, user permissions, and SQL correctness efficiently.
-   */
   @Override
   public void validateQuery(Connection connection, String query) throws SQLException {
+    // Use EXPLAIN to validate query syntax and metadata without executing
     String explainQuery = "EXPLAIN " + query;
     log.trace("Validating query via EXPLAIN: '{}'",
         shouldRedactSensitiveLogs(query));

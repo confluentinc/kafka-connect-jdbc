@@ -187,13 +187,9 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
     throw new SQLException("MySQL does not support synonyms. Please use views instead.");
   }
 
-  /**
-   * MySQL implementation uses {@code EXPLAIN} to validate the query. The
-   * {@code EXPLAIN} command analyzes the query execution plan without executing it,
-   * which validates table/column existence, user permissions, and SQL correctness.
-   */
   @Override
   public void validateQuery(Connection connection, String query) throws SQLException {
+    // Use EXPLAIN to validate query syntax and metadata without executing
     String explainQuery = "EXPLAIN " + query;
     log.trace("Validating query via EXPLAIN: '{}'",
         shouldRedactSensitiveLogs(query));

@@ -426,15 +426,9 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     return null;
   }
 
-  /**
-   * Oracle implementation uses {@code EXPLAIN PLAN FOR} to validate the query. This
-   * generates an execution plan without executing the query, which validates table/column
-   * existence, user permissions, and SQL correctness. If {@code EXPLAIN PLAN FOR} fails
-   * due to a missing PLAN_TABLE (ORA-02404), the method falls back to
-   * {@link Connection#prepareStatement(String)}.
-   */
   @Override
   public void validateQuery(Connection connection, String query) throws SQLException {
+    // Use EXPLAIN PLAN FOR to validate, fallback to prepareStatement if PLAN_TABLE missing
     String explainQuery = "EXPLAIN PLAN FOR " + query;
     log.trace("Validating query via EXPLAIN PLAN FOR: '{}'",
         shouldRedactSensitiveLogs(query));

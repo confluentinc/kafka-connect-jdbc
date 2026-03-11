@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.dialect;
 
 import java.sql.CallableStatement;
 import java.sql.PreparedStatement;
+import java.sql.Statement;
 import java.sql.Connection;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -494,74 +495,83 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
 
   @Test
   public void validateQuery_shouldUseSpDescribeFirstResultSet() throws SQLException {
-    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
-    CallableStatement mockCallableStatement = EasyMock.createNiceMock(CallableStatement.class);
-    java.sql.ResultSet mockResultSet = EasyMock.createNiceMock(java.sql.ResultSet.class);
-    java.sql.DatabaseMetaData mockDbMeta = EasyMock.createNiceMock(java.sql.DatabaseMetaData.class);
-    String expectedSql = "{call sp_describe_first_result_set(?, NULL, 0)}";
-    EasyMock.expect(mockConnection.getMetaData()).andReturn(mockDbMeta).anyTimes();
-    EasyMock.expect(mockConnection.prepareCall(expectedSql))
-        .andReturn(mockCallableStatement);
-    mockCallableStatement.setNString(1, "SELECT * FROM users");
-    EasyMock.expectLastCall();
-    EasyMock.expect(mockCallableStatement.execute()).andReturn(true);
-    EasyMock.expect(mockCallableStatement.getResultSet()).andReturn(mockResultSet);
-    ResultSetMetaData mockRsMeta = EasyMock.createNiceMock(ResultSetMetaData.class);
-    EasyMock.expect(mockResultSet.getMetaData()).andReturn(mockRsMeta);
-    EasyMock.expect(mockRsMeta.getColumnCount()).andReturn(0);
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+    Statement mockStatement = EasyMock.createNiceMock(Statement.class);
+    String query = "SELECT * FROM users";
+    String expectedSql = "EXEC sp_describe_first_result_set "
+        + "@tsql = N'" + query + "', "
+        + "@params = NULL, "
+        + "@browse_information_mode = 0";
 
-    EasyMock.replay(mockConnection, mockCallableStatement, mockResultSet, mockDbMeta, mockRsMeta);
-    dialect.validateQuery(mockConnection, "SELECT * FROM users");
-    EasyMock.verify(mockConnection, mockCallableStatement);
+    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
+    EasyMock.expect(mockStatement.execute(expectedSql)).andReturn(true);
+
+    EasyMock.replay(mockConnection, mockStatement);
+    dialect.validateQuery(mockConnection, query);
+    EasyMock.verify(mockConnection, mockStatement);
   }
 
   @Test
   public void validateQuery_shouldThrowOnInvalidQuery() throws SQLException {
-    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
-    CallableStatement mockCallableStatement = EasyMock.createNiceMock(CallableStatement.class);
-    java.sql.DatabaseMetaData mockDbMeta = EasyMock.createNiceMock(java.sql.DatabaseMetaData.class);
-    String expectedSql = "{call sp_describe_first_result_set(?, NULL, 0)}";
-    EasyMock.expect(mockConnection.getMetaData()).andReturn(mockDbMeta).anyTimes();
-    EasyMock.expect(mockConnection.prepareCall(expectedSql))
-        .andReturn(mockCallableStatement);
-    mockCallableStatement.setNString(1, "SELECT * FROM nonexistent_table");
-    EasyMock.expectLastCall();
-    EasyMock.expect(mockCallableStatement.execute())
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+    Statement mockStatement = EasyMock.createNiceMock(Statement.class);
+    String query = "SELECT * FROM nonexistent_table";
+    String expectedSql = "EXEC sp_describe_first_result_set "
+        + "@tsql = N'" + query + "', "
+        + "@params = NULL, "
+        + "@browse_information_mode = 0";
+
+    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
+    EasyMock.expect(mockStatement.execute(expectedSql))
         .andThrow(new SQLException(
             "Invalid object name 'nonexistent_table'.", "S0002"));
 
-    EasyMock.replay(mockConnection, mockCallableStatement, mockDbMeta);
+    EasyMock.replay(mockConnection, mockStatement);
     try {
-      dialect.validateQuery(mockConnection, "SELECT * FROM nonexistent_table");
+      dialect.validateQuery(mockConnection, query);
       org.junit.Assert.fail("Expected SQLException to be thrown");
     } catch (SQLException e) {
       assertEquals("S0002", e.getSQLState());
     }
-    EasyMock.verify(mockConnection, mockCallableStatement);
+    EasyMock.verify(mockConnection, mockStatement);
   }
 
   @Test
   public void validateQuery_shouldWorkWithComplexQuery() throws SQLException {
-    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
-    CallableStatement mockCallableStatement = EasyMock.createNiceMock(CallableStatement.class);
-    java.sql.ResultSet mockResultSet = EasyMock.createNiceMock(java.sql.ResultSet.class);
-    java.sql.DatabaseMetaData mockDbMeta = EasyMock.createNiceMock(java.sql.DatabaseMetaData.class);
-    String expectedSql = "{call sp_describe_first_result_set(?, NULL, 0)}";
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+    Statement mockStatement = EasyMock.createNiceMock(Statement.class);
     String complexQuery = "SELECT a.id, b.name FROM users a "
         + "INNER JOIN orders b ON a.id = b.user_id";
-    EasyMock.expect(mockConnection.getMetaData()).andReturn(mockDbMeta).anyTimes();
-    EasyMock.expect(mockConnection.prepareCall(expectedSql))
-        .andReturn(mockCallableStatement);
-    mockCallableStatement.setNString(1, complexQuery);
-    EasyMock.expectLastCall();
-    EasyMock.expect(mockCallableStatement.execute()).andReturn(true);
-    EasyMock.expect(mockCallableStatement.getResultSet()).andReturn(mockResultSet);
-    ResultSetMetaData mockRsMeta = EasyMock.createNiceMock(ResultSetMetaData.class);
-    EasyMock.expect(mockResultSet.getMetaData()).andReturn(mockRsMeta);
-    EasyMock.expect(mockRsMeta.getColumnCount()).andReturn(0);
+    String expectedSql = "EXEC sp_describe_first_result_set "
+        + "@tsql = N'" + complexQuery + "', "
+        + "@params = NULL, "
+        + "@browse_information_mode = 0";
 
-    EasyMock.replay(mockConnection, mockCallableStatement, mockResultSet, mockDbMeta, mockRsMeta);
+    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
+    EasyMock.expect(mockStatement.execute(expectedSql)).andReturn(true);
+
+    EasyMock.replay(mockConnection, mockStatement);
     dialect.validateQuery(mockConnection, complexQuery);
-    EasyMock.verify(mockConnection, mockCallableStatement);
+    EasyMock.verify(mockConnection, mockStatement);
+  }
+
+  @Test
+  public void validateQuery_shouldEscapeSingleQuotesInQuery() throws SQLException {
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+    Statement mockStatement = EasyMock.createNiceMock(Statement.class);
+    String queryWithQuotes = "SELECT * FROM users WHERE name = 'John'";
+    // Single quotes should be doubled when escaped: 'John' becomes ''John''
+    String escapedQuery = "SELECT * FROM users WHERE name = ''John''";
+    String expectedSql = "EXEC sp_describe_first_result_set "
+        + "@tsql = N'" + escapedQuery + "', "
+        + "@params = NULL, "
+        + "@browse_information_mode = 0";
+
+    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
+    EasyMock.expect(mockStatement.execute(expectedSql)).andReturn(true);
+
+    EasyMock.replay(mockConnection, mockStatement);
+    dialect.validateQuery(mockConnection, queryWithQuotes);
+    EasyMock.verify(mockConnection, mockStatement);
   }
 }

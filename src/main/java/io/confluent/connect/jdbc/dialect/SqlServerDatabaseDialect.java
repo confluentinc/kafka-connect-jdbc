@@ -645,4 +645,19 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     }
     return null;
   }
+
+  @Override
+  public void validateQuery(Connection connection, String query) throws SQLException {
+    // Validate by preparing the statement - this checks syntax, table/column existence,
+    // and user permissions without executing the query
+    log.trace("Validating SQL Server query: '{}'", shouldRedactSensitiveLogs(query));
+    try (PreparedStatement stmt = connection.prepareStatement(query)) {
+      log.debug("Query validation successful for SQL Server query: '{}'",
+          shouldRedactSensitiveLogs(query));
+    } catch (SQLException e) {
+      log.error("Query validation failed for SQL Server query: '{}'. Error: {}",
+          shouldRedactSensitiveLogs(query), e.getMessage());
+      throw e;
+    }
+  }
 }

@@ -1937,6 +1937,22 @@ public class GenericDatabaseDialect implements DatabaseDialect {
           List<ColumnId> columns
   ) throws ConnectException { }
 
+  /**
+   * The default implementation uses {@link Connection#prepareStatement(String)} which
+   * compiles the SQL without executing it. This validates syntax, table/column existence,
+   * and user permissions on most databases. Subclasses should override this method to use
+   * database-specific mechanisms like {@code EXPLAIN} for more thorough validation.
+   */
+  @Override
+  public void validateQuery(Connection connection, String query) throws SQLException {
+    glog.trace("Validating query via prepareStatement: '{}'",
+        shouldRedactSensitiveLogs(query));
+    try (PreparedStatement stmt = connection.prepareStatement(query)) {
+      glog.trace("Query validation successful for '{}'",
+          shouldRedactSensitiveLogs(query));
+    }
+  }
+
   protected List<String> extractPrimaryKeyFieldNames(Collection<SinkRecordField> fields) {
     final List<String> pks = new ArrayList<>();
     for (SinkRecordField f : fields) {

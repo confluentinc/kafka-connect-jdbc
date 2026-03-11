@@ -645,4 +645,56 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     }
     return null;
   }
+
+  /**
+   * Validates a SQL query using SQL Server's {@code sp_describe_first_result_set} system
+   * stored procedure, which analyzes query syntax and metadata without executing it.
+   *
+   * <p><b>Note:</b> This method has more detailed documentation than typical override methods
+   * due to the complex security and compatibility considerations specific to SQL Server
+   * managed and cloud environments.</p>
+   *
+   * <p>This stored procedure (available since SQL Server 2012) parses and resolves the query
+   * without executing it, validating syntax, table/column existence, and user permissions.
+   * It is a lightweight, compile-time-only operation that completes in milliseconds.</p>
+   *
+   * <h3>Implementation Details</h3>
+   * <p>The query is passed via a plain {@link Statement} with {@code EXEC} syntax and the
+   * query as an escaped {@code NVARCHAR} literal. This approach avoids both the TDS RPC
+   * pathway (which can fail with error 2809 in managed/cloud environments) and the
+   * {@code sp_prepexec} preparation layer (which the JDBC driver uses for
+   * {@link PreparedStatement}).</p>
+   *
+   * <p>Single quotes in the user query are escaped using SQL Server's standard doubling
+   * convention ({@code ' → ''}). Since {@code sp_describe_first_result_set} only analyzes
+   * the query without executing it, string concatenation is safe here.</p>
+   *
+   * @param connection the database connection to use for validation
+   * @param query the user-provided SQL query to validate
+   * @throws SQLException if the query is invalid (syntax errors, missing tables/columns,
+   *         insufficient permissions, etc.)
+   */
+  @Override
+  public void validateQuery(Connection connection, String query) throws SQLException {
+    log.trace("Validating SQL Server query: '{}'", shouldRedactSensitiveLogs(query));
+
+    // Escape single quotes for safe inclusion in NVARCHAR literal
+    String escapedQuery = query.replace("'", "''");
+
+    // Build the EXEC statement with the query as a literal parameter
+    String sql = "EXEC sp_describe_first_result_set "
+        + "@tsql = N'" + escapedQuery + "', "
+        + "@params = NULL, "
+        + "@browse_information_mode = 0";
+
+    try (Statement stmt = connection.createStatement()) {
+      stmt.execute(sql);
+      log.debug("Query validation successful for SQL Server query: '{}'",
+          shouldRedactSensitiveLogs(query));
+    } catch (SQLException e) {
+      log.error("Query validation failed for SQL Server query: '{}'. Error: {}",
+          shouldRedactSensitiveLogs(query), e.getMessage());
+      throw e;
+    }
+  }
 }

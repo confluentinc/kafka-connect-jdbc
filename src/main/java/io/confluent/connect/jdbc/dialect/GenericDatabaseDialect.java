@@ -2087,23 +2087,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       ).newInstance();
 
       if (provider instanceof Configurable) {
-        Map<String, Object> configs = config.originalsWithPrefix(
-            JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX
-        );
-        configs.remove(
-            JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG.substring(
-                JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX.length()
-            )
-        );
-
-        if (StringUtils.isNotBlank(username)) {
-          configs.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, username);
-        }
-        if (dbPassword != null && StringUtils.isNotBlank(dbPassword.value())) {
-          configs.put(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, dbPassword.value());
-        }
-
-        ((Configurable) provider).configure(configs);
+        ((Configurable) provider).configure(config.originals());
       }
 
       return provider;

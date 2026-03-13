@@ -43,5 +43,7 @@ public class BasicJdbcCredentials implements JdbcCredentials {
   }
 
   @Override
-  public String getAccessToken() { return accessToken; }
+  public String getAccessToken() {
+    return accessToken;
+  }
 }

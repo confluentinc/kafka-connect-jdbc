@@ -269,6 +269,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     if (jdbcCredentials.getPassword() != null) {
       properties.setProperty("password", jdbcCredentials.getPassword());
     }
+    if (jdbcCredentials.getAccessToken() != null) {
+      properties.setProperty("accessToken", jdbcCredentials.getAccessToken());
+    }
     properties = addConnectionProperties(properties);
     // Timeout is 40 seconds to be as long as possible for customer to have a long connection
     // handshake, while still giving enough time to validate once in the follower worker,

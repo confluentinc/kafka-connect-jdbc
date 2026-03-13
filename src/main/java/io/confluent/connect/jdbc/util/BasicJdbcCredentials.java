@@ -19,10 +19,17 @@ public class BasicJdbcCredentials implements JdbcCredentials {
 
   String username;
   String password;
+  String accessToken;
 
   public BasicJdbcCredentials(String user, String password) {
     this.username = user;
     this.password = password;
+  }
+
+  public BasicJdbcCredentials(String user, String password, String accessToken) {
+    this.username = user;
+    this.password = password;
+    this.accessToken = accessToken;
   }
 
   @Override
@@ -34,4 +41,7 @@ public class BasicJdbcCredentials implements JdbcCredentials {
   public String getPassword() {
     return password;
   }
+
+  @Override
+  public String getAccessToken() { return accessToken; }
 }

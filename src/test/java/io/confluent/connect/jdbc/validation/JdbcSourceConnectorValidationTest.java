@@ -15,11 +15,15 @@
 
 package io.confluent.connect.jdbc.validation;
 
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.util.TableId;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigValue;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.sql.Connection;
+import java.sql.SQLException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -29,6 +33,7 @@ import com.google.re2j.Pattern;
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.*;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import org.easymock.EasyMock;
 
 public class JdbcSourceConnectorValidationTest {
   private static final TableId TABLE_TEST_TABLE_ID = new TableId("database", "schema", "table_test");
@@ -44,8 +49,31 @@ public class JdbcSourceConnectorValidationTest {
     props.put(CONNECTION_USER_CONFIG, "testUser");
   }
 
+  /**
+   * Validate using a subclass that skips semantic query validation
+   * (no real database connection is available in unit tests).
+   */
   protected void validate() {
-    validation = new JdbcSourceConnectorValidation(props);
+    validation = new JdbcSourceConnectorValidation(props) {
+      @Override
+      protected boolean validateQuerySemantics() {
+        return true;
+      }
+    };
+    results = validation.validate();
+  }
+
+  /**
+   * Validate using a subclass that uses the provided mock dialect
+   * for semantic query validation.
+   */
+  protected void validateWithMockDialect(DatabaseDialect mockDialect) {
+    validation = new JdbcSourceConnectorValidation(props) {
+      @Override
+      protected DatabaseDialect createDialect() {
+        return mockDialect;
+      }
+    };
     results = validation.validate();
   }
 
@@ -214,9 +242,9 @@ public class JdbcSourceConnectorValidationTest {
     props.put(MODE_CONFIG, MODE_BULK);
     props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
     props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
-    
+
     validate();
-    
+
     assertErrors(2);
     assertErrors(TABLE_WHITELIST_CONFIG, 1);
     assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
@@ -241,14 +269,14 @@ public class JdbcSourceConnectorValidationTest {
     // - Invalid format for incrementing mapping
     // Business logic validation (legacy/new conflict) doesn't run when validator errors exist
     assertErrors(2);
-    
+
     // Validator errors for invalid formats
     assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
     assertErrorMatches(
         TIMESTAMP_COLUMN_MAPPING_CONFIG,
         ".*Invalid format.*Expected 'regex:\\[col1\\|col2\\|...\\]'.*"
     );
-    
+
     assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1);
     assertErrorMatches(
         INCREMENTING_COLUMN_MAPPING_CONFIG,
@@ -434,67 +462,67 @@ public class JdbcSourceConnectorValidationTest {
     assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1);
     assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
   }
-  
+
   @Test
   public void validate_withBothBlacklistAndExcludeList_setsError() {
     props.put(MODE_CONFIG, MODE_BULK);
     props.put(TABLE_BLACKLIST_CONFIG, "table1,table2");
     props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
     props.put(TABLE_EXCLUDE_LIST_CONFIG, "database.schema.excluded.*");
-    
+
     validate();
-    
+
     assertErrors(3);
     assertErrors(TABLE_BLACKLIST_CONFIG, 1);
     assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
     assertErrors(TABLE_EXCLUDE_LIST_CONFIG, 1);
     assertErrorMatches(TABLE_BLACKLIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
   }
-  
+
   @Test
   public void validate_withOnlyWhitelist_noErrors() {
     props.put(MODE_CONFIG, MODE_BULK);
     props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
-    
+
     validate();
-    
+
     assertNoErrors();
   }
-  
+
   @Test
   public void validate_withOnlyBlacklist_noErrors() {
     props.put(MODE_CONFIG, MODE_BULK);
     props.put(TABLE_BLACKLIST_CONFIG, "table1,table2");
-    
+
     validate();
-    
+
     assertNoErrors();
   }
-  
+
   @Test
   public void validate_withIncludeAndExcludeList_noErrors() {
     props.put(MODE_CONFIG, MODE_BULK);
     props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
     props.put(TABLE_EXCLUDE_LIST_CONFIG, "database.schema.excluded.*");
-    
+
     validate();
-    
+
     assertNoErrors();
   }
-  
+
   @Test
   public void validate_withOnlyExcludeListAndNoIncludeList_setsError() {
     props.remove(TABLE_INCLUDE_LIST_CONFIG);
     props.put(MODE_CONFIG, MODE_BULK);
     props.put(TABLE_EXCLUDE_LIST_CONFIG, "database.schema.excluded.*");
-    
+
     validate();
-    
+
     assertErrors(1);
     assertErrors(TABLE_EXCLUDE_LIST_CONFIG, 1);
     assertErrorMatches(TABLE_EXCLUDE_LIST_CONFIG, ".*cannot be used without.*");
   }
-  
+
   @Test
   public void validate_withNoTableConfigs_setsError() {
     props.remove(TABLE_INCLUDE_LIST_CONFIG);
@@ -503,9 +531,9 @@ public class JdbcSourceConnectorValidationTest {
     props.remove(TABLE_BLACKLIST_CONFIG);
 
     props.put(MODE_CONFIG, MODE_BULK);
-    
+
     validate();
-    
+
     assertErrors(4);
     assertErrors(TABLE_WHITELIST_CONFIG, 1);
     assertErrors(TABLE_BLACKLIST_CONFIG, 1);
@@ -520,9 +548,9 @@ public class JdbcSourceConnectorValidationTest {
     props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
     props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts_col");
     props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
-    
+
     validate();
-    
+
     assertErrors(3);
     assertErrors(TIMESTAMP_COLUMN_NAME_CONFIG, 1);
     assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
@@ -531,16 +559,16 @@ public class JdbcSourceConnectorValidationTest {
     assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
     assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
   }
-  
+
   @Test
   public void validate_withBothIncrementingColumnNameAndMapping_setsError() {
     props.put(MODE_CONFIG, MODE_BULK);
     props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
     props.put(INCREMENTING_COLUMN_NAME_CONFIG, "inc_col");
     props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
-    
+
     validate();
-    
+
     assertErrors(3);
     assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
     assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1);
@@ -555,70 +583,70 @@ public class JdbcSourceConnectorValidationTest {
     props.put(MODE_CONFIG, MODE_TIMESTAMP);
     props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
     props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
-    
+
     validate();
-    
+
     assertErrors(2);
     assertErrors(TABLE_WHITELIST_CONFIG, 1);
     assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
     assertErrorMatches(TABLE_WHITELIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
     assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
   }
-  
+
   @Test
   public void validate_withWhitelistAndIncrementingColumnMapping_setsError() {
     props.put(MODE_CONFIG, MODE_INCREMENTING);
     props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
     props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
-    
+
     validate();
-    
+
     assertErrors(2);
     assertErrors(TABLE_WHITELIST_CONFIG, 1);
     assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1);
     assertErrorMatches(TABLE_WHITELIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
     assertErrorMatches(INCREMENTING_COLUMN_MAPPING_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
   }
-  
+
   @Test
   public void validate_withBlacklistAndTimestampColumnMapping_setsError() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP);
     props.put(TABLE_BLACKLIST_CONFIG, "table1,table2");
     props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
-    
+
     validate();
-    
+
     assertErrors(2);
     assertErrors(TABLE_BLACKLIST_CONFIG, 1);
     assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
     assertErrorMatches(TABLE_BLACKLIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
     assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
   }
-  
+
   @Test
   public void validate_withBlacklistAndIncrementingColumnMapping_setsError() {
     props.put(MODE_CONFIG, MODE_INCREMENTING);
     props.put(TABLE_BLACKLIST_CONFIG, "table1,table2");
     props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
-    
+
     validate();
-    
+
     assertErrors(2);
     assertErrors(TABLE_BLACKLIST_CONFIG, 1);
     assertErrors(INCREMENTING_COLUMN_MAPPING_CONFIG, 1);
     assertErrorMatches(TABLE_BLACKLIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
     assertErrorMatches(INCREMENTING_COLUMN_MAPPING_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
   }
-  
+
   @Test
   public void validate_withWhitelistAndBothColumnMappings_setsError() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
     props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
     props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
     props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
-    
+
     validate();
-    
+
     assertErrors(3);
     assertErrors(TABLE_WHITELIST_CONFIG, 1);
     assertErrors(TIMESTAMP_COLUMN_MAPPING_CONFIG, 1);
@@ -627,28 +655,28 @@ public class JdbcSourceConnectorValidationTest {
     assertErrorMatches(TIMESTAMP_COLUMN_MAPPING_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
     assertErrorMatches(INCREMENTING_COLUMN_MAPPING_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
   }
-  
+
   @Test
   public void validate_withIncludeListAndColumnMappings_noErrors() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
     props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
     props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
     props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
-    
+
     validate();
-    
+
     assertNoErrors();
   }
-  
+
   @Test
   public void validate_withWhitelistAndLegacyColumnNames_noErrors() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
     props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
     props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts_col");
     props.put(INCREMENTING_COLUMN_NAME_CONFIG, "inc_col");
-    
+
     validate();
-    
+
     assertNoErrors();
   }
 
@@ -657,74 +685,74 @@ public class JdbcSourceConnectorValidationTest {
     props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
     props.put(MODE_CONFIG, MODE_TIMESTAMP);
     props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts_col");
-    
+
     validate();
-    
+
     assertNoErrors();
   }
-  
+
   @Test
   public void validate_withValidModeIncrementingWithLegacyColumnName_noErrors() {
     props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
     props.put(MODE_CONFIG, MODE_INCREMENTING);
     props.put(INCREMENTING_COLUMN_NAME_CONFIG, "inc_col");
-    
+
     validate();
-    
+
     assertNoErrors();
   }
-  
+
   @Test
   public void validate_withIncludeListAndLegacyTimestampColumnName_setsError() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP);
     props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
     props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts_col");
-    
+
     validate();
-    
+
     assertErrors(2);
     assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
     assertErrors(TIMESTAMP_COLUMN_NAME_CONFIG, 1);
     assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
     assertErrorMatches(TIMESTAMP_COLUMN_NAME_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
   }
-  
+
   @Test
   public void validate_withIncludeListAndLegacyIncrementingColumnName_setsError() {
     props.put(MODE_CONFIG, MODE_INCREMENTING);
     props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
     props.put(INCREMENTING_COLUMN_NAME_CONFIG, "inc_col");
-    
+
     validate();
-    
+
     assertErrors(2);
     assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
     assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
     assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
     assertErrorMatches(INCREMENTING_COLUMN_NAME_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
   }
-  
+
   @Test
   public void validate_withValidModeTimestampIncrementingWithLegacyColumnNames_noErrors() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
     props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
     props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts_col");
     props.put(INCREMENTING_COLUMN_NAME_CONFIG, "inc_col");
-    
+
     validate();
-    
+
     assertNoErrors();
   }
-  
+
   @Test
   public void validate_withValidModeTimestampIncrementingWithMixedConfigs_setsError() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
     props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
     props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts_col");
     props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
-    
+
     validate();
-    
+
     assertErrors(3);
     assertErrors(TIMESTAMP_COLUMN_NAME_CONFIG, 1);
     assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
@@ -733,16 +761,16 @@ public class JdbcSourceConnectorValidationTest {
     assertErrorMatches(TABLE_INCLUDE_LIST_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
     assertErrorMatches(INCREMENTING_COLUMN_MAPPING_CONFIG, ".*Cannot mix legacy and new configuration approaches.*");
   }
-  
+
   @Test
   public void validate_withValidModeTimestampIncrementingWithMixedConfigsReverse_setsError() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
     props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
     props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
     props.put(INCREMENTING_COLUMN_NAME_CONFIG, "inc_col");
-    
+
     validate();
-    
+
     assertErrors(3);
     assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
     assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
@@ -757,22 +785,22 @@ public class JdbcSourceConnectorValidationTest {
     props.put(MODE_CONFIG, MODE_BULK);
     props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
     props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
-    
+
     validate();
-    
+
     assertErrors(1);
     assertErrors(MODE_CONFIG, 1);
     assertErrorMatches(MODE_CONFIG, ".*Timestamp column configurations should not be provided.*");
   }
-  
+
   @Test
   public void validate_withModeBulkWithNewIncrementingMapping_setsError() {
     props.put(MODE_CONFIG, MODE_BULK);
     props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
     props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
-    
+
     validate();
-    
+
     assertErrors(1);
     assertErrors(MODE_CONFIG, 1);
     assertErrorMatches(MODE_CONFIG, ".*Incrementing column configurations should not be provided.*");
@@ -899,5 +927,393 @@ public class JdbcSourceConnectorValidationTest {
         "Do not specify table filtering configs with 'query'"
     );
   }
-  
+
+  // ========== Semantic Query Validation Tests ==========
+
+  @Test
+  public void validate_withQueryAndValidDatabase_noErrors() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM users");
+
+    DatabaseDialect mockDialect = EasyMock.createNiceMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, "SELECT * FROM users");
+    EasyMock.expectLastCall();
+    mockConnection.close();
+    EasyMock.expectLastCall();
+    EasyMock.replay(mockDialect, mockConnection);
+
+    validateWithMockDialect(mockDialect);
+
+    assertNoErrors();
+    EasyMock.verify(mockDialect, mockConnection);
+  }
+
+  @Test
+  public void validate_withQueryMaskedAndValidDatabase_noErrors() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM sensitive_table WHERE ssn = '123'");
+
+    DatabaseDialect mockDialect = EasyMock.createNiceMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(
+        mockConnection, "SELECT * FROM sensitive_table WHERE ssn = '123'");
+    EasyMock.expectLastCall();
+    mockConnection.close();
+    EasyMock.expectLastCall();
+    EasyMock.replay(mockDialect, mockConnection);
+
+    validateWithMockDialect(mockDialect);
+
+    assertNoErrors();
+    EasyMock.verify(mockDialect, mockConnection);
+  }
+
+  @Test
+  public void validate_withQueryAndTableNotFound_setsError() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM nonexistent_table");
+
+    DatabaseDialect mockDialect = EasyMock.createNiceMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, "SELECT * FROM nonexistent_table");
+    EasyMock.expectLastCall().andThrow(new SQLException(
+        "relation \"nonexistent_table\" does not exist", "42P01"));
+    EasyMock.replay(mockDialect, mockConnection);
+
+    validateWithMockDialect(mockDialect);
+
+    assertErrors(1);
+    assertErrors(QUERY_CONFIG, 1);
+    assertErrorMatches(QUERY_CONFIG,
+        ".*configured query is not valid.*SQLState: 42P01.*");
+  }
+
+  @Test
+  public void validate_withQueryMaskedAndTableNotFound_setsErrorOnMaskedConfig()
+      throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM nonexistent_table");
+
+    DatabaseDialect mockDialect = EasyMock.createNiceMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, "SELECT * FROM nonexistent_table");
+    EasyMock.expectLastCall().andThrow(new SQLException(
+        "relation \"nonexistent_table\" does not exist", "42P01"));
+    EasyMock.replay(mockDialect, mockConnection);
+
+    validateWithMockDialect(mockDialect);
+
+    assertErrors(1);
+    assertErrors(QUERY_MASKED_CONFIG, 1);
+    assertErrorMatches(QUERY_MASKED_CONFIG,
+        ".*configured query is not valid.*SQLState: 42P01.*");
+  }
+
+  @Test
+  public void validate_withQueryAndColumnNotFound_setsError() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT nonexistent_col FROM users");
+
+    DatabaseDialect mockDialect = EasyMock.createNiceMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, "SELECT nonexistent_col FROM users");
+    EasyMock.expectLastCall().andThrow(new SQLException(
+        "column \"nonexistent_col\" does not exist", "42703"));
+    EasyMock.replay(mockDialect, mockConnection);
+
+    validateWithMockDialect(mockDialect);
+
+    assertErrors(1);
+    assertErrors(QUERY_CONFIG, 1);
+    assertErrorMatches(QUERY_CONFIG,
+        ".*configured query is not valid.*SQLState: 42703.*");
+  }
+
+  @Test
+  public void validate_withQueryAndAuthenticationFailure_setsError() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM users");
+
+    DatabaseDialect mockDialect = EasyMock.createNiceMock(DatabaseDialect.class);
+    EasyMock.expect(mockDialect.getConnection()).andThrow(
+        new SQLException("password authentication failed for user \"testUser\"", "28P01"));
+    EasyMock.replay(mockDialect);
+
+    validateWithMockDialect(mockDialect);
+
+    assertErrors(1);
+    assertErrors(QUERY_CONFIG, 1);
+    assertErrorMatches(QUERY_CONFIG,
+        ".*configured query is not valid.*SQLState: 28P01.*");
+  }
+
+  @Test
+  public void validate_withQueryAndConnectionFailure_setsError() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM users");
+
+    DatabaseDialect mockDialect = EasyMock.createNiceMock(DatabaseDialect.class);
+    EasyMock.expect(mockDialect.getConnection()).andThrow(
+        new SQLException(
+            "Connection refused. Check that the hostname and port are correct", "08001"));
+    EasyMock.replay(mockDialect);
+
+    validateWithMockDialect(mockDialect);
+
+    assertErrors(1);
+    assertErrors(QUERY_CONFIG, 1);
+    assertErrorMatches(QUERY_CONFIG,
+        ".*configured query is not valid.*SQLState: 08001.*");
+  }
+
+  @Test
+  public void validate_withQueryAndPermissionDenied_setsError() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM restricted_table");
+
+    DatabaseDialect mockDialect = EasyMock.createNiceMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, "SELECT * FROM restricted_table");
+    EasyMock.expectLastCall().andThrow(new SQLException(
+        "permission denied for table restricted_table", "42501"));
+    EasyMock.replay(mockDialect, mockConnection);
+
+    validateWithMockDialect(mockDialect);
+
+    assertErrors(1);
+    assertErrors(QUERY_CONFIG, 1);
+    assertErrorMatches(QUERY_CONFIG,
+        ".*configured query is not valid.*SQLState: 42501.*");
+  }
+
+  @Test
+  public void validate_withNoQuery_skipsSemanticValidation() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
+    // No query config set
+
+    // Use real semantic validation (should be skipped since no query)
+    validation = new JdbcSourceConnectorValidation(props);
+    results = validation.validate();
+
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_withQueryAndUnknownSqlState_setsGenericError() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM users");
+
+    DatabaseDialect mockDialect = EasyMock.createNiceMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, "SELECT * FROM users");
+    EasyMock.expectLastCall().andThrow(new SQLException("Some unexpected error", "99999"));
+    EasyMock.replay(mockDialect, mockConnection);
+
+    validateWithMockDialect(mockDialect);
+
+    assertErrors(1);
+    assertErrors(QUERY_CONFIG, 1);
+    assertErrorMatches(QUERY_CONFIG,
+        ".*configured query is not valid.*SQLState: 99999.*");
+  }
+
+  @Test
+  public void validate_withQueryAndNullSqlState_setsGenericError() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM users");
+
+    DatabaseDialect mockDialect = EasyMock.createNiceMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, "SELECT * FROM users");
+    EasyMock.expectLastCall().andThrow(new SQLException("Unknown error"));
+    EasyMock.replay(mockDialect, mockConnection);
+
+    validateWithMockDialect(mockDialect);
+
+    assertErrors(1);
+    assertErrors(QUERY_CONFIG, 1);
+    assertErrorMatches(QUERY_CONFIG,
+        ".*configured query is not valid.*Please provide the correct query.*");
+  }
+
+  @Test
+  public void validate_withComplexQueryAndValidDatabase_noErrors() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    String complexQuery = "SELECT a.id, b.name FROM users a "
+        + "INNER JOIN orders b ON a.id = b.user_id "
+        + "LEFT JOIN payments c ON b.id = c.order_id";
+    props.put(QUERY_CONFIG, complexQuery);
+
+    DatabaseDialect mockDialect = EasyMock.createNiceMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, complexQuery);
+    EasyMock.expectLastCall();
+    EasyMock.replay(mockDialect, mockConnection);
+
+    validateWithMockDialect(mockDialect);
+
+    assertNoErrors();
+    EasyMock.verify(mockDialect, mockConnection);
+  }
+
+  @Test
+  public void validate_semanticValidationClosesDialectOnSuccess() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM users");
+
+    DatabaseDialect mockDialect = EasyMock.createNiceMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, "SELECT * FROM users");
+    EasyMock.expectLastCall();
+    mockConnection.close();
+    EasyMock.expectLastCall();
+    mockDialect.close();
+    EasyMock.expectLastCall();
+    EasyMock.replay(mockDialect, mockConnection);
+
+    validateWithMockDialect(mockDialect);
+
+    EasyMock.verify(mockDialect, mockConnection);
+  }
+
+  @Test
+  public void validate_semanticValidationClosesDialectOnFailure() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM users");
+
+    DatabaseDialect mockDialect = EasyMock.createNiceMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, "SELECT * FROM users");
+    EasyMock.expectLastCall().andThrow(new SQLException("table not found", "42S02"));
+    mockDialect.close();
+    EasyMock.expectLastCall();
+    EasyMock.replay(mockDialect, mockConnection);
+
+    validateWithMockDialect(mockDialect);
+
+    EasyMock.verify(mockDialect, mockConnection);
+  }
+
+  @Test
+  public void validate_semanticValidationPassesWithValidQuery() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT id, name FROM users WHERE active = true");
+
+    DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, "SELECT id, name FROM users WHERE active = true");
+    EasyMock.expectLastCall();
+    mockConnection.close();
+    EasyMock.expectLastCall();
+    mockDialect.close();
+    EasyMock.expectLastCall();
+
+    EasyMock.replay(mockDialect, mockConnection);
+    validateWithMockDialect(mockDialect);
+    EasyMock.verify(mockDialect, mockConnection);
+
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_semanticValidationFailsWithInvalidQuery() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM nonexistent_table");
+
+    DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, "SELECT * FROM nonexistent_table");
+    EasyMock.expectLastCall().andThrow(new SQLException(
+        "Table 'nonexistent_table' doesn't exist", "42S02"));
+    mockConnection.close();
+    EasyMock.expectLastCall();
+    mockDialect.close();
+    EasyMock.expectLastCall();
+
+    EasyMock.replay(mockDialect, mockConnection);
+    validateWithMockDialect(mockDialect);
+    EasyMock.verify(mockDialect, mockConnection);
+
+    assertErrors(QUERY_CONFIG, 1);
+    ConfigValue queryConfigValue = valueFor(QUERY_CONFIG);
+    assertTrue(queryConfigValue.errorMessages().get(0).contains("not valid"));
+    assertTrue(queryConfigValue.errorMessages().get(0).contains("SQLState: 42S02"));
+  }
+
+  @Test
+  public void validate_semanticValidationSkipsOnNonSqlException() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM users");
+
+    DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
+
+    EasyMock.expect(mockDialect.getConnection())
+        .andThrow(new RuntimeException("Connection pool unavailable"));
+    mockDialect.close();
+    EasyMock.expectLastCall();
+
+    EasyMock.replay(mockDialect);
+    validateWithMockDialect(mockDialect);
+    EasyMock.verify(mockDialect);
+
+    // Non-SQL exceptions are logged as warnings and validation passes
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_semanticValidationSkippedWhenNoQueryConfigured() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(TABLE_WHITELIST_CONFIG, "users,orders");
+    // No QUERY_CONFIG set
+
+    DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
+    // Dialect should never be called since no query is configured
+    EasyMock.replay(mockDialect);
+
+    validateWithMockDialect(mockDialect);
+
+    EasyMock.verify(mockDialect);
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_semanticValidationWithMaskedQuery() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM sensitive_data");
+
+    DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, "SELECT * FROM sensitive_data");
+    EasyMock.expectLastCall();
+    mockConnection.close();
+    EasyMock.expectLastCall();
+    mockDialect.close();
+    EasyMock.expectLastCall();
+
+    EasyMock.replay(mockDialect, mockConnection);
+    validateWithMockDialect(mockDialect);
+    EasyMock.verify(mockDialect, mockConnection);
+
+    assertNoErrors();
+  }
+
 }

@@ -15,7 +15,11 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import java.sql.CallableStatement;
+import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
+import java.sql.Statement;
+import java.sql.Connection;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Types;
@@ -40,6 +44,7 @@ import org.junit.Test;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 import org.mockito.Mockito;
+import org.easymock.EasyMock;
 
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
@@ -487,5 +492,70 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
 
     dialect.bindField(stmtNvarchar, index, schema, value, colDefNvarchar, field);
     verify(stmtNvarchar, times(1)).setNString(index, value);
+  }
+
+  @Test
+  public void validateQuery_shouldExecuteWithTop0Wrapper() throws SQLException {
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
+    Statement mockStatement = EasyMock.createNiceMock(Statement.class);
+    DatabaseMetaData mockMetadata = EasyMock.createNiceMock(DatabaseMetaData.class);
+    String query = "SELECT * FROM users";
+    String wrappedQuery = "SELECT TOP 0 * FROM (" + query + ") AS validation_subquery";
+
+    EasyMock.expect(mockConnection.getMetaData()).andReturn(mockMetadata).anyTimes();
+    EasyMock.expect(mockMetadata.getDatabaseProductName()).andReturn("Microsoft SQL Server").anyTimes();
+    EasyMock.expect(mockMetadata.getDatabaseProductVersion()).andReturn("15.00.4236").anyTimes();
+    EasyMock.expect(mockMetadata.getDriverName()).andReturn("Microsoft JDBC Driver").anyTimes();
+    EasyMock.expect(mockMetadata.getDriverVersion()).andReturn("12.8.2").anyTimes();
+    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
+    EasyMock.expect(mockStatement.execute(wrappedQuery)).andReturn(false);
+    EasyMock.expect(mockStatement.getUpdateCount()).andReturn(0);
+
+    EasyMock.replay(mockConnection, mockStatement, mockMetadata);
+    dialect.validateQuery(mockConnection, query);
+    EasyMock.verify(mockConnection, mockStatement);
+  }
+
+  @Test
+  public void validateQuery_shouldThrowOnInvalidQuery() throws SQLException {
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
+    Statement mockStatement = EasyMock.createNiceMock(Statement.class);
+    DatabaseMetaData mockMetadata = EasyMock.createNiceMock(DatabaseMetaData.class);
+    String query = "SELECT * FROM nonexistent_table";
+    String wrappedQuery = "SELECT TOP 0 * FROM (" + query + ") AS validation_subquery";
+
+    EasyMock.expect(mockConnection.getMetaData()).andReturn(mockMetadata).anyTimes();
+    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
+    EasyMock.expect(mockStatement.execute(wrappedQuery))
+        .andThrow(new SQLException(
+            "Invalid object name 'nonexistent_table'.", "S0002"));
+
+    EasyMock.replay(mockConnection, mockStatement, mockMetadata);
+    try {
+      dialect.validateQuery(mockConnection, query);
+      org.junit.Assert.fail("Expected SQLException to be thrown");
+    } catch (SQLException e) {
+      assertEquals("S0002", e.getSQLState());
+    }
+    EasyMock.verify(mockConnection, mockStatement);
+  }
+
+  @Test
+  public void validateQuery_shouldWorkWithComplexQuery() throws SQLException {
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
+    Statement mockStatement = EasyMock.createNiceMock(Statement.class);
+    DatabaseMetaData mockMetadata = EasyMock.createNiceMock(DatabaseMetaData.class);
+    String complexQuery = "SELECT a.id, b.name FROM users a "
+        + "INNER JOIN orders b ON a.id = b.user_id";
+    String wrappedQuery = "SELECT TOP 0 * FROM (" + complexQuery + ") AS validation_subquery";
+
+    EasyMock.expect(mockConnection.getMetaData()).andReturn(mockMetadata).anyTimes();
+    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
+    EasyMock.expect(mockStatement.execute(wrappedQuery)).andReturn(false);
+    EasyMock.expect(mockStatement.getUpdateCount()).andReturn(0);
+
+    EasyMock.replay(mockConnection, mockStatement, mockMetadata);
+    dialect.validateQuery(mockConnection, complexQuery);
+    EasyMock.verify(mockConnection, mockStatement);
   }
 }

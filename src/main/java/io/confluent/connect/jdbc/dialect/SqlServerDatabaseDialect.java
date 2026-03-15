@@ -646,17 +646,138 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     return null;
   }
 
+  /**
+   * Validates a SQL query by executing it with TOP 0 wrapper to ensure zero rows are returned.
+   * This validates syntax, table/column existence, and user permissions by actually executing
+   * the query against SQL Server.
+   *
+   * <p>The user's query is wrapped in {@code SELECT TOP 0 * FROM (user_query) AS validation_subquery}
+   * which executes the query but returns zero rows, validating all aspects without data transfer.</p>
+   *
+   * @param connection the database connection to use for validation
+   * @param query the user-provided SQL query to validate
+   * @throws SQLException if the query is invalid (syntax errors, missing tables/columns,
+   *         insufficient permissions, etc.)
+   */
   @Override
+  @SuppressWarnings("SQL_NONCONSTANT_STRING_PASSED_TO_EXECUTE")
   public void validateQuery(Connection connection, String query) throws SQLException {
-    // Validate by preparing the statement - this checks syntax, table/column existence,
-    // and user permissions without executing the query
-    log.trace("Validating SQL Server query: '{}'", shouldRedactSensitiveLogs(query));
-    try (PreparedStatement stmt = connection.prepareStatement(query)) {
-      log.debug("Query validation successful for SQL Server query: '{}'",
-          shouldRedactSensitiveLogs(query));
+    String redactedQuery = shouldRedactSensitiveLogs(query);
+
+    log.info("=== SQL Server Query Validation START ===");
+    log.info("Validating query (redacted): '{}'", redactedQuery);
+    log.info("Query length: {} characters", query.length());
+
+    // Log connection details for troubleshooting
+    try {
+      log.info("Connection class: {}", connection.getClass().getName());
+      log.info("Connection closed: {}", connection.isClosed());
+      log.info("Connection catalog: {}", connection.getCatalog());
+      log.info("Connection auto-commit: {}", connection.getAutoCommit());
+
+      DatabaseMetaData metadata = connection.getMetaData();
+      log.info("Database product: {} {}",
+          metadata.getDatabaseProductName(),
+          metadata.getDatabaseProductVersion());
+      log.info("JDBC driver: {} {}",
+          metadata.getDriverName(),
+          metadata.getDriverVersion());
     } catch (SQLException e) {
-      log.error("Query validation failed for SQL Server query: '{}'. Error: {}",
-          shouldRedactSensitiveLogs(query), e.getMessage());
+      log.warn("Unable to retrieve connection metadata: {}", e.getMessage());
+    }
+
+    // Wrap the user query in SELECT TOP 0 to validate without returning data
+    // SpotBugs: String concatenation is safe - query is from admin config, not end-user input
+    String validationQuery = "SELECT TOP 0 * FROM (" + query + ") AS validation_subquery";
+
+    log.info("Validation approach: Execute query with TOP 0 wrapper");
+    log.info("Validation query (redacted): SELECT TOP 0 * FROM ({}) AS validation_subquery",
+        redactedQuery);
+    log.info("Executing validation query...");
+
+    long startTime = System.currentTimeMillis();
+
+    try (Statement stmt = connection.createStatement()) {
+      log.info("Statement created successfully, class: {}", stmt.getClass().getName());
+
+      boolean hasResultSet = stmt.execute(validationQuery);
+      long executionTime = System.currentTimeMillis() - startTime;
+
+      log.info("Validation query executed successfully");
+      log.info("Execution time: {} ms", executionTime);
+      log.info("Has result set: {}", hasResultSet);
+
+      if (hasResultSet) {
+        try (ResultSet rs = stmt.getResultSet()) {
+          ResultSetMetaData rsMetadata = rs.getMetaData();
+          int columnCount = rsMetadata.getColumnCount();
+          log.info("Result set metadata: {} columns", columnCount);
+
+          // Log column details for debugging
+          for (int i = 1; i <= columnCount && i <= 10; i++) {
+            log.info("Column {}: name='{}', type='{}', typeName='{}'",
+                i,
+                rsMetadata.getColumnName(i),
+                rsMetadata.getColumnType(i),
+                rsMetadata.getColumnTypeName(i));
+          }
+          if (columnCount > 10) {
+            log.info("... and {} more columns", columnCount - 10);
+          }
+
+          // Verify no rows returned
+          int rowCount = 0;
+          while (rs.next()) {
+            rowCount++;
+          }
+          log.info("Rows returned: {} (expected: 0)", rowCount);
+
+          if (rowCount > 0) {
+            log.warn("WARNING: TOP 0 returned {} rows, expected 0", rowCount);
+          }
+        }
+      } else {
+        int updateCount = stmt.getUpdateCount();
+        log.info("No result set, update count: {}", updateCount);
+      }
+
+      log.info("=== VALIDATION PASSED ===");
+      log.info("Query is valid: syntax correct, tables/columns exist, permissions granted");
+      log.info("Query (redacted): '{}'", redactedQuery);
+      log.info("=== SQL Server Query Validation END (SUCCESS) ===");
+
+    } catch (SQLException e) {
+      long executionTime = System.currentTimeMillis() - startTime;
+
+      log.error("=== VALIDATION FAILED ===");
+      log.error("Query validation failed after {} ms", executionTime);
+      log.error("Failed query (redacted): '{}'", redactedQuery);
+      log.error("SQLException details:");
+      log.error("  - Message: {}", e.getMessage());
+      log.error("  - SQLState: {}", e.getSQLState());
+      log.error("  - Error code: {}", e.getErrorCode());
+
+      if (e.getCause() != null) {
+        log.error("  - Cause: {} - {}",
+            e.getCause().getClass().getName(),
+            e.getCause().getMessage());
+      }
+
+      // Log chained exceptions
+      SQLException nextException = e.getNextException();
+      int chainIndex = 1;
+      while (nextException != null) {
+        log.error("  - Chained exception [{}]: {}", chainIndex, nextException.getMessage());
+        log.error("    SQLState: {}, ErrorCode: {}",
+            nextException.getSQLState(),
+            nextException.getErrorCode());
+        nextException = nextException.getNextException();
+        chainIndex++;
+      }
+
+      log.error("Full stack trace:", e);
+      log.error("=== SQL Server Query Validation END (FAILED) ===");
+
       throw e;
     }
   }

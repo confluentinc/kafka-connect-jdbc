@@ -16,6 +16,7 @@
 package io.confluent.connect.jdbc.dialect;
 
 import java.sql.CallableStatement;
+import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.sql.Connection;

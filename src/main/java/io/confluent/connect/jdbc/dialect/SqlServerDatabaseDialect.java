@@ -647,12 +647,14 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * Validates a SQL query by executing it with TOP 0 wrapper to ensure zero rows are returned.
-   * This validates syntax, table/column existence, and user permissions by actually executing
+   * Validates a SQL query by executing it with TOP 0 wrapper.
+   * This validates syntax, table/column existence, and permissions by actually executing
    * the query against SQL Server.
    *
-   * <p>The user's query is wrapped in {@code SELECT TOP 0 * FROM (user_query) AS validation_subquery}
-   * which executes the query but returns zero rows, validating all aspects without data transfer.</p>
+   * <p>The user's query is wrapped in:
+   * {@code SELECT TOP 0 * FROM (user_query) AS validation_subquery}
+   * which executes the query but returns zero rows, validating all aspects.
+   * </p>
    *
    * @param connection the database connection to use for validation
    * @param query the user-provided SQL query to validate
@@ -668,7 +670,46 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     log.info("Validating query (redacted): '{}'", redactedQuery);
     log.info("Query length: {} characters", query.length());
 
-    // Log connection details for troubleshooting
+    logConnectionDetails(connection);
+
+    // Wrap user query in SELECT TOP 0 to validate without returning data
+    // SpotBugs: String concat safe - query from admin config, not end-user input
+    String validationQuery = "SELECT TOP 0 * FROM (" + query
+        + ") AS validation_subquery";
+
+    log.info("Validation approach: Execute query with TOP 0 wrapper");
+    log.info("Validation query (redacted): SELECT TOP 0 * FROM ({}) AS subquery",
+        redactedQuery);
+    log.info("Executing validation query...");
+
+    long startTime = System.currentTimeMillis();
+
+    try (Statement stmt = connection.createStatement()) {
+      log.info("Statement created, class: {}", stmt.getClass().getName());
+
+      boolean hasResultSet = stmt.execute(validationQuery);
+      long executionTime = System.currentTimeMillis() - startTime;
+
+      log.info("Validation query executed successfully");
+      log.info("Execution time: {} ms", executionTime);
+      log.info("Has result set: {}", hasResultSet);
+
+      if (hasResultSet) {
+        logResultSetDetails(stmt.getResultSet());
+      } else {
+        log.info("No result set, update count: {}", stmt.getUpdateCount());
+      }
+
+      logValidationSuccess(redactedQuery);
+
+    } catch (SQLException e) {
+      long executionTime = System.currentTimeMillis() - startTime;
+      logValidationFailure(redactedQuery, executionTime, e);
+      throw e;
+    }
+  }
+
+  private void logConnectionDetails(Connection connection) {
     try {
       log.info("Connection class: {}", connection.getClass().getName());
       log.info("Connection closed: {}", connection.isClosed());
@@ -685,100 +726,77 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     } catch (SQLException e) {
       log.warn("Unable to retrieve connection metadata: {}", e.getMessage());
     }
+  }
 
-    // Wrap the user query in SELECT TOP 0 to validate without returning data
-    // SpotBugs: String concatenation is safe - query is from admin config, not end-user input
-    String validationQuery = "SELECT TOP 0 * FROM (" + query + ") AS validation_subquery";
+  private void logResultSetDetails(ResultSet rs) throws SQLException {
+    ResultSetMetaData rsMetadata = rs.getMetaData();
+    int columnCount = rsMetadata.getColumnCount();
+    log.info("Result set metadata: {} columns", columnCount);
 
-    log.info("Validation approach: Execute query with TOP 0 wrapper");
-    log.info("Validation query (redacted): SELECT TOP 0 * FROM ({}) AS validation_subquery",
-        redactedQuery);
-    log.info("Executing validation query...");
-
-    long startTime = System.currentTimeMillis();
-
-    try (Statement stmt = connection.createStatement()) {
-      log.info("Statement created successfully, class: {}", stmt.getClass().getName());
-
-      boolean hasResultSet = stmt.execute(validationQuery);
-      long executionTime = System.currentTimeMillis() - startTime;
-
-      log.info("Validation query executed successfully");
-      log.info("Execution time: {} ms", executionTime);
-      log.info("Has result set: {}", hasResultSet);
-
-      if (hasResultSet) {
-        try (ResultSet rs = stmt.getResultSet()) {
-          ResultSetMetaData rsMetadata = rs.getMetaData();
-          int columnCount = rsMetadata.getColumnCount();
-          log.info("Result set metadata: {} columns", columnCount);
-
-          // Log column details for debugging
-          for (int i = 1; i <= columnCount && i <= 10; i++) {
-            log.info("Column {}: name='{}', type='{}', typeName='{}'",
-                i,
-                rsMetadata.getColumnName(i),
-                rsMetadata.getColumnType(i),
-                rsMetadata.getColumnTypeName(i));
-          }
-          if (columnCount > 10) {
-            log.info("... and {} more columns", columnCount - 10);
-          }
-
-          // Verify no rows returned
-          int rowCount = 0;
-          while (rs.next()) {
-            rowCount++;
-          }
-          log.info("Rows returned: {} (expected: 0)", rowCount);
-
-          if (rowCount > 0) {
-            log.warn("WARNING: TOP 0 returned {} rows, expected 0", rowCount);
-          }
-        }
-      } else {
-        int updateCount = stmt.getUpdateCount();
-        log.info("No result set, update count: {}", updateCount);
-      }
-
-      log.info("=== VALIDATION PASSED ===");
-      log.info("Query is valid: syntax correct, tables/columns exist, permissions granted");
-      log.info("Query (redacted): '{}'", redactedQuery);
-      log.info("=== SQL Server Query Validation END (SUCCESS) ===");
-
-    } catch (SQLException e) {
-      long executionTime = System.currentTimeMillis() - startTime;
-
-      log.error("=== VALIDATION FAILED ===");
-      log.error("Query validation failed after {} ms", executionTime);
-      log.error("Failed query (redacted): '{}'", redactedQuery);
-      log.error("SQLException details:");
-      log.error("  - Message: {}", e.getMessage());
-      log.error("  - SQLState: {}", e.getSQLState());
-      log.error("  - Error code: {}", e.getErrorCode());
-
-      if (e.getCause() != null) {
-        log.error("  - Cause: {} - {}",
-            e.getCause().getClass().getName(),
-            e.getCause().getMessage());
-      }
-
-      // Log chained exceptions
-      SQLException nextException = e.getNextException();
-      int chainIndex = 1;
-      while (nextException != null) {
-        log.error("  - Chained exception [{}]: {}", chainIndex, nextException.getMessage());
-        log.error("    SQLState: {}, ErrorCode: {}",
-            nextException.getSQLState(),
-            nextException.getErrorCode());
-        nextException = nextException.getNextException();
-        chainIndex++;
-      }
-
-      log.error("Full stack trace:", e);
-      log.error("=== SQL Server Query Validation END (FAILED) ===");
-
-      throw e;
+    // Log column details for debugging (up to 10 columns)
+    for (int i = 1; i <= columnCount && i <= 10; i++) {
+      log.info("Column {}: name='{}', type='{}', typeName='{}'",
+          i,
+          rsMetadata.getColumnName(i),
+          rsMetadata.getColumnType(i),
+          rsMetadata.getColumnTypeName(i));
     }
+    if (columnCount > 10) {
+      log.info("... and {} more columns", columnCount - 10);
+    }
+
+    // Verify no rows returned
+    int rowCount = 0;
+    while (rs.next()) {
+      rowCount++;
+    }
+    log.info("Rows returned: {} (expected: 0)", rowCount);
+
+    if (rowCount > 0) {
+      log.warn("WARNING: TOP 0 returned {} rows, expected 0", rowCount);
+    }
+  }
+
+  private void logValidationSuccess(String redactedQuery) {
+    log.info("=== VALIDATION PASSED ===");
+    log.info("Query valid: syntax OK, tables/columns exist, permissions granted");
+    log.info("Query (redacted): '{}'", redactedQuery);
+    log.info("=== SQL Server Query Validation END (SUCCESS) ===");
+  }
+
+  private void logValidationFailure(
+      String redactedQuery,
+      long executionTime,
+      SQLException e
+  ) {
+    log.error("=== VALIDATION FAILED ===");
+    log.error("Query validation failed after {} ms", executionTime);
+    log.error("Failed query (redacted): '{}'", redactedQuery);
+    log.error("SQLException details:");
+    log.error("  - Message: {}", e.getMessage());
+    log.error("  - SQLState: {}", e.getSQLState());
+    log.error("  - Error code: {}", e.getErrorCode());
+
+    if (e.getCause() != null) {
+      log.error("  - Cause: {} - {}",
+          e.getCause().getClass().getName(),
+          e.getCause().getMessage());
+    }
+
+    // Log chained exceptions
+    SQLException nextException = e.getNextException();
+    int chainIndex = 1;
+    while (nextException != null) {
+      log.error("  - Chained exception [{}]: {}", chainIndex,
+          nextException.getMessage());
+      log.error("    SQLState: {}, ErrorCode: {}",
+          nextException.getSQLState(),
+          nextException.getErrorCode());
+      nextException = nextException.getNextException();
+      chainIndex++;
+    }
+
+    log.error("Full stack trace:", e);
+    log.error("=== SQL Server Query Validation END (FAILED) ===");
   }
 }

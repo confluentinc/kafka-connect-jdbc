@@ -682,8 +682,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   public void validateQuery(Connection connection, String query) throws SQLException {
     // Use EXPLAIN to validate query syntax and metadata without executing
     String explainQuery = "EXPLAIN " + query;
-    log.trace("Validating query via EXPLAIN: '{}'",
-        shouldRedactSensitiveLogs(query));
     try (Statement stmt = connection.createStatement()) {
       stmt.execute(explainQuery);
       log.trace("Query validation via EXPLAIN successful for '{}'",

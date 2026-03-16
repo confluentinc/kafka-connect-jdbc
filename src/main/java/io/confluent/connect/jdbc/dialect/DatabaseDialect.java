@@ -719,8 +719,6 @@ public interface DatabaseDialect extends ConnectionProvider {
    */
   default void validateQuery(Connection connection, String query) throws SQLException {
     try (PreparedStatement stmt = connection.prepareStatement(query)) {
-      // Statement prepared successfully - query is syntactically valid,
-      // referenced tables/columns exist, and user has necessary permissions
     }
   }
 }

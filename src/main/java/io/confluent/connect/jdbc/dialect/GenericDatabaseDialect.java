@@ -1945,8 +1945,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
    */
   @Override
   public void validateQuery(Connection connection, String query) throws SQLException {
-    glog.trace("Validating query via prepareStatement: '{}'",
-        shouldRedactSensitiveLogs(query));
     try (PreparedStatement stmt = connection.prepareStatement(query)) {
       glog.trace("Query validation successful for '{}'",
           shouldRedactSensitiveLogs(query));

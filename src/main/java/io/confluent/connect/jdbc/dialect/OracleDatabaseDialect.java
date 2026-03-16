@@ -430,16 +430,14 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
   public void validateQuery(Connection connection, String query) throws SQLException {
     // Use EXPLAIN PLAN FOR to validate, fallback to prepareStatement if PLAN_TABLE missing
     String explainQuery = "EXPLAIN PLAN FOR " + query;
-    log.trace("Validating query via EXPLAIN PLAN FOR: '{}'",
-        shouldRedactSensitiveLogs(query));
     try (Statement stmt = connection.createStatement()) {
       stmt.execute(explainQuery);
-      log.trace("Query validation via EXPLAIN PLAN FOR successful for '{}'",
+      log.trace("Query validation successful for '{}'",
           shouldRedactSensitiveLogs(query));
     } catch (SQLException e) {
       // ORA-02404: specified plan table not found - fall back to prepareStatement
       if (e.getErrorCode() == 2404) {
-        log.trace("PLAN_TABLE not found, falling back to prepareStatement validation");
+        log.trace("Query validation failed,falling back to prepareStatement validation");
         super.validateQuery(connection, query);
       } else {
         throw e;

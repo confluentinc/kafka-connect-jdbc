@@ -397,12 +397,8 @@ public class JdbcSourceConnectorValidation {
         msg += " (SQLState: " + e.getSQLState() + ")";
       }
       addConfigError(configKey, msg);
-      log.error("Query semantic validation failed for '{}': {}", configKey, e.getMessage());
-      log.debug("Query validation exception details", e);
       return false;
     } catch (Exception e) {
-      log.warn("Unable to validate query against database ({}): {}. Skipping semantic validation.",
-          e.getClass().getSimpleName(), e.getMessage());
       log.debug("Query validation non-SQL exception", e);
       return true;
     } finally {

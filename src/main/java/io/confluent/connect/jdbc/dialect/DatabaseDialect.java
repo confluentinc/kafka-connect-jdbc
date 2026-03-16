@@ -719,6 +719,8 @@ public interface DatabaseDialect extends ConnectionProvider {
    */
   default void validateQuery(Connection connection, String query) throws SQLException {
     try (PreparedStatement stmt = connection.prepareStatement(query)) {
+        // Validate the query by preparing it. If the query is invalid,
+        // an SQLException will be thrown which will indicate the validation failure.
     }
   }
 }

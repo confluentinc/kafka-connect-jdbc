@@ -24,10 +24,13 @@ import org.apache.kafka.common.config.ConfigValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -84,7 +87,8 @@ public class JdbcSourceConnectorValidation {
 
       boolean validationResult = validateMultiConfigs()
           && validateLegacyNewConfigCompatibility()
-          && validateQueryConfigs();
+          && validateQueryConfigs()
+          && validateQuerySemantics();
 
       if (validationResult && isUsingNewConfigs()) {
         validationResult = validateTableInclusionConfigs()
@@ -355,6 +359,69 @@ public class JdbcSourceConnectorValidation {
     }
 
     return true;
+  }
+
+  /**
+   * Validate the user's custom query against the database by performing a lightweight
+   * semantic check using the database-specific EXPLAIN mechanism. This validates:
+   *
+   * @return true if validation passes or no query is configured, false if validation fails
+   */
+  protected boolean validateQuerySemantics() {
+    Optional<String> queryVal = config.getQuery();
+    if (!queryVal.isPresent()) {
+      log.debug("No query configured, skipping semantic validation");
+      return true;
+    }
+
+    String query = queryVal.get();
+    String configKey = config.isQueryMasked()
+        ? JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG
+        : JdbcSourceConnectorConfig.QUERY_CONFIG;
+
+    log.debug("Validating query semantics for '{}'", configKey);
+
+    DatabaseDialect dialect = null;
+    try {
+      dialect = createDialect();
+      try (Connection connection = dialect.getConnection()) {
+        dialect.validateQuery(connection, query);
+        log.debug("Query semantic validation successful for '{}'", configKey);
+      }
+      return true;
+    } catch (SQLException e) {
+      String msg = "The configured query is not valid and has database/connection errors"
+          + ". Please provide the correct query by validating the "
+          + "query syntax and the existing table/column names with the database being connected";
+      if (e.getSQLState() != null) {
+        msg += " (SQLState: " + e.getSQLState() + ")";
+      }
+      addConfigError(configKey, msg);
+      return false;
+    } catch (Exception e) {
+      log.debug("Query validation non-SQL exception", e);
+      return true;
+    } finally {
+      if (dialect != null) {
+        dialect.close();
+      }
+    }
+  }
+
+  /**
+   * Create a {@link DatabaseDialect} instance for the current configuration.
+   * This method is protected to allow override in tests.
+   *
+   * @return a new dialect instance; never null
+   */
+  protected DatabaseDialect createDialect() {
+    final String dialectName = config.getString(
+        JdbcSourceConnectorConfig.DIALECT_NAME_CONFIG);
+    if (dialectName != null && !dialectName.trim().isEmpty()) {
+      return DatabaseDialects.create(dialectName, config);
+    }
+    return DatabaseDialects.findBestFor(
+        config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG), config);
   }
 
   /**

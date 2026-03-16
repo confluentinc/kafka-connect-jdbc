@@ -192,7 +192,8 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
     String explainQuery = "EXPLAIN " + query;
     try (Statement stmt = connection.createStatement()) {
       stmt.execute(explainQuery);
-      log.trace("Query validation via EXPLAIN successful");
+      log.trace("Query validation successful for '{}'",
+          shouldRedactSensitiveLogs(query));
     }
   }
 }

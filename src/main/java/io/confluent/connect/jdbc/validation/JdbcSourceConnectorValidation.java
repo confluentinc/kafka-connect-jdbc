@@ -370,7 +370,6 @@ public class JdbcSourceConnectorValidation {
   protected boolean validateQuerySemantics() {
     Optional<String> queryVal = config.getQuery();
     if (!queryVal.isPresent()) {
-      log.debug("No query configured, skipping semantic validation");
       return true;
     }
 
@@ -379,14 +378,11 @@ public class JdbcSourceConnectorValidation {
         ? JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG
         : JdbcSourceConnectorConfig.QUERY_CONFIG;
 
-    log.debug("Validating query semantics for '{}'", configKey);
-
     DatabaseDialect dialect = null;
     try {
       dialect = createDialect();
       try (Connection connection = dialect.getConnection()) {
         dialect.validateQuery(connection, query);
-        log.debug("Query semantic validation successful for '{}'", configKey);
       }
       return true;
     } catch (SQLException e) {
@@ -399,7 +395,7 @@ public class JdbcSourceConnectorValidation {
       addConfigError(configKey, msg);
       return false;
     } catch (Exception e) {
-      log.debug("Query validation non-SQL exception", e);
+      log.debug("Query validation failed with non-SQL exception", e);
       return true;
     } finally {
       if (dialect != null) {

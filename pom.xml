@@ -528,7 +528,6 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven-surefire-plugin.version}</version>
                 <configuration>
-                    <jvm>/Library/Java/JavaVirtualMachines/temurin-11.jdk/Contents/Home/bin/java</jvm>
                     <trimStackTrace>false</trimStackTrace>
                 </configuration>
             </plugin>

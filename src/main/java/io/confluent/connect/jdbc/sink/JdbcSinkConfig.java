@@ -342,6 +342,13 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String MSSQL_USE_MERGE_HOLDLOCK_DISPLAY =
       "SQL Server - Use HOLDLOCK in MERGE";
 
+  public static final String BATCH_PK_COMPACTION = "batch.pk.compaction";
+  private static final String BATCH_PK_COMPACTION_DEFAULT = "false";
+  private static final String BATCH_PK_COMPACTION_DOC =
+      "Whether to retain only the latest record for each unique key";
+  private static final String BATCH_PK_COMPACTION_DISPLAY =
+      "Retain only the latest record for each unique key";
+
   /**
    * The properties that begin with this prefix will be used to configure a class, specified by
    * {@code jdbc.credentials.provider.class} if it implements {@link Configurable}.
@@ -498,6 +505,17 @@ public class JdbcSinkConfig extends AbstractConfig {
             5,
             ConfigDef.Width.MEDIUM,
             REPLACE_NULL_WITH_DEFAULT_DISPLAY
+        )
+        .define(
+            BATCH_PK_COMPACTION,
+            ConfigDef.Type.BOOLEAN,
+            BATCH_PK_COMPACTION_DEFAULT,
+            ConfigDef.Importance.LOW,
+            BATCH_PK_COMPACTION_DOC,
+            WRITES_GROUP,
+            6,
+            ConfigDef.Width.LONG,
+            BATCH_PK_COMPACTION_DISPLAY
         )
         // Data Mapping
         .define(
@@ -692,6 +710,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final int batchSize;
   public final boolean deleteEnabled;
   public final boolean replaceNullWithDefault;
+  public final boolean batchPkCompactionEnabled;
   public final int maxRetries;
   public final int retryBackoffMs;
   public final boolean autoCreate;
@@ -723,6 +742,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     batchSize = getInt(BATCH_SIZE);
     deleteEnabled = getBoolean(DELETE_ENABLED);
     replaceNullWithDefault = getBoolean(REPLACE_NULL_WITH_DEFAULT);
+    batchPkCompactionEnabled = getBoolean(BATCH_PK_COMPACTION);
     maxRetries = getInt(MAX_RETRIES);
     retryBackoffMs = getInt(RETRY_BACKOFF_MS);
     timestampFieldsList = new HashSet<>(getList(TIMESTAMP_FIELDS_LIST));

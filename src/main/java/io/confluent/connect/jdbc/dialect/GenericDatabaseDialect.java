@@ -95,7 +95,6 @@ import io.confluent.connect.jdbc.util.JdbcCredentials;
 import io.confluent.connect.jdbc.util.JdbcCredentialsProvider;
 import io.confluent.connect.jdbc.util.JdbcDriverInfo;
 import io.confluent.connect.jdbc.util.QuoteMethod;
-import io.confluent.connect.jdbc.util.StringUtils;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.TableType;
@@ -268,6 +267,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     }
     if (jdbcCredentials.getPassword() != null) {
       properties.setProperty("password", jdbcCredentials.getPassword());
+    }
+    if (jdbcCredentials.getAccessToken() != null) {
+      properties.setProperty("accessToken", jdbcCredentials.getAccessToken());
     }
     properties = addConnectionProperties(properties);
     // Timeout is 40 seconds to be as long as possible for customer to have a long connection
@@ -2085,23 +2087,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       ).newInstance();
 
       if (provider instanceof Configurable) {
-        Map<String, Object> configs = config.originalsWithPrefix(
-            JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX
-        );
-        configs.remove(
-            JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG.substring(
-                JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX.length()
-            )
-        );
-
-        if (StringUtils.isNotBlank(username)) {
-          configs.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, username);
-        }
-        if (dbPassword != null && StringUtils.isNotBlank(dbPassword.value())) {
-          configs.put(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, dbPassword.value());
-        }
-
-        ((Configurable) provider).configure(configs);
+        ((Configurable) provider).configure(config.originals());
       }
 
       return provider;

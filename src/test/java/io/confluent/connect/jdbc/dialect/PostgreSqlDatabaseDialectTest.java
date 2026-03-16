@@ -46,9 +46,11 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
+
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import org.easymock.EasyMock;
 
 public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDatabaseDialect> {
 
@@ -647,6 +649,54 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
                                          List<T> input, String expected) {
     dialect.formatColumnValue(builder, null, null, Schema.Type.ARRAY, input);
     assertEquals(expected, builder.toString());
+  }
+
+
+  // ========== validateQuery Tests ==========
+
+  @Test
+  public void validateQuery_shouldExecuteExplainQuery() throws SQLException {
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+    Statement mockStatement = EasyMock.createNiceMock(Statement.class);
+    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
+    EasyMock.expect(mockStatement.execute("EXPLAIN SELECT * FROM users")).andReturn(true);
+
+    EasyMock.replay(mockConnection, mockStatement);
+    dialect.validateQuery(mockConnection, "SELECT * FROM users");
+    EasyMock.verify(mockConnection, mockStatement);
+  }
+
+  @Test
+  public void validateQuery_shouldPropagateExceptionForInvalidTable() throws SQLException {
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+    Statement mockStatement = EasyMock.createNiceMock(Statement.class);
+    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
+    EasyMock.expect(mockStatement.execute("EXPLAIN SELECT * FROM nonexistent_table"))
+        .andThrow(new SQLException(
+            "relation \"nonexistent_table\" does not exist", "42P01"));
+
+    EasyMock.replay(mockConnection, mockStatement);
+    try {
+      dialect.validateQuery(mockConnection, "SELECT * FROM nonexistent_table");
+      org.junit.Assert.fail("Expected SQLException to be thrown");
+    } catch (SQLException e) {
+      assertEquals("42P01", e.getSQLState());
+    }
+    EasyMock.verify(mockConnection, mockStatement);
+  }
+
+  @Test
+  public void validateQuery_shouldWorkWithComplexQuery() throws SQLException {
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+    Statement mockStatement = EasyMock.createNiceMock(Statement.class);
+    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
+    String complexQuery = "SELECT a.id, b.name FROM users a "
+        + "INNER JOIN orders b ON a.id = b.user_id";
+    EasyMock.expect(mockStatement.execute("EXPLAIN " + complexQuery)).andReturn(true);
+
+    EasyMock.replay(mockConnection, mockStatement);
+    dialect.validateQuery(mockConnection, complexQuery);
+    EasyMock.verify(mockConnection, mockStatement);
   }
 
 }

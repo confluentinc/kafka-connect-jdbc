@@ -26,6 +26,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Collection;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
@@ -184,5 +185,14 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
   @Override
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
     throw new SQLException("MySQL does not support synonyms. Please use views instead.");
+  }
+
+  @Override
+  public void validateQuery(Connection connection, String query) throws SQLException {
+    String explainQuery = "EXPLAIN " + query;
+    try (Statement stmt = connection.createStatement()) {
+      stmt.execute(explainQuery);
+      log.trace("Query validation via EXPLAIN successful");
+    }
   }
 }

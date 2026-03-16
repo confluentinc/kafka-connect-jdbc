@@ -43,6 +43,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Types;
 import java.util.Arrays;
 import java.util.Collection;
@@ -675,6 +676,17 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     }
 
     return defn.scale();
+  }
+
+  @Override
+  public void validateQuery(Connection connection, String query) throws SQLException {
+    // Use EXPLAIN to validate query syntax and metadata without executing
+    String explainQuery = "EXPLAIN " + query;
+    try (Statement stmt = connection.createStatement()) {
+      stmt.execute(explainQuery);
+      log.trace("Query validation via EXPLAIN successful for '{}'",
+          shouldRedactSensitiveLogs(query));
+    }
   }
 
 }

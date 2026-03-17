@@ -15,6 +15,8 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.TABLE_NAME_FORMAT;
+import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.TABLE_NAME_FORMAT_RECORD_HEADER;
 import static org.easymock.EasyMock.anyObject;
 import static org.easymock.EasyMock.expect;
 import static org.easymock.EasyMock.expectLastCall;
@@ -41,6 +43,7 @@ import java.time.ZoneId;
 import java.util.concurrent.CompletableFuture;
 
 import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.SchemaAndValue;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Timestamp;
@@ -517,6 +520,214 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
       records.add(RECORD);
     }
     return records;
+  }
+
+  @Test
+  public void putWithMultipleTableRoutingWithPkModeKafka() throws Exception {
+    Map<String, String> props = new HashMap<>();
+    props.put("connection.url", sqliteHelper.sqliteUri());
+    props.put(TABLE_NAME_FORMAT, TABLE_NAME_FORMAT_RECORD_HEADER);
+    props.put("auto.create", "true");
+    props.put("pk.mode", "kafka");
+    props.put("pk.fields", "kafka_topic,kafka_partition,kafka_offset");
+
+    JdbcSinkTask task = new JdbcSinkTask();
+    task.initialize(mock(SinkTaskContext.class));
+    task.start(props);
+
+    final Struct struct1 = new Struct(SCHEMA)
+        .put("firstName", "Alice")
+        .put("lastName", "Johnson")
+        .put("age", 28)
+        .put("modified", new Date(1474661402123L));
+
+    final Struct struct2 = new Struct(SCHEMA)
+        .put("firstName", "Bob")
+        .put("lastName", "Williams")
+        .put("age", 35)
+        .put("modified", new Date(1474661402123L));
+
+    final String topic = "source_topic";
+
+    // Create records with different target tables
+    SinkRecord record1 = new SinkRecord(topic, 1, null, null, SCHEMA, struct1, 44);
+    record1.headers().add(TABLE_NAME_FORMAT, new SchemaAndValue(Schema.STRING_SCHEMA, "users"));
+
+    SinkRecord record2 = new SinkRecord(topic, 1, null, null, SCHEMA, struct2, 45);
+    record2.headers().add(TABLE_NAME_FORMAT, new SchemaAndValue(Schema.STRING_SCHEMA, "employees"));
+
+    List<SinkRecord> records = new ArrayList<>();
+    records.add(record1);
+    records.add(record2);
+
+    task.put(records);
+
+    // Verify first record went to 'users' table
+    assertEquals(
+        1,
+        sqliteHelper.select(
+            "SELECT * FROM users",
+            new SqliteHelper.ResultSetReadCallback() {
+              @Override
+              public void read(ResultSet rs) throws SQLException {
+                assertEquals(struct1.getString("firstName"), rs.getString("firstName"));
+                assertEquals(struct1.getString("lastName"), rs.getString("lastName"));
+                assertEquals(44, rs.getLong("kafka_offset"));
+              }
+            }
+        )
+    );
+
+    // Verify second record went to 'employees' table
+    assertEquals(
+        1,
+        sqliteHelper.select(
+            "SELECT * FROM employees",
+            new SqliteHelper.ResultSetReadCallback() {
+              @Override
+              public void read(ResultSet rs) throws SQLException {
+                assertEquals(struct2.getString("firstName"), rs.getString("firstName"));
+                assertEquals(struct2.getString("lastName"), rs.getString("lastName"));
+                assertEquals(45, rs.getLong("kafka_offset"));
+              }
+            }
+        )
+    );
+  }
+
+  @Test
+  public void putWithMultipleTableRoutingWithPkModeRecordKey() throws Exception {
+    Map<String, String> props = new HashMap<>();
+    props.put("connection.url", sqliteHelper.sqliteUri());
+    props.put(TABLE_NAME_FORMAT, TABLE_NAME_FORMAT_RECORD_HEADER);
+    props.put("auto.create", "true");
+    props.put("pk.mode", "record_key");
+    props.put("pk.fields", ""); // Empty for record_key mode
+
+    JdbcSinkTask task = new JdbcSinkTask();
+    task.initialize(mock(SinkTaskContext.class));
+    task.start(props);
+
+    final Struct struct1 = new Struct(SCHEMA)
+            .put("firstName", "Alice")
+            .put("lastName", "Johnson")
+            .put("age", 28)
+            .put("modified", new Date(1474661402123L));
+
+    final Struct struct2 = new Struct(SCHEMA)
+            .put("firstName", "Bob")
+            .put("lastName", "Williams")
+            .put("age", 35)
+            .put("modified", new Date(1474661402123L));
+
+    final String topic = "source_topic";
+
+    // Define key schemas for record keys
+    final Schema keySchema = SchemaBuilder.struct()
+            .field("id", Schema.INT32_SCHEMA)
+            .field("type", Schema.STRING_SCHEMA)
+            .build();
+
+    // Create record keys
+    final Struct key1 = new Struct(keySchema)
+            .put("id", 1001)
+            .put("type", "user");
+
+    final Struct key2 = new Struct(keySchema)
+            .put("id", 2001)
+            .put("type", "employee");
+
+    // Create records with record keys and different target tables
+    SinkRecord record1 = new SinkRecord(topic, 1, keySchema, key1, SCHEMA, struct1, 44);
+    record1.headers().add(TABLE_NAME_FORMAT, new SchemaAndValue(Schema.STRING_SCHEMA, "users"));
+
+    SinkRecord record2 = new SinkRecord(topic, 1, keySchema, key2, SCHEMA, struct2, 45);
+    record2.headers().add(TABLE_NAME_FORMAT, new SchemaAndValue(Schema.STRING_SCHEMA, "employees"));
+
+    List<SinkRecord> records = new ArrayList<>();
+    records.add(record1);
+    records.add(record2);
+
+    task.put(records);
+
+    // Verify first record went to 'users' table with record key as PK
+    assertEquals(
+            1,
+            sqliteHelper.select(
+                    "SELECT * FROM users",
+                    new SqliteHelper.ResultSetReadCallback() {
+                      @Override
+                      public void read(ResultSet rs) throws SQLException {
+                        // Verify data fields
+                        assertEquals(struct1.getString("firstName"), rs.getString("firstName"));
+                        assertEquals(struct1.getString("lastName"), rs.getString("lastName"));
+                        assertEquals(struct1.getInt32("age").intValue(), rs.getInt("age"));
+
+                        // Verify record key fields are used as primary key
+                        assertEquals(key1.getInt32("id").intValue(), rs.getInt("id"));
+                        assertEquals(key1.getString("type"), rs.getString("type"));
+                      }
+                    }
+            )
+    );
+
+    // Verify second record went to 'employees' table with record key as PK
+    assertEquals(
+            1,
+            sqliteHelper.select(
+                    "SELECT * FROM employees",
+                    new SqliteHelper.ResultSetReadCallback() {
+                      @Override
+                      public void read(ResultSet rs) throws SQLException {
+                        // Verify data fields
+                        assertEquals(struct2.getString("firstName"), rs.getString("firstName"));
+                        assertEquals(struct2.getString("lastName"), rs.getString("lastName"));
+                        assertEquals(struct2.getInt32("age").intValue(), rs.getInt("age"));
+
+                        // Verify record key fields are used as primary key
+                        assertEquals(key2.getInt32("id").intValue(), rs.getInt("id"));
+                        assertEquals(key2.getString("type"), rs.getString("type"));
+                      }
+                    }
+            )
+    );
+  }
+
+  @Test
+  public void putWithInvalidHeaderShouldFail() throws ConnectException {
+    Map<String, String> props = new HashMap<>();
+    props.put("connection.url", sqliteHelper.sqliteUri());
+    props.put(TABLE_NAME_FORMAT, TABLE_NAME_FORMAT_RECORD_HEADER);
+    props.put("auto.create", "true");
+
+    JdbcSinkTask task = new JdbcSinkTask();
+    task.initialize(mock(SinkTaskContext.class));
+    task.start(props);
+
+    final Struct struct = new Struct(SCHEMA)
+            .put("firstName", "Test")
+            .put("lastName", "User")
+            .put("age", 30)
+            .put("modified", new Date(1474661402123L));
+
+    // Test case 1: Missing header
+    SinkRecord recordWithoutHeader = new SinkRecord("source_topic", 1, null, null, SCHEMA, struct, 46);
+    try {
+      task.put(Collections.singleton(recordWithoutHeader));
+      fail("Expected ConnectException for missing header");
+    } catch (ConnectException e) {
+      assertTrue("Exception should mention header issue", e.getMessage().contains("Header 'table.name.format'"));
+    }
+
+    // Test case 2: Empty header value
+    SinkRecord recordWithEmptyHeader = new SinkRecord("source_topic", 1, null, null, SCHEMA, struct, 47);
+    recordWithEmptyHeader.headers().add(TABLE_NAME_FORMAT, new SchemaAndValue(Schema.STRING_SCHEMA, ""));
+    try {
+      task.put(Collections.singleton(recordWithEmptyHeader));
+      fail("Expected ConnectException for empty header value");
+    } catch (ConnectException e) {
+      assertTrue("Exception should mention header issue", e.getMessage().contains("Header 'table.name.format'"));
+    }
   }
 
   private Map<String, String> setupBasicProps(int maxRetries, long retryBackoffMs) {

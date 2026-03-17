@@ -27,10 +27,4 @@ public interface JdbcCredentials {
    * @return Password/Token to use for authentication to database
    */
   String getPassword();
-
-  /**
-   *
-   * @return Token to use for authentication to database
-   */
-  String getAccessToken();
 }

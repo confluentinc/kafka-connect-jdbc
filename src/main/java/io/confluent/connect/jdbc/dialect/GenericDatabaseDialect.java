@@ -257,10 +257,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     return zoneId;
   }
 
-  @Override
-  public Connection getConnection() throws SQLException {
-    JdbcCredentials jdbcCredentials = jdbcCredentialsProvider.getJdbcCredentials();
-
+  /**
+   * Build authentication properties from credentials.
+   * Subclasses can override to customize authentication property handling.
+   *
+   * @param jdbcCredentials the credentials to use for authentication
+   * @return properties containing authentication information
+   */
+  protected Properties buildAuthenticationProperties(JdbcCredentials jdbcCredentials) {
     Properties properties = new Properties();
     if (jdbcCredentials.getUsername() != null) {
       properties.setProperty("user", jdbcCredentials.getUsername());
@@ -268,9 +272,13 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     if (jdbcCredentials.getPassword() != null) {
       properties.setProperty("password", jdbcCredentials.getPassword());
     }
-    if (jdbcCredentials.getAccessToken() != null) {
-      properties.setProperty("accessToken", jdbcCredentials.getAccessToken());
-    }
+    return properties;
+  }
+
+  @Override
+  public Connection getConnection() throws SQLException {
+    JdbcCredentials jdbcCredentials = jdbcCredentialsProvider.getJdbcCredentials();
+    Properties properties = buildAuthenticationProperties(jdbcCredentials);
     properties = addConnectionProperties(properties);
     // Timeout is 40 seconds to be as long as possible for customer to have a long connection
     // handshake, while still giving enough time to validate once in the follower worker,

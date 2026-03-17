@@ -24,6 +24,7 @@ import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
+import io.confluent.connect.jdbc.util.JdbcCredentials;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
@@ -51,6 +52,9 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Properties;
+
+import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG;
 
 /**
  * A {@link DatabaseDialect} for PostgreSQL.
@@ -100,6 +104,27 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     super(config, new IdentifierRules(".", "\"", "\""));
   }
 
+  @Override
+  protected Properties buildAuthenticationProperties(JdbcCredentials jdbcCredentials) {
+    Properties properties = new Properties();
+
+    // For Azure PostgreSQL with Entra ID authentication, username is required
+    // If username is null, use provider.integration.id (Client/Application ID)
+    String username = jdbcCredentials.getUsername();
+    if (username == null) {
+      username = config.getString(CONNECTION_USER_CONFIG);
+    }
+    if (username != null) {
+      properties.setProperty("user", username);
+    }
+
+    // For PostgreSQL, the access token goes in the password field (not a separate property)
+    if (jdbcCredentials.getPassword() != null) {
+      properties.setProperty("password", jdbcCredentials.getPassword());
+    }
+
+    return properties;
+  }
 
   @Override
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {

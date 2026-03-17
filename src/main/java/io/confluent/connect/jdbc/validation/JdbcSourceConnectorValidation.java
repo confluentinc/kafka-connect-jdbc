@@ -160,6 +160,10 @@ public class JdbcSourceConnectorValidation {
    * Implements the pattern: legacyKeys vs newKeys with early returns.
    */
   private boolean validateLegacyNewConfigCompatibility() {
+    String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
+    if (query != null && !query.trim().isEmpty()) {
+      return true;
+    }
     // Define legacy and new config keys
     boolean usingLegacyConfigs = isUsingLegacyConfigs();
     boolean usingNewConfigs = isUsingNewConfigs();
@@ -269,6 +273,10 @@ public class JdbcSourceConnectorValidation {
    * Validate that at least one configuration is provided.
    */
   private boolean addConfigErrorsForNoConfigProvided() {
+    String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
+    if (query != null && !query.trim().isEmpty()) {
+      return true;
+    }
     String msg = "At least one table filtering configuration is required. "
         + "Provide one of: " + JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + ", "
         + JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG + ", "

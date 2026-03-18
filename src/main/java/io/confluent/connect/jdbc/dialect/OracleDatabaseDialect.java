@@ -31,7 +31,9 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Types;
+
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -422,5 +424,24 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
       }
     }
     return null;
+  }
+
+  @Override
+  public void validateQuery(Connection connection, String query) throws SQLException {
+    // Use EXPLAIN PLAN FOR to validate, fallback to prepareStatement if PLAN_TABLE missing
+    String explainQuery = "EXPLAIN PLAN FOR " + query;
+    try (Statement stmt = connection.createStatement()) {
+      stmt.execute(explainQuery);
+      log.trace("Query validation successful for '{}'",
+          shouldRedactSensitiveLogs(query));
+    } catch (SQLException e) {
+      // ORA-02404: specified plan table not found - fall back to prepareStatement
+      if (e.getErrorCode() == 2404) {
+        log.trace("Query validation failed,falling back to prepareStatement validation");
+        super.validateQuery(connection, query);
+      } else {
+        throw e;
+      }
+    }
   }
 }

@@ -975,9 +975,20 @@ public class SqlParserTest {
   @Test
   public void testJsonObjectSimpleKeyValueObj() {
     String sql = "SELECT JSON_OBJECTAGG(\"username, age\") FROM users WHERE userid IN (857287, 871122, 856489, 414082) GROUP BY age;";
-    String result = SqlParser.redactSensitiveData(sql);
 
-    System.out.println("Redacted SQL: " + result);
+    String expected = "SELECT JSON_OBJECTAGG("
+        + SqlParser.REDACTED_STRING
+        + ") FROM users WHERE userid IN ("
+        + SqlParser.REDACTED_NUMBER
+        + ", "
+        + SqlParser.REDACTED_NUMBER
+        + ", "
+        + SqlParser.REDACTED_NUMBER
+        + ", "
+        + SqlParser.REDACTED_NUMBER
+        + ") GROUP BY age";
+
+    assertEquals(expected, SqlParser.redactSensitiveData(sql));
   }
 
 
@@ -999,7 +1010,7 @@ public class SqlParserTest {
   }
 
   @Test
-  public void testJsonObjectNestedSecurityBug() {
+  public void testJsonObjectNestedQuery() {
     String sql = "SELECT JSON_OBJECT('profile', JSON_OBJECT('userid', 871122, "
         + "'username', 'user_1234', 'age', 24), "
         + "'metadata', JSON_OBJECT('event_time', '1743853243812259', "

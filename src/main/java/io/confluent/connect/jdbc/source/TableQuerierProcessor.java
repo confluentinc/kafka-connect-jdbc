@@ -176,9 +176,8 @@ public class TableQuerierProcessor {
   private void handleInterruptedException(TableQuerier querier, InterruptedException e) {
     resetAndRequeueHead(querier, true);
     log.error(
-        "Interrupted while running query for table: {}. Query: {}",
+        "Interrupted while running query for table: {}",
         querier,
-        querier.getRedactedQueryString(),
         e);
     // Interruption should not be treated as a failure, just stop processing
     Thread.currentThread().interrupt();
@@ -187,9 +186,8 @@ public class TableQuerierProcessor {
   private void handleThrowable(RecordDestination<SourceRecord> destination,
                                TableQuerier querier, Throwable t) {
     log.error(
-        "Failed to run query for table: {}. Query: {}",
+        "Failed to run query for table: {}",
         querier,
-        querier.getRedactedQueryString(),
         t);
     resetAndRequeueHead(querier, true);
     // This task has failed, report failure to destination

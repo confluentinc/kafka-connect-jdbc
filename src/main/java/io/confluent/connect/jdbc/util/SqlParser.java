@@ -172,7 +172,6 @@ public class SqlParser {
       // Layer 4: Regex fallback when AST parsing fails
       log.debug("JSqlParser could not parse the SQL query, "
           + "falling back to regex redaction", e);
-      System.out.println("JSqlParser failed to parse SQL, applying regex fallback: " + sql);
       return redactAllLiterals(sql);
     }
   }

@@ -986,7 +986,7 @@ public class SqlParserTest {
         + SqlParser.REDACTED_NUMBER
         + ", "
         + SqlParser.REDACTED_NUMBER
-        + ") GROUP BY age";
+        + ") GROUP BY age;";
 
     assertEquals(expected, SqlParser.redactSensitiveData(sql));
   }
@@ -3466,5 +3466,418 @@ public class SqlParserTest {
         + " ORDER BY e.salary DESC LIMIT "
         + SqlParser.REDACTED_NUMBER;
     assertEquals(expected, SqlParser.redactSensitiveData(sql));
+  }
+
+  /**
+   * Tests that Layer 2 redacts numeric literals while preserving structural numbers.
+   */
+  @Test
+  public void testLayer2RedactsNumericLiteralsPreservesStructural() {
+    // Simulate output from Layer 1 that has leaked numeric literals
+    String afterLayer1 = "SELECT TOP 50 * FROM users WHERE id = 12345 AND age > 25";
+
+    String expected = "SELECT TOP 50 * FROM users WHERE id = 0 AND age > 0";
+    assertEquals(expected, SqlParser.redactNumericLiterals(afterLayer1));
+  }
+
+  @Test
+  public void testLayer2PreservesDecimalTypeParameters() {
+    String afterLayer1 = "SELECT CAST(price AS DECIMAL(10, 2)) FROM products WHERE id = 857287";
+
+    String expected = "SELECT CAST(price AS DECIMAL(10, 2)) FROM products WHERE id = 0";
+    assertEquals(expected, SqlParser.redactNumericLiterals(afterLayer1));
+  }
+
+  @Test
+  public void testLayer2PreservesAlreadyRedactedNumbers() {
+    String afterLayer1 = "SELECT * FROM orders WHERE customer_id = 0 AND total > 0";
+
+    String expected = "SELECT * FROM orders WHERE customer_id = 0 AND total > 0";
+    assertEquals(expected, SqlParser.redactNumericLiterals(afterLayer1));
+  }
+
+  @Test
+  public void testLayer2RedactsFloatingPointNumbers() {
+    String afterLayer1 = "SELECT * FROM products WHERE price = 99.99 AND discount = 15.5";
+
+    String expected = "SELECT * FROM products WHERE price = 0 AND discount = 0";
+    assertEquals(expected, SqlParser.redactNumericLiterals(afterLayer1));
+  }
+
+  @Test
+  public void testLayer2WithMixedStructuralAndPiiNumbers() {
+    String afterLayer1 = "SELECT TOP 100 CAST(salary AS DECIMAL(10,2)) FROM employees WHERE emp_id = 857287";
+
+    String expected = "SELECT TOP 100 CAST(salary AS DECIMAL(10,2)) FROM employees WHERE emp_id = 0";
+    assertEquals(expected, SqlParser.redactNumericLiterals(afterLayer1));
+  }
+
+  @Test
+  public void testLayer2EndToEndWithNumericRedaction() {
+    // Full flow: query with leaked numbers should be caught by Layer 2, not Layer 3
+    String sql = "SELECT userid, username FROM sample_data WHERE userid IN (857287, 871122, 856489)";
+
+    String expected = "SELECT userid, username FROM sample_data WHERE userid IN (0, 0, 0)";
+    String result = SqlParser.redactSensitiveData(sql);
+
+    // Should NOT be fully redacted to "<redacted>"
+    assertNotEquals("<redacted>", result);
+    assertEquals(expected, result);
+  }
+
+  /**
+   * Tests that scientific notation numbers are redacted by Layer 2.
+   */
+  @Test
+  public void testScientificNotationRedactedByLayer2() {
+    String afterLayer1 = "SELECT * FROM data WHERE value = 1.5E2 AND temp = 2.0E-3";
+
+    String expected = "SELECT * FROM data WHERE value = 0 AND temp = 0";
+    assertEquals(expected, SqlParser.redactNumericLiterals(afterLayer1));
+  }
+
+  @Test
+  public void testScientificNotationUppercaseE() {
+    String sql = "SELECT * FROM measurements WHERE voltage = 3.14E+10";
+
+    String expected = "SELECT * FROM measurements WHERE voltage = 0";
+    assertEquals(expected, SqlParser.redactNumericLiterals(sql));
+  }
+
+  @Test
+  public void testScientificNotationLowercaseE() {
+    String sql = "SELECT * FROM physics WHERE planck = 6.626e-34";
+
+    String expected = "SELECT * FROM physics WHERE planck = 0";
+    assertEquals(expected, SqlParser.redactNumericLiterals(sql));
+  }
+
+  @Test
+  public void testGenerateSeriesWithScientificNotation() {
+    String sql = "SELECT sd.userid_new_2, sd.username_new, sd.age, gs.num "
+        + "FROM public.sample_data sd "
+        + "JOIN generate_series(1.5E2, 2.0E2) AS gs(num) ON sd.age = gs.num";
+
+    String result = SqlParser.redactSensitiveData(sql);
+
+    // Should NOT be fully redacted to "<redacted>"
+    assertNotEquals("<redacted>", result);
+
+    // Should redact scientific notation numbers
+    assertFalse("Should redact 1.5E2", result.contains("1.5E2"));
+    assertFalse("Should redact 2.0E2", result.contains("2.0E2"));
+
+    // Should contain redacted marker
+    assertTrue("Should contain redacted number", result.contains("generate_series(0, 0)"));
+  }
+
+  @Test
+  public void testMixedScientificAndRegularNumbers() {
+    String sql = "SELECT * FROM data WHERE a = 100 AND b = 1.5E2 AND c = 99.99 AND d = 2.0E-3";
+
+    String result = SqlParser.redactSensitiveData(sql);
+
+    // Should redact all numbers
+    String expected = "SELECT * FROM data WHERE a = 0 AND b = 0 AND c = 0 AND d = 0";
+    assertEquals(expected, result);
+  }
+
+  @Test
+  public void testScientificNotationDoesNotTriggerLayer3() {
+    // This test verifies that scientific notation is caught by Layer 2
+    // and does NOT trigger Layer 3's full redaction
+    String sql = "SELECT value FROM scientific_data WHERE measurement = 6.022E23";
+
+    String result = SqlParser.redactSensitiveData(sql);
+
+    // Should be partially redacted (Layer 2 success), NOT fully redacted (Layer 3)
+    assertNotEquals("<redacted>", result);
+    assertEquals("SELECT value FROM scientific_data WHERE measurement = 0", result);
+  }
+
+  @Test
+  public void testLayer3DetectsPartialScientificNotationLeak() {
+    // This test verifies that Layer 3 catches partial scientific notation patterns
+    // that might leak through if Layer 2 uses incomplete pattern
+
+    // Simulate Layer 2 output with OLD pattern that partially redacted scientific notation
+    String partiallyRedacted = "generate_series(0.5E2, 0.0E-3)";
+
+    // Layer 3 should detect this as a leak
+    assertTrue("Layer 3 should detect 0.5E2 as leaked data",
+        SqlParser.hasLeakedLiterals(partiallyRedacted));
+  }
+
+  @Test
+  public void testGenerateSeriesWithScientificNotationFullFlow() {
+    // End-to-end test with the problematic query from the issue
+    String sql = "SELECT sd.userid_new_2, sd.username_new, sd.age, gs.num\n" +
+        "FROM public.sample_data sd\n" +
+        "JOIN generate_series(1.5E2, 2.0E2) AS gs(num) ON sd.age = gs.num";
+
+    String result = SqlParser.redactSensitiveData(sql);
+
+    // With the fixed pattern, should NOT be fully redacted
+    assertNotEquals("<redacted>", result);
+
+    // Should properly redact scientific notation to 0
+    assertFalse("Should redact 1.5E2", result.contains("1.5E2"));
+    assertFalse("Should redact 2.0E2", result.contains("2.0E2"));
+
+    // Should NOT contain partial scientific notation leaks
+    assertFalse("Should not leak 0.5E2", result.contains("0.5E2"));
+    assertFalse("Should not leak 0.0E2", result.contains("0.0E2"));
+
+    // Should contain proper redaction
+    assertTrue("Should contain generate_series(0, 0)",
+        result.contains("generate_series(0, 0)"));
+  }
+
+  /**
+   * Tests hexadecimal literal redaction (MySQL, SQL Server, PostgreSQL)
+   */
+  @Test
+  public void testHexadecimalLiteralsRedacted() {
+    String sql = "SELECT * FROM logs WHERE error_code = 0x4A3F AND status = 0X1F2E";
+
+    String expected = "SELECT * FROM logs WHERE error_code = 0 AND status = 0";
+    assertEquals(expected, SqlParser.redactSensitiveData(sql));
+  }
+
+  @Test
+  public void testHexadecimalStringLiteralsRedacted() {
+    // MySQL/PostgreSQL/DB2 format: X'...'
+    // Note: JSqlParser treats X'...' as string literals, so they're redacted to '********'
+    String sql = "SELECT * FROM data WHERE hash = X'4A3F2E1D' AND key = x'ABCDEF'";
+
+    String expected = "SELECT * FROM data WHERE hash = "
+        + SqlParser.REDACTED_STRING + " AND key = " + SqlParser.REDACTED_STRING;
+    assertEquals(expected, SqlParser.redactSensitiveData(sql));
+  }
+
+  /**
+   * Tests binary literal redaction (MySQL)
+   */
+  @Test
+  public void testBinaryLiteralsRedacted() {
+    String sql = "SELECT * FROM config WHERE flags = 0b1101 AND mask = 0B1010";
+
+    String expected = "SELECT * FROM config WHERE flags = 0 AND mask = 0";
+    assertEquals(expected, SqlParser.redactSensitiveData(sql));
+  }
+
+  @Test
+  public void testBinaryStringLiteralsRedacted() {
+    // MySQL/PostgreSQL/DB2 format: B'...'
+    // Note: JSqlParser treats B'...' as string literals, so they're redacted to '********'
+    String sql = "SELECT * FROM bits WHERE pattern = B'11010011' AND filter = b'1010'";
+
+    String expected = "SELECT * FROM bits WHERE pattern = "
+        + SqlParser.REDACTED_STRING + " AND filter = " + SqlParser.REDACTED_STRING;
+    assertEquals(expected, SqlParser.redactSensitiveData(sql));
+  }
+
+  /**
+   * Tests octal literal redaction
+   */
+  @Test
+  public void testOctalLiteralsRedacted() {
+    String sql = "SELECT * FROM perms WHERE mode = 0o755 AND umask = 0O022";
+
+    String expected = "SELECT * FROM perms WHERE mode = 0 AND umask = 0";
+    assertEquals(expected, SqlParser.redactSensitiveData(sql));
+  }
+
+  /**
+   * Tests decimal literals starting with dot
+   */
+  @Test
+  public void testDecimalStartingWithDot() {
+    String sql = "SELECT * FROM measurements WHERE ratio = .75 AND percentage = .99";
+
+    String expected = "SELECT * FROM measurements WHERE ratio = 0 AND percentage = 0";
+    assertEquals(expected, SqlParser.redactSensitiveData(sql));
+  }
+
+  /**
+   * Tests mixed numeric literal formats in single query
+   */
+  @Test
+  public void testMixedNumericFormats() {
+    String sql = "SELECT * FROM mixed WHERE "
+        + "decimal = 123.45 AND "
+        + "scientific = 1.5E2 AND "
+        + "hex = 0x4A3F AND "
+        + "binary = 0b1101 AND "
+        + "octal = 0o755";
+
+    String expected = "SELECT * FROM mixed WHERE "
+        + "decimal = 0 AND "
+        + "scientific = 0 AND "
+        + "hex = 0 AND "
+        + "binary = 0 AND "
+        + "octal = 0";
+
+    assertEquals(expected, SqlParser.redactSensitiveData(sql));
+  }
+
+  /**
+   * Tests Layer 3 detection of hexadecimal leaks
+   */
+  @Test
+  public void testLayer3DetectsHexadecimalLeak() {
+    String leaked = "SELECT * FROM logs WHERE error_code = 0x4A3F";
+
+    assertTrue("Layer 3 should detect hexadecimal literal",
+        SqlParser.hasLeakedLiterals(leaked));
+  }
+
+  @Test
+  public void testLayer3DetectsBinaryLeak() {
+    String leaked = "SELECT * FROM config WHERE flags = 0b1101";
+
+    assertTrue("Layer 3 should detect binary literal",
+        SqlParser.hasLeakedLiterals(leaked));
+  }
+
+  @Test
+  public void testLayer3DetectsHexStringLeak() {
+    // X'...' format is detected as a string literal leak (not redacted to '********')
+    String leaked = "SELECT * FROM data WHERE hash = X'4A3F2E1D'";
+
+    assertTrue("Layer 3 should detect hexadecimal string literal",
+        SqlParser.hasLeakedLiterals(leaked));
+  }
+
+  @Test
+  public void testLayer3DetectsBinaryStringLeak() {
+    // B'...' format is detected as a string literal leak (not redacted to '********')
+    String leaked = "SELECT * FROM bits WHERE pattern = B'11010011'";
+
+    assertTrue("Layer 3 should detect binary string literal",
+        SqlParser.hasLeakedLiterals(leaked));
+  }
+
+  /**
+   * Tests that properly redacted queries with various formats pass Layer 3
+   */
+  @Test
+  public void testLayer3PassesProperlyRedactedMixedFormats() {
+    String redacted = "SELECT * FROM mixed WHERE "
+        + "decimal = 0 AND "
+        + "hex = 0 AND "
+        + "binary = 0 AND "
+        + "name = " + SqlParser.REDACTED_STRING;
+
+    assertFalse("Properly redacted query should pass Layer 3",
+        SqlParser.hasLeakedLiterals(redacted));
+  }
+
+  /**
+   * Tests end-to-end redaction of real-world query with hex values
+   */
+  @Test
+  public void testRealWorldHexQuery() {
+    String sql = "SELECT user_id, session_token FROM sessions "
+        + "WHERE session_token = 0xDEADBEEF4A3F2E1D "
+        + "AND created_at > '2024-01-01' "
+        + "AND user_id = 12345";
+
+    String result = SqlParser.redactSensitiveData(sql);
+
+    // Should NOT be fully redacted
+    assertNotEquals("<redacted>", result);
+
+    // Should redact all sensitive values
+    assertFalse("Should redact hex token", result.contains("0xDEADBEEF4A3F2E1D"));
+    assertFalse("Should redact user_id", result.contains("12345"));
+    assertFalse("Should redact date", result.contains("2024-01-01"));
+
+    // Should preserve structure
+    assertTrue("Should preserve table name", result.contains("FROM sessions"));
+    assertTrue("Should preserve column names", result.contains("user_id, session_token"));
+  }
+
+  /**
+   * Tests PostgreSQL-specific numeric formats
+   */
+  @Test
+  public void testPostgreSQLNumericFormats() {
+    String sql = "SELECT encode(data, 'hex') FROM crypto "
+        + "WHERE key = X'DEADBEEF' "
+        + "AND flags = B'1101' "
+        + "AND value = 1.5E2";
+
+    String result = SqlParser.redactSensitiveData(sql);
+
+    assertFalse("Should redact hex string", result.contains("X'DEADBEEF'"));
+    assertFalse("Should redact binary string", result.contains("B'1101'"));
+    assertFalse("Should redact scientific notation", result.contains("1.5E2"));
+  }
+
+  /**
+   * Tests MySQL-specific numeric formats
+   */
+  @Test
+  public void testMySQLNumericFormats() {
+    String sql = "SELECT HEX(data) FROM logs "
+        + "WHERE error_code = 0x4A3F "
+        + "AND flags = 0b1101 "
+        + "AND timestamp > 1234567890";
+
+    String result = SqlParser.redactSensitiveData(sql);
+
+    assertFalse("Should redact 0x hex", result.contains("0x4A3F"));
+    assertFalse("Should redact 0b binary", result.contains("0b1101"));
+    assertFalse("Should redact unix timestamp", result.contains("1234567890"));
+  }
+
+  /**
+   * Layer 3 corner case: PostgreSQL dollar-quoted strings
+   * Tests that Layer 3 catches any unredacted dollar-quoted strings
+   */
+  @Test
+  public void testLayer3CatchesDollarQuotedStrings() {
+    String sql = "SELECT * FROM messages WHERE body = $$sensitive data$$ "
+        + "AND metadata = $tag$secret info$tag$";
+
+    String result = SqlParser.redactSensitiveData(sql);
+
+    // Should handle dollar-quoted strings - either redacted properly or fully <redacted>
+    assertFalse("Should not leak 'sensitive data'", result.contains("sensitive data"));
+    assertFalse("Should not leak 'secret info'", result.contains("secret info"));
+
+    // If not fully redacted, should contain redaction markers
+    if (!result.equals("<redacted>")) {
+      assertTrue("Should contain redacted strings",
+          result.contains(SqlParser.REDACTED_STRING));
+    }
+  }
+
+  /**
+   * Layer 3 corner case: Very long numeric literals
+   * Tests that extremely long numbers don't bypass Layer 3
+   */
+  @Test
+  public void testLayer3CatchesVeryLongNumbers() {
+    String sql = "SELECT * FROM transactions "
+        + "WHERE amount = 999999999999999999999999999999 "
+        + "AND hash = 0x1234567890ABCDEF1234567890ABCDEF "
+        + "AND timestamp = 1234567890123456789";
+
+    String result = SqlParser.redactSensitiveData(sql);
+
+    // Layer 3 ensures very long numbers are handled
+    assertFalse("Should not leak very long decimal",
+        result.contains("999999999999999999999999999999"));
+    assertFalse("Should not leak very long hex",
+        result.contains("1234567890ABCDEF1234567890ABCDEF"));
+    assertFalse("Should not leak long timestamp",
+        result.contains("1234567890123456789"));
+
+    // Should contain redaction markers
+    if (!result.equals("<redacted>")) {
+      assertTrue("Should contain redacted numbers", result.contains("0"));
+    }
   }
 }

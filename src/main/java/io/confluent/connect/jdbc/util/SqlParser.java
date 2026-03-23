@@ -85,13 +85,34 @@ public class SqlParser {
   static final Pattern STRING_LITERAL_PATTERN =
       Pattern.compile("'(?:[^'\\\\]|\\\\.|'')*'");
 
+  // Matches double-quoted strings (some SQL dialects allow this for literals)
+  static final Pattern DOUBLE_QUOTED_STRING_PATTERN =
+      Pattern.compile("\"(?:[^\"\\\\]|\\\\.)*\"");
+
   // Matches PostgreSQL dollar-quoted strings: $$...$$ or $tag$...$tag$
   static final Pattern DOLLAR_QUOTED_PATTERN =
       Pattern.compile("\\$(\\w*)\\$.*?\\$\\1\\$", Pattern.DOTALL);
 
-  // Matches standalone numeric literals, excluding numbers within identifiers
-  static final Pattern NUMERIC_LITERAL_PATTERN =
-      Pattern.compile("(?<![a-zA-Z_$\\d])\\d+(?:\\.\\d+)?(?![a-zA-Z_$\\d])");
+  // Matches standalone numeric literals across all major SQL databases
+  static final Pattern NUMERIC_LITERAL_PATTERN = Pattern.compile(
+      // Alternation of all numeric literal formats (order matters - most specific first)
+      "(?<![a-zA-Z_$\\d])(?:"
+      // Hexadecimal: 0x4A3F or 0X4A3F
+      + "0[xX][0-9a-fA-F]+"
+      // Binary: 0b1010 or 0B1010
+      + "|0[bB][01]+"
+      // Octal: 0o777 or 0O777
+      + "|0[oO][0-7]+"
+      // Hexadecimal string: X'4A3F' or x'4A3F'
+      + "|[xX]'[0-9a-fA-F]+'"
+      // Binary string: B'1010' or b'1010'
+      + "|[bB]'[01]+'"
+      // Standard decimal with optional scientific notation
+      + "|\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?"
+      // Decimal starting with dot: .45
+      + "|\\.\\d+(?:[eE][+-]?\\d+)?"
+      + ")(?![a-zA-Z_$\\d])"
+  );
 
   // Structural number positions (TOP n, OPTIMIZE FOR n) — SQL syntax, not PII
   static final Pattern[] STRUCTURAL_NUMBER_PATTERNS = {
@@ -134,7 +155,10 @@ public class SqlParser {
 
       String result = buffer.toString();
 
-      // Layer 2: Regex safety net for string literals that leaked through bypass types
+      // Layer 2: Regex safety net for literals that leaked through bypass types
+      // Process numeric literals first to catch X'hex' and B'binary' formats
+      // before string literal pattern matches them
+      result = redactNumericLiterals(result);
       result = redactStringLiterals(result);
 
       // Layer 3: Verify no unredacted literals remain
@@ -143,12 +167,12 @@ public class SqlParser {
             + "fully redacting query for safety");
         return REDACTED_VALUE;
       }
-
       return result;
     } catch (JSQLParserException e) {
       // Layer 4: Regex fallback when AST parsing fails
       log.debug("JSqlParser could not parse the SQL query, "
           + "falling back to regex redaction", e);
+      System.out.println("JSqlParser failed to parse SQL, applying regex fallback: " + sql);
       return redactAllLiterals(sql);
     }
   }
@@ -159,7 +183,57 @@ public class SqlParser {
       return sql;
     }
     String result = DOLLAR_QUOTED_PATTERN.matcher(sql).replaceAll(REDACTED_STRING);
+    result = DOUBLE_QUOTED_STRING_PATTERN.matcher(result).replaceAll(REDACTED_STRING);
     return STRING_LITERAL_PATTERN.matcher(result).replaceAll(REDACTED_STRING);
+  }
+
+  /**
+   * Redacts numeric literals using regex while preserving structural numbers.
+   * Structural numbers (TOP 50, DECIMAL(10,2), etc.) are NOT redacted.
+   * Already-redacted numbers (0 or 0.0) are preserved.
+   */
+  static String redactNumericLiterals(String sql) {
+    if (sql == null || sql.isEmpty()) {
+      return sql;
+    }
+
+    Set<Integer> structuralPositions = findStructuralNumberPositions(sql);
+    StringBuilder result = new StringBuilder();
+    Matcher numMatcher = NUMERIC_LITERAL_PATTERN.matcher(sql);
+    int lastEnd = 0;
+
+    while (numMatcher.find()) {
+      String numStr = numMatcher.group();
+
+      // Skip already redacted numbers (0 or 0.0)
+      boolean isAlreadyRedacted = false;
+      try {
+        if (Double.parseDouble(numStr) == 0.0) {
+          isAlreadyRedacted = true;
+        }
+      } catch (NumberFormatException e) {
+        // Not a valid number, will be redacted
+      }
+
+      // Skip structural numbers (TOP 50, DECIMAL(10,2), etc.)
+      boolean isStructural = structuralPositions.contains(numMatcher.start());
+
+      // Append text before this match
+      result.append(sql, lastEnd, numMatcher.start());
+
+      // Redact or preserve this number
+      if (isAlreadyRedacted || isStructural) {
+        result.append(numStr);  // Preserve
+      } else {
+        result.append(REDACTED_NUMBER);  // Redact
+      }
+
+      lastEnd = numMatcher.end();
+    }
+
+    // Append remaining text
+    result.append(sql.substring(lastEnd));
+    return result.toString();
   }
 
   /** Redacts all literals (strings and numbers) using regex. Fallback when AST fails. */
@@ -168,9 +242,11 @@ public class SqlParser {
       return REDACTED_VALUE;
     }
     try {
-      String result = DOLLAR_QUOTED_PATTERN.matcher(sql).replaceAll(REDACTED_STRING);
+      // Process numeric literals first to catch X'hex' and B'binary' before string pattern
+      String result = NUMERIC_LITERAL_PATTERN.matcher(sql).replaceAll(REDACTED_NUMBER);
+      result = DOLLAR_QUOTED_PATTERN.matcher(result).replaceAll(REDACTED_STRING);
+      result = DOUBLE_QUOTED_STRING_PATTERN.matcher(result).replaceAll(REDACTED_STRING);
       result = STRING_LITERAL_PATTERN.matcher(result).replaceAll(REDACTED_STRING);
-      result = NUMERIC_LITERAL_PATTERN.matcher(result).replaceAll(REDACTED_NUMBER);
       return result;
     } catch (Exception e) {
       return REDACTED_VALUE;
@@ -186,35 +262,109 @@ public class SqlParser {
       return false;
     }
 
-    if (DOLLAR_QUOTED_PATTERN.matcher(redactedSql).find()) {
+    if (hasLeakedDollarQuotedStrings(redactedSql)) {
       return true;
     }
 
-    Matcher stringMatcher = STRING_LITERAL_PATTERN.matcher(redactedSql);
+    if (hasLeakedSingleQuotedStrings(redactedSql)) {
+      return true;
+    }
+
+    if (hasLeakedDoubleQuotedStrings(redactedSql)) {
+      return true;
+    }
+
+    if (hasLeakedNumericLiterals(redactedSql)) {
+      return true;
+    }
+
+    if (hasPartialScientificNotation(redactedSql)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /** Checks for leaked dollar-quoted strings (PostgreSQL). */
+  private static boolean hasLeakedDollarQuotedStrings(String sql) {
+    return DOLLAR_QUOTED_PATTERN.matcher(sql).find();
+  }
+
+  /** Checks for leaked single-quoted strings that are not redaction markers. */
+  private static boolean hasLeakedSingleQuotedStrings(String sql) {
+    Matcher stringMatcher = STRING_LITERAL_PATTERN.matcher(sql);
     while (stringMatcher.find()) {
       if (!REDACTED_STRING.equals(stringMatcher.group())) {
         return true;
       }
     }
+    return false;
+  }
 
-    Set<Integer> structuralPositions = findStructuralNumberPositions(redactedSql);
-    Matcher numMatcher = NUMERIC_LITERAL_PATTERN.matcher(redactedSql);
+  /** Checks for leaked double-quoted strings. */
+  private static boolean hasLeakedDoubleQuotedStrings(String sql) {
+    return DOUBLE_QUOTED_STRING_PATTERN.matcher(sql).find();
+  }
+
+  /** Checks for leaked numeric literals. */
+  private static boolean hasLeakedNumericLiterals(String sql) {
+    Set<Integer> structuralPositions = findStructuralNumberPositions(sql);
+    Matcher numMatcher = NUMERIC_LITERAL_PATTERN.matcher(sql);
+
     while (numMatcher.find()) {
       String numStr = numMatcher.group();
-      try {
-        if (Double.parseDouble(numStr) == 0.0) {
-          continue;
-        }
-      } catch (NumberFormatException e) {
-        // Not a valid number; treat as potential leak
+
+      if (isNonDecimalNumericLiteral(numStr)) {
+        return true;
       }
-      if (structuralPositions.contains(numMatcher.start())) {
+
+      if (isStructuralNumber(numMatcher.start(), structuralPositions)) {
         continue;
       }
-      return true;
+
+      if (!isRedactedDecimalNumber(numStr)) {
+        return true;
+      }
     }
 
     return false;
+  }
+
+  /** Checks if a number is a non-decimal format (hex, binary, octal). */
+  private static boolean isNonDecimalNumericLiteral(String numStr) {
+    // Check for 0x/0X/0b/0B/0o/0O prefixed formats
+    if (numStr.matches("(?i)0[xXbBoO][0-9a-fA-F01]+")) {
+      return true;
+    }
+    // Check for quoted hex/binary strings: X'...', B'...'
+    if (numStr.matches("(?i)[xXbB]'[0-9a-fA-F01]+'")) {
+      return true;
+    }
+    return false;
+  }
+
+  /** Checks if a number is at a structural position. */
+  private static boolean isStructuralNumber(int position, Set<Integer> structuralPositions) {
+    return structuralPositions.contains(position);
+  }
+
+  /** Checks if a decimal number is already redacted (value is 0.0). */
+  private static boolean isRedactedDecimalNumber(String numStr) {
+    try {
+      return Double.parseDouble(numStr) == 0.0;
+    } catch (NumberFormatException e) {
+      return false;  // Not a valid decimal, treat as leak
+    }
+  }
+
+  /**
+   * Checks for partial scientific notation that leaked through.
+   * Examples: "0.5E2", ".5E2" where leading digit was redacted but exponent remains.
+   */
+  private static boolean hasPartialScientificNotation(String sql) {
+    Pattern partialScientificPattern =
+        Pattern.compile("\\d*\\.\\d+[eE][+-]?\\d+");
+    return partialScientificPattern.matcher(sql).find();
   }
 
   /** Finds positions of structural numbers (TOP n, OPTIMIZE FOR n, type params). */

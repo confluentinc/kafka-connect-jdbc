@@ -43,6 +43,7 @@ import java.util.Calendar;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Properties;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode;
@@ -57,6 +58,7 @@ import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.IdentifierRules;
+import io.confluent.connect.jdbc.util.JdbcCredentials;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.ColumnDefinition.Mutability;
@@ -120,6 +122,21 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
   public SqlServerDatabaseDialect(AbstractConfig config) {
     super(config, new IdentifierRules(".", "[", "]"));
     jtdsDriver = jdbcUrlInfo == null ? false : jdbcUrlInfo.subprotocol().matches("jtds");
+  }
+
+  @Override
+  protected Properties buildAuthenticationProperties(JdbcCredentials jdbcCredentials) {
+    Properties properties = new Properties();
+    if (jdbcCredentials.getUsername() != null) {
+      properties.setProperty("user", jdbcCredentials.getUsername());
+      if (jdbcCredentials.getPassword() != null) {
+        properties.setProperty("password", jdbcCredentials.getPassword());
+      }
+    } else if (jdbcCredentials.getPassword() != null) {
+      // When username is null, treat password field as access token
+      properties.setProperty("accessToken", jdbcCredentials.getPassword());
+    }
+    return properties;
   }
 
   @Override

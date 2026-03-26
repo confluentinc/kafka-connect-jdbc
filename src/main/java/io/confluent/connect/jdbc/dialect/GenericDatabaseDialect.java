@@ -95,7 +95,6 @@ import io.confluent.connect.jdbc.util.JdbcCredentials;
 import io.confluent.connect.jdbc.util.JdbcCredentialsProvider;
 import io.confluent.connect.jdbc.util.JdbcDriverInfo;
 import io.confluent.connect.jdbc.util.QuoteMethod;
-import io.confluent.connect.jdbc.util.StringUtils;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.TableType;
@@ -258,10 +257,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     return zoneId;
   }
 
-  @Override
-  public Connection getConnection() throws SQLException {
-    JdbcCredentials jdbcCredentials = jdbcCredentialsProvider.getJdbcCredentials();
-
+  /**
+   * Build authentication properties from credentials.
+   * Subclasses can override to customize authentication property handling.
+   *
+   * @param jdbcCredentials the credentials to use for authentication
+   * @return properties containing authentication information
+   */
+  protected Properties buildAuthenticationProperties(JdbcCredentials jdbcCredentials) {
     Properties properties = new Properties();
     if (jdbcCredentials.getUsername() != null) {
       properties.setProperty("user", jdbcCredentials.getUsername());
@@ -269,6 +272,13 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     if (jdbcCredentials.getPassword() != null) {
       properties.setProperty("password", jdbcCredentials.getPassword());
     }
+    return properties;
+  }
+
+  @Override
+  public Connection getConnection() throws SQLException {
+    JdbcCredentials jdbcCredentials = jdbcCredentialsProvider.getJdbcCredentials();
+    Properties properties = buildAuthenticationProperties(jdbcCredentials);
     properties = addConnectionProperties(properties);
     // Timeout is 40 seconds to be as long as possible for customer to have a long connection
     // handshake, while still giving enough time to validate once in the follower worker,
@@ -2076,8 +2086,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     // All the config key variables referred in this method are same in both source and sink
     // connector. Using source connector config keys here but method should work for sink
     // connector as well.
-    String username = config.getString(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG);
-    Password dbPassword = config.getPassword(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG);
 
     try {
       JdbcCredentialsProvider provider = ((Class<? extends JdbcCredentialsProvider>)
@@ -2085,21 +2093,19 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       ).newInstance();
 
       if (provider instanceof Configurable) {
-        Map<String, Object> configs = config.originalsWithPrefix(
+        Map<String, Object> configs = config.originals();
+
+        // To maintain backward compatability, strip configs prefixed with
+        // CREDENTIALS_PROVIDER_CONFIG_PREFIX add it to the config entries
+        configs.putAll(config.originalsWithPrefix(
             JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX
-        );
+        ));
+
         configs.remove(
             JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG.substring(
                 JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX.length()
             )
         );
-
-        if (StringUtils.isNotBlank(username)) {
-          configs.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, username);
-        }
-        if (dbPassword != null && StringUtils.isNotBlank(dbPassword.value())) {
-          configs.put(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, dbPassword.value());
-        }
 
         ((Configurable) provider).configure(configs);
       }

@@ -43,6 +43,7 @@ import java.util.Calendar;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Properties;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode;
@@ -57,6 +58,7 @@ import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.IdentifierRules;
+import io.confluent.connect.jdbc.util.JdbcCredentials;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.ColumnDefinition.Mutability;
@@ -101,7 +103,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
   public static class Provider extends SubprotocolBasedProvider {
     public Provider() {
       super(SqlServerDatabaseDialect.class.getSimpleName(), "microsoft:sqlserver", "sqlserver",
-            "jtds:sqlserver");
+          "jtds:sqlserver");
     }
 
     @Override
@@ -120,6 +122,21 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
   public SqlServerDatabaseDialect(AbstractConfig config) {
     super(config, new IdentifierRules(".", "[", "]"));
     jtdsDriver = jdbcUrlInfo == null ? false : jdbcUrlInfo.subprotocol().matches("jtds");
+  }
+
+  @Override
+  protected Properties buildAuthenticationProperties(JdbcCredentials jdbcCredentials) {
+    Properties properties = new Properties();
+    if (jdbcCredentials.getUsername() != null) {
+      properties.setProperty("user", jdbcCredentials.getUsername());
+      if (jdbcCredentials.getPassword() != null) {
+        properties.setProperty("password", jdbcCredentials.getPassword());
+      }
+    } else if (jdbcCredentials.getPassword() != null) {
+      // When username is null, treat password field as access token
+      properties.setProperty("accessToken", jdbcCredentials.getPassword());
+    }
+    return properties;
   }
 
   @Override
@@ -218,9 +235,9 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
       jdbcDatabaseMajorVersionValue = Integer.parseInt(jdbcDatabaseMajorVersion);
     } catch (NumberFormatException e) {
       log.warn("Could not retrieve MSSQL Database version from JDBC."
-              + "Version is used to verify timestamp mode compatibility with "
-              + "Sql Server Datetime columns. Defaulting to pre 2016 version."
-              + "Error:" + e.toString());
+          + "Version is used to verify timestamp mode compatibility with "
+          + "Sql Server Datetime columns. Defaulting to pre 2016 version."
+          + "Error:" + e.toString());
     }
     return (jdbcDatabaseMajorVersionValue >= MSSQL_2016_VERSION);
   }
@@ -354,7 +371,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
         return "int";
       case INT64:
         if (config instanceof JdbcSinkConfig
-             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
+            && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
           return "datetime2";
         }
         return "bigint";
@@ -366,7 +383,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
         return "bit";
       case STRING:
         if (config instanceof JdbcSinkConfig
-             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
+            && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
           return "datetime2";
         } else if (field.isPrimaryKey()) {
           // Should be no more than 900 which is the MSSQL constraint
@@ -429,32 +446,32 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     }
     builder.append(" AS target using (select ");
     builder.appendList()
-           .delimitedBy(", ")
-           .transformedBy(ExpressionBuilder.columnNamesWithPrefix("? AS "))
-           .of(keyColumns, nonKeyColumns);
+        .delimitedBy(", ")
+        .transformedBy(ExpressionBuilder.columnNamesWithPrefix("? AS "))
+        .of(keyColumns, nonKeyColumns);
     builder.append(") AS incoming on (");
     builder.appendList()
-           .delimitedBy(" and ")
-           .transformedBy(this::transformAs)
-           .of(keyColumns);
+        .delimitedBy(" and ")
+        .transformedBy(this::transformAs)
+        .of(keyColumns);
     builder.append(")");
     if (nonKeyColumns != null && !nonKeyColumns.isEmpty()) {
       builder.append(" when matched then update set ");
       builder.appendList()
-             .delimitedBy(",")
-             .transformedBy(this::transformUpdate)
-             .of(nonKeyColumns);
+          .delimitedBy(",")
+          .transformedBy(this::transformUpdate)
+          .of(nonKeyColumns);
     }
     builder.append(" when not matched then insert (");
     builder.appendList()
-           .delimitedBy(", ")
-           .transformedBy(ExpressionBuilder.columnNames())
-           .of(nonKeyColumns, keyColumns);
+        .delimitedBy(", ")
+        .transformedBy(ExpressionBuilder.columnNames())
+        .of(nonKeyColumns, keyColumns);
     builder.append(") values (");
     builder.appendList()
-           .delimitedBy(",")
-           .transformedBy(ExpressionBuilder.columnNamesWithPrefix("incoming."))
-           .of(nonKeyColumns, keyColumns);
+        .delimitedBy(",")
+        .transformedBy(ExpressionBuilder.columnNamesWithPrefix("incoming."))
+        .of(nonKeyColumns, keyColumns);
     builder.append(");");
     return builder.toString();
   }
@@ -478,8 +495,8 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
    */
   @Override
   public void validateSpecificColumnTypes(
-          ResultSetMetaData rsMetadata,
-          List<ColumnId> columns
+      ResultSetMetaData rsMetadata,
+      List<ColumnId> columns
   ) throws ConnectException {
     List<ColumnId> timestampColumns = columns;
     if (verifiedSqlServerTimestamp) {
@@ -494,7 +511,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
             for (ColumnId id: timestampColumns) {
               if (id.name().equals(rsMetadata.getColumnName(i + 1))) {
                 throw new ConnectException(
-                        "A DATETIME column is configured for " + TIMESTAMP_COLUMN_NAME_CONFIG
+                    "A DATETIME column is configured for " + TIMESTAMP_COLUMN_NAME_CONFIG
                         + " with Sql Server. DATETIME is not supported. Use DATETIME2 instead.");
               }
             }
@@ -502,7 +519,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
         }
       } catch (SQLException sqlException) {
         throw new ConnectException("Failed to get table meta data"
-                + "while verifying Timestamp column type:", sqlException);
+            + "while verifying Timestamp column type:", sqlException);
       }
     }
     verifiedSqlServerTimestamp = true;
@@ -539,7 +556,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
               + "FROM sys.synonyms";
 
       try (Statement stmt = conn.createStatement();
-          ResultSet synonymRs = stmt.executeQuery(synonymQuery)) {
+           ResultSet synonymRs = stmt.executeQuery(synonymQuery)) {
         while (synonymRs.next()) {
           String catalogName = synonymRs.getString(1);
           String schemaName = synonymRs.getString(2);
@@ -588,36 +605,36 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     }
 
     return super.columnDefinition(
-      resultSet,
-      id,
-      jdbcType,
-      typeName,
-      classNameForType,
-      nullability,
-      mutability,
-      precision,
-      scale,
-      signedNumbers,
-      displaySize,
-      autoIncremented,
-      caseSensitive,
-      searchable,
-      currency,
-      isPrimaryKey
+        resultSet,
+        id,
+        jdbcType,
+        typeName,
+        classNameForType,
+        nullability,
+        mutability,
+        precision,
+        scale,
+        signedNumbers,
+        displaySize,
+        autoIncremented,
+        caseSensitive,
+        searchable,
+        currency,
+        isPrimaryKey
     );
   }
 
   private void transformAs(ExpressionBuilder builder, ColumnId col) {
     builder.append("target.")
-           .appendColumnName(col.name())
-           .append("=incoming.")
-           .appendColumnName(col.name());
+        .appendColumnName(col.name())
+        .append("=incoming.")
+        .appendColumnName(col.name());
   }
 
   private void transformUpdate(ExpressionBuilder builder, ColumnId col) {
     builder.appendColumnName(col.name())
-           .append("=incoming.")
-           .appendColumnName(col.name());
+        .append("=incoming.")
+        .appendColumnName(col.name());
   }
 
   @Override
@@ -625,17 +642,17 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     // SQL Server has semicolon delimited property name-value pairs, and several properties
     // that contain secrets
     return super.sanitizedUrl(url)
-                .replaceAll("(?i)(;password=)[^;]*", "$1****")
-                .replaceAll("(?i)(;keyStoreSecret=)[^;]*", "$1****")
-                .replaceAll("(?i)(;gsscredential=)[^;]*", "$1****");
+        .replaceAll("(?i)(;password=)[^;]*", "$1****")
+        .replaceAll("(?i)(;keyStoreSecret=)[^;]*", "$1****")
+        .replaceAll("(?i)(;gsscredential=)[^;]*", "$1****");
   }
 
   @Override
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
     try (PreparedStatement stmt =
-        connection.prepareStatement(
-            "SELECT PARSENAME(s.base_object_name, 1) AS TABLE_NAME "
-                + "FROM sys.synonyms s WHERE s.name = ?")) {
+             connection.prepareStatement(
+                 "SELECT PARSENAME(s.base_object_name, 1) AS TABLE_NAME "
+                     + "FROM sys.synonyms s WHERE s.name = ?")) {
       String tableName = parseTableIdentifier(synonymName).tableName();
       stmt.setString(1, tableName.toUpperCase());
       ResultSet rs = stmt.executeQuery();

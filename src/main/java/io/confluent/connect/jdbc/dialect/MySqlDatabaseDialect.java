@@ -77,7 +77,8 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
     Properties properties = new Properties();
 
     // For Azure MySQL with Entra ID authentication, username is required
-    // If username is null, use provider.integration.id (Client/Application ID)
+    // The provider integration currently returns username as null.
+    // If the provider does not return a username, attempt to get it from the connector config
     String username = jdbcCredentials.getUsername();
     if (username == null) {
       username = config.getString(CONNECTION_USER_CONFIG);

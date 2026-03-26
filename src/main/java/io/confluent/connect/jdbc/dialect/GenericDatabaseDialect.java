@@ -2086,8 +2086,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     // All the config key variables referred in this method are same in both source and sink
     // connector. Using source connector config keys here but method should work for sink
     // connector as well.
-    String username = config.getString(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG);
-    Password dbPassword = config.getPassword(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG);
 
     try {
       JdbcCredentialsProvider provider = ((Class<? extends JdbcCredentialsProvider>)

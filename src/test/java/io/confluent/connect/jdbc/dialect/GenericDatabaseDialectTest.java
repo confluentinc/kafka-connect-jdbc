@@ -678,10 +678,9 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
     connProps.put(JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG,
         TestConfigurableJdbcCredentialsProvider.class.getName());
 
-    // Adding custom config with prefix - jdbc.credentials.provider. to verify Configurable
-    // functionality
-    connProps.put(JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX + "username", username);
-    connProps.put(JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX + "password", password);
+    // Adding custom config to verify Configurable functionality
+    connProps.put(JdbcSourceConnectorConfig.CONNECTION_PREFIX + "username", username);
+    connProps.put(JdbcSourceConnectorConfig.CONNECTION_PREFIX + "password", password);
     config = new JdbcSourceConnectorConfig(connProps);
     dialect = createDialect(config);
 

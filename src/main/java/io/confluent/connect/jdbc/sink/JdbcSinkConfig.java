@@ -341,6 +341,7 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "Note that it is only applicable to SQL Server.";
   private static final String MSSQL_USE_MERGE_HOLDLOCK_DISPLAY =
       "SQL Server - Use HOLDLOCK in MERGE";
+  public static final String CONNECTION_HOST = "connection.host";
 
   /**
    * The properties that begin with this prefix will be used to configure a class, specified by

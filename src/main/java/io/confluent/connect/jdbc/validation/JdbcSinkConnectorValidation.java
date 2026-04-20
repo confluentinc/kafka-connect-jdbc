@@ -105,8 +105,8 @@ public class JdbcSinkConnectorValidation {
       dialect.getConnection();
     } catch (Exception e) {
       configValue(validationResult, CONNECTION_URL)
-          .ifPresent(hostName ->
-              hostName.addErrorMessage(
+          .ifPresent(connectionUrl ->
+              connectionUrl.addErrorMessage(
                   String.format("Could not connect to database. %s", e.getMessage())));
       log.error("SQLException during validation", e);
     }

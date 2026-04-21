@@ -32,7 +32,7 @@ import java.util.Optional;
 
 import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.DELETE_ENABLED;
 import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.PK_MODE;
-import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.CONNECTION_HOST;
+import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.CONNECTION_URL;
 import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.PrimaryKeyMode.RECORD_KEY;
 
 public class JdbcSinkConnectorValidation {
@@ -104,9 +104,9 @@ public class JdbcSinkConnectorValidation {
     try (DatabaseDialect dialect = DatabaseDialects.create(config.dialectName, config)) {
       dialect.getConnection();
     } catch (Exception e) {
-      configValue(validationResult, CONNECTION_HOST)
-          .ifPresent(hostName ->
-              hostName.addErrorMessage(
+      configValue(validationResult, CONNECTION_URL)
+          .ifPresent(connectionUrl ->
+              connectionUrl.addErrorMessage(
                   String.format("Could not connect to database. %s", e.getMessage())));
       log.error("SQLException during validation", e);
     }

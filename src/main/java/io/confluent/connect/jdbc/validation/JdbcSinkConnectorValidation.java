@@ -39,7 +39,7 @@ public class JdbcSinkConnectorValidation {
   private static final Logger log = LoggerFactory.getLogger(JdbcSinkConnectorValidation.class);
   protected JdbcSinkConfig config;
   protected Config validationResult;
-  private final Map<String, String> connectorConfigs;
+  protected final Map<String, String> connectorConfigs;
 
   public JdbcSinkConnectorValidation(JdbcSinkConfig config,
                                      Config validationResult) {

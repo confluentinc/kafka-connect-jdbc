@@ -23,7 +23,6 @@ import org.apache.kafka.common.config.ConfigValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -101,9 +100,13 @@ public class JdbcSinkConnectorValidation {
   }
 
   private void validateConnection() {
-    try (DatabaseDialect dialect = DatabaseDialects.create(config.dialectName, config)) {
+    try (DatabaseDialect dialect = config.dialectName != null
+        && !config.dialectName.trim().isEmpty()
+        ? DatabaseDialects.create(config.dialectName, config)
+        : DatabaseDialects.findBestFor(config.connectionUrl, config)) {
       dialect.getConnection();
     } catch (Exception e) {
+      // Connection error - attach to connection.url config
       configValue(validationResult, CONNECTION_URL)
           .ifPresent(connectionUrl ->
               connectionUrl.addErrorMessage(

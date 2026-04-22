@@ -23,7 +23,6 @@ import org.apache.kafka.common.config.ConfigValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -32,7 +31,7 @@ import java.util.Optional;
 
 import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.DELETE_ENABLED;
 import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.PK_MODE;
-import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.CONNECTION_HOST;
+import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.CONNECTION_URL;
 import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.PrimaryKeyMode.RECORD_KEY;
 
 public class JdbcSinkConnectorValidation {
@@ -101,12 +100,16 @@ public class JdbcSinkConnectorValidation {
   }
 
   private void validateConnection() {
-    try (DatabaseDialect dialect = DatabaseDialects.create(config.dialectName, config)) {
+    try (DatabaseDialect dialect = config.dialectName != null
+        && !config.dialectName.trim().isEmpty()
+        ? DatabaseDialects.create(config.dialectName, config)
+        : DatabaseDialects.findBestFor(config.connectionUrl, config)) {
       dialect.getConnection();
     } catch (Exception e) {
-      configValue(validationResult, CONNECTION_HOST)
-          .ifPresent(hostName ->
-              hostName.addErrorMessage(
+      // Connection error - attach to connection.url config
+      configValue(validationResult, CONNECTION_URL)
+          .ifPresent(connectionUrl ->
+              connectionUrl.addErrorMessage(
                   String.format("Could not connect to database. %s", e.getMessage())));
       log.error("SQLException during validation", e);
     }

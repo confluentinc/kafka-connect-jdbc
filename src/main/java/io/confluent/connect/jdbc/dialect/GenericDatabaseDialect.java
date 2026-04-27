@@ -1947,17 +1947,44 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   ) throws ConnectException { }
 
   /**
-   * The default implementation uses {@link Connection#prepareStatement(String)} which
-   * compiles the SQL without executing it. This validates syntax, table/column existence,
-   * and user permissions on most databases. Subclasses should override this method to use
-   * database-specific mechanisms like {@code EXPLAIN} for more thorough validation.
+   * Derived-table alias used by every dialect's {@code validateQuery} probe.
+   */
+  protected static final String VALIDATION_SUBQUERY_ALIAS = "jdbc_validation_subquery";
+
+  /**
+   * Default validation: wrap the query as a derived table with ANSI {@code LIMIT 1}.
+   * Subclasses override only when the dialect lacks ANSI {@code LIMIT}.
    */
   @Override
   public void validateQuery(Connection connection, String query) throws SQLException {
-    try (PreparedStatement stmt = connection.prepareStatement(query)) {
-      glog.trace("Query validation successful for '{}'",
-          shouldRedactSensitiveLogs(query));
+    final String wrapped = "SELECT * FROM (" + stripTrailingSemicolons(query) + ") "
+        + VALIDATION_SUBQUERY_ALIAS + " LIMIT 1";
+    executeValidationProbe(connection, wrapped, query);
+  }
+
+  /**
+   * Execute a pre-built limit-1 probe; {@link Statement#setMaxRows(int)} guards drivers
+   * that do not push the limit down.
+   */
+  protected void executeValidationProbe(
+      Connection connection,
+      String wrappedQuery,
+      String originalQuery
+  ) throws SQLException {
+    try (Statement stmt = connection.createStatement()) {
+      stmt.setMaxRows(1);
+      try (ResultSet rs = stmt.executeQuery(wrappedQuery)) {
+        glog.trace("Query validation successful for '{}'",
+            shouldRedactSensitiveLogs(originalQuery));
+      }
     }
+  }
+
+  /**
+   * Strip trailing semicolons and whitespace so the query can be wrapped as a subquery.
+   */
+  protected static String stripTrailingSemicolons(String query) {
+    return query.replaceAll("[;\\s]+$", "");
   }
 
   protected List<String> extractPrimaryKeyFieldNames(Collection<SinkRecordField> fields) {

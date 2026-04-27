@@ -31,7 +31,7 @@ import org.testcontainers.shaded.com.google.common.collect.ImmutableList;
 
 import java.math.BigDecimal;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
@@ -740,27 +740,59 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
   }
 
   // ========== validateQuery Tests ==========
+  // The default implementation wraps the query with ANSI LIMIT 1.
 
   @Test
-  public void validateQuery_shouldUsePrepareStatement() throws SQLException {
+  public void validateQuery_shouldExecuteAnsiLimitOneWrap() throws SQLException {
     Connection mockConnection = EasyMock.createMock(Connection.class);
-    PreparedStatement mockStmt = EasyMock.createMock(PreparedStatement.class);
-    expect(mockConnection.prepareStatement("SELECT * FROM users")).andReturn(mockStmt);
+    Statement mockStmt = EasyMock.createMock(Statement.class);
+    ResultSet mockRs = EasyMock.createNiceMock(ResultSet.class);
+    String expectedWrap =
+        "SELECT * FROM (SELECT * FROM users) jdbc_validation_subquery LIMIT 1";
+
+    expect(mockConnection.createStatement()).andReturn(mockStmt);
+    mockStmt.setMaxRows(1);
+    EasyMock.expectLastCall();
+    expect(mockStmt.executeQuery(expectedWrap)).andReturn(mockRs);
+    mockRs.close();
+    EasyMock.expectLastCall();
     mockStmt.close();
     EasyMock.expectLastCall();
-    replay(mockConnection, mockStmt);
+    replay(mockConnection, mockStmt, mockRs);
 
     dialect.validateQuery(mockConnection, "SELECT * FROM users");
 
-    verify(mockConnection, mockStmt);
+    verify(mockConnection, mockStmt, mockRs);
+  }
+
+  @Test
+  public void validateQuery_shouldStripTrailingSemicolonsAndWhitespace() throws SQLException {
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+    Statement mockStmt = EasyMock.createNiceMock(Statement.class);
+    ResultSet mockRs = EasyMock.createNiceMock(ResultSet.class);
+    String expectedWrap =
+        "SELECT * FROM (SELECT * FROM users) jdbc_validation_subquery LIMIT 1";
+
+    expect(mockConnection.createStatement()).andReturn(mockStmt);
+    expect(mockStmt.executeQuery(expectedWrap)).andReturn(mockRs);
+    replay(mockConnection, mockStmt, mockRs);
+
+    dialect.validateQuery(mockConnection, "SELECT * FROM users;\n  ;\n");
+
+    verify(mockConnection, mockStmt, mockRs);
   }
 
   @Test
   public void validateQuery_shouldPropagateExceptionForInvalidQuery() throws SQLException {
     Connection mockConnection = EasyMock.createMock(Connection.class);
-    expect(mockConnection.prepareStatement("SELECT * FROM nonexistent"))
+    Statement mockStmt = EasyMock.createNiceMock(Statement.class);
+    String expectedWrap =
+        "SELECT * FROM (SELECT * FROM nonexistent) jdbc_validation_subquery LIMIT 1";
+
+    expect(mockConnection.createStatement()).andReturn(mockStmt);
+    expect(mockStmt.executeQuery(expectedWrap))
         .andThrow(new SQLException("table not found", "42S02"));
-    replay(mockConnection);
+    replay(mockConnection, mockStmt);
 
     try {
       dialect.validateQuery(mockConnection, "SELECT * FROM nonexistent");
@@ -769,6 +801,6 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
       assertEquals("42S02", e.getSQLState());
     }
 
-    verify(mockConnection);
+    verify(mockConnection, mockStmt);
   }
 }

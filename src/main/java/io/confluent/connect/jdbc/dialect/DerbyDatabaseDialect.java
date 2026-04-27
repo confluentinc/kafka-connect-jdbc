@@ -183,4 +183,14 @@ public class DerbyDatabaseDialect extends GenericDatabaseDialect {
   public String resolveSynonym(Connection connection, String tableId) throws SQLException {
     throw new SQLException("Derby does not support synonyms. Please use views instead.");
   }
+
+  /**
+   * Derby has no {@code LIMIT}; uses {@code FETCH FIRST 1 ROW ONLY}.
+   */
+  @Override
+  public void validateQuery(Connection connection, String query) throws SQLException {
+    final String wrapped = "SELECT * FROM (" + stripTrailingSemicolons(query) + ") "
+        + VALIDATION_SUBQUERY_ALIAS + " FETCH FIRST 1 ROW ONLY";
+    executeValidationProbe(connection, wrapped, query);
+  }
 }

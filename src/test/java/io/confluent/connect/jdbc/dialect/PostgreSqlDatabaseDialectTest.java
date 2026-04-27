@@ -653,25 +653,55 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
 
   // ========== validateQuery Tests ==========
+  // PostgreSQL inherits the ANSI LIMIT 1 wrap from GenericDatabaseDialect.
 
   @Test
-  public void validateQuery_shouldExecuteExplainQuery() throws SQLException {
+  public void validateQuery_shouldExecuteAnsiLimitOneWrap() throws SQLException {
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+    Statement mockStatement = EasyMock.createMock(Statement.class);
+    ResultSet mockResultSet = EasyMock.createNiceMock(ResultSet.class);
+    String expectedWrap =
+        "SELECT * FROM (SELECT * FROM users) jdbc_validation_subquery LIMIT 1";
+
+    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
+    mockStatement.setMaxRows(1);
+    EasyMock.expectLastCall();
+    EasyMock.expect(mockStatement.executeQuery(expectedWrap)).andReturn(mockResultSet);
+    mockResultSet.close();
+    EasyMock.expectLastCall();
+    mockStatement.close();
+    EasyMock.expectLastCall();
+
+    EasyMock.replay(mockConnection, mockStatement, mockResultSet);
+    dialect.validateQuery(mockConnection, "SELECT * FROM users");
+    EasyMock.verify(mockConnection, mockStatement, mockResultSet);
+  }
+
+  @Test
+  public void validateQuery_shouldStripTrailingSemicolonBeforeWrapping() throws SQLException {
     Connection mockConnection = EasyMock.createMock(Connection.class);
     Statement mockStatement = EasyMock.createNiceMock(Statement.class);
-    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
-    EasyMock.expect(mockStatement.execute("EXPLAIN SELECT * FROM users")).andReturn(true);
+    ResultSet mockResultSet = EasyMock.createNiceMock(ResultSet.class);
+    String expectedWrap =
+        "SELECT * FROM (SELECT * FROM users) jdbc_validation_subquery LIMIT 1";
 
-    EasyMock.replay(mockConnection, mockStatement);
-    dialect.validateQuery(mockConnection, "SELECT * FROM users");
-    EasyMock.verify(mockConnection, mockStatement);
+    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
+    EasyMock.expect(mockStatement.executeQuery(expectedWrap)).andReturn(mockResultSet);
+
+    EasyMock.replay(mockConnection, mockStatement, mockResultSet);
+    dialect.validateQuery(mockConnection, "SELECT * FROM users;\n");
+    EasyMock.verify(mockConnection, mockStatement, mockResultSet);
   }
 
   @Test
   public void validateQuery_shouldPropagateExceptionForInvalidTable() throws SQLException {
     Connection mockConnection = EasyMock.createMock(Connection.class);
     Statement mockStatement = EasyMock.createNiceMock(Statement.class);
+    String expectedWrap = "SELECT * FROM (SELECT * FROM nonexistent_table) "
+        + "jdbc_validation_subquery LIMIT 1";
+
     EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
-    EasyMock.expect(mockStatement.execute("EXPLAIN SELECT * FROM nonexistent_table"))
+    EasyMock.expect(mockStatement.executeQuery(expectedWrap))
         .andThrow(new SQLException(
             "relation \"nonexistent_table\" does not exist", "42P01"));
 
@@ -689,14 +719,18 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   public void validateQuery_shouldWorkWithComplexQuery() throws SQLException {
     Connection mockConnection = EasyMock.createMock(Connection.class);
     Statement mockStatement = EasyMock.createNiceMock(Statement.class);
-    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
+    ResultSet mockResultSet = EasyMock.createNiceMock(ResultSet.class);
     String complexQuery = "SELECT a.id, b.name FROM users a "
         + "INNER JOIN orders b ON a.id = b.user_id";
-    EasyMock.expect(mockStatement.execute("EXPLAIN " + complexQuery)).andReturn(true);
+    String expectedWrap =
+        "SELECT * FROM (" + complexQuery + ") jdbc_validation_subquery LIMIT 1";
 
-    EasyMock.replay(mockConnection, mockStatement);
+    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
+    EasyMock.expect(mockStatement.executeQuery(expectedWrap)).andReturn(mockResultSet);
+
+    EasyMock.replay(mockConnection, mockStatement, mockResultSet);
     dialect.validateQuery(mockConnection, complexQuery);
-    EasyMock.verify(mockConnection, mockStatement);
+    EasyMock.verify(mockConnection, mockStatement, mockResultSet);
   }
 
 }

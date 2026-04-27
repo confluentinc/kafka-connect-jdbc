@@ -22,9 +22,10 @@ import java.io.StringReader;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.sql.Connection;
-import java.sql.Statement;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Types;
 import java.time.ZoneOffset;
 import java.util.Calendar;
@@ -478,26 +479,39 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
     return verify(statement, times(1));
 }
   // ========== validateQuery Tests ==========
+  // Oracle wraps the query with FETCH FIRST 1 ROW ONLY; no PLAN_TABLE access required.
 
   @Test
-  public void validateQuery_shouldExecuteExplainPlanFor() throws SQLException {
+  public void validateQuery_shouldExecuteFetchFirstWrap() throws SQLException {
     Connection mockConnection = EasyMock.createMock(Connection.class);
-    Statement mockStatement = EasyMock.createNiceMock(Statement.class);
-    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
-    EasyMock.expect(mockStatement.execute("EXPLAIN PLAN FOR SELECT * FROM users"))
-        .andReturn(true);
+    Statement mockStatement = EasyMock.createMock(Statement.class);
+    ResultSet mockResultSet = EasyMock.createNiceMock(ResultSet.class);
+    String expectedWrap = "SELECT * FROM (SELECT * FROM users) "
+        + "jdbc_validation_subquery FETCH FIRST 1 ROW ONLY";
 
-    EasyMock.replay(mockConnection, mockStatement);
+    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
+    mockStatement.setMaxRows(1);
+    EasyMock.expectLastCall();
+    EasyMock.expect(mockStatement.executeQuery(expectedWrap)).andReturn(mockResultSet);
+    mockResultSet.close();
+    EasyMock.expectLastCall();
+    mockStatement.close();
+    EasyMock.expectLastCall();
+
+    EasyMock.replay(mockConnection, mockStatement, mockResultSet);
     dialect.validateQuery(mockConnection, "SELECT * FROM users");
-    EasyMock.verify(mockConnection, mockStatement);
+    EasyMock.verify(mockConnection, mockStatement, mockResultSet);
   }
 
   @Test
   public void validateQuery_shouldPropagateExceptionForInvalidTable() throws SQLException {
     Connection mockConnection = EasyMock.createMock(Connection.class);
     Statement mockStatement = EasyMock.createNiceMock(Statement.class);
+    String expectedWrap = "SELECT * FROM (SELECT * FROM nonexistent_table) "
+        + "jdbc_validation_subquery FETCH FIRST 1 ROW ONLY";
+
     EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
-    EasyMock.expect(mockStatement.execute("EXPLAIN PLAN FOR SELECT * FROM nonexistent_table"))
+    EasyMock.expect(mockStatement.executeQuery(expectedWrap))
         .andThrow(new SQLException(
             "ORA-00942: table or view does not exist", "42000", 942));
 
@@ -513,37 +527,20 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
   }
 
   @Test
-  public void validateQuery_shouldFallbackToPrepareStatementWhenPlanTableMissing()
-      throws SQLException {
-    Connection mockConnection = EasyMock.createMock(Connection.class);
-    Statement mockStatement = EasyMock.createNiceMock(Statement.class);
-    PreparedStatement mockPreparedStatement = EasyMock.createNiceMock(PreparedStatement.class);
-
-    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
-    // ORA-02404: specified plan table not found
-    EasyMock.expect(mockStatement.execute("EXPLAIN PLAN FOR SELECT * FROM users"))
-        .andThrow(new SQLException(
-            "ORA-02404: specified plan table not found", "42000", 2404));
-    EasyMock.expect(mockConnection.prepareStatement("SELECT * FROM users"))
-        .andReturn(mockPreparedStatement);
-
-    EasyMock.replay(mockConnection, mockStatement, mockPreparedStatement);
-    dialect.validateQuery(mockConnection, "SELECT * FROM users");
-    EasyMock.verify(mockConnection, mockStatement, mockPreparedStatement);
-  }
-
-  @Test
   public void validateQuery_shouldWorkWithComplexQuery() throws SQLException {
     Connection mockConnection = EasyMock.createMock(Connection.class);
     Statement mockStatement = EasyMock.createNiceMock(Statement.class);
-    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
+    ResultSet mockResultSet = EasyMock.createNiceMock(ResultSet.class);
     String complexQuery = "SELECT a.id, b.name FROM users a "
         + "INNER JOIN orders b ON a.id = b.user_id";
-    EasyMock.expect(mockStatement.execute("EXPLAIN PLAN FOR " + complexQuery))
-        .andReturn(true);
+    String expectedWrap = "SELECT * FROM (" + complexQuery + ") "
+        + "jdbc_validation_subquery FETCH FIRST 1 ROW ONLY";
 
-    EasyMock.replay(mockConnection, mockStatement);
+    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStatement);
+    EasyMock.expect(mockStatement.executeQuery(expectedWrap)).andReturn(mockResultSet);
+
+    EasyMock.replay(mockConnection, mockStatement, mockResultSet);
     dialect.validateQuery(mockConnection, complexQuery);
-    EasyMock.verify(mockConnection, mockStatement);
+    EasyMock.verify(mockConnection, mockStatement, mockResultSet);
   }
 }

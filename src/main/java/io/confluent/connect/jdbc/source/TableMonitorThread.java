@@ -247,9 +247,9 @@ public class TableMonitorThread extends Thread {
   private boolean updateTables() {
     final List<TableId> allTables;
     try {
-      log.info("Fetching all tables from database");
+      log.debug("Fetching all tables from database");
       allTables = dialect.tableIds(connectionProvider.getConnection());
-      log.info("Retrieved {} tables from database: {}", allTables.size(), allTables);
+      log.debug("Retrieved {} tables from database: {}", allTables.size(), allTables);
     } catch (SQLException e) {
       log.error(
           "Error while trying to get updated table list, ignoring and waiting for next table poll"
@@ -271,9 +271,9 @@ public class TableMonitorThread extends Thread {
           includeListRegex != null ? includeListRegex : java.util.Collections.emptySet(),
           excludeListRegex != null ? excludeListRegex : java.util.Collections.emptySet()
       );
-      log.info("Regex filtering resulted in {} tables from {} total tables", 
+      log.debug("Regex filtering resulted in {} tables from {} total tables",
                filteredTables.size(), allTables.size());
-      log.info("Filtered tables: {}", filteredTables);
+      log.debug("Filtered tables: {}", filteredTables);
     } else {
       // Legacy exact-match filtering
       filteredTables = applyLegacyFiltering(allTables);
@@ -281,7 +281,8 @@ public class TableMonitorThread extends Thread {
 
     List<TableId> priorTablesSnapshot = tables.getAndSet(filteredTables);
     if (!Objects.equals(priorTablesSnapshot, filteredTables)) {
-      log.info("Filtered tables size: {}", filteredTables);
+      log.info("Filtered tables size: {}", filteredTables.size());
+      log.debug("Filtered tables: {}", filteredTables);
     }
     synchronized (tables) {
       tables.notifyAll();

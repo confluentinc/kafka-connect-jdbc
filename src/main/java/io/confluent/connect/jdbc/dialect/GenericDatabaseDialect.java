@@ -1966,8 +1966,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
   /**
    * Strip trailing semicolons and whitespace so the query can be wrapped as a subquery.
+   * Visible to dialect subclasses that need to build their own probe (e.g. DB2).
    */
-  private static String stripTrailingSemicolons(String query) {
+  protected static String stripTrailingSemicolons(String query) {
     return query.replaceAll("[;\\s]+$", "");
   }
 

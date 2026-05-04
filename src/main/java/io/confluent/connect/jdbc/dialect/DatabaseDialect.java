@@ -707,10 +707,9 @@ public interface DatabaseDialect extends ConnectionProvider {
   String resolveSynonym(Connection connection, String synonymName) throws SQLException;
 
   /**
-   * Validate the query with a low-cost limit-1 probe. Each bundled dialect wraps the
-   * query and applies its native limit syntax ({@code LIMIT}, {@code TOP}, or
-   * {@code FETCH FIRST}); the default below is a {@code prepareStatement} fallback for
-   * custom dialects that do not extend {@code GenericDatabaseDialect}.
+   * Validate the query with a low-cost ANSI probe that wraps it as a derived table
+   * under a constant-false predicate. The default below is a {@code prepareStatement}
+   * fallback for custom dialects that do not extend {@code GenericDatabaseDialect}.
    *
    * @param connection the database connection; may not be null
    * @param query      the SQL query to validate; may not be null

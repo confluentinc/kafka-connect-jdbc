@@ -197,14 +197,4 @@ public class Db2DatabaseDialect extends GenericDatabaseDialect {
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
     throw new SQLException("DB2 does not support synonyms. Please use views instead.");
   }
-
-  /**
-   * DB2 has no {@code LIMIT}; uses {@code FETCH FIRST 1 ROW ONLY}.
-   */
-  @Override
-  public void validateQuery(Connection connection, String query) throws SQLException {
-    final String wrapped = "SELECT * FROM (" + stripTrailingSemicolons(query) + ") "
-        + VALIDATION_SUBQUERY_ALIAS + " FETCH FIRST 1 ROW ONLY";
-    executeValidationProbe(connection, wrapped, query);
-  }
 }

@@ -1947,43 +1947,27 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   ) throws ConnectException { }
 
   /**
-   * Derived-table alias used by every dialect's {@code validateQuery} probe.
-   */
-  protected static final String VALIDATION_SUBQUERY_ALIAS = "jdbc_validation_subquery";
-
-  /**
-   * Default validation: wrap the query as a derived table with ANSI {@code LIMIT 1}.
-   * Subclasses override only when the dialect lacks ANSI {@code LIMIT}.
+   * Wrap the user query as a derived table and execute it under a constant-false
+   * predicate. The optimiser short-circuits before scanning data, so the probe
+   * validates parse, object resolution, type compatibility, and {@code SELECT}
+   * permissions at near-zero I/O cost and without firing any side effects in the
+   * user query. Uses only ANSI SQL, so a single implementation covers every dialect.
    */
   @Override
   public void validateQuery(Connection connection, String query) throws SQLException {
-    final String wrapped = "SELECT * FROM (" + stripTrailingSemicolons(query) + ") "
-        + VALIDATION_SUBQUERY_ALIAS + " LIMIT 1";
-    executeValidationProbe(connection, wrapped, query);
-  }
-
-  /**
-   * Execute a pre-built limit-1 probe; {@link Statement#setMaxRows(int)} guards drivers
-   * that do not push the limit down.
-   */
-  protected void executeValidationProbe(
-      Connection connection,
-      String wrappedQuery,
-      String originalQuery
-  ) throws SQLException {
-    try (Statement stmt = connection.createStatement()) {
-      stmt.setMaxRows(1);
-      try (ResultSet rs = stmt.executeQuery(wrappedQuery)) {
-        glog.trace("Query validation successful for '{}'",
-            shouldRedactSensitiveLogs(originalQuery));
-      }
+    final String wrapped = "SELECT * FROM (" + stripTrailingSemicolons(query)
+        + ") jdbc_validation_subquery WHERE 1=0";
+    try (Statement stmt = connection.createStatement();
+         ResultSet rs = stmt.executeQuery(wrapped)) {
+      glog.trace("Query validation successful for '{}'",
+          shouldRedactSensitiveLogs(query));
     }
   }
 
   /**
    * Strip trailing semicolons and whitespace so the query can be wrapped as a subquery.
    */
-  protected static String stripTrailingSemicolons(String query) {
+  private static String stripTrailingSemicolons(String query) {
     return query.replaceAll("[;\\s]+$", "");
   }
 

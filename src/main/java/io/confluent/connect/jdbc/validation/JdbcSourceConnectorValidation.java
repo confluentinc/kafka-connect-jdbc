@@ -362,9 +362,9 @@ public class JdbcSourceConnectorValidation {
   }
 
   /**
-   * Validate the user query through the dialect's limit-1 probe. Surfaces syntax,
-   * missing-object and {@code SELECT}-permission errors without needing
-   * {@code EXPLAIN PLAN} privileges.
+   * Validate the user query through the dialect's constant-false probe. Surfaces syntax,
+   * missing-object and {@code SELECT}-permission errors without requiring
+   * {@code EXPLAIN PLAN} privileges and without scanning user data.
    *
    * @return {@code true} if validation passes or no query is configured;
    *         {@code false} on {@link SQLException}

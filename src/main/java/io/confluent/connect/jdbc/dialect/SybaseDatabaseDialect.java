@@ -366,14 +366,4 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
      "Kafka JDBC Connector doesn't support Synonym Types on Sybase. "
       + "Please use other table types instead.");
   }
-
-  /**
-   * Sybase ASE has no {@code LIMIT}; uses the {@code SELECT TOP 1} prefix instead.
-   */
-  @Override
-  public void validateQuery(Connection connection, String query) throws SQLException {
-    final String wrapped = "SELECT TOP 1 * FROM (" + stripTrailingSemicolons(query) + ") "
-        + VALIDATION_SUBQUERY_ALIAS;
-    executeValidationProbe(connection, wrapped, query);
-  }
 }

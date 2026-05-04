@@ -425,15 +425,4 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     return null;
   }
 
-  /**
-   * Oracle has no {@code LIMIT}; uses ANSI {@code FETCH FIRST 1 ROW ONLY}
-   * (Oracle 12.1+) and avoids the PLAN_TABLE write privileges that
-   * {@code EXPLAIN PLAN FOR} requires.
-   */
-  @Override
-  public void validateQuery(Connection connection, String query) throws SQLException {
-    final String wrapped = "SELECT * FROM (" + stripTrailingSemicolons(query) + ") "
-        + VALIDATION_SUBQUERY_ALIAS + " FETCH FIRST 1 ROW ONLY";
-    executeValidationProbe(connection, wrapped, query);
-  }
 }

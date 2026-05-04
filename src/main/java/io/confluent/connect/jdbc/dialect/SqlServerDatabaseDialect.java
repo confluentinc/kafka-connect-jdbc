@@ -662,14 +662,4 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
     }
     return null;
   }
-
-  /**
-   * SQL Server has no {@code LIMIT}; uses the {@code SELECT TOP 1} prefix instead.
-   */
-  @Override
-  public void validateQuery(Connection connection, String query) throws SQLException {
-    final String wrapped = "SELECT TOP 1 * FROM (" + stripTrailingSemicolons(query) + ") "
-        + VALIDATION_SUBQUERY_ALIAS;
-    executeValidationProbe(connection, wrapped, query);
-  }
 }

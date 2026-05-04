@@ -1947,17 +1947,29 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   ) throws ConnectException { }
 
   /**
-   * The default implementation uses {@link Connection#prepareStatement(String)} which
-   * compiles the SQL without executing it. This validates syntax, table/column existence,
-   * and user permissions on most databases. Subclasses should override this method to use
-   * database-specific mechanisms like {@code EXPLAIN} for more thorough validation.
+   * Wrap the user query as a derived table and execute it under a constant-false
+   * predicate. The optimiser short-circuits before scanning data, so the probe
+   * validates parse, object resolution, type compatibility, and {@code SELECT}
+   * permissions at near-zero I/O cost and without firing any side effects in the
+   * user query. Uses only ANSI SQL, so a single implementation covers every dialect.
    */
   @Override
   public void validateQuery(Connection connection, String query) throws SQLException {
-    try (PreparedStatement stmt = connection.prepareStatement(query)) {
+    final String wrapped = "SELECT * FROM (" + stripTrailingSemicolons(query)
+        + ") jdbc_validation_subquery WHERE 1=0";
+    try (Statement stmt = connection.createStatement();
+         ResultSet rs = stmt.executeQuery(wrapped)) {
       glog.trace("Query validation successful for '{}'",
           shouldRedactSensitiveLogs(query));
     }
+  }
+
+  /**
+   * Strip trailing semicolons and whitespace so the query can be wrapped as a subquery.
+   * Visible to dialect subclasses that need to build their own probe (e.g. DB2).
+   */
+  protected static String stripTrailingSemicolons(String query) {
+    return query.replaceAll("[;\\s]+$", "");
   }
 
   protected List<String> extractPrimaryKeyFieldNames(Collection<SinkRecordField> fields) {

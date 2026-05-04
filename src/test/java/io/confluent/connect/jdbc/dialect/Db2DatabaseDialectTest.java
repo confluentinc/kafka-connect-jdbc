@@ -21,8 +21,13 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.easymock.EasyMock;
 import org.junit.Test;
 
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.List;
 
 import io.confluent.connect.jdbc.util.QuoteMethod;
@@ -365,5 +370,27 @@ public class Db2DatabaseDialectTest extends BaseDialectTest<Db2DatabaseDialect> 
   @Test
   public void testCheckConnectionQuery() {
     assertFalse(dialect.checkConnectionQuery().contains(";"));
+  }
+
+  // ========== validateQuery Tests ==========
+  // DB2 overrides the generic WHERE 1=0 probe with FETCH FIRST 1 ROW ONLY to
+  // avoid an empty-cursor SQLException from the IBM DB2 JDBC driver.
+
+  @Test
+  public void validateQuery_shouldExecuteFetchFirstWrapForDb2() throws SQLException {
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+    Statement mockStmt = EasyMock.createNiceMock(Statement.class);
+    ResultSet mockRs = EasyMock.createNiceMock(ResultSet.class);
+    String userQuery = "SELECT * FROM db2inst1.ibmdb2_system_test";
+    String expectedWrap = "SELECT * FROM (" + userQuery + ") "
+        + "jdbc_validation_subquery FETCH FIRST 1 ROW ONLY";
+
+    EasyMock.expect(mockConnection.createStatement()).andReturn(mockStmt);
+    EasyMock.expect(mockStmt.executeQuery(expectedWrap)).andReturn(mockRs);
+    EasyMock.replay(mockConnection, mockStmt, mockRs);
+
+    dialect.validateQuery(mockConnection, userQuery + ";\n");
+
+    EasyMock.verify(mockConnection, mockStmt, mockRs);
   }
 }

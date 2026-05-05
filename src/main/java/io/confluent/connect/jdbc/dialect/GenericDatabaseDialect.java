@@ -1957,10 +1957,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   public void validateQuery(Connection connection, String query) throws SQLException {
     final String wrapped = "SELECT * FROM (" + stripTrailingSemicolons(query)
         + ") jdbc_validation_subquery WHERE 1=0";
+    glog.info("Executing generic validation probe (WHERE 1=0) for query '{}'",
+        shouldRedactSensitiveLogs(query));
     try (Statement stmt = connection.createStatement();
          ResultSet rs = stmt.executeQuery(wrapped)) {
-      glog.trace("Query validation successful for '{}'",
-          shouldRedactSensitiveLogs(query));
+      glog.info("Generic validation probe completed without exception");
     }
   }
 

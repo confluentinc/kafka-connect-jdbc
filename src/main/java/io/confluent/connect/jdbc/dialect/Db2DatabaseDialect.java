@@ -211,10 +211,11 @@ public class Db2DatabaseDialect extends GenericDatabaseDialect {
   public void validateQuery(Connection connection, String query) throws SQLException {
     final String wrapped = "SELECT * FROM (" + stripTrailingSemicolons(query) + ") "
         + "jdbc_validation_subquery FETCH FIRST 1 ROW ONLY";
+    log.info("Executing DB2 validation probe (FETCH FIRST 1 ROW ONLY) for query '{}'",
+        shouldRedactSensitiveLogs(query));
     try (Statement stmt = connection.createStatement();
          ResultSet rs = stmt.executeQuery(wrapped)) {
-      log.trace("Query validation successful for '{}'",
-          shouldRedactSensitiveLogs(query));
+      log.info("DB2 validation probe completed without exception");
     }
   }
 }

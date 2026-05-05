@@ -405,13 +405,7 @@ public class JdbcSourceConnectorValidation {
         connectionOpened = true;
         long connectElapsedMs = System.currentTimeMillis() - connectStartMs;
 
-        DatabaseMetaData md = connection.getMetaData();
-        log.info("Connection opened in {} ms [driver='{} {}', database='{} {}', "
-                + "autoCommit={}, isolation={}]",
-            connectElapsedMs,
-            md.getDriverName(), md.getDriverVersion(),
-            md.getDatabaseProductName(), md.getDatabaseProductVersion(),
-            connection.getAutoCommit(), connection.getTransactionIsolation());
+        logConnectionMetadata(connection, connectElapsedMs);
 
         log.info("Invoking dialect.validateQuery() to execute the validation probe");
         long queryStartMs = System.currentTimeMillis();
@@ -607,6 +601,34 @@ public class JdbcSourceConnectorValidation {
         .filter(cv -> cv.name().equals(configName))
         .findFirst()
         .ifPresent(cv -> cv.addErrorMessage(errorMessage));
+  }
+
+  /**
+   * Log driver and database metadata for diagnostic purposes. Wrapped in a broad
+   * catch because metadata reads must never break the validation flow — a buggy
+   * driver, partially-initialised connection, or test mock returning {@code null}
+   * should not abort validation. Catches {@link Throwable} (rather than
+   * {@link Exception}) deliberately, so that test mocks raising
+   * {@link AssertionError} for unexpected calls also fall through safely.
+   */
+  private void logConnectionMetadata(Connection connection, long connectElapsedMs) {
+    try {
+      DatabaseMetaData md = connection.getMetaData();
+      if (md == null) {
+        log.info("Connection opened in {} ms [metadata unavailable: getMetaData() returned null]",
+            connectElapsedMs);
+        return;
+      }
+      log.info("Connection opened in {} ms [driver='{} {}', database='{} {}', "
+              + "autoCommit={}, isolation={}]",
+          connectElapsedMs,
+          md.getDriverName(), md.getDriverVersion(),
+          md.getDatabaseProductName(), md.getDatabaseProductVersion(),
+          connection.getAutoCommit(), connection.getTransactionIsolation());
+    } catch (Throwable t) {
+      log.info("Connection opened in {} ms [metadata read failed: {}: {}]",
+          connectElapsedMs, t.getClass().getSimpleName(), t.getMessage());
+    }
   }
 
   /**

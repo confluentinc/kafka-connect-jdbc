@@ -1213,12 +1213,12 @@ public class JdbcSourceConnectorValidationTest {
     props.put(QUERY_CONFIG, "SELECT id, name FROM users WHERE active = true");
 
     DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
-    // Connection is a nice mock so diagnostic getMetaData() calls are allowed;
-    // the strict assertions live on mockDialect.
-    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
+    Connection mockConnection = EasyMock.createMock(Connection.class);
 
     EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
     mockDialect.validateQuery(mockConnection, "SELECT id, name FROM users WHERE active = true");
+    EasyMock.expectLastCall();
+    mockConnection.close();
     EasyMock.expectLastCall();
     mockDialect.close();
     EasyMock.expectLastCall();
@@ -1236,14 +1236,14 @@ public class JdbcSourceConnectorValidationTest {
     props.put(QUERY_CONFIG, "SELECT * FROM nonexistent_table");
 
     DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
-    // Connection is a nice mock so diagnostic getMetaData() calls are allowed;
-    // the strict assertions live on mockDialect.
-    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
+    Connection mockConnection = EasyMock.createMock(Connection.class);
 
     EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
     mockDialect.validateQuery(mockConnection, "SELECT * FROM nonexistent_table");
     EasyMock.expectLastCall().andThrow(new SQLException(
         "Table 'nonexistent_table' doesn't exist", "42S02"));
+    mockConnection.close();
+    EasyMock.expectLastCall();
     mockDialect.close();
     EasyMock.expectLastCall();
 
@@ -1299,12 +1299,12 @@ public class JdbcSourceConnectorValidationTest {
     props.put(QUERY_MASKED_CONFIG, "SELECT * FROM sensitive_data");
 
     DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
-    // Connection is a nice mock so diagnostic getMetaData() calls are allowed;
-    // the strict assertions live on mockDialect.
-    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
+    Connection mockConnection = EasyMock.createMock(Connection.class);
 
     EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
     mockDialect.validateQuery(mockConnection, "SELECT * FROM sensitive_data");
+    EasyMock.expectLastCall();
+    mockConnection.close();
     EasyMock.expectLastCall();
     mockDialect.close();
     EasyMock.expectLastCall();

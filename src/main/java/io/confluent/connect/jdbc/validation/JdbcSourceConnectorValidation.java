@@ -25,8 +25,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
-import java.sql.DatabaseMetaData;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -374,7 +372,6 @@ public class JdbcSourceConnectorValidation {
   protected boolean validateQuerySemantics() {
     Optional<String> queryVal = config.getQuery();
     if (!queryVal.isPresent()) {
-      log.info("Query validation skipped: no 'query' or 'query.masked' configured");
       return true;
     }
 
@@ -384,61 +381,13 @@ public class JdbcSourceConnectorValidation {
         : JdbcSourceConnectorConfig.QUERY_CONFIG;
 
     DatabaseDialect dialect = null;
-    boolean connectionOpened = false;
-    long startMs = System.currentTimeMillis();
-
     try {
-      log.info("Starting query validation [configKey='{}']", configKey);
-
       dialect = createDialect();
-      log.info("Resolved dialect: {} [sanitizedUrl='{}', connectionUser='{}', "
-              + "DriverManager.loginTimeoutSec={}]",
-          dialect.getClass().getSimpleName(),
-          maskJdbcUrl(
-              config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG)),
-          config.getString(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG),
-          DriverManager.getLoginTimeout());
-
-      // Force-load the JDBC driver from the dialect's classloader. Kafka Connect
-      // runs validation in a thread whose context classloader does not see the
-      // connector's plugin JARs, so JDBC 4.0 SPI auto-discovery in
-      // DriverManager.getConnection() can fail with "No suitable driver found"
-      // even though the runtime task path works fine.
-      preloadJdbcDriverFromDialect(
-          dialect,
-          config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG));
-
-      logRegisteredJdbcDrivers();
-
-      log.info("Attempting to open database connection for query validation");
-      long connectStartMs = System.currentTimeMillis();
       try (Connection connection = dialect.getConnection()) {
-        connectionOpened = true;
-        long connectElapsedMs = System.currentTimeMillis() - connectStartMs;
-
-        logConnectionMetadata(connection, connectElapsedMs);
-
-        log.info("Invoking dialect.validateQuery() to execute the validation probe");
-        long queryStartMs = System.currentTimeMillis();
         dialect.validateQuery(connection, query);
-        log.info("Query validation probe succeeded in {} ms",
-            System.currentTimeMillis() - queryStartMs);
       }
-      log.info("Query validation completed successfully [totalMs={}]",
-          System.currentTimeMillis() - startMs);
       return true;
     } catch (SQLException e) {
-      long elapsedMs = System.currentTimeMillis() - startMs;
-      log.info("Query validation FAILED with SQLException [connectionOpened={}, "
-              + "totalMs={}, topLevel.SQLState={}, topLevel.errorCode={}, "
-              + "topLevel.type={}, topLevel.message='{}']",
-          connectionOpened, elapsedMs,
-          e.getSQLState(), e.getErrorCode(),
-          e.getClass().getName(), e.getMessage());
-      logSqlExceptionChain(e);
-      logCauseChain(e);
-      log.info("Query validation SQLException stack trace:", e);
-
       String msg = "The configured query is not valid and has database/connection errors"
           + ". Please provide the correct query by validating the "
           + "query syntax and the existing table/column names with the database being connected";
@@ -448,22 +397,11 @@ public class JdbcSourceConnectorValidation {
       addConfigError(configKey, msg);
       return false;
     } catch (Exception e) {
-      long elapsedMs = System.currentTimeMillis() - startMs;
-      log.info("Query validation hit non-SQL exception [connectionOpened={}, totalMs={}, "
-              + "type={}, message='{}']",
-          connectionOpened, elapsedMs, e.getClass().getName(), e.getMessage());
-      logCauseChain(e);
-      log.info("Query validation non-SQL exception stack trace:", e);
+      log.debug("Query validation failed with non-SQL exception", e);
       return true;
     } finally {
       if (dialect != null) {
-        try {
-          dialect.close();
-          log.info("Dialect closed after query validation [totalMs={}]",
-              System.currentTimeMillis() - startMs);
-        } catch (Exception closeEx) {
-          log.warn("Error while closing dialect after query validation", closeEx);
-        }
+        dialect.close();
       }
     }
   }
@@ -612,190 +550,6 @@ public class JdbcSourceConnectorValidation {
         .filter(cv -> cv.name().equals(configName))
         .findFirst()
         .ifPresent(cv -> cv.addErrorMessage(errorMessage));
-  }
-
-  /**
-   * Map of JDBC URL prefix to the canonical driver class name. Used by
-   * {@link #preloadJdbcDriverFromDialect} to force-register the driver from the
-   * dialect's classloader, working around Kafka Connect plugin classloader
-   * isolation that would otherwise prevent JDBC 4.0 SPI auto-discovery from
-   * finding the driver during validation.
-   */
-  private static final Map<String, String> JDBC_DRIVER_CLASS_BY_URL_PREFIX;
-
-  static {
-    Map<String, String> m = new HashMap<>();
-    m.put("jdbc:db2:",        "com.ibm.db2.jcc.DB2Driver");
-    m.put("jdbc:postgresql:", "org.postgresql.Driver");
-    m.put("jdbc:mysql:",      "com.mysql.cj.jdbc.Driver");
-    m.put("jdbc:mariadb:",    "org.mariadb.jdbc.Driver");
-    m.put("jdbc:sqlserver:",  "com.microsoft.sqlserver.jdbc.SQLServerDriver");
-    m.put("jdbc:oracle:",     "oracle.jdbc.OracleDriver");
-    m.put("jdbc:derby:",      "org.apache.derby.jdbc.EmbeddedDriver");
-    m.put("jdbc:sqlite:",     "org.sqlite.JDBC");
-    m.put("jdbc:vertica:",    "com.vertica.jdbc.Driver");
-    m.put("jdbc:sap:",        "com.sap.db.jdbc.Driver");
-    m.put("jdbc:sybase:",     "com.sybase.jdbc4.jdbc.SybDriver");
-    JDBC_DRIVER_CLASS_BY_URL_PREFIX = java.util.Collections.unmodifiableMap(m);
-  }
-
-  /**
-   * Force-load the JDBC driver class for the given URL using the dialect's own
-   * classloader. Kafka Connect validates connectors on threads whose context
-   * classloader does not see the connector's plugin JARs, so
-   * {@link DriverManager#getConnection(String)} cannot rely on JDBC 4.0 SPI
-   * auto-discovery to locate the driver. Calling
-   * {@link Class#forName(String, boolean, ClassLoader)} from the dialect's
-   * classloader triggers the driver's static initializer, which registers it
-   * with {@code DriverManager}; the registration is process-global and visible
-   * from every thread.
-   *
-   * <p>If the URL prefix is unknown or the driver class is missing, this method
-   * logs the failure and returns silently. The subsequent {@code getConnection()}
-   * call will surface the underlying {@code SQLException} with full context.
-   */
-  private void preloadJdbcDriverFromDialect(DatabaseDialect dialect, String url) {
-    if (url == null) {
-      return;
-    }
-    String driverClass = null;
-    for (Map.Entry<String, String> entry : JDBC_DRIVER_CLASS_BY_URL_PREFIX.entrySet()) {
-      if (url.toLowerCase(java.util.Locale.ROOT).startsWith(entry.getKey())) {
-        driverClass = entry.getValue();
-        break;
-      }
-    }
-    if (driverClass == null) {
-      log.info("No known JDBC driver class for URL prefix; relying on SPI discovery "
-          + "[sanitizedUrl='{}']", maskJdbcUrl(url));
-      return;
-    }
-    ClassLoader dialectCl = dialect.getClass().getClassLoader();
-    try {
-      Class<?> loaded = Class.forName(driverClass, true, dialectCl);
-      log.info("Preloaded JDBC driver class '{}' from dialect classloader [codeSource='{}']",
-          loaded.getName(),
-          loaded.getProtectionDomain().getCodeSource() != null
-              ? loaded.getProtectionDomain().getCodeSource().getLocation()
-              : "unknown");
-    } catch (ClassNotFoundException ex) {
-      log.info("JDBC driver class '{}' not found on dialect classloader; "
-              + "falling back to SPI discovery in DriverManager [error='{}']",
-          driverClass, ex.getMessage());
-    }
-  }
-
-  /**
-   * Log every {@link java.sql.Driver} currently registered with
-   * {@link DriverManager}, including the classloader and code-source of each
-   * driver class. This pinpoints whether
-   * {@code "No suitable driver found"} stems from an unregistered driver
-   * (driver class never loaded) or from {@link DriverManager}'s caller-classloader
-   * filtering rejecting a driver that IS registered but lives in a different
-   * classloader (e.g. the framework rather than the connector plugin).
-   */
-  private void logRegisteredJdbcDrivers() {
-    try {
-      java.util.Enumeration<java.sql.Driver> drivers = DriverManager.getDrivers();
-      int count = 0;
-      while (drivers.hasMoreElements()) {
-        java.sql.Driver d = drivers.nextElement();
-        Class<?> dc = d.getClass();
-        String codeSource;
-        try {
-          codeSource = dc.getProtectionDomain().getCodeSource() != null
-              ? dc.getProtectionDomain().getCodeSource().getLocation().toString()
-              : "unknown";
-        } catch (Throwable ignored) {
-          codeSource = "unknown";
-        }
-        log.info("Registered JDBC driver #{}: class='{}', classLoader='{}', codeSource='{}'",
-            count++, dc.getName(),
-            dc.getClassLoader() != null ? dc.getClassLoader().toString() : "bootstrap",
-            codeSource);
-      }
-      if (count == 0) {
-        log.info("DriverManager has zero registered drivers");
-      }
-    } catch (Throwable t) {
-      log.info("Could not enumerate registered JDBC drivers [{}: {}]",
-          t.getClass().getSimpleName(), t.getMessage());
-    }
-  }
-
-  /**
-   * Log driver and database metadata for diagnostic purposes. Wrapped in a broad
-   * catch because metadata reads must never break the validation flow — a buggy
-   * driver, partially-initialised connection, or test mock returning {@code null}
-   * should not abort validation. Catches {@link Throwable} (rather than
-   * {@link Exception}) deliberately, so that test mocks raising
-   * {@link AssertionError} for unexpected calls also fall through safely.
-   */
-  private void logConnectionMetadata(Connection connection, long connectElapsedMs) {
-    try {
-      DatabaseMetaData md = connection.getMetaData();
-      if (md == null) {
-        log.info("Connection opened in {} ms [metadata unavailable: getMetaData() returned null]",
-            connectElapsedMs);
-        return;
-      }
-      log.info("Connection opened in {} ms [driver='{} {}', database='{} {}', "
-              + "autoCommit={}, isolation={}]",
-          connectElapsedMs,
-          md.getDriverName(), md.getDriverVersion(),
-          md.getDatabaseProductName(), md.getDatabaseProductVersion(),
-          connection.getAutoCommit(), connection.getTransactionIsolation());
-    } catch (Throwable t) {
-      log.info("Connection opened in {} ms [metadata read failed: {}: {}]",
-          connectElapsedMs, t.getClass().getSimpleName(), t.getMessage());
-    }
-  }
-
-  /**
-   * Walk and log every {@link SQLException#getNextException() chained SQLException} below
-   * the head exception. JDBC drivers (DB2 in particular) often attach the real root cause
-   * to the chain rather than to {@code getCause()}, so this is essential for diagnosis.
-   */
-  private void logSqlExceptionChain(SQLException head) {
-    SQLException next = head.getNextException();
-    int idx = 1;
-    while (next != null && idx <= 10) {
-      log.info("Query validation chained SQLException #{} [SQLState={}, errorCode={}, "
-              + "type={}, message='{}']",
-          idx, next.getSQLState(), next.getErrorCode(),
-          next.getClass().getName(), next.getMessage());
-      next = next.getNextException();
-      idx++;
-    }
-  }
-
-  /**
-   * Walk and log the {@link Throwable#getCause() cause chain} of an exception. JDBC
-   * driver failures often wrap a lower-level transport exception (e.g.
-   * {@code SocketTimeoutException}, {@code SSLHandshakeException}) as the cause.
-   */
-  private void logCauseChain(Throwable head) {
-    Throwable cause = head.getCause();
-    int idx = 1;
-    while (cause != null && idx <= 10) {
-      log.info("Query validation cause #{} [type={}, message='{}']",
-          idx, cause.getClass().getName(), cause.getMessage());
-      cause = cause.getCause();
-      idx++;
-    }
-  }
-
-  /**
-   * Mask common credential patterns in a JDBC URL so it can be logged safely. Handles
-   * both {@code password=...} property style and {@code user:password@host} userinfo
-   * style. Used only by validation diagnostic logs.
-   */
-  static String maskJdbcUrl(String url) {
-    if (url == null) {
-      return null;
-    }
-    return url.replaceAll("(?i)(password=)[^;&]*", "$1****")
-        .replaceAll("(://[^:/?#]+:)[^@]*(@)", "$1****$2");
   }
 
   /** Validate that provided query strings start with a SELECT statement. */

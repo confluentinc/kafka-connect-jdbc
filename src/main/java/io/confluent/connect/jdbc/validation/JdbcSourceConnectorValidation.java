@@ -25,6 +25,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -362,14 +364,17 @@ public class JdbcSourceConnectorValidation {
   }
 
   /**
-   * Validate the user's custom query against the database by performing a lightweight
-   * semantic check using the database-specific EXPLAIN mechanism. This validates:
+   * Validate the user query through the dialect's constant-false probe. Surfaces syntax,
+   * missing-object and {@code SELECT}-permission errors without requiring
+   * {@code EXPLAIN PLAN} privileges and without scanning user data.
    *
-   * @return true if validation passes or no query is configured, false if validation fails
+   * @return {@code true} if validation passes or no query is configured;
+   *         {@code false} on {@link SQLException}
    */
   protected boolean validateQuerySemantics() {
     Optional<String> queryVal = config.getQuery();
     if (!queryVal.isPresent()) {
+      log.info("Query validation skipped: no 'query' or 'query.masked' configured");
       return true;
     }
 
@@ -379,13 +384,50 @@ public class JdbcSourceConnectorValidation {
         : JdbcSourceConnectorConfig.QUERY_CONFIG;
 
     DatabaseDialect dialect = null;
+    boolean connectionOpened = false;
+    long startMs = System.currentTimeMillis();
+
     try {
+      log.info("Starting query validation [configKey='{}']", configKey);
+
       dialect = createDialect();
+      log.info("Resolved dialect: {} [sanitizedUrl='{}', connectionUser='{}', "
+              + "DriverManager.loginTimeoutSec={}]",
+          dialect.getClass().getSimpleName(),
+          maskJdbcUrl(
+              config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG)),
+          config.getString(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG),
+          DriverManager.getLoginTimeout());
+
+      log.info("Attempting to open database connection for query validation");
+      long connectStartMs = System.currentTimeMillis();
       try (Connection connection = dialect.getConnection()) {
+        connectionOpened = true;
+        long connectElapsedMs = System.currentTimeMillis() - connectStartMs;
+
+        logConnectionMetadata(connection, connectElapsedMs);
+
+        log.info("Invoking dialect.validateQuery() to execute the validation probe");
+        long queryStartMs = System.currentTimeMillis();
         dialect.validateQuery(connection, query);
+        log.info("Query validation probe succeeded in {} ms",
+            System.currentTimeMillis() - queryStartMs);
       }
+      log.info("Query validation completed successfully [totalMs={}]",
+          System.currentTimeMillis() - startMs);
       return true;
     } catch (SQLException e) {
+      long elapsedMs = System.currentTimeMillis() - startMs;
+      log.info("Query validation FAILED with SQLException [connectionOpened={}, "
+              + "totalMs={}, topLevel.SQLState={}, topLevel.errorCode={}, "
+              + "topLevel.type={}, topLevel.message='{}']",
+          connectionOpened, elapsedMs,
+          e.getSQLState(), e.getErrorCode(),
+          e.getClass().getName(), e.getMessage());
+      logSqlExceptionChain(e);
+      logCauseChain(e);
+      log.info("Query validation SQLException stack trace:", e);
+
       String msg = "The configured query is not valid and has database/connection errors"
           + ". Please provide the correct query by validating the "
           + "query syntax and the existing table/column names with the database being connected";
@@ -395,11 +437,22 @@ public class JdbcSourceConnectorValidation {
       addConfigError(configKey, msg);
       return false;
     } catch (Exception e) {
-      log.debug("Query validation failed with non-SQL exception", e);
+      long elapsedMs = System.currentTimeMillis() - startMs;
+      log.info("Query validation hit non-SQL exception [connectionOpened={}, totalMs={}, "
+              + "type={}, message='{}']",
+          connectionOpened, elapsedMs, e.getClass().getName(), e.getMessage());
+      logCauseChain(e);
+      log.info("Query validation non-SQL exception stack trace:", e);
       return true;
     } finally {
       if (dialect != null) {
-        dialect.close();
+        try {
+          dialect.close();
+          log.info("Dialect closed after query validation [totalMs={}]",
+              System.currentTimeMillis() - startMs);
+        } catch (Exception closeEx) {
+          log.warn("Error while closing dialect after query validation", closeEx);
+        }
       }
     }
   }
@@ -548,6 +601,81 @@ public class JdbcSourceConnectorValidation {
         .filter(cv -> cv.name().equals(configName))
         .findFirst()
         .ifPresent(cv -> cv.addErrorMessage(errorMessage));
+  }
+
+  /**
+   * Log driver and database metadata for diagnostic purposes. Wrapped in a broad
+   * catch because metadata reads must never break the validation flow — a buggy
+   * driver, partially-initialised connection, or test mock returning {@code null}
+   * should not abort validation. Catches {@link Throwable} (rather than
+   * {@link Exception}) deliberately, so that test mocks raising
+   * {@link AssertionError} for unexpected calls also fall through safely.
+   */
+  private void logConnectionMetadata(Connection connection, long connectElapsedMs) {
+    try {
+      DatabaseMetaData md = connection.getMetaData();
+      if (md == null) {
+        log.info("Connection opened in {} ms [metadata unavailable: getMetaData() returned null]",
+            connectElapsedMs);
+        return;
+      }
+      log.info("Connection opened in {} ms [driver='{} {}', database='{} {}', "
+              + "autoCommit={}, isolation={}]",
+          connectElapsedMs,
+          md.getDriverName(), md.getDriverVersion(),
+          md.getDatabaseProductName(), md.getDatabaseProductVersion(),
+          connection.getAutoCommit(), connection.getTransactionIsolation());
+    } catch (Throwable t) {
+      log.info("Connection opened in {} ms [metadata read failed: {}: {}]",
+          connectElapsedMs, t.getClass().getSimpleName(), t.getMessage());
+    }
+  }
+
+  /**
+   * Walk and log every {@link SQLException#getNextException() chained SQLException} below
+   * the head exception. JDBC drivers (DB2 in particular) often attach the real root cause
+   * to the chain rather than to {@code getCause()}, so this is essential for diagnosis.
+   */
+  private void logSqlExceptionChain(SQLException head) {
+    SQLException next = head.getNextException();
+    int idx = 1;
+    while (next != null && idx <= 10) {
+      log.info("Query validation chained SQLException #{} [SQLState={}, errorCode={}, "
+              + "type={}, message='{}']",
+          idx, next.getSQLState(), next.getErrorCode(),
+          next.getClass().getName(), next.getMessage());
+      next = next.getNextException();
+      idx++;
+    }
+  }
+
+  /**
+   * Walk and log the {@link Throwable#getCause() cause chain} of an exception. JDBC
+   * driver failures often wrap a lower-level transport exception (e.g.
+   * {@code SocketTimeoutException}, {@code SSLHandshakeException}) as the cause.
+   */
+  private void logCauseChain(Throwable head) {
+    Throwable cause = head.getCause();
+    int idx = 1;
+    while (cause != null && idx <= 10) {
+      log.info("Query validation cause #{} [type={}, message='{}']",
+          idx, cause.getClass().getName(), cause.getMessage());
+      cause = cause.getCause();
+      idx++;
+    }
+  }
+
+  /**
+   * Mask common credential patterns in a JDBC URL so it can be logged safely. Handles
+   * both {@code password=...} property style and {@code user:password@host} userinfo
+   * style. Used only by validation diagnostic logs.
+   */
+  static String maskJdbcUrl(String url) {
+    if (url == null) {
+      return null;
+    }
+    return url.replaceAll("(?i)(password=)[^;&]*", "$1****")
+        .replaceAll("(://[^:/?#]+:)[^@]*(@)", "$1****$2");
   }
 
   /** Validate that provided query strings start with a SELECT statement. */

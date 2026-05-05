@@ -23,7 +23,9 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Collection;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
@@ -196,5 +198,24 @@ public class Db2DatabaseDialect extends GenericDatabaseDialect {
   @Override
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
     throw new SQLException("DB2 does not support synonyms. Please use views instead.");
+  }
+
+  /**
+   * DB2's JDBC driver mishandles empty result sets produced by the constant-false
+   * {@code WHERE 1=0} probe used elsewhere; the unpositioned cursor can escalate
+   * a "no data" warning into a {@code SQLException} on close. Use
+   * {@code FETCH FIRST 1 ROW ONLY} so the probe always yields a positionable row
+   * while still bounding I/O to a single row.
+   */
+  @Override
+  public void validateQuery(Connection connection, String query) throws SQLException {
+    final String wrapped = "SELECT * FROM (" + stripTrailingSemicolons(query) + ") "
+        + "jdbc_validation_subquery FETCH FIRST 1 ROW ONLY";
+    log.info("Executing DB2 validation probe (FETCH FIRST 1 ROW ONLY) for query '{}'",
+        shouldRedactSensitiveLogs(query));
+    try (Statement stmt = connection.createStatement();
+         ResultSet rs = stmt.executeQuery(wrapped)) {
+      log.info("DB2 validation probe completed without exception");
+    }
   }
 }

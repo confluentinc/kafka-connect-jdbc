@@ -399,6 +399,17 @@ public class JdbcSourceConnectorValidation {
           config.getString(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG),
           DriverManager.getLoginTimeout());
 
+      // Force-load the JDBC driver from the dialect's classloader. Kafka Connect
+      // runs validation in a thread whose context classloader does not see the
+      // connector's plugin JARs, so JDBC 4.0 SPI auto-discovery in
+      // DriverManager.getConnection() can fail with "No suitable driver found"
+      // even though the runtime task path works fine.
+      preloadJdbcDriverFromDialect(
+          dialect,
+          config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG));
+
+      logRegisteredJdbcDrivers();
+
       log.info("Attempting to open database connection for query validation");
       long connectStartMs = System.currentTimeMillis();
       try (Connection connection = dialect.getConnection()) {
@@ -601,6 +612,115 @@ public class JdbcSourceConnectorValidation {
         .filter(cv -> cv.name().equals(configName))
         .findFirst()
         .ifPresent(cv -> cv.addErrorMessage(errorMessage));
+  }
+
+  /**
+   * Map of JDBC URL prefix to the canonical driver class name. Used by
+   * {@link #preloadJdbcDriverFromDialect} to force-register the driver from the
+   * dialect's classloader, working around Kafka Connect plugin classloader
+   * isolation that would otherwise prevent JDBC 4.0 SPI auto-discovery from
+   * finding the driver during validation.
+   */
+  private static final Map<String, String> JDBC_DRIVER_CLASS_BY_URL_PREFIX;
+
+  static {
+    Map<String, String> m = new HashMap<>();
+    m.put("jdbc:db2:",        "com.ibm.db2.jcc.DB2Driver");
+    m.put("jdbc:postgresql:", "org.postgresql.Driver");
+    m.put("jdbc:mysql:",      "com.mysql.cj.jdbc.Driver");
+    m.put("jdbc:mariadb:",    "org.mariadb.jdbc.Driver");
+    m.put("jdbc:sqlserver:",  "com.microsoft.sqlserver.jdbc.SQLServerDriver");
+    m.put("jdbc:oracle:",     "oracle.jdbc.OracleDriver");
+    m.put("jdbc:derby:",      "org.apache.derby.jdbc.EmbeddedDriver");
+    m.put("jdbc:sqlite:",     "org.sqlite.JDBC");
+    m.put("jdbc:vertica:",    "com.vertica.jdbc.Driver");
+    m.put("jdbc:sap:",        "com.sap.db.jdbc.Driver");
+    m.put("jdbc:sybase:",     "com.sybase.jdbc4.jdbc.SybDriver");
+    JDBC_DRIVER_CLASS_BY_URL_PREFIX = java.util.Collections.unmodifiableMap(m);
+  }
+
+  /**
+   * Force-load the JDBC driver class for the given URL using the dialect's own
+   * classloader. Kafka Connect validates connectors on threads whose context
+   * classloader does not see the connector's plugin JARs, so
+   * {@link DriverManager#getConnection(String)} cannot rely on JDBC 4.0 SPI
+   * auto-discovery to locate the driver. Calling
+   * {@link Class#forName(String, boolean, ClassLoader)} from the dialect's
+   * classloader triggers the driver's static initializer, which registers it
+   * with {@code DriverManager}; the registration is process-global and visible
+   * from every thread.
+   *
+   * <p>If the URL prefix is unknown or the driver class is missing, this method
+   * logs the failure and returns silently. The subsequent {@code getConnection()}
+   * call will surface the underlying {@code SQLException} with full context.
+   */
+  private void preloadJdbcDriverFromDialect(DatabaseDialect dialect, String url) {
+    if (url == null) {
+      return;
+    }
+    String driverClass = null;
+    for (Map.Entry<String, String> entry : JDBC_DRIVER_CLASS_BY_URL_PREFIX.entrySet()) {
+      if (url.toLowerCase(java.util.Locale.ROOT).startsWith(entry.getKey())) {
+        driverClass = entry.getValue();
+        break;
+      }
+    }
+    if (driverClass == null) {
+      log.info("No known JDBC driver class for URL prefix; relying on SPI discovery "
+          + "[sanitizedUrl='{}']", maskJdbcUrl(url));
+      return;
+    }
+    ClassLoader dialectCl = dialect.getClass().getClassLoader();
+    try {
+      Class<?> loaded = Class.forName(driverClass, true, dialectCl);
+      log.info("Preloaded JDBC driver class '{}' from dialect classloader [codeSource='{}']",
+          loaded.getName(),
+          loaded.getProtectionDomain().getCodeSource() != null
+              ? loaded.getProtectionDomain().getCodeSource().getLocation()
+              : "unknown");
+    } catch (ClassNotFoundException ex) {
+      log.info("JDBC driver class '{}' not found on dialect classloader; "
+              + "falling back to SPI discovery in DriverManager [error='{}']",
+          driverClass, ex.getMessage());
+    }
+  }
+
+  /**
+   * Log every {@link java.sql.Driver} currently registered with
+   * {@link DriverManager}, including the classloader and code-source of each
+   * driver class. This pinpoints whether
+   * {@code "No suitable driver found"} stems from an unregistered driver
+   * (driver class never loaded) or from {@link DriverManager}'s caller-classloader
+   * filtering rejecting a driver that IS registered but lives in a different
+   * classloader (e.g. the framework rather than the connector plugin).
+   */
+  private void logRegisteredJdbcDrivers() {
+    try {
+      java.util.Enumeration<java.sql.Driver> drivers = DriverManager.getDrivers();
+      int count = 0;
+      while (drivers.hasMoreElements()) {
+        java.sql.Driver d = drivers.nextElement();
+        Class<?> dc = d.getClass();
+        String codeSource;
+        try {
+          codeSource = dc.getProtectionDomain().getCodeSource() != null
+              ? dc.getProtectionDomain().getCodeSource().getLocation().toString()
+              : "unknown";
+        } catch (Throwable ignored) {
+          codeSource = "unknown";
+        }
+        log.info("Registered JDBC driver #{}: class='{}', classLoader='{}', codeSource='{}'",
+            count++, dc.getName(),
+            dc.getClassLoader() != null ? dc.getClassLoader().toString() : "bootstrap",
+            codeSource);
+      }
+      if (count == 0) {
+        log.info("DriverManager has zero registered drivers");
+      }
+    } catch (Throwable t) {
+      log.info("Could not enumerate registered JDBC drivers [{}: {}]",
+          t.getClass().getSimpleName(), t.getMessage());
+    }
   }
 
   /**

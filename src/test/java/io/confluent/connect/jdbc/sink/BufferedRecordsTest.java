@@ -574,9 +574,9 @@ public class BufferedRecordsTest {
     // Delete is not enabled, so therefore require non-null key and values with schemas
     assertValidRecord(true, true, true, true);
     // Fail when ingesting tombstones
-    assertInvalidRecord(true, true, false, true, "with a non-null Struct value and non-null Struct schema");
-    assertInvalidRecord(true, true, true, false, "with a non-null Struct value and non-null Struct schema");
-    assertInvalidRecord(true, true, false, false, "with a non-null Struct value and non-null Struct schema");
+    assertInvalidRecord(true, true, false, true, "Struct or primitive");
+    assertInvalidRecord(true, true, true, false, "Struct or primitive");
+    assertInvalidRecord(true, true, false, false, "Struct or primitive");
 
     // Fail when null key and null key schema
     assertInvalidRecord(false, false, true, true, "with a null key and null key schema");
@@ -636,20 +636,20 @@ public class BufferedRecordsTest {
     assertValidRecord(true, false, true, true);
     assertValidRecord(false, false, true, true);
 
-    assertInvalidRecord(true, true, true, false, "with a non-null Struct value and non-null Struct schema");
-    assertInvalidRecord(false, true, true, false, "with a non-null Struct value and non-null Struct schema");
-    assertInvalidRecord(true, false, true, false, "with a non-null Struct value and non-null Struct schema");
-    assertInvalidRecord(false, false, true, false, "with a non-null Struct value and non-null Struct schema");
+    assertInvalidRecord(true, true, true, false, "Struct or primitive");
+    assertInvalidRecord(false, true, true, false, "Struct or primitive");
+    assertInvalidRecord(true, false, true, false, "Struct or primitive");
+    assertInvalidRecord(false, false, true, false, "Struct or primitive");
 
-    assertInvalidRecord(true, true, false, true, "with a non-null Struct value and non-null Struct schema");
-    assertInvalidRecord(false, true, false, true, "with a non-null Struct value and non-null Struct schema");
-    assertInvalidRecord(true, false, false, true, "with a non-null Struct value and non-null Struct schema");
-    assertInvalidRecord(false, false, false, true, "with a non-null Struct value and non-null Struct schema");
+    assertInvalidRecord(true, true, false, true, "Struct or primitive");
+    assertInvalidRecord(false, true, false, true, "Struct or primitive");
+    assertInvalidRecord(true, false, false, true, "Struct or primitive");
+    assertInvalidRecord(false, false, false, true, "Struct or primitive");
 
-    assertInvalidRecord(true, true, false, false, "with a non-null Struct value and non-null Struct schema");
-    assertInvalidRecord(false, true, false, false, "with a non-null Struct value and non-null Struct schema");
-    assertInvalidRecord(true, false, false, false, "with a non-null Struct value and non-null Struct schema");
-    assertInvalidRecord(false, false, false, false, "with a non-null Struct value and non-null Struct schema");
+    assertInvalidRecord(true, true, false, false, "Struct or primitive");
+    assertInvalidRecord(false, true, false, false, "Struct or primitive");
+    assertInvalidRecord(true, false, false, false, "Struct or primitive");
+    assertInvalidRecord(false, false, false, false, "Struct or primitive");
   }
 
   @Test
@@ -779,6 +779,139 @@ public class BufferedRecordsTest {
     assertValidRecord(
         generateRecord(includeKeySchema, includeKey, includeValueSchema, includeValue)
     );
+  }
+
+  @Test
+  public void testPrimitiveValueInsertPkModeNone() throws SQLException {
+    props.put("pk.mode", "none");
+    final JdbcSinkConfig config = new JdbcSinkConfig(props);
+
+    final String url = sqliteHelper.sqliteUri();
+    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+    final DbStructure dbStructure = new DbStructure(dbDialect);
+
+    final TableId tableId = new TableId(null, null, "primitiveTest");
+    final BufferedRecords buffer = new BufferedRecords(
+        config, tableId, dbDialect, dbStructure, sqliteHelper.connection
+    );
+
+    final SinkRecord record = new SinkRecord(
+        "topic", 0, null, null, Schema.STRING_SCHEMA, "hello world", 0
+    );
+    assertEquals(Collections.emptyList(), buffer.add(record));
+    assertEquals(Collections.singletonList(record), buffer.flush());
+  }
+
+  @Test
+  public void testPrimitiveValueInsertPkModeKafka() throws SQLException {
+    props.put("pk.mode", "kafka");
+    final JdbcSinkConfig config = new JdbcSinkConfig(props);
+
+    final String url = sqliteHelper.sqliteUri();
+    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+    final DbStructure dbStructure = new DbStructure(dbDialect);
+
+    final TableId tableId = new TableId(null, null, "primitiveKafkaTest");
+    final BufferedRecords buffer = new BufferedRecords(
+        config, tableId, dbDialect, dbStructure, sqliteHelper.connection
+    );
+
+    final SinkRecord record = new SinkRecord(
+        "topic", 0, null, null, Schema.STRING_SCHEMA, "hello world", 0
+    );
+    assertEquals(Collections.emptyList(), buffer.add(record));
+    assertEquals(Collections.singletonList(record), buffer.flush());
+  }
+
+  @Test
+  public void testPrimitiveValueWithRecordKeyPk() throws SQLException {
+    props.put("pk.mode", "record_key");
+    props.put("pk.fields", "the_key");
+    final JdbcSinkConfig config = new JdbcSinkConfig(props);
+
+    final String url = sqliteHelper.sqliteUri();
+    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+    final DbStructure dbStructure = new DbStructure(dbDialect);
+
+    final TableId tableId = new TableId(null, null, "primitiveKeyTest");
+    final BufferedRecords buffer = new BufferedRecords(
+        config, tableId, dbDialect, dbStructure, sqliteHelper.connection
+    );
+
+    final SinkRecord record = new SinkRecord(
+        "topic", 0, Schema.INT64_SCHEMA, 42L, Schema.STRING_SCHEMA, "hello", 0
+    );
+    assertEquals(Collections.emptyList(), buffer.add(record));
+    assertEquals(Collections.singletonList(record), buffer.flush());
+  }
+
+  @Test
+  public void testPrimitiveValueDeleteWithRecordKeyPk() throws SQLException {
+    props.put("delete.enabled", true);
+    props.put("insert.mode", "upsert");
+    props.put("pk.mode", "record_key");
+    props.put("pk.fields", "the_key");
+    final JdbcSinkConfig config = new JdbcSinkConfig(props);
+
+    final String url = sqliteHelper.sqliteUri();
+    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+    final DbStructure dbStructure = new DbStructure(dbDialect);
+
+    final TableId tableId = new TableId(null, null, "primitiveDeleteTest");
+    final BufferedRecords buffer = new BufferedRecords(
+        config, tableId, dbDialect, dbStructure, sqliteHelper.connection
+    );
+
+    final SinkRecord insertRecord = new SinkRecord(
+        "topic", 0, Schema.INT64_SCHEMA, 42L, Schema.STRING_SCHEMA, "hello", 0
+    );
+    final SinkRecord deleteRecord = new SinkRecord(
+        "topic", 0, Schema.INT64_SCHEMA, 42L, null, null, 1
+    );
+
+    assertEquals(Collections.emptyList(), buffer.add(insertRecord));
+    assertEquals(Collections.emptyList(), buffer.add(deleteRecord));
+    assertEquals(Arrays.asList(insertRecord, deleteRecord), buffer.flush());
+  }
+
+  @Test
+  public void testPrimitiveValueBatchingWithSchemaChange() throws SQLException {
+    props.put("pk.mode", "none");
+    final JdbcSinkConfig config = new JdbcSinkConfig(props);
+
+    final String url = sqliteHelper.sqliteUri();
+    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+    final DbStructure dbStructure = new DbStructure(dbDialect);
+
+    final TableId tableId = new TableId(null, null, "primitiveBatchTest");
+    final BufferedRecords buffer = new BufferedRecords(
+        config, tableId, dbDialect, dbStructure, sqliteHelper.connection
+    );
+
+    final SinkRecord stringRecord = new SinkRecord(
+        "topic", 0, null, null, Schema.OPTIONAL_STRING_SCHEMA, "hello", 0
+    );
+    final Schema structSchema = SchemaBuilder.struct()
+        .field("name", Schema.OPTIONAL_STRING_SCHEMA)
+        .build();
+    final Struct structValue = new Struct(structSchema).put("name", "world");
+    final SinkRecord structRecord = new SinkRecord(
+        "topic", 0, null, null, structSchema, structValue, 1
+    );
+
+    assertEquals(Collections.emptyList(), buffer.add(stringRecord));
+    assertEquals(Collections.singletonList(stringRecord), buffer.add(structRecord));
+    assertEquals(Collections.singletonList(structRecord), buffer.flush());
+  }
+
+  @Test
+  public void testPrimitiveValueValidation() throws SQLException {
+    props.put("pk.mode", "none");
+
+    final SinkRecord primitiveRecord = new SinkRecord(
+        "dummy", 0, null, null, Schema.STRING_SCHEMA, "hello", 0
+    );
+    assertValidRecord(primitiveRecord);
   }
 
   protected void assertValidRecord(SinkRecord record) throws SQLException {

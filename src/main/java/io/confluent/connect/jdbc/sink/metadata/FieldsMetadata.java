@@ -57,6 +57,8 @@ public class FieldsMetadata {
     this.allFields = allFields;
   }
 
+  public static final String DEFAULT_PRIMITIVE_VALUE_COLUMN_NAME = "recordValue";
+
   public static FieldsMetadata extract(
       final String tableName,
       final JdbcSinkConfig.PrimaryKeyMode pkMode,
@@ -82,9 +84,14 @@ public class FieldsMetadata {
       final Schema keySchema,
       final Schema valueSchema
   ) {
-    if (valueSchema != null && valueSchema.type() != Schema.Type.STRUCT) {
-      throw new ConnectException("Value schema must be of type Struct");
+    if (valueSchema != null
+        && valueSchema.type() != Schema.Type.STRUCT
+        && !valueSchema.type().isPrimitive()) {
+      throw new ConnectException("Value schema must be of type Struct or a primitive type");
     }
+
+    final boolean isPrimitiveValue = valueSchema != null
+        && valueSchema.type().isPrimitive();
 
     final Map<String, SinkRecordField> allFields = new HashMap<>();
 
@@ -102,6 +109,11 @@ public class FieldsMetadata {
         break;
 
       case RECORD_VALUE:
+        if (isPrimitiveValue) {
+          throw new ConnectException(
+              "pk.mode record_value is not supported with primitive value schemas"
+          );
+        }
         extractRecordValuePk(tableName, configuredPkFields, valueSchema, allFields, keyFieldNames);
         break;
 
@@ -111,18 +123,24 @@ public class FieldsMetadata {
 
     final Set<String> nonKeyFieldNames = new LinkedHashSet<>();
     if (valueSchema != null) {
-      for (Field field : valueSchema.fields()) {
-        if (keyFieldNames.contains(field.name())) {
-          continue;
-        }
-        if (!fieldsWhitelist.isEmpty() && !fieldsWhitelist.contains(field.name())) {
-          continue;
-        }
+      if (isPrimitiveValue) {
+        final String colName = DEFAULT_PRIMITIVE_VALUE_COLUMN_NAME;
+        nonKeyFieldNames.add(colName);
+        allFields.put(colName, new SinkRecordField(valueSchema, colName, false));
+      } else {
+        for (Field field : valueSchema.fields()) {
+          if (keyFieldNames.contains(field.name())) {
+            continue;
+          }
+          if (!fieldsWhitelist.isEmpty() && !fieldsWhitelist.contains(field.name())) {
+            continue;
+          }
 
-        nonKeyFieldNames.add(field.name());
+          nonKeyFieldNames.add(field.name());
 
-        final Schema fieldSchema = field.schema();
-        allFields.put(field.name(), new SinkRecordField(fieldSchema, field.name(), false));
+          final Schema fieldSchema = field.schema();
+          allFields.put(field.name(), new SinkRecordField(fieldSchema, field.name(), false));
+        }
       }
     }
 
@@ -140,10 +158,17 @@ public class FieldsMetadata {
     }
 
     if (valueSchema != null) {
-      for (Field field : valueSchema.fields()) {
-        String fieldName = field.name();
-        if (allFields.containsKey(fieldName)) {
-          allFieldsOrdered.put(fieldName, allFields.get(fieldName));
+      if (isPrimitiveValue) {
+        final String colName = DEFAULT_PRIMITIVE_VALUE_COLUMN_NAME;
+        if (allFields.containsKey(colName)) {
+          allFieldsOrdered.put(colName, allFields.get(colName));
+        }
+      } else {
+        for (Field field : valueSchema.fields()) {
+          String fieldName = field.name();
+          if (allFields.containsKey(fieldName)) {
+            allFieldsOrdered.put(fieldName, allFields.get(fieldName));
+          }
         }
       }
     }

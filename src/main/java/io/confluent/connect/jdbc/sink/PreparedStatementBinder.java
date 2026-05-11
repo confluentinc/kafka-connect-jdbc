@@ -89,9 +89,9 @@ public class PreparedStatementBinder implements StatementBinder {
 
   @Override
   public void bindRecord(SinkRecord record) throws SQLException {
-    final boolean isPrimitiveValue = record.valueSchema() != null
-        && record.valueSchema().type().isPrimitive();
-    final Struct valueStruct = isPrimitiveValue ? null : (Struct) record.value();
+    final boolean isStringValue = record.valueSchema() != null
+        && record.valueSchema().type() == Schema.Type.STRING;
+    final Struct valueStruct = isStringValue ? null : (Struct) record.value();
     final boolean isDelete = isNull(record.value());
     // Assumption: the relevant SQL has placeholders for keyFieldNames first followed by
     //             nonKeyFieldNames, in iteration order for all INSERT/ UPSERT queries
@@ -108,11 +108,11 @@ public class PreparedStatementBinder implements StatementBinder {
         case INSERT:
         case UPSERT:
           index = bindKeyFields(record, index);
-          bindNonKeyFields(record, valueStruct, isPrimitiveValue, index);
+          bindNonKeyFields(record, valueStruct, isStringValue, index);
           break;
 
         case UPDATE:
-          index = bindNonKeyFields(record, valueStruct, isPrimitiveValue, index);
+          index = bindNonKeyFields(record, valueStruct, isStringValue, index);
           bindKeyFields(record, index);
           break;
         default:
@@ -173,11 +173,11 @@ public class PreparedStatementBinder implements StatementBinder {
   protected int bindNonKeyFields(
       SinkRecord record,
       Struct valueStruct,
-      boolean isPrimitiveValue,
+      boolean isStringValue,
       int index
   ) throws SQLException {
     for (final String fieldName : fieldsMetadata.nonKeyFieldNames) {
-      if (isPrimitiveValue) {
+      if (isStringValue) {
         bindField(index++, record.valueSchema(), record.value(), fieldName);
       } else {
         final Field field = record.valueSchema().field(fieldName);

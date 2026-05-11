@@ -210,18 +210,18 @@ public class PreparedStatementBinderTest {
   }
 
     @Test
-    public void bindRecordPrimitiveValueInsert() throws SQLException {
+    public void bindRecordStringValueInsert() throws SQLException {
       SchemaPair schemaPair = new SchemaPair(null, Schema.STRING_SCHEMA);
 
       JdbcSinkConfig.PrimaryKeyMode pkMode = JdbcSinkConfig.PrimaryKeyMode.NONE;
 
       FieldsMetadata fieldsMetadata = FieldsMetadata.extract(
-          "primitiveTable", pkMode, Collections.<String>emptyList(),
+          "stringValueTable", pkMode, Collections.<String>emptyList(),
           Collections.<String>emptySet(), schemaPair
       );
 
       PreparedStatement statement = mock(PreparedStatement.class);
-      TableId tabId = new TableId(null, null, "primitiveTable");
+      TableId tabId = new TableId(null, null, "stringValueTable");
       List<ColumnDefinition> colDefs = new ArrayList<>();
       colDefs.add(mock(ColumnDefinition.class));
       when(colDefs.get(0).type()).thenReturn(Types.VARCHAR);
@@ -248,18 +248,18 @@ public class PreparedStatementBinderTest {
     }
 
     @Test
-    public void bindRecordPrimitiveValueWithPrimitiveKey() throws SQLException {
+    public void bindRecordStringValueWithPrimitiveKey() throws SQLException {
       SchemaPair schemaPair = new SchemaPair(Schema.INT64_SCHEMA, Schema.STRING_SCHEMA);
 
       JdbcSinkConfig.PrimaryKeyMode pkMode = JdbcSinkConfig.PrimaryKeyMode.RECORD_KEY;
 
       FieldsMetadata fieldsMetadata = FieldsMetadata.extract(
-          "primitiveTable", pkMode, Collections.singletonList("the_key"),
+          "stringValueTable", pkMode, Collections.singletonList("the_key"),
           Collections.<String>emptySet(), schemaPair
       );
 
       PreparedStatement statement = mock(PreparedStatement.class);
-      TableId tabId = new TableId(null, null, "primitiveTable");
+      TableId tabId = new TableId(null, null, "stringValueTable");
       List<ColumnDefinition> colDefs = new ArrayList<>();
       colDefs.add(mock(ColumnDefinition.class));
       colDefs.add(mock(ColumnDefinition.class));

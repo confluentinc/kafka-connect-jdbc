@@ -79,15 +79,16 @@ public interface RecordValidator {
       Schema valueSchema = record.valueSchema();
       if (record.value() != null
           && valueSchema != null
-          && (valueSchema.type() == Schema.Type.STRUCT || valueSchema.type().isPrimitive())) {
+          && (valueSchema.type() == Schema.Type.STRUCT
+              || valueSchema.type() == Schema.Type.STRING)) {
         return;
       }
       throw new ConnectException(
           String.format(
               "Sink connector '%s' is configured with '%s=%s' and "
               + "'%s=%s' and therefore requires records with a non-null "
-              + "Struct or primitive value and non-null Struct or "
-              + "primitive schema, but found record at "
+              + "Struct or String value and non-null Struct or "
+              + "String schema, but found record at "
               + "(topic='%s',partition=%d,offset=%d,timestamp=%d) "
               + "with a %s value and %s value schema.",
               config.connectorName(),

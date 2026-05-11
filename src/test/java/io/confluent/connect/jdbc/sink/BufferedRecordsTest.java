@@ -574,9 +574,9 @@ public class BufferedRecordsTest {
     // Delete is not enabled, so therefore require non-null key and values with schemas
     assertValidRecord(true, true, true, true);
     // Fail when ingesting tombstones
-    assertInvalidRecord(true, true, false, true, "Struct or primitive");
-    assertInvalidRecord(true, true, true, false, "Struct or primitive");
-    assertInvalidRecord(true, true, false, false, "Struct or primitive");
+    assertInvalidRecord(true, true, false, true, "Struct or String");
+    assertInvalidRecord(true, true, true, false, "Struct or String");
+    assertInvalidRecord(true, true, false, false, "Struct or String");
 
     // Fail when null key and null key schema
     assertInvalidRecord(false, false, true, true, "with a null key and null key schema");
@@ -636,20 +636,20 @@ public class BufferedRecordsTest {
     assertValidRecord(true, false, true, true);
     assertValidRecord(false, false, true, true);
 
-    assertInvalidRecord(true, true, true, false, "Struct or primitive");
-    assertInvalidRecord(false, true, true, false, "Struct or primitive");
-    assertInvalidRecord(true, false, true, false, "Struct or primitive");
-    assertInvalidRecord(false, false, true, false, "Struct or primitive");
+    assertInvalidRecord(true, true, true, false, "Struct or String");
+    assertInvalidRecord(false, true, true, false, "Struct or String");
+    assertInvalidRecord(true, false, true, false, "Struct or String");
+    assertInvalidRecord(false, false, true, false, "Struct or String");
 
-    assertInvalidRecord(true, true, false, true, "Struct or primitive");
-    assertInvalidRecord(false, true, false, true, "Struct or primitive");
-    assertInvalidRecord(true, false, false, true, "Struct or primitive");
-    assertInvalidRecord(false, false, false, true, "Struct or primitive");
+    assertInvalidRecord(true, true, false, true, "Struct or String");
+    assertInvalidRecord(false, true, false, true, "Struct or String");
+    assertInvalidRecord(true, false, false, true, "Struct or String");
+    assertInvalidRecord(false, false, false, true, "Struct or String");
 
-    assertInvalidRecord(true, true, false, false, "Struct or primitive");
-    assertInvalidRecord(false, true, false, false, "Struct or primitive");
-    assertInvalidRecord(true, false, false, false, "Struct or primitive");
-    assertInvalidRecord(false, false, false, false, "Struct or primitive");
+    assertInvalidRecord(true, true, false, false, "Struct or String");
+    assertInvalidRecord(false, true, false, false, "Struct or String");
+    assertInvalidRecord(true, false, false, false, "Struct or String");
+    assertInvalidRecord(false, false, false, false, "Struct or String");
   }
 
   @Test
@@ -782,7 +782,7 @@ public class BufferedRecordsTest {
   }
 
   @Test
-  public void testPrimitiveValueInsertPkModeNone() throws SQLException {
+  public void testStringValueInsertPkModeNone() throws SQLException {
     props.put("pk.mode", "none");
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
@@ -790,7 +790,7 @@ public class BufferedRecordsTest {
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
-    final TableId tableId = new TableId(null, null, "primitiveTest");
+    final TableId tableId = new TableId(null, null, "stringValueTest");
     final BufferedRecords buffer = new BufferedRecords(
         config, tableId, dbDialect, dbStructure, sqliteHelper.connection
     );
@@ -803,7 +803,7 @@ public class BufferedRecordsTest {
   }
 
   @Test
-  public void testPrimitiveValueInsertPkModeKafka() throws SQLException {
+  public void testStringValueInsertPkModeKafka() throws SQLException {
     props.put("pk.mode", "kafka");
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
@@ -811,7 +811,7 @@ public class BufferedRecordsTest {
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
-    final TableId tableId = new TableId(null, null, "primitiveKafkaTest");
+    final TableId tableId = new TableId(null, null, "stringValueKafkaTest");
     final BufferedRecords buffer = new BufferedRecords(
         config, tableId, dbDialect, dbStructure, sqliteHelper.connection
     );
@@ -824,7 +824,7 @@ public class BufferedRecordsTest {
   }
 
   @Test
-  public void testPrimitiveValueWithRecordKeyPk() throws SQLException {
+  public void testStringValueWithRecordKeyPk() throws SQLException {
     props.put("pk.mode", "record_key");
     props.put("pk.fields", "the_key");
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
@@ -833,7 +833,7 @@ public class BufferedRecordsTest {
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
-    final TableId tableId = new TableId(null, null, "primitiveKeyTest");
+    final TableId tableId = new TableId(null, null, "stringValueKeyTest");
     final BufferedRecords buffer = new BufferedRecords(
         config, tableId, dbDialect, dbStructure, sqliteHelper.connection
     );
@@ -846,7 +846,7 @@ public class BufferedRecordsTest {
   }
 
   @Test
-  public void testPrimitiveValueDeleteWithRecordKeyPk() throws SQLException {
+  public void testStringValueDeleteWithRecordKeyPk() throws SQLException {
     props.put("delete.enabled", true);
     props.put("insert.mode", "upsert");
     props.put("pk.mode", "record_key");
@@ -857,7 +857,7 @@ public class BufferedRecordsTest {
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
-    final TableId tableId = new TableId(null, null, "primitiveDeleteTest");
+    final TableId tableId = new TableId(null, null, "stringValueDeleteTest");
     final BufferedRecords buffer = new BufferedRecords(
         config, tableId, dbDialect, dbStructure, sqliteHelper.connection
     );
@@ -875,7 +875,7 @@ public class BufferedRecordsTest {
   }
 
   @Test
-  public void testPrimitiveValueBatchingWithSchemaChange() throws SQLException {
+  public void testStringValueBatchingWithSchemaChange() throws SQLException {
     props.put("pk.mode", "none");
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
@@ -883,7 +883,7 @@ public class BufferedRecordsTest {
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
     final DbStructure dbStructure = new DbStructure(dbDialect);
 
-    final TableId tableId = new TableId(null, null, "primitiveBatchTest");
+    final TableId tableId = new TableId(null, null, "stringValueBatchTest");
     final BufferedRecords buffer = new BufferedRecords(
         config, tableId, dbDialect, dbStructure, sqliteHelper.connection
     );
@@ -905,13 +905,119 @@ public class BufferedRecordsTest {
   }
 
   @Test
-  public void testPrimitiveValueValidation() throws SQLException {
+  public void testStringValueValidation() throws SQLException {
     props.put("pk.mode", "none");
 
-    final SinkRecord primitiveRecord = new SinkRecord(
+    final SinkRecord stringRecord = new SinkRecord(
         "dummy", 0, null, null, Schema.STRING_SCHEMA, "hello", 0
     );
-    assertValidRecord(primitiveRecord);
+    assertValidRecord(stringRecord);
+  }
+
+  @Test
+  public void testStringValueCustomColumnNameNewTable() throws SQLException {
+    props.put("pk.mode", "none");
+    props.put("string.output.value.column.name", "payload");
+    final JdbcSinkConfig config = new JdbcSinkConfig(props);
+
+    final String url = sqliteHelper.sqliteUri();
+    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+    final DbStructure dbStructure = new DbStructure(dbDialect);
+
+    final TableId tableId = new TableId(null, null, "stringValueCustomColTest");
+    final BufferedRecords buffer = new BufferedRecords(
+        config, tableId, dbDialect, dbStructure, sqliteHelper.connection
+    );
+
+    final SinkRecord record = new SinkRecord(
+        "topic", 0, null, null, Schema.STRING_SCHEMA, "hello world", 0
+    );
+    assertEquals(Collections.emptyList(), buffer.add(record));
+    assertEquals(Collections.singletonList(record), buffer.flush());
+  }
+
+  @Test
+  public void testStringValueCustomColumnNameExistingTableHasColumn() throws SQLException {
+    props.put("pk.mode", "none");
+    props.put("string.output.value.column.name", "payload");
+    final JdbcSinkConfig config = new JdbcSinkConfig(props);
+
+    sqliteHelper.createTable(
+        "CREATE TABLE stringValueExistingTest (payload TEXT NULL)"
+    );
+
+    final String url = sqliteHelper.sqliteUri();
+    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+    final DbStructure dbStructure = new DbStructure(dbDialect);
+
+    final TableId tableId = new TableId(null, null, "stringValueExistingTest");
+    final BufferedRecords buffer = new BufferedRecords(
+        config, tableId, dbDialect, dbStructure, sqliteHelper.connection
+    );
+
+    final SinkRecord record = new SinkRecord(
+        "topic", 0, null, null, Schema.STRING_SCHEMA, "hello world", 0
+    );
+    assertEquals(Collections.emptyList(), buffer.add(record));
+    assertEquals(Collections.singletonList(record), buffer.flush());
+  }
+
+  @Test
+  public void testStringValueCustomColumnNameAutoEvolveAddsColumn() throws SQLException {
+    props.put("pk.mode", "none");
+    props.put("string.output.value.column.name", "payload");
+    props.put("auto.evolve", true);
+    final JdbcSinkConfig config = new JdbcSinkConfig(props);
+
+    sqliteHelper.createTable(
+        "CREATE TABLE stringValueAutoEvolveTest (other_col TEXT NULL)"
+    );
+
+    final String url = sqliteHelper.sqliteUri();
+    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+    final DbStructure dbStructure = new DbStructure(dbDialect);
+
+    final TableId tableId = new TableId(null, null, "stringValueAutoEvolveTest");
+    final BufferedRecords buffer = new BufferedRecords(
+        config, tableId, dbDialect, dbStructure, sqliteHelper.connection
+    );
+
+    final SinkRecord record = new SinkRecord(
+        "topic", 0, null, null, Schema.STRING_SCHEMA, "hello world", 0
+    );
+    assertEquals(Collections.emptyList(), buffer.add(record));
+    assertEquals(Collections.singletonList(record), buffer.flush());
+  }
+
+  @Test
+  public void testStringValueCustomColumnNameNoAutoEvolveFails() throws SQLException {
+    props.put("pk.mode", "none");
+    props.put("string.output.value.column.name", "payload");
+    props.put("auto.evolve", false);
+    final JdbcSinkConfig config = new JdbcSinkConfig(props);
+
+    sqliteHelper.createTable(
+        "CREATE TABLE stringValueNoEvolveTest (other_col TEXT NULL)"
+    );
+
+    final String url = sqliteHelper.sqliteUri();
+    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+    final DbStructure dbStructure = new DbStructure(dbDialect);
+
+    final TableId tableId = new TableId(null, null, "stringValueNoEvolveTest");
+    final BufferedRecords buffer = new BufferedRecords(
+        config, tableId, dbDialect, dbStructure, sqliteHelper.connection
+    );
+
+    final SinkRecord record = new SinkRecord(
+        "topic", 0, null, null, Schema.STRING_SCHEMA, "hello world", 0
+    );
+    TableAlterOrCreateException ex = assertThrows(
+        TableAlterOrCreateException.class,
+        () -> buffer.add(record)
+    );
+    assertTrue(ex.getMessage().contains("payload"));
+    assertTrue(ex.getMessage().contains("auto-evolution is disabled"));
   }
 
   protected void assertValidRecord(SinkRecord record) throws SQLException {

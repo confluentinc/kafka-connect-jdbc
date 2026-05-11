@@ -50,30 +50,40 @@ public class FieldsMetadataTest {
   }
 
   @Test
-  public void primitiveValueSchemaIsAllowed() {
+  public void stringValueSchemaIsAllowed() {
     FieldsMetadata metadata = extract(
         JdbcSinkConfig.PrimaryKeyMode.KAFKA,
         Collections.<String>emptyList(),
         SIMPLE_PRIMITIVE_SCHEMA,
-        SIMPLE_PRIMITIVE_SCHEMA
+        Schema.STRING_SCHEMA
     );
     assertEquals(
-        Collections.singleton(FieldsMetadata.DEFAULT_PRIMITIVE_VALUE_COLUMN_NAME),
+        Collections.singleton(FieldsMetadata.DEFAULT_STRING_VALUE_COLUMN_NAME),
         metadata.nonKeyFieldNames
     );
     assertEquals(
-        Schema.Type.INT64,
-        metadata.allFields.get(FieldsMetadata.DEFAULT_PRIMITIVE_VALUE_COLUMN_NAME).schemaType()
+        Schema.Type.STRING,
+        metadata.allFields.get(FieldsMetadata.DEFAULT_STRING_VALUE_COLUMN_NAME).schemaType()
     );
   }
 
   @Test(expected = ConnectException.class)
-  public void valueSchemaMustBeStructOrPrimitiveIfPresent() {
+  public void valueSchemaMustBeStructOrStringIfPresent() {
     extract(
         JdbcSinkConfig.PrimaryKeyMode.KAFKA,
         Collections.<String>emptyList(),
         null,
         SIMPLE_MAP_SCHEMA
+    );
+  }
+
+  @Test(expected = ConnectException.class)
+  public void nonStringPrimitiveValueSchemaIsRejected() {
+    extract(
+        JdbcSinkConfig.PrimaryKeyMode.KAFKA,
+        Collections.<String>emptyList(),
+        null,
+        Schema.INT64_SCHEMA
     );
   }
 
@@ -326,7 +336,7 @@ public class FieldsMetadataTest {
   }
 
   @Test
-  public void primitiveValueSchemaPkModeNone() {
+  public void stringValueSchemaPkModeNone() {
     FieldsMetadata metadata = extract(
         JdbcSinkConfig.PrimaryKeyMode.NONE,
         Collections.<String>emptyList(),
@@ -335,17 +345,17 @@ public class FieldsMetadataTest {
     );
     assertEquals(Collections.emptySet(), metadata.keyFieldNames);
     assertEquals(
-        Collections.singleton(FieldsMetadata.DEFAULT_PRIMITIVE_VALUE_COLUMN_NAME),
+        Collections.singleton(FieldsMetadata.DEFAULT_STRING_VALUE_COLUMN_NAME),
         metadata.nonKeyFieldNames
     );
     SinkRecordField field =
-        metadata.allFields.get(FieldsMetadata.DEFAULT_PRIMITIVE_VALUE_COLUMN_NAME);
+        metadata.allFields.get(FieldsMetadata.DEFAULT_STRING_VALUE_COLUMN_NAME);
     assertEquals(Schema.Type.STRING, field.schemaType());
     assertFalse(field.isPrimaryKey());
   }
 
   @Test
-  public void primitiveValueSchemaWithRecordKeyPk() {
+  public void stringValueSchemaWithRecordKeyPk() {
     FieldsMetadata metadata = extract(
         JdbcSinkConfig.PrimaryKeyMode.RECORD_KEY,
         Collections.singletonList("the_pk"),
@@ -354,17 +364,47 @@ public class FieldsMetadataTest {
     );
     assertEquals(Collections.singleton("the_pk"), metadata.keyFieldNames);
     assertEquals(
-        Collections.singleton(FieldsMetadata.DEFAULT_PRIMITIVE_VALUE_COLUMN_NAME),
+        Collections.singleton(FieldsMetadata.DEFAULT_STRING_VALUE_COLUMN_NAME),
         metadata.nonKeyFieldNames
     );
   }
 
   @Test(expected = ConnectException.class)
-  public void primitiveValueSchemaWithRecordValuePkFails() {
+  public void stringValueSchemaWithRecordValuePkFails() {
     extract(
         JdbcSinkConfig.PrimaryKeyMode.RECORD_VALUE,
         Collections.singletonList("name"),
         null,
+        Schema.STRING_SCHEMA
+    );
+  }
+
+  @Test
+  public void stringValueColumnNameIsHonored() {
+    FieldsMetadata metadata = FieldsMetadata.extract(
+        "table",
+        JdbcSinkConfig.PrimaryKeyMode.NONE,
+        Collections.<String>emptyList(),
+        Collections.<String>emptySet(),
+        "myValueColumn",
+        null,
+        Schema.STRING_SCHEMA
+    );
+    assertEquals(Collections.singleton("myValueColumn"), metadata.nonKeyFieldNames);
+    SinkRecordField field = metadata.allFields.get("myValueColumn");
+    assertEquals(Schema.Type.STRING, field.schemaType());
+    assertTrue(field.isOptional());
+  }
+
+  @Test(expected = ConnectException.class)
+  public void stringValueColumnNameConflictsWithKeyColumnName() {
+    FieldsMetadata.extract(
+        "table",
+        JdbcSinkConfig.PrimaryKeyMode.RECORD_KEY,
+        Collections.singletonList("the_key"),
+        Collections.<String>emptySet(),
+        "the_key",
+        Schema.INT64_SCHEMA,
         Schema.STRING_SCHEMA
     );
   }

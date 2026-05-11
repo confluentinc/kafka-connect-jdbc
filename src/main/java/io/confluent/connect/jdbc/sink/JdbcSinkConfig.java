@@ -267,6 +267,19 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "specific dialect. All properly-packaged dialects in the JDBC connector plugin "
       + "can be used.";
 
+  public static final String STRING_OUTPUT_VALUE_COLUMN_NAME = "string.output.value.column.name";
+  public static final String STRING_OUTPUT_VALUE_COLUMN_NAME_DEFAULT = "recordValue";
+  private static final String STRING_OUTPUT_VALUE_COLUMN_NAME_DOC =
+      "When the Kafka record value uses the String schema (e.g. records produced with "
+      + "StringConverter), the connector writes the value into a single column with this name. "
+      + "If the destination table is being auto-created, the column is created with this name. "
+      + "If the table already exists and the column is missing, the column is added via ALTER "
+      + "when 'auto.evolve' is true; otherwise the connector fails with the standard "
+      + "auto-evolution-disabled error. Defaults to '"
+      + STRING_OUTPUT_VALUE_COLUMN_NAME_DEFAULT + "'.";
+  private static final String STRING_OUTPUT_VALUE_COLUMN_NAME_DISPLAY =
+      "String Value Column Name";
+
   public static final String DB_TIMEZONE_CONFIG = "db.timezone";
   public static final String DB_TIMEZONE_DEFAULT = "UTC";
   private static final String DB_TIMEZONE_CONFIG_DOC =
@@ -606,6 +619,18 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Width.MEDIUM,
             DATE_CALENDAR_SYSTEM_DISPLAY
         )
+        .define(
+            STRING_OUTPUT_VALUE_COLUMN_NAME,
+            ConfigDef.Type.STRING,
+            STRING_OUTPUT_VALUE_COLUMN_NAME_DEFAULT,
+            new ConfigDef.NonEmptyString(),
+            ConfigDef.Importance.LOW,
+            STRING_OUTPUT_VALUE_COLUMN_NAME_DOC,
+            DATAMAPPING_GROUP,
+            10,
+            ConfigDef.Width.MEDIUM,
+            STRING_OUTPUT_VALUE_COLUMN_NAME_DISPLAY
+        )
         // DDL
         .define(
             AUTO_CREATE,
@@ -700,6 +725,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final PrimaryKeyMode pkMode;
   public final List<String> pkFields;
   public final Set<String> fieldsWhitelist;
+  public final String stringOutputValueColumnName;
   public final Set<String> timestampFieldsList;
   public final String dialectName;
   public final ZoneId zoneId;
@@ -733,6 +759,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     pkFields = getList(PK_FIELDS);
     dialectName = getString(DIALECT_NAME_CONFIG);
     fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
+    stringOutputValueColumnName = getString(STRING_OUTPUT_VALUE_COLUMN_NAME);
     String dbTimeZone = getString(DB_TIMEZONE_CONFIG);
     zoneId = ZoneId.of(dbTimeZone);
     DateTimezone dateTimezoneConfig =

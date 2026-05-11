@@ -57,6 +57,8 @@ public class FieldsMetadata {
     this.allFields = allFields;
   }
 
+  public static final String DEFAULT_STRING_VALUE_COLUMN_NAME = "recordValue";
+
   public static FieldsMetadata extract(
       final String tableName,
       final JdbcSinkConfig.PrimaryKeyMode pkMode,
@@ -69,6 +71,26 @@ public class FieldsMetadata {
         pkMode,
         configuredPkFields,
         fieldsWhitelist,
+        DEFAULT_STRING_VALUE_COLUMN_NAME,
+        schemaPair.keySchema,
+        schemaPair.valueSchema
+    );
+  }
+
+  public static FieldsMetadata extract(
+      final String tableName,
+      final JdbcSinkConfig.PrimaryKeyMode pkMode,
+      final List<String> configuredPkFields,
+      final Set<String> fieldsWhitelist,
+      final String stringValueColumnName,
+      final SchemaPair schemaPair
+  ) {
+    return extract(
+        tableName,
+        pkMode,
+        configuredPkFields,
+        fieldsWhitelist,
+        stringValueColumnName,
         schemaPair.keySchema,
         schemaPair.valueSchema
     );
@@ -82,9 +104,34 @@ public class FieldsMetadata {
       final Schema keySchema,
       final Schema valueSchema
   ) {
-    if (valueSchema != null && valueSchema.type() != Schema.Type.STRUCT) {
-      throw new ConnectException("Value schema must be of type Struct");
+    return extract(
+        tableName,
+        pkMode,
+        configuredPkFields,
+        fieldsWhitelist,
+        DEFAULT_STRING_VALUE_COLUMN_NAME,
+        keySchema,
+        valueSchema
+    );
+  }
+
+  public static FieldsMetadata extract(
+      final String tableName,
+      final JdbcSinkConfig.PrimaryKeyMode pkMode,
+      final List<String> configuredPkFields,
+      final Set<String> fieldsWhitelist,
+      final String stringValueColumnName,
+      final Schema keySchema,
+      final Schema valueSchema
+  ) {
+    if (valueSchema != null
+        && valueSchema.type() != Schema.Type.STRUCT
+        && valueSchema.type() != Schema.Type.STRING) {
+      throw new ConnectException("Value schema must be of type Struct or String");
     }
+
+    final boolean isStringValue = valueSchema != null
+        && valueSchema.type() == Schema.Type.STRING;
 
     final Map<String, SinkRecordField> allFields = new HashMap<>();
 
@@ -102,6 +149,11 @@ public class FieldsMetadata {
         break;
 
       case RECORD_VALUE:
+        if (isStringValue) {
+          throw new ConnectException(
+              "pk.mode record_value is not supported with String value schemas"
+          );
+        }
         extractRecordValuePk(tableName, configuredPkFields, valueSchema, allFields, keyFieldNames);
         break;
 
@@ -110,7 +162,21 @@ public class FieldsMetadata {
     }
 
     final Set<String> nonKeyFieldNames = new LinkedHashSet<>();
-    if (valueSchema != null) {
+    if (isStringValue) {
+      if (keyFieldNames.contains(stringValueColumnName)) {
+        throw new ConnectException(String.format(
+            "Configured %s '%s' conflicts with a primary key column for table '%s'",
+            JdbcSinkConfig.STRING_OUTPUT_VALUE_COLUMN_NAME,
+            stringValueColumnName,
+            tableName
+        ));
+      }
+      nonKeyFieldNames.add(stringValueColumnName);
+      allFields.put(
+          stringValueColumnName,
+          new SinkRecordField(Schema.OPTIONAL_STRING_SCHEMA, stringValueColumnName, false)
+      );
+    } else if (valueSchema != null) {
       for (Field field : valueSchema.fields()) {
         if (keyFieldNames.contains(field.name())) {
           continue;
@@ -139,7 +205,11 @@ public class FieldsMetadata {
       }
     }
 
-    if (valueSchema != null) {
+    if (isStringValue) {
+      if (allFields.containsKey(stringValueColumnName)) {
+        allFieldsOrdered.put(stringValueColumnName, allFields.get(stringValueColumnName));
+      }
+    } else if (valueSchema != null) {
       for (Field field : valueSchema.fields()) {
         String fieldName = field.name();
         if (allFields.containsKey(fieldName)) {

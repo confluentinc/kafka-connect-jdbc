@@ -79,14 +79,17 @@ public interface RecordValidator {
       Schema valueSchema = record.valueSchema();
       if (record.value() != null
           && valueSchema != null
-          && valueSchema.type() == Schema.Type.STRUCT) {
+          && (valueSchema.type() == Schema.Type.STRUCT
+              || valueSchema.type() == Schema.Type.STRING)) {
         return;
       }
       throw new ConnectException(
           String.format(
-              "Sink connector '%s' is configured with '%s=%s' and '%s=%s' and therefore requires "
-              + "records with a non-null Struct value and non-null Struct schema, "
-              + "but found record at (topic='%s',partition=%d,offset=%d,timestamp=%d) "
+              "Sink connector '%s' is configured with '%s=%s' and "
+              + "'%s=%s' and therefore requires records with a non-null "
+              + "Struct or String value and non-null Struct or "
+              + "String schema, but found record at "
+              + "(topic='%s',partition=%d,offset=%d,timestamp=%d) "
               + "with a %s value and %s value schema.",
               config.connectorName(),
               JdbcSinkConfig.DELETE_ENABLED,

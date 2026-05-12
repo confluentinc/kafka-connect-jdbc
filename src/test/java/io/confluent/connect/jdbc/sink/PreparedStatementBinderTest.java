@@ -111,7 +111,10 @@ public class PreparedStatementBinderTest {
 
     List<String> pkFields = Collections.singletonList("long");
 
-    FieldsMetadata fieldsMetadata = FieldsMetadata.extract("people", pkMode, pkFields, Collections.<String>emptySet(), schemaPair);
+    FieldsMetadata fieldsMetadata = FieldsMetadata.extract(
+        "people", pkMode, pkFields, Collections.<String>emptySet(),
+        JdbcSinkConfig.STRING_OUTPUT_VALUE_COLUMN_NAME_DEFAULT,
+        schemaPair);
 
     PreparedStatement statement = mock(PreparedStatement.class);
     TableId tabId = new TableId("ORCL", "ADMIN", "people");
@@ -209,86 +212,92 @@ public class PreparedStatementBinderTest {
     verify(statement, times(1)).setObject(index++, null);
   }
 
-    @Test
-    public void bindRecordStringValueInsert() throws SQLException {
-      SchemaPair schemaPair = new SchemaPair(null, Schema.STRING_SCHEMA);
+  @Test
+  public void bindRecordStringValueInsert() throws SQLException {
+    SchemaPair schemaPair = new SchemaPair(null, Schema.STRING_SCHEMA);
 
-      JdbcSinkConfig.PrimaryKeyMode pkMode = JdbcSinkConfig.PrimaryKeyMode.NONE;
+    JdbcSinkConfig.PrimaryKeyMode pkMode = JdbcSinkConfig.PrimaryKeyMode.NONE;
 
-      FieldsMetadata fieldsMetadata = FieldsMetadata.extract(
-          "stringValueTable", pkMode, Collections.<String>emptyList(),
-          Collections.<String>emptySet(), schemaPair
-      );
+    FieldsMetadata fieldsMetadata = FieldsMetadata.extract(
+        "stringValueTable", pkMode, Collections.<String>emptyList(),
+        Collections.<String>emptySet(),
+        JdbcSinkConfig.STRING_OUTPUT_VALUE_COLUMN_NAME_DEFAULT,
+        schemaPair
+    );
 
-      PreparedStatement statement = mock(PreparedStatement.class);
-      TableId tabId = new TableId(null, null, "stringValueTable");
-      List<ColumnDefinition> colDefs = new ArrayList<>();
-      colDefs.add(mock(ColumnDefinition.class));
-      when(colDefs.get(0).type()).thenReturn(Types.VARCHAR);
-      when(colDefs.get(0).id()).thenReturn(new ColumnId(tabId, "recordValue"));
-      when(colDefs.get(0).isPrimaryKey()).thenReturn(false);
-      TableDefinition tabDef = new TableDefinition(tabId, colDefs);
+    PreparedStatement statement = mock(PreparedStatement.class);
+    TableId tabId = new TableId(null, null, "stringValueTable");
+    List<ColumnDefinition> colDefs = new ArrayList<>();
+    colDefs.add(mock(ColumnDefinition.class));
+    when(colDefs.get(0).type()).thenReturn(Types.VARCHAR);
+    when(colDefs.get(0).id()).thenReturn(
+        new ColumnId(tabId, JdbcSinkConfig.STRING_OUTPUT_VALUE_COLUMN_NAME_DEFAULT));
+    when(colDefs.get(0).isPrimaryKey()).thenReturn(false);
+    TableDefinition tabDef = new TableDefinition(tabId, colDefs);
 
-      PreparedStatementBinder binder = new PreparedStatementBinder(
-          dialect,
-          statement,
-          pkMode,
-          schemaPair,
-          fieldsMetadata,
-          tabDef,
-          JdbcSinkConfig.InsertMode.INSERT,
-          true
-      );
+    PreparedStatementBinder binder = new PreparedStatementBinder(
+        dialect,
+        statement,
+        pkMode,
+        schemaPair,
+        fieldsMetadata,
+        tabDef,
+        JdbcSinkConfig.InsertMode.INSERT,
+        true
+    );
 
-      binder.bindRecord(new SinkRecord(
-          "topic", 0, null, null, Schema.STRING_SCHEMA, "hello world", 0
-      ));
+    binder.bindRecord(new SinkRecord(
+        "topic", 0, null, null, Schema.STRING_SCHEMA, "hello world", 0
+    ));
 
-      verify(statement, times(1)).setString(1, "hello world");
-    }
+    verify(statement, times(1)).setString(1, "hello world");
+  }
 
-    @Test
-    public void bindRecordStringValueWithPrimitiveKey() throws SQLException {
-      SchemaPair schemaPair = new SchemaPair(Schema.INT64_SCHEMA, Schema.STRING_SCHEMA);
+  @Test
+  public void bindRecordStringValueWithPrimitiveKey() throws SQLException {
+    SchemaPair schemaPair = new SchemaPair(Schema.INT64_SCHEMA, Schema.STRING_SCHEMA);
 
-      JdbcSinkConfig.PrimaryKeyMode pkMode = JdbcSinkConfig.PrimaryKeyMode.RECORD_KEY;
+    JdbcSinkConfig.PrimaryKeyMode pkMode = JdbcSinkConfig.PrimaryKeyMode.RECORD_KEY;
 
-      FieldsMetadata fieldsMetadata = FieldsMetadata.extract(
-          "stringValueTable", pkMode, Collections.singletonList("the_key"),
-          Collections.<String>emptySet(), schemaPair
-      );
+    FieldsMetadata fieldsMetadata = FieldsMetadata.extract(
+        "stringValueTable", pkMode, Collections.singletonList("the_key"),
+        Collections.<String>emptySet(),
+        JdbcSinkConfig.STRING_OUTPUT_VALUE_COLUMN_NAME_DEFAULT,
+        schemaPair
+    );
 
-      PreparedStatement statement = mock(PreparedStatement.class);
-      TableId tabId = new TableId(null, null, "stringValueTable");
-      List<ColumnDefinition> colDefs = new ArrayList<>();
-      colDefs.add(mock(ColumnDefinition.class));
-      colDefs.add(mock(ColumnDefinition.class));
-      when(colDefs.get(0).type()).thenReturn(Types.BIGINT);
-      when(colDefs.get(0).id()).thenReturn(new ColumnId(tabId, "the_key"));
-      when(colDefs.get(0).isPrimaryKey()).thenReturn(true);
-      when(colDefs.get(1).type()).thenReturn(Types.VARCHAR);
-      when(colDefs.get(1).id()).thenReturn(new ColumnId(tabId, "recordValue"));
-      when(colDefs.get(1).isPrimaryKey()).thenReturn(false);
-      TableDefinition tabDef = new TableDefinition(tabId, colDefs);
+    PreparedStatement statement = mock(PreparedStatement.class);
+    TableId tabId = new TableId(null, null, "stringValueTable");
+    List<ColumnDefinition> colDefs = new ArrayList<>();
+    colDefs.add(mock(ColumnDefinition.class));
+    colDefs.add(mock(ColumnDefinition.class));
+    when(colDefs.get(0).type()).thenReturn(Types.BIGINT);
+    when(colDefs.get(0).id()).thenReturn(new ColumnId(tabId, "the_key"));
+    when(colDefs.get(0).isPrimaryKey()).thenReturn(true);
+    when(colDefs.get(1).type()).thenReturn(Types.VARCHAR);
+    when(colDefs.get(1).id()).thenReturn(
+        new ColumnId(tabId, JdbcSinkConfig.STRING_OUTPUT_VALUE_COLUMN_NAME_DEFAULT));
+    when(colDefs.get(1).isPrimaryKey()).thenReturn(false);
+    TableDefinition tabDef = new TableDefinition(tabId, colDefs);
 
-      PreparedStatementBinder binder = new PreparedStatementBinder(
-          dialect,
-          statement,
-          pkMode,
-          schemaPair,
-          fieldsMetadata,
-          tabDef,
-          JdbcSinkConfig.InsertMode.INSERT,
-          true
-      );
+    PreparedStatementBinder binder = new PreparedStatementBinder(
+        dialect,
+        statement,
+        pkMode,
+        schemaPair,
+        fieldsMetadata,
+        tabDef,
+        JdbcSinkConfig.InsertMode.INSERT,
+        true
+    );
 
-      binder.bindRecord(new SinkRecord(
-          "topic", 0, Schema.INT64_SCHEMA, 42L, Schema.STRING_SCHEMA, "hello", 0
-      ));
+    binder.bindRecord(new SinkRecord(
+        "topic", 0, Schema.INT64_SCHEMA, 42L, Schema.STRING_SCHEMA, "hello", 0
+    ));
 
-      verify(statement, times(1)).setLong(1, 42L);
-      verify(statement, times(1)).setString(2, "hello");
-    }
+    verify(statement, times(1)).setLong(1, 42L);
+    verify(statement, times(1)).setString(2, "hello");
+  }
 
     @Test
     public void bindRecordUpsertMode() throws SQLException, ParseException {
@@ -307,7 +316,10 @@ public class PreparedStatementBinderTest {
 
       List<String> pkFields = Collections.singletonList("long");
 
-      FieldsMetadata fieldsMetadata = FieldsMetadata.extract("people", pkMode, pkFields, Collections.<String>emptySet(), schemaPair);
+      FieldsMetadata fieldsMetadata = FieldsMetadata.extract(
+        "people", pkMode, pkFields, Collections.<String>emptySet(),
+        JdbcSinkConfig.STRING_OUTPUT_VALUE_COLUMN_NAME_DEFAULT,
+        schemaPair);
 
       PreparedStatement statement = mock(PreparedStatement.class);
       TableId tabId = new TableId("ORCL", "ADMIN", "people");
@@ -358,8 +370,10 @@ public class PreparedStatementBinderTest {
 
       List<String> pkFields = Collections.singletonList("long");
 
-      FieldsMetadata fieldsMetadata = FieldsMetadata.extract("people", pkMode, pkFields,
-              Collections.<String>emptySet(), schemaPair);
+      FieldsMetadata fieldsMetadata = FieldsMetadata.extract(
+          "people", pkMode, pkFields, Collections.<String>emptySet(),
+          JdbcSinkConfig.STRING_OUTPUT_VALUE_COLUMN_NAME_DEFAULT,
+          schemaPair);
 
       PreparedStatement statement = mock(PreparedStatement.class);
       TableId tabId = new TableId("ORCL", "ADMIN", "people");

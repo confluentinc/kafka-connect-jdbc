@@ -58,12 +58,12 @@ public class FieldsMetadataTest {
         Schema.STRING_SCHEMA
     );
     assertEquals(
-        Collections.singleton(FieldsMetadata.DEFAULT_STRING_VALUE_COLUMN_NAME),
+        Collections.singleton(JdbcSinkConfig.STRING_OUTPUT_VALUE_COLUMN_NAME_DEFAULT),
         metadata.nonKeyFieldNames
     );
     assertEquals(
         Schema.Type.STRING,
-        metadata.allFields.get(FieldsMetadata.DEFAULT_STRING_VALUE_COLUMN_NAME).schemaType()
+        metadata.allFields.get(JdbcSinkConfig.STRING_OUTPUT_VALUE_COLUMN_NAME_DEFAULT).schemaType()
     );
   }
 
@@ -345,11 +345,11 @@ public class FieldsMetadataTest {
     );
     assertEquals(Collections.emptySet(), metadata.keyFieldNames);
     assertEquals(
-        Collections.singleton(FieldsMetadata.DEFAULT_STRING_VALUE_COLUMN_NAME),
+        Collections.singleton(JdbcSinkConfig.STRING_OUTPUT_VALUE_COLUMN_NAME_DEFAULT),
         metadata.nonKeyFieldNames
     );
     SinkRecordField field =
-        metadata.allFields.get(FieldsMetadata.DEFAULT_STRING_VALUE_COLUMN_NAME);
+        metadata.allFields.get(JdbcSinkConfig.STRING_OUTPUT_VALUE_COLUMN_NAME_DEFAULT);
     assertEquals(Schema.Type.STRING, field.schemaType());
     assertFalse(field.isPrimaryKey());
   }
@@ -364,7 +364,7 @@ public class FieldsMetadataTest {
     );
     assertEquals(Collections.singleton("the_pk"), metadata.keyFieldNames);
     assertEquals(
-        Collections.singleton(FieldsMetadata.DEFAULT_STRING_VALUE_COLUMN_NAME),
+        Collections.singleton(JdbcSinkConfig.STRING_OUTPUT_VALUE_COLUMN_NAME_DEFAULT),
         metadata.nonKeyFieldNames
     );
   }
@@ -409,11 +409,59 @@ public class FieldsMetadataTest {
     );
   }
 
+  @Test(expected = ConnectException.class)
+  public void stringValueWithWhitelistThatExcludesColumnIsRejected() {
+    FieldsMetadata.extract(
+        "table",
+        JdbcSinkConfig.PrimaryKeyMode.NONE,
+        Collections.<String>emptyList(),
+        Collections.singleton("other_field"),
+        JdbcSinkConfig.STRING_OUTPUT_VALUE_COLUMN_NAME_DEFAULT,
+        null,
+        Schema.STRING_SCHEMA
+    );
+  }
+
+  @Test
+  public void stringValueWithWhitelistThatIncludesColumnIsAccepted() {
+    FieldsMetadata metadata = FieldsMetadata.extract(
+        "table",
+        JdbcSinkConfig.PrimaryKeyMode.NONE,
+        Collections.<String>emptyList(),
+        Collections.singleton("payload"),
+        "payload",
+        null,
+        Schema.STRING_SCHEMA
+    );
+    assertEquals(Collections.singleton("payload"), metadata.nonKeyFieldNames);
+  }
+
+  @Test
+  public void stringValueWithEmptyWhitelistIsAccepted() {
+    FieldsMetadata metadata = FieldsMetadata.extract(
+        "table",
+        JdbcSinkConfig.PrimaryKeyMode.NONE,
+        Collections.<String>emptyList(),
+        Collections.<String>emptySet(),
+        JdbcSinkConfig.STRING_OUTPUT_VALUE_COLUMN_NAME_DEFAULT,
+        null,
+        Schema.STRING_SCHEMA
+    );
+    assertEquals(
+        Collections.singleton(JdbcSinkConfig.STRING_OUTPUT_VALUE_COLUMN_NAME_DEFAULT),
+        metadata.nonKeyFieldNames
+    );
+  }
+
   private static FieldsMetadata extract(JdbcSinkConfig.PrimaryKeyMode pkMode, List<String> pkFields, Schema keySchema, Schema valueSchema) {
     return extract(pkMode, pkFields, Collections.<String>emptySet(), keySchema, valueSchema);
   }
 
   private static FieldsMetadata extract(JdbcSinkConfig.PrimaryKeyMode pkMode, List<String> pkFields, Set<String> whitelist, Schema keySchema, Schema valueSchema) {
-    return FieldsMetadata.extract("table", pkMode, pkFields, whitelist, keySchema, valueSchema);
+    return FieldsMetadata.extract(
+        "table", pkMode, pkFields, whitelist,
+        JdbcSinkConfig.STRING_OUTPUT_VALUE_COLUMN_NAME_DEFAULT,
+        keySchema, valueSchema
+    );
   }
 }

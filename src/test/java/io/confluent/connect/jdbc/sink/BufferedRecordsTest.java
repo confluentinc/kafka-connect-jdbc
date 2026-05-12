@@ -574,9 +574,9 @@ public class BufferedRecordsTest {
     // Delete is not enabled, so therefore require non-null key and values with schemas
     assertValidRecord(true, true, true, true);
     // Fail when ingesting tombstones
-    assertInvalidRecord(true, true, false, true, "Struct or String");
-    assertInvalidRecord(true, true, true, false, "Struct or String");
-    assertInvalidRecord(true, true, false, false, "Struct or String");
+    assertInvalidRecord(true, true, false, true, "requires records with a non-null Struct or String value");
+    assertInvalidRecord(true, true, true, false, "requires records with a non-null Struct or String value");
+    assertInvalidRecord(true, true, false, false, "requires records with a non-null Struct or String value");
 
     // Fail when null key and null key schema
     assertInvalidRecord(false, false, true, true, "with a null key and null key schema");
@@ -636,20 +636,20 @@ public class BufferedRecordsTest {
     assertValidRecord(true, false, true, true);
     assertValidRecord(false, false, true, true);
 
-    assertInvalidRecord(true, true, true, false, "Struct or String");
-    assertInvalidRecord(false, true, true, false, "Struct or String");
-    assertInvalidRecord(true, false, true, false, "Struct or String");
-    assertInvalidRecord(false, false, true, false, "Struct or String");
+    assertInvalidRecord(true, true, true, false, "requires records with a non-null Struct or String value");
+    assertInvalidRecord(false, true, true, false, "requires records with a non-null Struct or String value");
+    assertInvalidRecord(true, false, true, false, "requires records with a non-null Struct or String value");
+    assertInvalidRecord(false, false, true, false, "requires records with a non-null Struct or String value");
 
-    assertInvalidRecord(true, true, false, true, "Struct or String");
-    assertInvalidRecord(false, true, false, true, "Struct or String");
-    assertInvalidRecord(true, false, false, true, "Struct or String");
-    assertInvalidRecord(false, false, false, true, "Struct or String");
+    assertInvalidRecord(true, true, false, true, "requires records with a non-null Struct or String value");
+    assertInvalidRecord(false, true, false, true, "requires records with a non-null Struct or String value");
+    assertInvalidRecord(true, false, false, true, "requires records with a non-null Struct or String value");
+    assertInvalidRecord(false, false, false, true, "requires records with a non-null Struct or String value");
 
-    assertInvalidRecord(true, true, false, false, "Struct or String");
-    assertInvalidRecord(false, true, false, false, "Struct or String");
-    assertInvalidRecord(true, false, false, false, "Struct or String");
-    assertInvalidRecord(false, false, false, false, "Struct or String");
+    assertInvalidRecord(true, true, false, false, "requires records with a non-null Struct or String value");
+    assertInvalidRecord(false, true, false, false, "requires records with a non-null Struct or String value");
+    assertInvalidRecord(true, false, false, false, "requires records with a non-null Struct or String value");
+    assertInvalidRecord(false, false, false, false, "requires records with a non-null Struct or String value");
   }
 
   @Test

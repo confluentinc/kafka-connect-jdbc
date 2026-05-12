@@ -57,26 +57,6 @@ public class FieldsMetadata {
     this.allFields = allFields;
   }
 
-  public static final String DEFAULT_STRING_VALUE_COLUMN_NAME = "recordValue";
-
-  public static FieldsMetadata extract(
-      final String tableName,
-      final JdbcSinkConfig.PrimaryKeyMode pkMode,
-      final List<String> configuredPkFields,
-      final Set<String> fieldsWhitelist,
-      final SchemaPair schemaPair
-  ) {
-    return extract(
-        tableName,
-        pkMode,
-        configuredPkFields,
-        fieldsWhitelist,
-        DEFAULT_STRING_VALUE_COLUMN_NAME,
-        schemaPair.keySchema,
-        schemaPair.valueSchema
-    );
-  }
-
   public static FieldsMetadata extract(
       final String tableName,
       final JdbcSinkConfig.PrimaryKeyMode pkMode,
@@ -93,25 +73,6 @@ public class FieldsMetadata {
         stringValueColumnName,
         schemaPair.keySchema,
         schemaPair.valueSchema
-    );
-  }
-
-  public static FieldsMetadata extract(
-      final String tableName,
-      final JdbcSinkConfig.PrimaryKeyMode pkMode,
-      final List<String> configuredPkFields,
-      final Set<String> fieldsWhitelist,
-      final Schema keySchema,
-      final Schema valueSchema
-  ) {
-    return extract(
-        tableName,
-        pkMode,
-        configuredPkFields,
-        fieldsWhitelist,
-        DEFAULT_STRING_VALUE_COLUMN_NAME,
-        keySchema,
-        valueSchema
     );
   }
 
@@ -169,6 +130,17 @@ public class FieldsMetadata {
             JdbcSinkConfig.STRING_OUTPUT_VALUE_COLUMN_NAME,
             stringValueColumnName,
             tableName
+        ));
+      }
+      if (!fieldsWhitelist.isEmpty() && !fieldsWhitelist.contains(stringValueColumnName)) {
+        throw new ConnectException(String.format(
+            "fields.whitelist=%s does not include the configured %s '%s' for table '%s'. "
+            + "Either add '%s' to fields.whitelist or remove the whitelist.",
+            fieldsWhitelist,
+            JdbcSinkConfig.STRING_OUTPUT_VALUE_COLUMN_NAME,
+            stringValueColumnName,
+            tableName,
+            stringValueColumnName
         ));
       }
       nonKeyFieldNames.add(stringValueColumnName);

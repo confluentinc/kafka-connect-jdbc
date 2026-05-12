@@ -268,7 +268,7 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "can be used.";
 
   public static final String STRING_OUTPUT_VALUE_COLUMN_NAME = "string.output.value.column.name";
-  public static final String STRING_OUTPUT_VALUE_COLUMN_NAME_DEFAULT = "recordValue";
+  public static final String STRING_OUTPUT_VALUE_COLUMN_NAME_DEFAULT = "record_value";
   private static final String STRING_OUTPUT_VALUE_COLUMN_NAME_DOC =
       "When the Kafka record value uses the String schema (e.g. records produced with "
       + "StringConverter), the connector writes the value into a single column with this name. "

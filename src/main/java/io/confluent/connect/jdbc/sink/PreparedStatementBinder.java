@@ -108,11 +108,11 @@ public class PreparedStatementBinder implements StatementBinder {
         case INSERT:
         case UPSERT:
           index = bindKeyFields(record, index);
-          bindNonKeyFields(record, valueStruct, isStringValue, index);
+          bindNonKeyFields(record, valueStruct, index);
           break;
 
         case UPDATE:
-          index = bindNonKeyFields(record, valueStruct, isStringValue, index);
+          index = bindNonKeyFields(record, valueStruct, index);
           bindKeyFields(record, index);
           break;
         default:
@@ -173,11 +173,11 @@ public class PreparedStatementBinder implements StatementBinder {
   protected int bindNonKeyFields(
       SinkRecord record,
       Struct valueStruct,
-      boolean isStringValue,
       int index
   ) throws SQLException {
     for (final String fieldName : fieldsMetadata.nonKeyFieldNames) {
-      if (isStringValue) {
+      if (valueStruct == null) {
+        // String-value record: bind the raw value into the synthetic column
         bindField(index++, record.valueSchema(), record.value(), fieldName);
       } else {
         final Field field = record.valueSchema().field(fieldName);

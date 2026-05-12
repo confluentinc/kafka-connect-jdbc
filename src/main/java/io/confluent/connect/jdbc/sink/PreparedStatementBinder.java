@@ -89,8 +89,10 @@ public class PreparedStatementBinder implements StatementBinder {
 
   @Override
   public void bindRecord(SinkRecord record) throws SQLException {
-    final Struct valueStruct = (Struct) record.value();
-    final boolean isDelete = isNull(valueStruct);
+    final boolean isStringValue = record.valueSchema() != null
+        && record.valueSchema().type() == Schema.Type.STRING;
+    final Struct valueStruct = isStringValue ? null : (Struct) record.value();
+    final boolean isDelete = isNull(record.value());
     // Assumption: the relevant SQL has placeholders for keyFieldNames first followed by
     //             nonKeyFieldNames, in iteration order for all INSERT/ UPSERT queries
     //             the relevant SQL has placeholders for keyFieldNames,
@@ -174,11 +176,16 @@ public class PreparedStatementBinder implements StatementBinder {
       int index
   ) throws SQLException {
     for (final String fieldName : fieldsMetadata.nonKeyFieldNames) {
-      final Field field = record.valueSchema().field(fieldName);
-      Object objectValue = this.replaceNullWithDefault
-              ? valueStruct.get(field)
-              : valueStruct.getWithoutDefault(field.name());
-      bindField(index++, field.schema(), objectValue, fieldName);
+      if (valueStruct == null) {
+        // String-value record: bind the raw value into the synthetic column
+        bindField(index++, record.valueSchema(), record.value(), fieldName);
+      } else {
+        final Field field = record.valueSchema().field(fieldName);
+        Object objectValue = this.replaceNullWithDefault
+                ? valueStruct.get(field)
+                : valueStruct.getWithoutDefault(field.name());
+        bindField(index++, field.schema(), objectValue, fieldName);
+      }
     }
     return index;
   }

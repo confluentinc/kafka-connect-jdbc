@@ -23,7 +23,9 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.SQLTimeoutException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -1213,7 +1215,7 @@ public class JdbcSourceConnectorValidationTest {
     props.put(QUERY_CONFIG, "SELECT id, name FROM users WHERE active = true");
 
     DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
-    Connection mockConnection = EasyMock.createMock(Connection.class);
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
 
     EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
     mockDialect.validateQuery(mockConnection, "SELECT id, name FROM users WHERE active = true");
@@ -1236,7 +1238,7 @@ public class JdbcSourceConnectorValidationTest {
     props.put(QUERY_CONFIG, "SELECT * FROM nonexistent_table");
 
     DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
-    Connection mockConnection = EasyMock.createMock(Connection.class);
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
 
     EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
     mockDialect.validateQuery(mockConnection, "SELECT * FROM nonexistent_table");
@@ -1299,11 +1301,140 @@ public class JdbcSourceConnectorValidationTest {
     props.put(QUERY_MASKED_CONFIG, "SELECT * FROM sensitive_data");
 
     DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
-    Connection mockConnection = EasyMock.createMock(Connection.class);
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
 
     EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
     mockDialect.validateQuery(mockConnection, "SELECT * FROM sensitive_data");
     EasyMock.expectLastCall();
+    mockConnection.close();
+    EasyMock.expectLastCall();
+    mockDialect.close();
+    EasyMock.expectLastCall();
+
+    EasyMock.replay(mockDialect, mockConnection);
+    validateWithMockDialect(mockDialect);
+    EasyMock.verify(mockDialect, mockConnection);
+
+    assertNoErrors();
+  }
+
+  // ========== getMetaData() Shadow Probe Tests ==========
+  // The probe is invoked from validateQuerySemantics' finally block. It must
+  // never affect the user-visible validation result, regardless of what the
+  // probe itself encounters (success, SQLException, SQLTimeoutException,
+  // unexpected RuntimeException).
+
+  @Test
+  public void shadowProbe_failureDoesNotAffectPrimarySuccess() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM users");
+
+    DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+    PreparedStatement shadowStmt = EasyMock.createNiceMock(PreparedStatement.class);
+
+    // Primary validation succeeds.
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, "SELECT * FROM users");
+    EasyMock.expectLastCall();
+    // Shadow probe: prepareStatement is called, then setQueryTimeout, then
+    // getMetaData throws. The probe must swallow the failure.
+    EasyMock.expect(mockConnection.prepareStatement("SELECT * FROM users"))
+        .andReturn(shadowStmt);
+    EasyMock.expect(shadowStmt.getMetaData())
+        .andThrow(new SQLException("driver-side failure", "08006", 17002));
+    mockConnection.close();
+    EasyMock.expectLastCall();
+    mockDialect.close();
+    EasyMock.expectLastCall();
+
+    EasyMock.replay(mockDialect, mockConnection, shadowStmt);
+    validateWithMockDialect(mockDialect);
+    EasyMock.verify(mockDialect, mockConnection, shadowStmt);
+
+    // Shadow failure must not register as a validation error.
+    assertNoErrors();
+  }
+
+  @Test
+  public void shadowProbe_timeoutDoesNotAffectPrimarySuccess() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM users");
+
+    DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+    PreparedStatement shadowStmt = EasyMock.createNiceMock(PreparedStatement.class);
+
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, "SELECT * FROM users");
+    EasyMock.expectLastCall();
+    EasyMock.expect(mockConnection.prepareStatement("SELECT * FROM users"))
+        .andReturn(shadowStmt);
+    EasyMock.expect(shadowStmt.getMetaData())
+        .andThrow(new SQLTimeoutException("query timed out", "57014"));
+    mockConnection.close();
+    EasyMock.expectLastCall();
+    mockDialect.close();
+    EasyMock.expectLastCall();
+
+    EasyMock.replay(mockDialect, mockConnection, shadowStmt);
+    validateWithMockDialect(mockDialect);
+    EasyMock.verify(mockDialect, mockConnection, shadowStmt);
+
+    assertNoErrors();
+  }
+
+  @Test
+  public void shadowProbe_runsAndIsSwallowedWhenPrimaryFails() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM nonexistent_table");
+
+    DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+    PreparedStatement shadowStmt = EasyMock.createNiceMock(PreparedStatement.class);
+
+    // Primary validation fails.
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, "SELECT * FROM nonexistent_table");
+    EasyMock.expectLastCall().andThrow(new SQLException(
+        "Table 'nonexistent_table' doesn't exist", "42S02"));
+    // Shadow probe still runs in finally and also fails; must not mask the
+    // primary's user-visible error.
+    EasyMock.expect(mockConnection.prepareStatement("SELECT * FROM nonexistent_table"))
+        .andReturn(shadowStmt);
+    EasyMock.expect(shadowStmt.getMetaData())
+        .andThrow(new SQLException("does not exist", "42S02"));
+    mockConnection.close();
+    EasyMock.expectLastCall();
+    mockDialect.close();
+    EasyMock.expectLastCall();
+
+    EasyMock.replay(mockDialect, mockConnection, shadowStmt);
+    validateWithMockDialect(mockDialect);
+    EasyMock.verify(mockDialect, mockConnection, shadowStmt);
+
+    // Primary's SQLState 42S02 surfaces to the user; shadow does not interfere.
+    assertErrors(QUERY_CONFIG, 1);
+    ConfigValue queryConfigValue = valueFor(QUERY_CONFIG);
+    assertTrue(queryConfigValue.errorMessages().get(0).contains("not valid"));
+    assertTrue(queryConfigValue.errorMessages().get(0).contains("SQLState: 42S02"));
+  }
+
+  @Test
+  public void shadowProbe_runtimeExceptionFromDriverIsSwallowed() throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM users");
+
+    DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, "SELECT * FROM users");
+    EasyMock.expectLastCall();
+    // Driver throws an unchecked exception (e.g. NPE in a buggy JDBC impl).
+    // The probe's catch (Exception) arm must swallow it.
+    EasyMock.expect(mockConnection.prepareStatement("SELECT * FROM users"))
+        .andThrow(new RuntimeException("driver bug"));
     mockConnection.close();
     EasyMock.expectLastCall();
     mockDialect.close();

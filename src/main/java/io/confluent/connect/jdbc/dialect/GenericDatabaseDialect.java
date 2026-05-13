@@ -1946,31 +1946,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       List<ColumnId> columns
   ) throws ConnectException { }
 
-  /**
-   * Wrap the user query as a derived table and execute it under a constant-false
-   * predicate. The optimiser short-circuits before scanning data, so the probe
-   * validates parse, object resolution, type compatibility, and {@code SELECT}
-   * permissions at near-zero I/O cost and without firing any side effects in the
-   * user query. Uses only ANSI SQL, so a single implementation covers every dialect.
-   */
-  @Override
-  public void validateQuery(Connection connection, String query) throws SQLException {
-    final String wrapped = "SELECT * FROM (" + stripTrailingSemicolons(query)
-        + ") jdbc_validation_subquery WHERE 1=0";
-    try (Statement stmt = connection.createStatement();
-         ResultSet rs = stmt.executeQuery(wrapped)) {
-      glog.trace("Query validation successful for '{}'",
-          shouldRedactSensitiveLogs(query));
-    }
-  }
-
-  /**
-   * Strip trailing semicolons and whitespace so the query can be wrapped as a subquery.
-   */
-  private static String stripTrailingSemicolons(String query) {
-    return query.replaceAll("[;\\s]+$", "");
-  }
-
   protected List<String> extractPrimaryKeyFieldNames(Collection<SinkRecordField> fields) {
     final List<String> pks = new ArrayList<>();
     for (SinkRecordField f : fields) {

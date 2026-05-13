@@ -31,7 +31,9 @@ import org.testcontainers.shaded.com.google.common.collect.ImmutableList;
 
 import java.math.BigDecimal;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
@@ -740,40 +742,49 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
   }
 
   // ========== validateQuery Tests ==========
-  // The dialect wraps the user query in a derived table under WHERE 1=0; this single
-  // ANSI form is shared by every dialect that inherits GenericDatabaseDialect.
+  // Validation delegates to PreparedStatement.getMetaData(), which on every
+  // supported JDBC driver forces a server interaction that compiles the query
+  // (parse + object resolution + type check + permission check). The user
+  // query is passed through unmodified -- no derived-table wrap, so there are
+  // no false positives from ORDER BY, JOIN duplicate columns, unaliased
+  // computed columns, FOR UPDATE, etc.
 
   @Test
-  public void validateQuery_shouldExecuteConstantFalseWrap() throws SQLException {
+  public void validateQuery_shouldDelegateToGetMetaData() throws SQLException {
     Connection mockConnection = EasyMock.createMock(Connection.class);
-    Statement mockStmt = EasyMock.createNiceMock(Statement.class);
-    ResultSet mockRs = EasyMock.createNiceMock(ResultSet.class);
-    String expectedWrap =
-        "SELECT * FROM (SELECT * FROM users) jdbc_validation_subquery WHERE 1=0";
+    PreparedStatement mockStmt = EasyMock.createMock(PreparedStatement.class);
+    ResultSetMetaData mockMd = EasyMock.createNiceMock(ResultSetMetaData.class);
+    String query = "SELECT * FROM users";
 
-    expect(mockConnection.createStatement()).andReturn(mockStmt);
-    expect(mockStmt.executeQuery(expectedWrap)).andReturn(mockRs);
-    replay(mockConnection, mockStmt, mockRs);
+    expect(mockConnection.prepareStatement(query)).andReturn(mockStmt);
+    expect(mockStmt.getMetaData()).andReturn(mockMd);
+    mockStmt.close();
+    EasyMock.expectLastCall();
+    replay(mockConnection, mockStmt, mockMd);
 
-    dialect.validateQuery(mockConnection, "SELECT * FROM users;\n");
+    dialect.validateQuery(mockConnection, query);
 
-    verify(mockConnection, mockStmt, mockRs);
+    verify(mockConnection, mockStmt, mockMd);
   }
 
   @Test
-  public void validateQuery_shouldPropagateSqlExceptionFromDatabase() throws SQLException {
+  public void validateQuery_shouldPropagateSqlExceptionFromGetMetaData()
+      throws SQLException {
+    // When the user query references a missing table or is otherwise invalid,
+    // getMetaData() throws SQLException; the exception must propagate.
     Connection mockConnection = EasyMock.createMock(Connection.class);
-    Statement mockStmt = EasyMock.createNiceMock(Statement.class);
-    String expectedWrap =
-        "SELECT * FROM (SELECT * FROM nonexistent) jdbc_validation_subquery WHERE 1=0";
+    PreparedStatement mockStmt = EasyMock.createMock(PreparedStatement.class);
+    String query = "SELECT * FROM nonexistent";
 
-    expect(mockConnection.createStatement()).andReturn(mockStmt);
-    expect(mockStmt.executeQuery(expectedWrap))
+    expect(mockConnection.prepareStatement(query)).andReturn(mockStmt);
+    expect(mockStmt.getMetaData())
         .andThrow(new SQLException("table not found", "42S02"));
+    mockStmt.close();
+    EasyMock.expectLastCall();
     replay(mockConnection, mockStmt);
 
     try {
-      dialect.validateQuery(mockConnection, "SELECT * FROM nonexistent");
+      dialect.validateQuery(mockConnection, query);
       org.junit.Assert.fail("Expected SQLException to be thrown");
     } catch (SQLException e) {
       assertEquals("42S02", e.getSQLState());

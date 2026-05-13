@@ -707,9 +707,16 @@ public interface DatabaseDialect extends ConnectionProvider {
   String resolveSynonym(Connection connection, String synonymName) throws SQLException;
 
   /**
-   * Validate the query with a low-cost ANSI probe that wraps it as a derived table
-   * under a constant-false predicate. The default below is a {@code prepareStatement}
-   * fallback for custom dialects that do not extend {@code GenericDatabaseDialect}.
+   * Validate the user-supplied SQL by asking the driver to describe its result-set
+   * shape via {@link PreparedStatement#getMetaData()}. Every supported driver
+   * services this call by having the database compile the query (parse, resolve
+   * objects, check types, verify {@code SELECT} permission), so any problem
+   * surfaces as a {@link SQLException} without the rows being scanned.
+   *
+   * <p>The user query is passed through unmodified, which avoids the false
+   * positives that wrap-based probes suffer from (top-level {@code ORDER BY}
+   * on SQL Server, duplicate columns from {@code SELECT *} over JOINs,
+   * unaliased computed columns, {@code FOR UPDATE}, and so on).
    *
    * @param connection the database connection; may not be null
    * @param query      the SQL query to validate; may not be null
@@ -718,7 +725,7 @@ public interface DatabaseDialect extends ConnectionProvider {
    */
   default void validateQuery(Connection connection, String query) throws SQLException {
     try (PreparedStatement stmt = connection.prepareStatement(query)) {
-      // Preparing surfaces syntax errors as SQLException; no execution needed.
+      stmt.getMetaData();
     }
   }
 }

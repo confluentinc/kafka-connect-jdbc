@@ -117,6 +117,7 @@ public class BufferedRecords {
           config.pkMode,
           config.pkFields,
           config.fieldsWhitelist,
+          config.stringOutputValueColumnName,
           schemaPair
       );
       dbStructure.createOrAmendIfNecessary(

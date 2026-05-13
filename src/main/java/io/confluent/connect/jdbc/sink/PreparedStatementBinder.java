@@ -89,9 +89,6 @@ public class PreparedStatementBinder implements StatementBinder {
 
   @Override
   public void bindRecord(SinkRecord record) throws SQLException {
-    final boolean isStringValue = record.valueSchema() != null
-        && record.valueSchema().type() == Schema.Type.STRING;
-    final Struct valueStruct = isStringValue ? null : (Struct) record.value();
     final boolean isDelete = isNull(record.value());
     // Assumption: the relevant SQL has placeholders for keyFieldNames first followed by
     //             nonKeyFieldNames, in iteration order for all INSERT/ UPSERT queries
@@ -108,11 +105,11 @@ public class PreparedStatementBinder implements StatementBinder {
         case INSERT:
         case UPSERT:
           index = bindKeyFields(record, index);
-          bindNonKeyFields(record, valueStruct, index);
+          bindNonKeyFields(record, index);
           break;
 
         case UPDATE:
-          index = bindNonKeyFields(record, valueStruct, index);
+          index = bindNonKeyFields(record, index);
           bindKeyFields(record, index);
           break;
         default:
@@ -172,14 +169,15 @@ public class PreparedStatementBinder implements StatementBinder {
 
   protected int bindNonKeyFields(
       SinkRecord record,
-      Struct valueStruct,
       int index
   ) throws SQLException {
-    for (final String fieldName : fieldsMetadata.nonKeyFieldNames) {
-      if (valueStruct == null) {
-        // String-value record: bind the raw value into the synthetic column
+    if (record.valueSchema().type() == Schema.Type.STRING) {
+      for (final String fieldName : fieldsMetadata.nonKeyFieldNames) {
         bindField(index++, record.valueSchema(), record.value(), fieldName);
-      } else {
+      }
+    } else {
+      final Struct valueStruct = (Struct) record.value();
+      for (final String fieldName : fieldsMetadata.nonKeyFieldNames) {
         final Field field = record.valueSchema().field(fieldName);
         Object objectValue = this.replaceNullWithDefault
                 ? valueStruct.get(field)

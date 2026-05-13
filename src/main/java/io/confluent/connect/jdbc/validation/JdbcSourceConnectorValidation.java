@@ -362,10 +362,11 @@ public class JdbcSourceConnectorValidation {
   }
 
   /**
-   * Validate the user's custom query against the database by performing a lightweight
-   * semantic check using the database-specific EXPLAIN mechanism. This validates:
+   * Validate the user query via the dialect. Surfaces syntax, missing-object
+   * and {@code SELECT}-permission errors without scanning user data.
    *
-   * @return true if validation passes or no query is configured, false if validation fails
+   * @return {@code true} if validation passes or no query is configured;
+   *         {@code false} on {@link SQLException}
    */
   protected boolean validateQuerySemantics() {
     Optional<String> queryVal = config.getQuery();

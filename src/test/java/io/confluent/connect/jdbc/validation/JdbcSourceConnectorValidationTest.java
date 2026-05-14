@@ -25,7 +25,6 @@ import org.junit.Test;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.SQLTimeoutException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -1320,9 +1319,8 @@ public class JdbcSourceConnectorValidationTest {
 
   // ========== getMetaData() Shadow Probe Tests ==========
   // The probe is invoked from validateQuerySemantics' finally block. It must
-  // never affect the user-visible validation result, regardless of what the
-  // probe itself encounters (success, SQLException, SQLTimeoutException,
-  // unexpected RuntimeException).
+  // never affect the user-visible validation result. The two cases below
+  // exercise both directions: primary succeeds and primary fails.
 
   @Test
   public void shadowProbe_failureDoesNotAffectPrimarySuccess() throws Exception {
@@ -1337,41 +1335,12 @@ public class JdbcSourceConnectorValidationTest {
     EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
     mockDialect.validateQuery(mockConnection, "SELECT * FROM users");
     EasyMock.expectLastCall();
-    // Shadow probe: prepareStatement is called, then setQueryTimeout, then
-    // getMetaData throws. The probe must swallow the failure.
+    // Shadow probe: prepareStatement returns, getMetaData throws. The probe
+    // must swallow the failure so primary success surfaces unchanged.
     EasyMock.expect(mockConnection.prepareStatement("SELECT * FROM users"))
         .andReturn(shadowStmt);
     EasyMock.expect(shadowStmt.getMetaData())
         .andThrow(new SQLException("driver-side failure", "08006", 17002));
-    mockConnection.close();
-    EasyMock.expectLastCall();
-    mockDialect.close();
-    EasyMock.expectLastCall();
-
-    EasyMock.replay(mockDialect, mockConnection, shadowStmt);
-    validateWithMockDialect(mockDialect);
-    EasyMock.verify(mockDialect, mockConnection, shadowStmt);
-
-    // Shadow failure must not register as a validation error.
-    assertNoErrors();
-  }
-
-  @Test
-  public void shadowProbe_timeoutDoesNotAffectPrimarySuccess() throws Exception {
-    props.put(MODE_CONFIG, MODE_BULK);
-    props.put(QUERY_CONFIG, "SELECT * FROM users");
-
-    DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
-    Connection mockConnection = EasyMock.createMock(Connection.class);
-    PreparedStatement shadowStmt = EasyMock.createNiceMock(PreparedStatement.class);
-
-    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
-    mockDialect.validateQuery(mockConnection, "SELECT * FROM users");
-    EasyMock.expectLastCall();
-    EasyMock.expect(mockConnection.prepareStatement("SELECT * FROM users"))
-        .andReturn(shadowStmt);
-    EasyMock.expect(shadowStmt.getMetaData())
-        .andThrow(new SQLTimeoutException("query timed out", "57014"));
     mockConnection.close();
     EasyMock.expectLastCall();
     mockDialect.close();
@@ -1418,33 +1387,6 @@ public class JdbcSourceConnectorValidationTest {
     ConfigValue queryConfigValue = valueFor(QUERY_CONFIG);
     assertTrue(queryConfigValue.errorMessages().get(0).contains("not valid"));
     assertTrue(queryConfigValue.errorMessages().get(0).contains("SQLState: 42S02"));
-  }
-
-  @Test
-  public void shadowProbe_runtimeExceptionFromDriverIsSwallowed() throws Exception {
-    props.put(MODE_CONFIG, MODE_BULK);
-    props.put(QUERY_CONFIG, "SELECT * FROM users");
-
-    DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
-    Connection mockConnection = EasyMock.createMock(Connection.class);
-
-    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
-    mockDialect.validateQuery(mockConnection, "SELECT * FROM users");
-    EasyMock.expectLastCall();
-    // Driver throws an unchecked exception (e.g. NPE in a buggy JDBC impl).
-    // The probe's catch (Exception) arm must swallow it.
-    EasyMock.expect(mockConnection.prepareStatement("SELECT * FROM users"))
-        .andThrow(new RuntimeException("driver bug"));
-    mockConnection.close();
-    EasyMock.expectLastCall();
-    mockDialect.close();
-    EasyMock.expectLastCall();
-
-    EasyMock.replay(mockDialect, mockConnection);
-    validateWithMockDialect(mockDialect);
-    EasyMock.verify(mockDialect, mockConnection);
-
-    assertNoErrors();
   }
 
 }

@@ -46,7 +46,7 @@ public class JdbcSourceConnectorValidation {
   private static final Logger log = LoggerFactory.getLogger(JdbcSourceConnectorValidation.class);
   private static final Pattern SELECT_STATEMENT_PATTERN =
       Pattern.compile("(?is)^SELECT\\b");
-  private static final int SHADOW_QUERY_TIMEOUT_SECONDS = 60;
+  private static final int VALIDATE_QUERY_TIMEOUT_SECONDS = 60;
   protected JdbcSourceConnectorConfig config;
   protected Config validationResult;
   private final Map<String, String> connectorConfigs;
@@ -420,17 +420,13 @@ public class JdbcSourceConnectorValidation {
   }
 
   /**
-   * Run {@link PreparedStatement#getMetaData()} as a shadow validation against
-   * the same connection used for the primary {@code EXPLAIN}-based validation.
-   * Never throws; any failure is logged at {@code WARN} with non-sensitive
-   * metadata only (dialect, SQLState, vendor error code, duration, primary
-   * outcome). The query text and the driver's exception message are
-   * deliberately omitted.
-   *
-   * <p>{@link PreparedStatement#setQueryTimeout(int)} is set to bound server
-   * time, but is honoured by drivers on a best-effort basis — most respect it
-   * for {@code getMetaData()}, but a few only honour it for actual
-   * {@code executeQuery}/{@code executeUpdate}.
+   * Shadow probe via {@link PreparedStatement#getMetaData()} on the same
+   * connection used for the primary validation. Never throws — failures are
+   * caught and logged at {@code WARN} with non-sensitive metadata only
+   * (dialect, SQLState, vendor error code, duration, primary outcome); the
+   * query text and the driver's exception message are deliberately omitted.
+   * Bounded by {@link PreparedStatement#setQueryTimeout(int)}, which drivers
+   * honour on a best-effort basis for {@code getMetaData()}.
    */
   private void runGetMetaDataShadowProbe(
       Connection connection,
@@ -440,13 +436,13 @@ public class JdbcSourceConnectorValidation {
   ) {
     long startMs = System.currentTimeMillis();
     try (PreparedStatement stmt = connection.prepareStatement(query)) {
-      stmt.setQueryTimeout(SHADOW_QUERY_TIMEOUT_SECONDS);
+      stmt.setQueryTimeout(VALIDATE_QUERY_TIMEOUT_SECONDS);
       stmt.getMetaData();
     } catch (SQLTimeoutException e) {
       log.warn(
           "Query validation getMetaData() probe timed out "
               + "[dialect={}, primarySucceeded={}, timeoutSeconds={}, durationMs={}]",
-          dialectName, primarySucceeded, SHADOW_QUERY_TIMEOUT_SECONDS,
+          dialectName, primarySucceeded, VALIDATE_QUERY_TIMEOUT_SECONDS,
           System.currentTimeMillis() - startMs);
     } catch (SQLException e) {
       log.warn(

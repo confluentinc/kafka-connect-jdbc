@@ -89,8 +89,10 @@ public class PreparedStatementBinder implements StatementBinder {
 
   @Override
   public void bindRecord(SinkRecord record) throws SQLException {
-    final Struct valueStruct = (Struct) record.value();
-    final boolean isDelete = isNull(valueStruct);
+    final Struct valueStruct = record.valueSchema() != null
+        && record.valueSchema().type() == Schema.Type.STRING
+        ? null : (Struct) record.value();
+    final boolean isDelete = isNull(record.value());
     // Assumption: the relevant SQL has placeholders for keyFieldNames first followed by
     //             nonKeyFieldNames, in iteration order for all INSERT/ UPSERT queries
     //             the relevant SQL has placeholders for keyFieldNames,
@@ -173,12 +175,18 @@ public class PreparedStatementBinder implements StatementBinder {
       Struct valueStruct,
       int index
   ) throws SQLException {
-    for (final String fieldName : fieldsMetadata.nonKeyFieldNames) {
-      final Field field = record.valueSchema().field(fieldName);
-      Object objectValue = this.replaceNullWithDefault
-              ? valueStruct.get(field)
-              : valueStruct.getWithoutDefault(field.name());
-      bindField(index++, field.schema(), objectValue, fieldName);
+    if (record.valueSchema().type() == Schema.Type.STRING) {
+      for (final String fieldName : fieldsMetadata.nonKeyFieldNames) {
+        bindField(index++, record.valueSchema(), record.value(), fieldName);
+      }
+    } else {
+      for (final String fieldName : fieldsMetadata.nonKeyFieldNames) {
+        final Field field = record.valueSchema().field(fieldName);
+        Object objectValue = this.replaceNullWithDefault
+                ? valueStruct.get(field)
+                : valueStruct.getWithoutDefault(field.name());
+        bindField(index++, field.schema(), objectValue, fieldName);
+      }
     }
     return index;
   }

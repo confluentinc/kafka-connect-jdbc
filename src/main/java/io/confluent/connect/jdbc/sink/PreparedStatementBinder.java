@@ -89,6 +89,9 @@ public class PreparedStatementBinder implements StatementBinder {
 
   @Override
   public void bindRecord(SinkRecord record) throws SQLException {
+    final Struct valueStruct = record.valueSchema() != null
+        && record.valueSchema().type() == Schema.Type.STRING
+        ? null : (Struct) record.value();
     final boolean isDelete = isNull(record.value());
     // Assumption: the relevant SQL has placeholders for keyFieldNames first followed by
     //             nonKeyFieldNames, in iteration order for all INSERT/ UPSERT queries
@@ -105,11 +108,11 @@ public class PreparedStatementBinder implements StatementBinder {
         case INSERT:
         case UPSERT:
           index = bindKeyFields(record, index);
-          bindNonKeyFields(record, index);
+          bindNonKeyFields(record, valueStruct, index);
           break;
 
         case UPDATE:
-          index = bindNonKeyFields(record, index);
+          index = bindNonKeyFields(record, valueStruct, index);
           bindKeyFields(record, index);
           break;
         default:
@@ -169,6 +172,7 @@ public class PreparedStatementBinder implements StatementBinder {
 
   protected int bindNonKeyFields(
       SinkRecord record,
+      Struct valueStruct,
       int index
   ) throws SQLException {
     if (record.valueSchema().type() == Schema.Type.STRING) {
@@ -176,7 +180,6 @@ public class PreparedStatementBinder implements StatementBinder {
         bindField(index++, record.valueSchema(), record.value(), fieldName);
       }
     } else {
-      final Struct valueStruct = (Struct) record.value();
       for (final String fieldName : fieldsMetadata.nonKeyFieldNames) {
         final Field field = record.valueSchema().field(fieldName);
         Object objectValue = this.replaceNullWithDefault

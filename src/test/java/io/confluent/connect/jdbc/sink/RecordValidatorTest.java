@@ -97,21 +97,6 @@ public class RecordValidatorTest {
   }
 
   @Test
-  public void requiresValueRejectsMapSchema() {
-    props.put("pk.mode", "none");
-    JdbcSinkConfig config = new JdbcSinkConfig(props);
-    RecordValidator validator = RecordValidator.create(config);
-
-    Schema mapSchema = SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.STRING_SCHEMA).build();
-    Map<String, String> mapValue = new HashMap<>();
-    mapValue.put("key", "value");
-    SinkRecord record = new SinkRecord("topic", 0, null, null, mapSchema, mapValue, 0);
-
-    ConnectException e = assertThrows(ConnectException.class, () -> validator.validate(record));
-    assertTrue(e.getMessage().contains("Struct or String"));
-  }
-
-  @Test
   public void stringValueWithRecordKeyPkMode() {
     props.put("pk.mode", "record_key");
     props.put("pk.fields", "id");

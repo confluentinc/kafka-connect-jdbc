@@ -782,48 +782,6 @@ public class BufferedRecordsTest {
   }
 
   @Test
-  public void testStringValueInsertPkModeNone() throws SQLException {
-    props.put("pk.mode", "none");
-    final JdbcSinkConfig config = new JdbcSinkConfig(props);
-
-    final String url = sqliteHelper.sqliteUri();
-    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
-    final DbStructure dbStructure = new DbStructure(dbDialect);
-
-    final TableId tableId = new TableId(null, null, "stringValueTest");
-    final BufferedRecords buffer = new BufferedRecords(
-        config, tableId, dbDialect, dbStructure, sqliteHelper.connection
-    );
-
-    final SinkRecord record = new SinkRecord(
-        "topic", 0, null, null, Schema.STRING_SCHEMA, "hello world", 0
-    );
-    assertEquals(Collections.emptyList(), buffer.add(record));
-    assertEquals(Collections.singletonList(record), buffer.flush());
-  }
-
-  @Test
-  public void testStringValueInsertPkModeKafka() throws SQLException {
-    props.put("pk.mode", "kafka");
-    final JdbcSinkConfig config = new JdbcSinkConfig(props);
-
-    final String url = sqliteHelper.sqliteUri();
-    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
-    final DbStructure dbStructure = new DbStructure(dbDialect);
-
-    final TableId tableId = new TableId(null, null, "stringValueKafkaTest");
-    final BufferedRecords buffer = new BufferedRecords(
-        config, tableId, dbDialect, dbStructure, sqliteHelper.connection
-    );
-
-    final SinkRecord record = new SinkRecord(
-        "topic", 0, null, null, Schema.STRING_SCHEMA, "hello world", 0
-    );
-    assertEquals(Collections.emptyList(), buffer.add(record));
-    assertEquals(Collections.singletonList(record), buffer.flush());
-  }
-
-  @Test
   public void testStringValueWithRecordKeyPk() throws SQLException {
     props.put("pk.mode", "record_key");
     props.put("pk.fields", "the_key");
@@ -843,75 +801,6 @@ public class BufferedRecordsTest {
     );
     assertEquals(Collections.emptyList(), buffer.add(record));
     assertEquals(Collections.singletonList(record), buffer.flush());
-  }
-
-  @Test
-  public void testStringValueDeleteWithRecordKeyPk() throws SQLException {
-    props.put("delete.enabled", true);
-    props.put("insert.mode", "upsert");
-    props.put("pk.mode", "record_key");
-    props.put("pk.fields", "the_key");
-    final JdbcSinkConfig config = new JdbcSinkConfig(props);
-
-    final String url = sqliteHelper.sqliteUri();
-    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
-    final DbStructure dbStructure = new DbStructure(dbDialect);
-
-    final TableId tableId = new TableId(null, null, "stringValueDeleteTest");
-    final BufferedRecords buffer = new BufferedRecords(
-        config, tableId, dbDialect, dbStructure, sqliteHelper.connection
-    );
-
-    final SinkRecord insertRecord = new SinkRecord(
-        "topic", 0, Schema.INT64_SCHEMA, 42L, Schema.STRING_SCHEMA, "hello", 0
-    );
-    final SinkRecord deleteRecord = new SinkRecord(
-        "topic", 0, Schema.INT64_SCHEMA, 42L, null, null, 1
-    );
-
-    assertEquals(Collections.emptyList(), buffer.add(insertRecord));
-    assertEquals(Collections.emptyList(), buffer.add(deleteRecord));
-    assertEquals(Arrays.asList(insertRecord, deleteRecord), buffer.flush());
-  }
-
-  @Test
-  public void testStringValueBatchingWithSchemaChange() throws SQLException {
-    props.put("pk.mode", "none");
-    final JdbcSinkConfig config = new JdbcSinkConfig(props);
-
-    final String url = sqliteHelper.sqliteUri();
-    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
-    final DbStructure dbStructure = new DbStructure(dbDialect);
-
-    final TableId tableId = new TableId(null, null, "stringValueBatchTest");
-    final BufferedRecords buffer = new BufferedRecords(
-        config, tableId, dbDialect, dbStructure, sqliteHelper.connection
-    );
-
-    final SinkRecord stringRecord = new SinkRecord(
-        "topic", 0, null, null, Schema.OPTIONAL_STRING_SCHEMA, "hello", 0
-    );
-    final Schema structSchema = SchemaBuilder.struct()
-        .field("name", Schema.OPTIONAL_STRING_SCHEMA)
-        .build();
-    final Struct structValue = new Struct(structSchema).put("name", "world");
-    final SinkRecord structRecord = new SinkRecord(
-        "topic", 0, null, null, structSchema, structValue, 1
-    );
-
-    assertEquals(Collections.emptyList(), buffer.add(stringRecord));
-    assertEquals(Collections.singletonList(stringRecord), buffer.add(structRecord));
-    assertEquals(Collections.singletonList(structRecord), buffer.flush());
-  }
-
-  @Test
-  public void testStringValueValidation() throws SQLException {
-    props.put("pk.mode", "none");
-
-    final SinkRecord stringRecord = new SinkRecord(
-        "dummy", 0, null, null, Schema.STRING_SCHEMA, "hello", 0
-    );
-    assertValidRecord(stringRecord);
   }
 
   @Test

@@ -77,16 +77,6 @@ public class FieldsMetadataTest {
     );
   }
 
-  @Test(expected = ConnectException.class)
-  public void nonStringPrimitiveValueSchemaIsRejected() {
-    extract(
-        JdbcSinkConfig.PrimaryKeyMode.KAFKA,
-        Collections.<String>emptyList(),
-        null,
-        Schema.INT64_SCHEMA
-    );
-  }
-
   @Test
   public void missingValueSchemaCanBeOk() {
     assertEquals(

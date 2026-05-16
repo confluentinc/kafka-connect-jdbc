@@ -25,7 +25,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.SQLTimeoutException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -44,6 +46,7 @@ public class JdbcSourceConnectorValidation {
   private static final Logger log = LoggerFactory.getLogger(JdbcSourceConnectorValidation.class);
   private static final Pattern SELECT_STATEMENT_PATTERN =
       Pattern.compile("(?is)^SELECT\\b");
+  private static final int VALIDATE_QUERY_TIMEOUT_SECONDS = 60;
   protected JdbcSourceConnectorConfig config;
   protected Config validationResult;
   private final Map<String, String> connectorConfigs;
@@ -382,7 +385,19 @@ public class JdbcSourceConnectorValidation {
     try {
       dialect = createDialect();
       try (Connection connection = dialect.getConnection()) {
-        dialect.validateQuery(connection, query);
+        // The shadow probe must run regardless of the primary outcome, so it
+        // is invoked from the finally block; the original SQLException (if
+        // any) propagates afterwards to the outer catch.
+        boolean primarySucceeded = false;
+        try {
+          dialect.validateQuery(connection, query);
+          primarySucceeded = true;
+        } finally {
+          runGetMetaDataShadowProbe(
+              connection, query,
+              dialect.getClass().getSimpleName(),
+              primarySucceeded);
+        }
       }
       return true;
     } catch (SQLException e) {
@@ -401,6 +416,50 @@ public class JdbcSourceConnectorValidation {
       if (dialect != null) {
         dialect.close();
       }
+    }
+  }
+
+  /**
+   * Shadow probe via {@link PreparedStatement#getMetaData()} on the same
+   * connection used for the primary validation. Never throws — failures are
+   * caught and logged at {@code WARN} with non-sensitive metadata only
+   * (dialect, SQLState, vendor error code, duration, primary outcome); the
+   * query text and the driver's exception message are deliberately omitted.
+   * Bounded by {@link PreparedStatement#setQueryTimeout(int)}, which drivers
+   * honour on a best-effort basis for {@code getMetaData()}.
+   */
+  private void runGetMetaDataShadowProbe(
+      Connection connection,
+      String query,
+      String dialectName,
+      boolean primarySucceeded
+  ) {
+    long startMs = System.currentTimeMillis();
+    try (PreparedStatement stmt = connection.prepareStatement(query)) {
+      stmt.setQueryTimeout(VALIDATE_QUERY_TIMEOUT_SECONDS);
+      stmt.getMetaData();
+    } catch (SQLTimeoutException e) {
+      log.warn(
+          "Query validation getMetaData() probe timed out "
+              + "[dialect={}, primarySucceeded={}, timeoutSeconds={}, durationMs={}]",
+          dialectName, primarySucceeded, VALIDATE_QUERY_TIMEOUT_SECONDS,
+          System.currentTimeMillis() - startMs);
+    } catch (SQLException e) {
+      log.warn(
+          "Query validation getMetaData() probe failed "
+              + "[dialect={}, primarySucceeded={}, sqlState={}, errorCode={}, "
+              + "durationMs={}]",
+          dialectName, primarySucceeded,
+          e.getSQLState() == null ? "null" : e.getSQLState(),
+          e.getErrorCode(),
+          System.currentTimeMillis() - startMs);
+    } catch (Exception e) {
+      log.warn(
+          "Query validation getMetaData() probe failed unexpectedly "
+              + "[dialect={}, primarySucceeded={}, causeClass={}, durationMs={}]",
+          dialectName, primarySucceeded,
+          e.getClass().getSimpleName(),
+          System.currentTimeMillis() - startMs);
     }
   }
 

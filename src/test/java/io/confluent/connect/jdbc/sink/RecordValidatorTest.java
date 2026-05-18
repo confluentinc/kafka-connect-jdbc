@@ -162,27 +162,10 @@ public class RecordValidatorTest {
   }
 
   @Test
-  public void stringValueWithExplicitTimestampPrecisionModeIsRejected() {
-    props.put("pk.mode", "none");
-    props.put("timestamp.precision.mode", "nanoseconds");
-    JdbcSinkConfig config = new JdbcSinkConfig(props);
-    RecordValidator validator = RecordValidator.create(config);
-
-    SinkRecord record = new SinkRecord(
-        "topic", 0, null, null, Schema.STRING_SCHEMA, "hello", 0
-    );
-
-    ConnectException e = assertThrows(ConnectException.class, () -> validator.validate(record));
-    assertTrue(e.getMessage().contains("timestamp.precision.mode"));
-    assertTrue(e.getMessage().contains("not applicable to String values"));
-  }
-
-  @Test
   public void stringValueWithAllIncompatibleConfigsIsRejectedWithAllConfigsNamed() {
     props.put("pk.mode", "none");
     props.put("fields.whitelist", "field_a");
     props.put("timestamp.fields.list", "created_at");
-    props.put("timestamp.precision.mode", "nanoseconds");
     JdbcSinkConfig config = new JdbcSinkConfig(props);
     RecordValidator validator = RecordValidator.create(config);
 
@@ -193,7 +176,6 @@ public class RecordValidatorTest {
     ConnectException e = assertThrows(ConnectException.class, () -> validator.validate(record));
     assertTrue(e.getMessage().contains("fields.whitelist"));
     assertTrue(e.getMessage().contains("timestamp.fields.list"));
-    assertTrue(e.getMessage().contains("timestamp.precision.mode"));
   }
 
   @Test
@@ -203,7 +185,6 @@ public class RecordValidatorTest {
     props.put("pk.mode", "none");
     props.put("fields.whitelist", "name");
     props.put("timestamp.fields.list", "created_at");
-    props.put("timestamp.precision.mode", "nanoseconds");
     JdbcSinkConfig config = new JdbcSinkConfig(props);
     RecordValidator validator = RecordValidator.create(config);
 

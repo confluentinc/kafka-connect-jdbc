@@ -158,9 +158,6 @@ public interface RecordValidator {
     if (!config.timestampFieldsList.isEmpty()) {
       conflictingConfigs.add(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST);
     }
-    if (config.originals().containsKey(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG)) {
-      conflictingConfigs.add(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG);
-    }
     if (conflictingConfigs.isEmpty()) {
       return;
     }

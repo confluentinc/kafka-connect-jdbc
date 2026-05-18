@@ -21,6 +21,9 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @FunctionalInterface
 public interface RecordValidator {
 
@@ -79,14 +82,20 @@ public interface RecordValidator {
       Schema valueSchema = record.valueSchema();
       if (record.value() != null
           && valueSchema != null
-          && valueSchema.type() == Schema.Type.STRUCT) {
+          && (valueSchema.type() == Schema.Type.STRUCT
+              || valueSchema.type() == Schema.Type.STRING)) {
+        if (valueSchema.type() == Schema.Type.STRING) {
+          rejectIncompatibleStringValueConfigs(config);
+        }
         return;
       }
       throw new ConnectException(
           String.format(
-              "Sink connector '%s' is configured with '%s=%s' and '%s=%s' and therefore requires "
-              + "records with a non-null Struct value and non-null Struct schema, "
-              + "but found record at (topic='%s',partition=%d,offset=%d,timestamp=%d) "
+              "Sink connector '%s' is configured with '%s=%s' and "
+              + "'%s=%s' and therefore requires records with a non-null "
+              + "Struct or String value and non-null Struct or "
+              + "String schema, but found record at "
+              + "(topic='%s',partition=%d,offset=%d,timestamp=%d) "
               + "with a %s value and %s value schema.",
               config.connectorName(),
               JdbcSinkConfig.DELETE_ENABLED,
@@ -132,5 +141,37 @@ public interface RecordValidator {
           )
       );
     };
+  }
+
+  /**
+   * Reject records with a {@link Schema.Type#STRING} value when the connector is configured with
+   * field-level options that only apply to records whose value is a {@code Struct}. The
+   * synthetic single-column projection used for String values has no inner fields for these
+   * options to operate on; honoring them would be a silent no-op, so we fail fast on the first
+   * String record to show the misconfiguration.
+   */
+  static void rejectIncompatibleStringValueConfigs(JdbcSinkConfig config) {
+    final List<String> conflictingConfigs = new ArrayList<>();
+    if (!config.fieldsWhitelist.isEmpty()) {
+      conflictingConfigs.add(JdbcSinkConfig.FIELDS_WHITELIST);
+    }
+    if (!config.timestampFieldsList.isEmpty()) {
+      conflictingConfigs.add(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST);
+    }
+    if (config.originals().containsKey(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG)) {
+      conflictingConfigs.add(JdbcSinkConfig.TIMESTAMP_PRECISION_MODE_CONFIG);
+    }
+    if (conflictingConfigs.isEmpty()) {
+      return;
+    }
+    throw new ConnectException(
+        String.format(
+            "Sink connector '%s' is configured with field-level options that are not "
+            + "applicable to String values: %s. Remove these options, or have the upstream "
+            + "producer emit Struct values instead.",
+            config.connectorName(),
+            String.join(", ", conflictingConfigs)
+        )
+    );
   }
 }

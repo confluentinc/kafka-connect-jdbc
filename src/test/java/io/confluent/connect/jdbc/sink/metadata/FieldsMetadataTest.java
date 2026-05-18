@@ -399,50 +399,6 @@ public class FieldsMetadataTest {
     );
   }
 
-  @Test(expected = ConnectException.class)
-  public void stringValueWithWhitelistThatExcludesColumnIsRejected() {
-    FieldsMetadata.extract(
-        "table",
-        JdbcSinkConfig.PrimaryKeyMode.NONE,
-        Collections.<String>emptyList(),
-        Collections.singleton("other_field"),
-        JdbcSinkConfig.STRING_OUTPUT_VALUE_COLUMN_NAME_DEFAULT,
-        null,
-        Schema.STRING_SCHEMA
-    );
-  }
-
-  @Test
-  public void stringValueWithWhitelistThatIncludesColumnIsAccepted() {
-    FieldsMetadata metadata = FieldsMetadata.extract(
-        "table",
-        JdbcSinkConfig.PrimaryKeyMode.NONE,
-        Collections.<String>emptyList(),
-        Collections.singleton("payload"),
-        "payload",
-        null,
-        Schema.STRING_SCHEMA
-    );
-    assertEquals(Collections.singleton("payload"), metadata.nonKeyFieldNames);
-  }
-
-  @Test
-  public void stringValueWithEmptyWhitelistIsAccepted() {
-    FieldsMetadata metadata = FieldsMetadata.extract(
-        "table",
-        JdbcSinkConfig.PrimaryKeyMode.NONE,
-        Collections.<String>emptyList(),
-        Collections.<String>emptySet(),
-        JdbcSinkConfig.STRING_OUTPUT_VALUE_COLUMN_NAME_DEFAULT,
-        null,
-        Schema.STRING_SCHEMA
-    );
-    assertEquals(
-        Collections.singleton(JdbcSinkConfig.STRING_OUTPUT_VALUE_COLUMN_NAME_DEFAULT),
-        metadata.nonKeyFieldNames
-    );
-  }
-
   private static FieldsMetadata extract(JdbcSinkConfig.PrimaryKeyMode pkMode, List<String> pkFields, Schema keySchema, Schema valueSchema) {
     return extract(pkMode, pkFields, Collections.<String>emptySet(), keySchema, valueSchema);
   }

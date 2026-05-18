@@ -128,4 +128,92 @@ public class RecordValidatorTest {
     );
     validator.validate(deleteRecord);
   }
+
+  @Test
+  public void stringValueWithFieldsWhitelistIsRejected() {
+    props.put("pk.mode", "none");
+    props.put("fields.whitelist", "field_a,field_b");
+    JdbcSinkConfig config = new JdbcSinkConfig(props);
+    RecordValidator validator = RecordValidator.create(config);
+
+    SinkRecord record = new SinkRecord(
+        "topic", 0, null, null, Schema.STRING_SCHEMA, "hello", 0
+    );
+
+    ConnectException e = assertThrows(ConnectException.class, () -> validator.validate(record));
+    assertTrue(e.getMessage().contains("fields.whitelist"));
+    assertTrue(e.getMessage().contains("not applicable to String values"));
+  }
+
+  @Test
+  public void stringValueWithTimestampFieldsListIsRejected() {
+    props.put("pk.mode", "none");
+    props.put("timestamp.fields.list", "created_at");
+    JdbcSinkConfig config = new JdbcSinkConfig(props);
+    RecordValidator validator = RecordValidator.create(config);
+
+    SinkRecord record = new SinkRecord(
+        "topic", 0, null, null, Schema.STRING_SCHEMA, "hello", 0
+    );
+
+    ConnectException e = assertThrows(ConnectException.class, () -> validator.validate(record));
+    assertTrue(e.getMessage().contains("timestamp.fields.list"));
+    assertTrue(e.getMessage().contains("not applicable to String values"));
+  }
+
+  @Test
+  public void stringValueWithExplicitTimestampPrecisionModeIsRejected() {
+    props.put("pk.mode", "none");
+    props.put("timestamp.precision.mode", "nanoseconds");
+    JdbcSinkConfig config = new JdbcSinkConfig(props);
+    RecordValidator validator = RecordValidator.create(config);
+
+    SinkRecord record = new SinkRecord(
+        "topic", 0, null, null, Schema.STRING_SCHEMA, "hello", 0
+    );
+
+    ConnectException e = assertThrows(ConnectException.class, () -> validator.validate(record));
+    assertTrue(e.getMessage().contains("timestamp.precision.mode"));
+    assertTrue(e.getMessage().contains("not applicable to String values"));
+  }
+
+  @Test
+  public void stringValueWithAllIncompatibleConfigsIsRejectedWithAllConfigsNamed() {
+    props.put("pk.mode", "none");
+    props.put("fields.whitelist", "field_a");
+    props.put("timestamp.fields.list", "created_at");
+    props.put("timestamp.precision.mode", "nanoseconds");
+    JdbcSinkConfig config = new JdbcSinkConfig(props);
+    RecordValidator validator = RecordValidator.create(config);
+
+    SinkRecord record = new SinkRecord(
+        "topic", 0, null, null, Schema.STRING_SCHEMA, "hello", 0
+    );
+
+    ConnectException e = assertThrows(ConnectException.class, () -> validator.validate(record));
+    assertTrue(e.getMessage().contains("fields.whitelist"));
+    assertTrue(e.getMessage().contains("timestamp.fields.list"));
+    assertTrue(e.getMessage().contains("timestamp.precision.mode"));
+  }
+
+  @Test
+  public void structValueWithIncompatibleConfigsIsAccepted() {
+    // The same configs that fail for STRING values are perfectly valid for STRUCT values —
+    // the rejection must only fire on the STRING path.
+    props.put("pk.mode", "none");
+    props.put("fields.whitelist", "name");
+    props.put("timestamp.fields.list", "created_at");
+    props.put("timestamp.precision.mode", "nanoseconds");
+    JdbcSinkConfig config = new JdbcSinkConfig(props);
+    RecordValidator validator = RecordValidator.create(config);
+
+    Schema valueSchema = SchemaBuilder.struct()
+        .field("name", Schema.STRING_SCHEMA)
+        .field("created_at", Schema.INT64_SCHEMA)
+        .build();
+    Struct value = new Struct(valueSchema).put("name", "test").put("created_at", 1L);
+    SinkRecord record = new SinkRecord("topic", 0, null, null, valueSchema, value, 0);
+
+    validator.validate(record);
+  }
 }

@@ -132,17 +132,6 @@ public class FieldsMetadata {
             tableName
         ));
       }
-      if (!fieldsWhitelist.isEmpty() && !fieldsWhitelist.contains(stringValueColumnName)) {
-        throw new ConnectException(String.format(
-            "fields.whitelist=%s does not include the configured %s '%s' for table '%s'. "
-            + "Either add '%s' to fields.whitelist or remove the whitelist.",
-            fieldsWhitelist,
-            JdbcSinkConfig.STRING_OUTPUT_VALUE_COLUMN_NAME,
-            stringValueColumnName,
-            tableName,
-            stringValueColumnName
-        ));
-      }
       nonKeyFieldNames.add(stringValueColumnName);
       allFields.put(
           stringValueColumnName,

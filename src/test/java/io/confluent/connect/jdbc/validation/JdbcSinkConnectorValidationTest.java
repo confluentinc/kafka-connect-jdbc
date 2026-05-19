@@ -81,14 +81,6 @@ public class JdbcSinkConnectorValidationTest {
                   }
                 }));
       }
-
-      private Optional<ConfigValue> configValue(Config config, String name) {
-        return config.configValues()
-            .stream()
-            .filter(cfg -> name.equals(cfg.name())
-                && cfg.errorMessages().isEmpty())
-            .findFirst();
-      }
     };
     results = validation.validate();
   }
@@ -145,14 +137,6 @@ public class JdbcSinkConnectorValidationTest {
       private boolean hasErrors() {
         return validationResult.configValues().stream()
             .anyMatch(configValue -> !configValue.errorMessages().isEmpty());
-      }
-
-      private Optional<ConfigValue> configValue(Config config, String name) {
-        return config.configValues()
-            .stream()
-            .filter(cfg -> name.equals(cfg.name())
-                && cfg.errorMessages().isEmpty())
-            .findFirst();
       }
     };
     results = validation.validate();

@@ -89,10 +89,10 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
         config = new JdbcSourceConnectorConfig(connectorConfigs);
       }
 
-      boolean validationResult = validateConnection(CONNECTION_URL_CONFIG)
-          && validateMultiConfigs()
+      boolean validationResult = validateMultiConfigs()
           && validateLegacyNewConfigCompatibility()
           && validateQueryConfigs()
+          && validateConnection(CONNECTION_URL_CONFIG)
           && validateQuerySemantics();
 
       if (validationResult && isUsingNewConfigs()) {

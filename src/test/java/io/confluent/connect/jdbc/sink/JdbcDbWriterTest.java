@@ -440,6 +440,71 @@ public class JdbcDbWriterTest {
   }
 
   @Test
+  public void multiTableOrderingPreservedWithForeignKeys() throws SQLException {
+    Map<String, String> props = new HashMap<>();
+    props.put("connection.url", sqliteHelper.sqliteUri());
+    props.put("auto.create", "true");
+    props.put("pk.mode", "record_key");
+    props.put("insert.mode", "insert");
+    props.put("table.name.format", "${topic}");
+
+    writer = newWriter(props);
+
+    // Enable foreign key constraints in SQLite
+    sqliteHelper.connection.createStatement().execute("PRAGMA foreign_keys = ON;");
+
+    // Create parent table
+    String createParent = "CREATE TABLE parents (id INTEGER PRIMARY KEY, name TEXT);";
+    sqliteHelper.createTable(createParent);
+
+    // Create child table with FK constraint
+    String createChild = "CREATE TABLE children (id INTEGER PRIMARY KEY, parent_id INTEGER, " +
+        "name TEXT, FOREIGN KEY(parent_id) REFERENCES parents(id));";
+    sqliteHelper.createTable(createChild);
+
+    Schema parentKeySchema = SchemaBuilder.struct().field("id", Schema.INT64_SCHEMA);
+    Schema parentValueSchema = SchemaBuilder.struct().field("name", Schema.STRING_SCHEMA).build();
+
+    Schema childKeySchema = SchemaBuilder.struct().field("id", Schema.INT64_SCHEMA);
+    Schema childValueSchema = SchemaBuilder.struct()
+        .field("parent_id", Schema.INT64_SCHEMA)
+        .field("name", Schema.STRING_SCHEMA)
+        .build();
+
+    // Create records in order: parent1, child1, parent2, child2
+    // This tests that records are written in the exact order received
+    SinkRecord parent1 = new SinkRecord("parents", 0,
+        parentKeySchema, new Struct(parentKeySchema).put("id", 1L),
+        parentValueSchema, new Struct(parentValueSchema).put("name", "Parent 1"),
+        0);
+
+    SinkRecord child1 = new SinkRecord("children", 0,
+        childKeySchema, new Struct(childKeySchema).put("id", 101L),
+        childValueSchema, new Struct(childValueSchema).put("parent_id", 1L).put("name", "Child 1"),
+        1);
+
+    SinkRecord parent2 = new SinkRecord("parents", 0,
+        parentKeySchema, new Struct(parentKeySchema).put("id", 2L),
+        parentValueSchema, new Struct(parentValueSchema).put("name", "Parent 2"),
+        2);
+
+    SinkRecord child2 = new SinkRecord("children", 0,
+        childKeySchema, new Struct(childKeySchema).put("id", 102L),
+        childValueSchema, new Struct(childValueSchema).put("parent_id", 2L).put("name", "Child 2"),
+        3);
+
+    // Write all records in a single batch - should preserve order and respect FK constraints
+    java.util.List<SinkRecord> records = java.util.Arrays.asList(parent1, child1, parent2, child2);
+    writer.write(records);
+
+    // Verify all records were inserted
+    assertEquals(2, sqliteHelper.select("SELECT COUNT(*) FROM parents",
+        rs -> assertEquals(2, rs.getInt(1))));
+    assertEquals(2, sqliteHelper.select("SELECT COUNT(*) FROM children",
+        rs -> assertEquals(2, rs.getInt(1))));
+  }
+
+  @Test
   public void sameRecordNTimes() throws SQLException {
     String testId = "sameRecordNTimes";
     String createTable = "CREATE TABLE " + testId + " (" +

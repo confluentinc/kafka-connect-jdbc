@@ -21,8 +21,6 @@ import org.apache.kafka.connect.sink.SinkRecord;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Optional;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
@@ -66,23 +64,38 @@ public class JdbcDbWriter {
     String schemaName = getSchemaSafe(connection).orElse(null);
     String catalogName = getCatalogSafe(connection).orElse(null);
     try {
-      final Map<TableId, BufferedRecords> bufferByTable = new HashMap<>();
+      // Process records in order, flushing when table changes to preserve ordering
+      // This ensures foreign key constraints are respected when records span multiple tables
+      BufferedRecords currentBuffer = null;
+      TableId currentTableId = null;
+
       for (SinkRecord record : records) {
         final TableId tableId = destinationTable(record.topic(), schemaName, catalogName);
-        BufferedRecords buffer = bufferByTable.get(tableId);
-        if (buffer == null) {
-          buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
-          bufferByTable.put(tableId, buffer);
+
+        // If switching to a different table, flush current buffer first to maintain order
+        if (currentBuffer != null && !tableId.equals(currentTableId)) {
+          log.debug("Flushing records in JDBC Writer for table ID: {}", currentTableId);
+          currentBuffer.flush();
+          currentBuffer.close();
+          currentBuffer = null;
         }
-        buffer.add(record);
+
+        // Create new buffer if needed for current table
+        if (currentBuffer == null) {
+          currentBuffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
+          currentTableId = tableId;
+        }
+
+        currentBuffer.add(record);
       }
-      for (Map.Entry<TableId, BufferedRecords> entry : bufferByTable.entrySet()) {
-        TableId tableId = entry.getKey();
-        BufferedRecords buffer = entry.getValue();
-        log.debug("Flushing records in JDBC Writer for table ID: {}", tableId);
-        buffer.flush();
-        buffer.close();
+
+      // Flush any remaining buffered records
+      if (currentBuffer != null) {
+        log.debug("Flushing records in JDBC Writer for table ID: {}", currentTableId);
+        currentBuffer.flush();
+        currentBuffer.close();
       }
+
       log.trace("Committing transaction");
       connection.commit();
     } catch (SQLException | TableAlterOrCreateException e) {

@@ -27,17 +27,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 
 import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.DELETE_ENABLED;
 import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.PK_MODE;
 import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.CONNECTION_URL;
 import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.PrimaryKeyMode.RECORD_KEY;
 
-public class JdbcSinkConnectorValidation {
+public class JdbcSinkConnectorValidation extends AbstractJdbcConnectorValidation {
   private static final Logger log = LoggerFactory.getLogger(JdbcSinkConnectorValidation.class);
   protected JdbcSinkConfig config;
-  protected Config validationResult;
   private final Map<String, String> connectorConfigs;
 
   public JdbcSinkConnectorValidation(JdbcSinkConfig config,
@@ -64,7 +62,7 @@ public class JdbcSinkConnectorValidation {
       if (config == null && connectorConfigs != null) {
         config = new JdbcSinkConfig(connectorConfigs);
       }
-      validateConnection();
+      validateConnection(CONNECTION_URL);
     }
 
     if (hasErrors()) {
@@ -99,33 +97,15 @@ public class JdbcSinkConnectorValidation {
             }));
   }
 
-  private void validateConnection() {
-    try (DatabaseDialect dialect = config.dialectName != null
-        && !config.dialectName.trim().isEmpty()
+  @Override
+  protected DatabaseDialect createDialect() {
+    return config.dialectName != null && !config.dialectName.trim().isEmpty()
         ? DatabaseDialects.create(config.dialectName, config)
-        : DatabaseDialects.findBestFor(config.connectionUrl, config)) {
-      dialect.getConnection();
-    } catch (Exception e) {
-      // Connection error - attach to connection.url config
-      configValue(validationResult, CONNECTION_URL)
-          .ifPresent(connectionUrl ->
-              connectionUrl.addErrorMessage(
-                  String.format("Could not connect to database. %s", e.getMessage())));
-      log.error("SQLException during validation", e);
-    }
+        : DatabaseDialects.findBestFor(config.connectionUrl, config);
   }
 
   private boolean hasErrors() {
     return validationResult.configValues().stream()
         .anyMatch(configValue -> !configValue.errorMessages().isEmpty());
-  }
-
-  /** only if individual validation passed. */
-  private Optional<ConfigValue> configValue(Config config, String name) {
-    return config.configValues()
-        .stream()
-        .filter(cfg -> name.equals(cfg.name())
-            && cfg.errorMessages().isEmpty())
-        .findFirst();
   }
 }

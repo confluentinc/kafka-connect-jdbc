@@ -169,6 +169,15 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final String NUMERIC_MAPPING_DISPLAY = "Map Numeric Values, Integral "
       + "or Decimal, By Precision and Scale";
 
+  public static final String SQL_COMPLEX_TYPES_ENABLE_CONFIG = "sql.complex.types.enable";
+  public static final boolean SQL_COMPLEX_TYPES_ENABLE_DEFAULT = false;
+  private static final String SQL_COMPLEX_TYPES_ENABLE_DOC =
+      "When enabled, the source connector maps native complex column types (e.g. PostgreSQL JSONB "
+      + "and JSON) to Connect Schema Map values instead of returning their textual representation "
+      + "as STRING. When disabled (the default), the column is emitted as STRING to preserve "
+      + "backwards compatibility with existing pipelines.";
+  private static final String SQL_COMPLEX_TYPES_ENABLE_DISPLAY = "Enable SQL Complex Types";
+
   private static final EnumRecommender NUMERIC_MAPPING_RECOMMENDER =
       EnumRecommender.in(NumericMapping.values());
 
@@ -854,7 +863,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         DATABASE_GROUP,
         ++orderInGroup,
         Width.MEDIUM,
-        DATE_CALENDAR_SYSTEM_DISPLAY);
+        DATE_CALENDAR_SYSTEM_DISPLAY
+    ).define(
+        SQL_COMPLEX_TYPES_ENABLE_CONFIG,
+        Type.BOOLEAN,
+        SQL_COMPLEX_TYPES_ENABLE_DEFAULT,
+        Importance.LOW,
+        SQL_COMPLEX_TYPES_ENABLE_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        SQL_COMPLEX_TYPES_ENABLE_DISPLAY);
   }
 
   private static final void addModeOptions(ConfigDef config) {

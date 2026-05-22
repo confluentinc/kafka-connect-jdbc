@@ -55,12 +55,21 @@ public final class ConnectJsonConverterUtil {
   }
 
   /**
-   * Parse a JSON string into a {@code Map<String,String>} where each value is the
-   * JSON-encoded representation of the corresponding top-level field.
+   * Parse a JSON string into a {@code Map<String,String>} where each top-level value is
+   * projected to a String according to its JSON type:
+   *
+   * <ul>
+   *   <li>JSON string → decoded text (no surrounding quotes), so a JSONB→MAP→JSONB
+   *       round-trip preserves the original literal.
+   *   <li>JSON number / boolean → its textual form ({@code "1"}, {@code "true"}).
+   *   <li>JSON object / array → its JSON-encoded text, so structure is preserved as a
+   *       sub-document inside the MAP value.
+   *   <li>JSON null → Java {@code null} map value.
+   * </ul>
    *
    * <p>Examples:
    * <ul>
-   *   <li>{@code {"a":1,"b":"x"}} → {@code {"a":"1", "b":"\"x\""}}
+   *   <li>{@code {"a":1,"b":"x"}} → {@code {"a":"1", "b":"x"}}
    *   <li>{@code {"sensor":{"temp":50}}} → {@code {"sensor":"{\"temp\":50}"}}
    * </ul>
    *
@@ -98,13 +107,9 @@ public final class ConnectJsonConverterUtil {
     if (node == null || node.isNull()) {
       return null;
     }
-    if (node.isTextual()) {
-      // Preserve quoted form so consumers can round-trip it back through a JSON parser.
-      try {
-        return MAPPER.writeValueAsString(node);
-      } catch (JsonProcessingException e) {
-        throw new DataException("Failed to encode JSON text node", e);
-      }
+    if (node.isValueNode()) {
+      // Scalars (string/number/boolean) → decoded text so a JSONB round-trip stays clean.
+      return node.asText();
     }
     try {
       return MAPPER.writeValueAsString(node);

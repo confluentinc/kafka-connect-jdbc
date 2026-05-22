@@ -32,14 +32,22 @@ import java.util.Properties;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import io.confluent.connect.jdbc.source.ColumnMapping;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
+import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.ConnectJsonConverterUtil;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.JdbcCredentials;
 import io.confluent.connect.jdbc.util.TableId;
+import org.apache.kafka.connect.data.Schema;
+import org.apache.kafka.connect.data.SchemaBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG;
 
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG;
 
@@ -119,6 +127,51 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   @Override
+  public String addFieldToSchema(
+      ColumnDefinition columnDefn,
+      SchemaBuilder builder
+  ) {
+    if (complexTypesEnabled() && isJsonColumn(columnDefn)) {
+      String fieldName = fieldNameFor(columnDefn);
+      SchemaBuilder mapBuilder = SchemaBuilder.map(
+          Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA);
+      if (columnDefn.isOptional()) {
+        mapBuilder.optional();
+      }
+      builder.field(fieldName, mapBuilder.build());
+      return fieldName;
+    }
+    return super.addFieldToSchema(columnDefn, builder);
+  }
+
+  @Override
+  protected ColumnConverter columnConverterFor(
+      ColumnMapping mapping,
+      ColumnDefinition defn,
+      int col,
+      boolean isJdbc4
+  ) {
+    if (complexTypesEnabled() && isJsonColumn(mapping.columnDefn())) {
+      return rs -> ConnectJsonConverterUtil.jsonStringToShallowMap(rs.getString(col));
+    }
+    return super.columnConverterFor(mapping, defn, col, isJdbc4);
+  }
+
+  protected boolean isJsonColumn(ColumnDefinition columnDefn) {
+    return "json".equalsIgnoreCase(columnDefn.typeName());
+  }
+
+  private boolean complexTypesEnabled() {
+    if (config instanceof JdbcSinkConfig) {
+      return ((JdbcSinkConfig) config).sqlComplexTypesEnable;
+    }
+    if (config instanceof JdbcSourceConnectorConfig) {
+      return config.getBoolean(SQL_COMPLEX_TYPES_ENABLE_CONFIG);
+    }
+    return false;
+  }
+
+  @Override
   protected String getSqlType(SinkRecordField field) {
     if (field.schemaName() != null) {
       switch (field.schemaName()) {
@@ -163,9 +216,47 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
         return "TEXT";
       case BYTES:
         return "VARBINARY(1024)";
+      case STRUCT:
+      case MAP:
+      case ARRAY:
+        if (config instanceof JdbcSinkConfig
+            && ((JdbcSinkConfig) config).sqlComplexTypesEnable) {
+          return "JSON";
+        }
+        return super.getSqlType(field);
       default:
         return super.getSqlType(field);
     }
+  }
+
+  @Override
+  protected boolean maybeBindPrimitive(
+      PreparedStatement statement,
+      int index,
+      org.apache.kafka.connect.data.Schema schema,
+      Object value,
+      String fieldName
+  ) throws SQLException {
+    if (isJsonBindCandidate(schema)) {
+      String json = ConnectJsonConverterUtil.connectValueToJson(schema, value);
+      if (json == null) {
+        statement.setNull(index, java.sql.Types.VARCHAR);
+      } else {
+        statement.setString(index, json);
+      }
+      return true;
+    }
+    return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
+  }
+
+  private boolean isJsonBindCandidate(org.apache.kafka.connect.data.Schema schema) {
+    org.apache.kafka.connect.data.Schema.Type type = schema.type();
+    boolean complex = type == org.apache.kafka.connect.data.Schema.Type.STRUCT
+        || type == org.apache.kafka.connect.data.Schema.Type.MAP
+        || type == org.apache.kafka.connect.data.Schema.Type.ARRAY;
+    return complex
+        && config instanceof JdbcSinkConfig
+        && ((JdbcSinkConfig) config).sqlComplexTypesEnable;
   }
 
   @Override

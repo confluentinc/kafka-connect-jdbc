@@ -44,11 +44,14 @@ public class ConnectJsonConverterUtilTest {
   }
 
   @Test
-  public void shallowMapPreservesScalarsAndNestedAsJsonStrings() {
-    String json = "{\"name\":\"sensor-1\",\"temp\":42,\"meta\":{\"loc\":\"x\"},\"tags\":[1,2]}";
+  public void shallowMapDecodesScalarsAndKeepsNestedAsJsonStrings() {
+    String json = "{\"name\":\"sensor-1\",\"temp\":42,\"on\":true,\"miss\":null,"
+        + "\"meta\":{\"loc\":\"x\"},\"tags\":[1,2]}";
     Map<String, String> result = ConnectJsonConverterUtil.jsonStringToShallowMap(json);
-    assertEquals("\"sensor-1\"", result.get("name"));
+    assertEquals("sensor-1", result.get("name"));
     assertEquals("42", result.get("temp"));
+    assertEquals("true", result.get("on"));
+    assertNull(result.get("miss"));
     assertEquals("{\"loc\":\"x\"}", result.get("meta"));
     assertEquals("[1,2]", result.get("tags"));
   }

@@ -21,6 +21,7 @@ import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.ConnectJsonConverterUtil;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
@@ -255,10 +256,29 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         // Some of these types will have fixed size, but we drop this from the schema conversion
         // since only fixed byte arrays can have a fixed size
         if (isJsonType(columnDefn)) {
-          builder.field(
-              fieldName,
-              columnDefn.isOptional() ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA
-          );
+          if (complexTypesEnabled()) {
+            SchemaBuilder mapBuilder = SchemaBuilder.map(
+                Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA);
+            if (columnDefn.isOptional()) {
+              mapBuilder.optional();
+            }
+            builder.field(fieldName, mapBuilder.build());
+          } else {
+            builder.field(
+                fieldName,
+                columnDefn.isOptional() ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA
+            );
+          }
+          return fieldName;
+        }
+
+        if (complexTypesEnabled() && isHstoreType(columnDefn)) {
+          SchemaBuilder hstoreBuilder = SchemaBuilder.map(
+              Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA);
+          if (columnDefn.isOptional()) {
+            hstoreBuilder.optional();
+          }
+          builder.field(fieldName, hstoreBuilder.build());
           return fieldName;
         }
 
@@ -273,6 +293,20 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           return fieldName;
         }
 
+        break;
+      }
+      case Types.ARRAY: {
+        if (complexTypesEnabled()) {
+          Schema elementSchema = arrayElementSchemaFor(columnDefn);
+          if (elementSchema != null) {
+            SchemaBuilder arrayBuilder = SchemaBuilder.array(elementSchema);
+            if (columnDefn.isOptional()) {
+              arrayBuilder.optional();
+            }
+            builder.field(fieldName, arrayBuilder.build());
+            return fieldName;
+          }
+        }
         break;
       }
       default:
@@ -308,11 +342,24 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       }
       case Types.OTHER: {
         if (isJsonType(columnDefn)) {
+          if (complexTypesEnabled()) {
+            return rs -> ConnectJsonConverterUtil.jsonStringToShallowMap(rs.getString(col));
+          }
           return rs -> rs.getString(col);
+        }
+
+        if (complexTypesEnabled() && isHstoreType(columnDefn)) {
+          return rs -> rs.getObject(col);
         }
 
         if (UUID.class.getName().equals(columnDefn.classNameForType())) {
           return rs -> rs.getString(col);
+        }
+        break;
+      }
+      case Types.ARRAY: {
+        if (complexTypesEnabled() && arrayElementSchemaFor(columnDefn) != null) {
+          return rs -> readJdbcArray(rs, col);
         }
         break;
       }
@@ -327,6 +374,105 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   protected boolean isJsonType(ColumnDefinition columnDefn) {
     String typeName = columnDefn.typeName();
     return JSON_TYPE_NAME.equalsIgnoreCase(typeName) || JSONB_TYPE_NAME.equalsIgnoreCase(typeName);
+  }
+
+  protected boolean isHstoreType(ColumnDefinition columnDefn) {
+    return "hstore".equalsIgnoreCase(columnDefn.typeName());
+  }
+
+  /**
+   * Map a PostgreSQL array column's element JDBC type to a Connect element {@link Schema}.
+   * Returns null when the element type isn't covered by this MVP (callers fall through to the
+   * generic dialect, which will skip the column with a WARN).
+   */
+  private Schema arrayElementSchemaFor(ColumnDefinition columnDefn) {
+    String typeName = columnDefn.typeName();
+    if (typeName == null) {
+      return null;
+    }
+    String base = typeName.startsWith("_") ? typeName.substring(1) : typeName;
+    switch (base.toLowerCase()) {
+      case "text":
+      case "varchar":
+      case "bpchar":
+      case "char":
+        return Schema.OPTIONAL_STRING_SCHEMA;
+      case "int2":
+        return Schema.OPTIONAL_INT16_SCHEMA;
+      case "int4":
+        return Schema.OPTIONAL_INT32_SCHEMA;
+      case "int8":
+        return Schema.OPTIONAL_INT64_SCHEMA;
+      case "float4":
+        return Schema.OPTIONAL_FLOAT32_SCHEMA;
+      case "float8":
+        return Schema.OPTIONAL_FLOAT64_SCHEMA;
+      case "bool":
+      case "boolean":
+        return Schema.OPTIONAL_BOOLEAN_SCHEMA;
+      default:
+        return null;
+    }
+  }
+
+  private static java.util.List<Object> readJdbcArray(ResultSet rs, int col) throws SQLException {
+    java.sql.Array arr = rs.getArray(col);
+    if (arr == null) {
+      return null;
+    }
+    try {
+      Object raw = arr.getArray();
+      if (raw == null) {
+        return null;
+      }
+      Object[] elements = (Object[]) raw;
+      return Arrays.asList(elements);
+    } finally {
+      arr.free();
+    }
+  }
+
+  private boolean isJsonbBindCandidate(Schema schema) {
+    Schema.Type type = schema.type();
+    if (type != Schema.Type.STRUCT && type != Schema.Type.MAP) {
+      return false;
+    }
+    return config instanceof JdbcSinkConfig
+        && ((JdbcSinkConfig) config).sqlComplexTypesEnable;
+  }
+
+  private void bindAsJsonb(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
+      Object value,
+      String fieldName
+  ) throws SQLException {
+    String json = ConnectJsonConverterUtil.connectValueToJson(schema, value);
+    if (json == null) {
+      statement.setNull(index, Types.OTHER);
+      return;
+    }
+    org.postgresql.util.PGobject pgo = new org.postgresql.util.PGobject();
+    pgo.setType(JSONB_TYPE_NAME);
+    try {
+      pgo.setValue(json);
+    } catch (SQLException e) {
+      throw new DataException("Failed to bind JSONB value for field " + fieldName, e);
+    }
+    statement.setObject(index, pgo);
+  }
+
+  private boolean complexTypesEnabled() {
+    if (config instanceof JdbcSinkConfig) {
+      return ((JdbcSinkConfig) config).sqlComplexTypesEnable;
+    }
+    if (config instanceof io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig) {
+      return config.getBoolean(
+          io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig
+              .SQL_COMPLEX_TYPES_ENABLE_CONFIG);
+    }
+    return false;
   }
 
   @Override
@@ -378,6 +524,13 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
             field.isPrimaryKey()
         );
         return getSqlType(childField) + "[]";
+      case STRUCT:
+      case MAP:
+        if (config instanceof JdbcSinkConfig
+            && ((JdbcSinkConfig) config).sqlComplexTypesEnable) {
+          return JSONB_TYPE_NAME.toUpperCase();
+        }
+        return super.getSqlType(field);
       default:
         return super.getSqlType(field);
     }
@@ -544,6 +697,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       Object value,
       String fieldName
   ) throws SQLException {
+    if (isJsonbBindCandidate(schema)) {
+      bindAsJsonb(statement, index, schema, value, fieldName);
+      return true;
+    }
     switch (schema.type()) {
       case ARRAY: {
         Class<?> valueClass = value.getClass();

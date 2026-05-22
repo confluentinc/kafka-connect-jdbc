@@ -770,12 +770,48 @@ public class JdbcSourceConnectorValidationTest {
     props.put(MODE_CONFIG, MODE_BULK);
     props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
     props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
-    
+
     validate();
-    
+
     assertErrors(1);
     assertErrors(MODE_CONFIG, 1);
     assertErrorMatches(MODE_CONFIG, ".*Incrementing column configurations should not be provided.*");
   }
-  
+
+  @Test
+  public void validate_withOnlyQuery_noErrors() {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM users WHERE active = true");
+
+    validate();
+
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_withQueryAndTableWhitelist_setsError() {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM users");
+    props.put(TABLE_WHITELIST_CONFIG, "table1,table2");
+
+    validate();
+
+    assertErrors(QUERY_CONFIG, 1);
+    assertErrors(TABLE_WHITELIST_CONFIG, 1);
+    assertErrorMatches(QUERY_CONFIG, ".*Do not specify table filtering configs with 'query'.*");
+  }
+
+  @Test
+  public void validate_withQueryAndTableIncludeList_setsError() {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM users");
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
+
+    validate();
+
+    assertErrors(QUERY_CONFIG, 1);
+    assertErrors(TABLE_INCLUDE_LIST_CONFIG, 1);
+    assertErrorMatches(QUERY_CONFIG, ".*Do not specify table filtering configs with 'query'.*");
+  }
+
 }

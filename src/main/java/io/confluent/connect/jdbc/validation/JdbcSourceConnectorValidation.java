@@ -80,7 +80,8 @@ public class JdbcSourceConnectorValidation {
       }
 
       boolean validationResult = validateMultiConfigs()
-          && validateLegacyNewConfigCompatibility();
+          && validateLegacyNewConfigCompatibility()
+          && validateQueryConfigs();
 
       if (validationResult && isUsingNewConfigs()) {
         validationResult = validateTableInclusionConfigs()
@@ -158,6 +159,12 @@ public class JdbcSourceConnectorValidation {
     // Define legacy and new config keys
     boolean usingLegacyConfigs = isUsingLegacyConfigs();
     boolean usingNewConfigs = isUsingNewConfigs();
+
+    // Query mode does not require any table filtering configs;
+    // their mutual exclusion is enforced separately in validateQueryConfigs().
+    if (isUsingQueryConfig()) {
+      return true;
+    }
 
     if (usingLegacyConfigs && usingNewConfigs) {
       return addConfigErrorsForLegacyAndNewConfigConflict();
@@ -440,6 +447,53 @@ public class JdbcSourceConnectorValidation {
         .filter(cv -> cv.name().equals(configName))
         .findFirst()
         .ifPresent(cv -> cv.addErrorMessage(errorMessage));
+  }
+
+  /**
+   * Validate that query mode is not combined with any table filtering configs.
+   * When query is set, table.whitelist / table.blacklist / table.include.list /
+   * table.exclude.list must not be specified.
+   */
+  private boolean validateQueryConfigs() {
+    if (!isUsingQueryConfig() || !isUsingTableFilteringConfigs()) {
+      return true;
+    }
+
+    String msg = "Do not specify table filtering configs with '"
+        + JdbcSourceConnectorConfig.QUERY_CONFIG + "'. "
+        + "Remove " + JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG + " / "
+        + JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG + " / "
+        + JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG + " / "
+        + JdbcSourceConnectorConfig.TABLE_EXCLUDE_LIST_CONFIG
+        + " when using query mode, or remove '"
+        + JdbcSourceConnectorConfig.QUERY_CONFIG + "' when using table filtering mode.";
+    addConfigError(JdbcSourceConnectorConfig.QUERY_CONFIG, msg);
+    if (!config.getTableWhitelistSet().isEmpty()) {
+      addConfigError(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, msg);
+    }
+    if (!config.getTableBlacklistSet().isEmpty()) {
+      addConfigError(JdbcSourceConnectorConfig.TABLE_BLACKLIST_CONFIG, msg);
+    }
+    if (!config.getTableIncludeListSet().isEmpty()) {
+      addConfigError(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG, msg);
+    }
+    if (!config.getTableExcludeListSet().isEmpty()) {
+      addConfigError(JdbcSourceConnectorConfig.TABLE_EXCLUDE_LIST_CONFIG, msg);
+    }
+    log.error(msg);
+    return false;
+  }
+
+  private boolean isUsingQueryConfig() {
+    String query = config.getString(JdbcSourceConnectorConfig.QUERY_CONFIG);
+    return query != null && !query.isEmpty();
+  }
+
+  private boolean isUsingTableFilteringConfigs() {
+    return !config.getTableWhitelistSet().isEmpty()
+        || !config.getTableBlacklistSet().isEmpty()
+        || !config.getTableIncludeListSet().isEmpty()
+        || !config.getTableExcludeListSet().isEmpty();
   }
 
 }

@@ -30,6 +30,7 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.sql.BatchUpdateException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -98,6 +99,39 @@ public class JdbcDbWriterTest {
     public MockRollbackException() {
       super();
     }
+  }
+
+  @Test
+  public void maybeTrimReturnsExceptionAsIsWhenFlagDisabled() {
+    Map<String, String> props = new HashMap<>();
+    props.put("connection.url", sqliteHelper.sqliteUri());
+    props.put("trim.sensitive.log", "false");
+    JdbcDbWriter writer = newWriter(props);
+    BatchUpdateException exception = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\") " +
+            "VALUES ('1','2','3',NULL) was aborted: ERROR: null value in column \"c4\" violates not-null constraint\n" +
+            "  Detail: Failing row contains (1, 2, 3, null).  Call getNextException to see other errors in the batch.",
+            new int[0]);
+
+    Throwable result = writer.maybeTrim(exception);
+
+    assertSame(exception, result);
+    assertTrue(result.getMessage().contains("VALUES"));
+  }
+
+  @Test
+  public void maybeTrimRedactsBatchUpdateExceptionWhenFlagEnabled() {
+    Map<String, String> props = new HashMap<>();
+    props.put("connection.url", sqliteHelper.sqliteUri());
+    props.put("trim.sensitive.log", "true");
+    JdbcDbWriter writer = newWriter(props);
+    BatchUpdateException exception = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\") " +
+            "VALUES ('1','2','3',NULL) was aborted: ERROR: null value in column \"c4\" violates not-null constraint\n" +
+            "  Detail: Failing row contains (1, 2, 3, null).  Call getNextException to see other errors in the batch.",
+            new int[0]);
+
+    Throwable result = writer.maybeTrim(exception);
+
+    assertTrue(!result.getMessage().contains("VALUES"));
   }
 
   @Test

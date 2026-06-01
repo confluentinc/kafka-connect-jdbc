@@ -27,6 +27,7 @@ import java.util.Optional;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
+import io.confluent.connect.jdbc.util.LogUtil;
 import io.confluent.connect.jdbc.util.TableId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,18 +87,23 @@ public class JdbcDbWriter {
       log.trace("Committing transaction");
       connection.commit();
     } catch (SQLException | TableAlterOrCreateException e) {
-      log.error("Error during write operation. Attempting rollback.", e);
+      log.error("Error during write operation. Attempting rollback.", maybeTrim(e));
       try {
         connection.rollback();
         log.info("Successfully rolled back transaction");
       } catch (SQLException sqle) {
-        log.error("Failed to rollback transaction", sqle);
+        log.error("Failed to rollback transaction", maybeTrim(sqle));
         e.addSuppressed(sqle);
       } finally {
         throw e;
       }
     }
     log.info("Completed write operation for {} records to the database", records.size());
+  }
+
+  Throwable maybeTrim(Throwable t) {
+    return (config.trimSensitiveLogsEnabled && t instanceof SQLException)
+        ? LogUtil.trimSensitiveData((SQLException) t) : t;
   }
 
   void closeQuietly() {

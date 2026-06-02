@@ -27,6 +27,8 @@ import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 public class JdbcSinkConfigTest {
 
@@ -131,6 +133,22 @@ public class JdbcSinkConfigTest {
     props.put("table.types", "table \t \n");
     createConfig();
     assertTableTypes(TableType.TABLE);
+  }
+
+  @Test
+  public void shouldFailToCreateConfigWithEmptyTableTypes() {
+    props.put("table.types", "");
+    ConfigException ex = assertThrows(ConfigException.class, this::createConfig);
+    assertTrue(ex.getMessage().contains("table.types"));
+    assertTrue(ex.getMessage().contains("At least one table type must be specified"));
+  }
+
+  @Test
+  public void shouldFailToCreateConfigWithInvalidTableType() {
+    props.put("table.types", "not-a-type");
+    ConfigException ex = assertThrows(ConfigException.class, this::createConfig);
+    assertTrue(ex.getMessage().contains("table.types"));
+    assertTrue(ex.getMessage().contains("not-a-type"));
   }
 
   @Test(expected = ConfigException.class)

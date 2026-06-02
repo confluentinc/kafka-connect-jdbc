@@ -46,19 +46,29 @@ public enum TableType {
     return value;
   }
 
+  private static final String VALID_TYPES =
+      EnumSet.allOf(TableType.class).stream()
+             .map(TableType::toString)
+             .collect(Collectors.joining(", "));
+
   public static TableType get(String name) {
     if (name != null) {
       name = name.trim();
     }
-    for (TableType method : values()) {
-      if (method.toString().equalsIgnoreCase(name)) {
-        return method;
+    for (TableType type : values()) {
+      if (type.toString().equalsIgnoreCase(name)) {
+        return type;
       }
     }
-    throw new IllegalArgumentException("No matching QuoteMethod found for '" + name + "'");
+    throw new IllegalArgumentException(
+        "No matching TableType found for '" + name + "'. Valid values are: " + VALID_TYPES);
   }
 
   public static EnumSet<TableType> parse(Collection<String> values) {
+    if (values == null || values.isEmpty()) {
+      throw new IllegalArgumentException(
+          "At least one table type must be specified. Valid values are: " + VALID_TYPES);
+    }
     Set<TableType> types = values.stream().map(TableType::get).collect(Collectors.toSet());
     return EnumSet.copyOf(types);
   }

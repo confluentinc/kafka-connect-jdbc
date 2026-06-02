@@ -741,13 +741,6 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
   }
 
   // ========== validateQuery Tests ==========
-  // Validation delegates to PreparedStatement.getMetaData(), which on every
-  // supported JDBC driver forces a server round-trip that compiles the query
-  // (parse + object resolution + type check + permission check). The user
-  // query is passed through unmodified -- no derived-table wrap, so there are
-  // no false positives from top-level ORDER BY, JOIN duplicate columns,
-  // unaliased computed columns, FOR UPDATE, etc. A 60-second query timeout
-  // guards against a pathologically slow planner stalling config validation.
   private static final int VALIDATE_QUERY_TIMEOUT_SECONDS = 60;
 
   @Test
@@ -773,9 +766,6 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
   @Test
   public void validateQuery_shouldApplyQueryTimeoutBeforeMetaDataCall()
       throws SQLException {
-    // The timeout is set on the PreparedStatement before getMetaData() so the
-    // driver bounds the compile round-trip; this guards config validation
-    // against planners that stall on pathological queries.
     Connection mockConnection = EasyMock.createMock(Connection.class);
     PreparedStatement mockStmt = EasyMock.createMock(PreparedStatement.class);
     ResultSetMetaData mockMd = EasyMock.createNiceMock(ResultSetMetaData.class);
@@ -798,8 +788,6 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
   @Test
   public void validateQuery_shouldPropagateSqlExceptionFromGetMetaData()
       throws SQLException {
-    // When the user query references a missing table or is otherwise invalid,
-    // getMetaData() throws SQLException; the exception must propagate.
     Connection mockConnection = EasyMock.createMock(Connection.class);
     PreparedStatement mockStmt = EasyMock.createMock(PreparedStatement.class);
     String query = "SELECT * FROM nonexistent";
@@ -826,9 +814,6 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
   @Test
   public void validateQuery_shouldPropagateSqlExceptionFromPrepareStatement()
       throws SQLException {
-    // Some drivers (e.g. Oracle) reject malformed SQL at prepareStatement;
-    // others (e.g. MS SQL Server) defer until getMetaData. The dialect must
-    // surface either path's SQLException unchanged.
     Connection mockConnection = EasyMock.createMock(Connection.class);
     String query = "SELECT FROM";
 
@@ -849,10 +834,6 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
 
   @Test
   public void validateQuery_shouldPassQueryThroughUnmodified() throws SQLException {
-    // Critical: the user's SQL must reach prepareStatement byte-for-byte, with
-    // no derived-table wrap or other rewrite. This guards forms that wrap-based
-    // probes break (top-level ORDER BY, duplicate columns from SELECT * over
-    // JOIN, unaliased computed columns).
     Connection mockConnection = EasyMock.createMock(Connection.class);
     PreparedStatement mockStmt = EasyMock.createMock(PreparedStatement.class);
     ResultSetMetaData mockMd = EasyMock.createNiceMock(ResultSetMetaData.class);

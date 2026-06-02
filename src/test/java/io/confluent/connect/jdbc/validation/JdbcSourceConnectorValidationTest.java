@@ -1257,18 +1257,12 @@ public class JdbcSourceConnectorValidationTest {
     String errorMessage = queryConfigValue.errorMessages().get(0);
     assertTrue(errorMessage.contains("not valid"));
     assertTrue(errorMessage.contains("SQLState: 42S02"));
-    // Vendor errorCode defaults to 0 when the 2-arg SQLException constructor
-    // is used; the formatter must omit it in that case rather than emit
-    // "errorCode: 0", which would be misleading noise.
     assertFalse(errorMessage.contains("errorCode"));
   }
 
   @Test
   public void validate_semanticValidationErrorIncludesErrorCodeWhenPresent()
       throws Exception {
-    // When the driver populates both SQLState and the vendor errorCode (typical
-    // for Oracle ORA-942, SQL Server 208, MySQL 1146), both must appear in the
-    // user-facing message so the user can look up the exact error.
     props.put(MODE_CONFIG, MODE_BULK);
     props.put(QUERY_CONFIG, "SELECT * FROM nonexistent_table");
 
@@ -1298,10 +1292,6 @@ public class JdbcSourceConnectorValidationTest {
   @Test
   public void validate_semanticValidationErrorIncludesErrorCodeAloneWhenSqlStateMissing()
       throws Exception {
-    // Some drivers throw with a vendor errorCode but no SQLState (e.g. Oracle
-    // network failures, MySQL connection-time errors). The user-facing message
-    // must still include the errorCode so the user has at least one identifier
-    // to grep their driver docs against.
     props.put(MODE_CONFIG, MODE_BULK);
     props.put(QUERY_CONFIG, "SELECT * FROM users");
 

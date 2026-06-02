@@ -116,13 +116,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   protected static final int NUMERIC_TYPE_SCALE_HIGH = 127;
   protected static final int NUMERIC_TYPE_SCALE_UNSET = -127;
 
-  /**
-   * Upper bound, in seconds, on the time the driver is allowed to spend
-   * compiling the query for {@link #validateQuery(Connection, String)}. Drivers
-   * honour {@link PreparedStatement#setQueryTimeout(int)} on a best-effort basis
-   * for {@code getMetaData()}; this guards against pathologically slow planners
-   * stalling config validation.
-   */
   private static final int VALIDATE_QUERY_TIMEOUT_SECONDS = 60;
 
   // The maximum precision that can be achieved in a signed 64-bit integer is 2^63 ~= 9.223372e+18
@@ -1955,18 +1948,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       List<ColumnId> columns
   ) throws ConnectException { }
 
-  /**
-   * Validate the user-supplied SQL by asking the driver to describe its result-set
-   * shape via {@link PreparedStatement#getMetaData()}. Every supported driver
-   * services this call by having the database compile the query (parse, resolve
-   * objects, check types, verify {@code SELECT} permission), so any problem
-   * surfaces as a {@link SQLException} without the rows being scanned.
-   *
-   * <p>The user query is passed through unmodified, which avoids the false
-   * positives that wrap-based probes suffer from (top-level {@code ORDER BY}
-   * on SQL Server, duplicate columns from {@code SELECT *} over JOINs,
-   * unaliased computed columns, {@code FOR UPDATE}, and so on).
-   */
   @Override
   public void validateQuery(Connection connection, String query) throws SQLException {
     try (PreparedStatement stmt = connection.prepareStatement(query)) {

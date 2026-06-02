@@ -707,20 +707,20 @@ public interface DatabaseDialect extends ConnectionProvider {
   String resolveSynonym(Connection connection, String synonymName) throws SQLException;
 
   /**
-   * Validate the given SQL query against the database without executing it.
-   * This method verifies that the query is valid by checking table and column existence,
-   * user permissions, and SQL correctness using database-specific mechanisms such as
-   * {@code EXPLAIN} or {@code prepareStatement}.
+   * Validate the user-supplied SQL without scanning user data. Implementations
+   * should ask the driver to compile the query (parse, resolve objects, check
+   * types, verify {@code SELECT} permission) so that any problem surfaces as a
+   * {@link SQLException}.
+   *
+   * <p>The user query must be passed through unmodified, which avoids the false
+   * positives that wrap-based probes suffer from (top-level {@code ORDER BY}
+   * on SQL Server, duplicate columns from {@code SELECT *} over JOINs,
+   * unaliased computed columns, {@code FOR UPDATE}, and so on).
    *
    * @param connection the database connection; may not be null
    * @param query      the SQL query to validate; may not be null
-   * @throws SQLException if the query is invalid, references non-existent tables or columns,
-   *                      or the user lacks necessary permissions
+   * @throws SQLException if the query is invalid, references missing tables or columns,
+   *                      or the user lacks {@code SELECT} permission
    */
-  default void validateQuery(Connection connection, String query) throws SQLException {
-    try (PreparedStatement stmt = connection.prepareStatement(query)) {
-        // Validate the query by preparing it. If the query is invalid,
-        // an SQLException will be thrown which will indicate the validation failure.
-    }
-  }
+  void validateQuery(Connection connection, String query) throws SQLException;
 }

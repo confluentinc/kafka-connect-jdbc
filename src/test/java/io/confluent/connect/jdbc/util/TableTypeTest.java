@@ -15,12 +15,15 @@
 package io.confluent.connect.jdbc.util;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.EnumSet;
 
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 public class TableTypeTest {
 
@@ -72,6 +75,37 @@ public class TableTypeTest {
   public void shouldHaveUpperCaseToString() {
     assertEquals("TABLE", TableType.TABLE.toString());
     assertEquals("VIEW", TableType.VIEW.toString());
+  }
+
+  @Test
+  public void shouldParseValidTypes() {
+    assertEquals(TABLE_ONLY, TableType.parse(Arrays.asList("table")));
+    assertEquals(TABLE_AND_VIEW, TableType.parse(Arrays.asList("table", "view")));
+  }
+
+  @Test
+  public void parseShouldRejectEmptyCollection() {
+    IllegalArgumentException ex = assertThrows(
+        IllegalArgumentException.class,
+        () -> TableType.parse(Collections.emptyList()));
+    assertTrue(ex.getMessage().contains("At least one table type must be specified"));
+    assertTrue(ex.getMessage().contains("TABLE"));
+    assertTrue(ex.getMessage().contains("VIEW"));
+  }
+
+  @Test
+  public void parseShouldRejectNullCollection() {
+    assertThrows(IllegalArgumentException.class, () -> TableType.parse(null));
+  }
+
+  @Test
+  public void getShouldRejectUnknownTypeWithDescriptiveMessage() {
+    IllegalArgumentException ex = assertThrows(
+        IllegalArgumentException.class,
+        () -> TableType.get("not-a-type"));
+    assertTrue(ex.getMessage().contains("TableType"));
+    assertTrue(ex.getMessage().contains("not-a-type"));
+    assertTrue(ex.getMessage().contains("TABLE"));
   }
 
   protected static EnumSet<TableType> types(TableType...types) {

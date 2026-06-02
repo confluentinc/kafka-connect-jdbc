@@ -116,6 +116,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   protected static final int NUMERIC_TYPE_SCALE_HIGH = 127;
   protected static final int NUMERIC_TYPE_SCALE_UNSET = -127;
 
+  private static final int VALIDATE_QUERY_TIMEOUT_SECONDS = 60;
+
   // The maximum precision that can be achieved in a signed 64-bit integer is 2^63 ~= 9.223372e+18
   private static final int MAX_INTEGER_TYPE_PRECISION = 18;
 
@@ -1946,17 +1948,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       List<ColumnId> columns
   ) throws ConnectException { }
 
-  /**
-   * The default implementation uses {@link Connection#prepareStatement(String)} which
-   * compiles the SQL without executing it. This validates syntax, table/column existence,
-   * and user permissions on most databases. Subclasses should override this method to use
-   * database-specific mechanisms like {@code EXPLAIN} for more thorough validation.
-   */
   @Override
   public void validateQuery(Connection connection, String query) throws SQLException {
     try (PreparedStatement stmt = connection.prepareStatement(query)) {
-      glog.trace("Query validation successful for '{}'",
-          shouldRedactSensitiveLogs(query));
+      stmt.setQueryTimeout(VALIDATE_QUERY_TIMEOUT_SECONDS);
+      stmt.getMetaData();
     }
   }
 

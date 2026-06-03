@@ -707,8 +707,15 @@ public interface DatabaseDialect extends ConnectionProvider {
   String resolveSynonym(Connection connection, String synonymName) throws SQLException;
 
   /**
-   * Validate the SQL query by compiling it via {@link PreparedStatement#getMetaData()}
-   * without scanning user data.
+   * Validate the SQL query by asking the driver to compile it via
+   * {@link PreparedStatement#getMetaData()}, which surfaces syntax, missing-object
+   * and permission errors without scanning user data. The query is passed through
+   * unmodified to avoid false positives from rewrites (e.g. top-level {@code ORDER BY},
+   * duplicate columns from {@code SELECT *} over JOINs).
+   *
+   * <p>Kept as a {@code default} so out-of-tree dialects implementing this interface
+   * directly continue to work; {@link GenericDatabaseDialect} overrides it to add a
+   * query timeout.
    *
    * @param connection the database connection; may not be null
    * @param query      the SQL query to validate; may not be null

@@ -116,6 +116,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   protected static final int NUMERIC_TYPE_SCALE_HIGH = 127;
   protected static final int NUMERIC_TYPE_SCALE_UNSET = -127;
 
+  // Bounds the getMetaData() compile round-trip during query validation; drivers
+  // honour setQueryTimeout() best-effort, guarding against slow planners.
   private static final int VALIDATE_QUERY_TIMEOUT_SECONDS = 60;
 
   // The maximum precision that can be achieved in a signed 64-bit integer is 2^63 ~= 9.223372e+18
@@ -1948,6 +1950,10 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       List<ColumnId> columns
   ) throws ConnectException { }
 
+  /**
+   * Validates the query via {@link PreparedStatement#getMetaData()}, bounded by a
+   * query timeout. See {@link DatabaseDialect#validateQuery(Connection, String)}.
+   */
   @Override
   public void validateQuery(Connection connection, String query) throws SQLException {
     try (PreparedStatement stmt = connection.prepareStatement(query)) {

@@ -741,6 +741,8 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
   }
 
   // ========== validateQuery Tests ==========
+  // Validation delegates to PreparedStatement.getMetaData() with the query passed
+  // through unmodified, bounded by a query timeout.
   private static final int VALIDATE_QUERY_TIMEOUT_SECONDS = 60;
 
   @Test

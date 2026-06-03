@@ -1257,6 +1257,7 @@ public class JdbcSourceConnectorValidationTest {
     String errorMessage = queryConfigValue.errorMessages().get(0);
     assertTrue(errorMessage.contains("not valid"));
     assertTrue(errorMessage.contains("SQLState: 42S02"));
+    // errorCode defaults to 0 here and must be omitted rather than shown as "errorCode: 0".
     assertFalse(errorMessage.contains("errorCode"));
   }
 

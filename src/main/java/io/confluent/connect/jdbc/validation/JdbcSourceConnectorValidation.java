@@ -390,6 +390,8 @@ public class JdbcSourceConnectorValidation {
       String msg = "The configured query is not valid and has database/connection errors"
           + ". Please provide the correct query by validating the "
           + "query syntax and the existing table/column names with the database being connected";
+      // Append SQLState and vendor errorCode when present so the user can look up
+      // the exact cause; errorCode 0 is the JDBC default for "unset" and is omitted.
       String sqlState = e.getSQLState();
       int errorCode = e.getErrorCode();
       if (sqlState != null && errorCode != 0) {

@@ -134,6 +134,18 @@ public class JdbcSinkConfigTest {
   }
 
   @Test(expected = ConfigException.class)
+  public void shouldFailToCreateConfigWithEmptyTableTypes() {
+    props.put("table.types", "");
+    createConfig();
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldFailToCreateConfigWithInvalidTableType() {
+    props.put("table.types", "not-a-type");
+    createConfig();
+  }
+
+  @Test(expected = ConfigException.class)
   public void shouldFailToCreateConfigWithInvalidCredentialsProviderClass() {
     // Configuring SqliteHelper Class here which does not extends JdbcCredentialsProvider Interface
     props.put(JdbcSinkConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG,

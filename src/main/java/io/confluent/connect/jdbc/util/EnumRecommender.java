@@ -50,6 +50,10 @@ public class EnumRecommender implements ConfigDef.Validator, ConfigDef.Recommend
   public void ensureValid(String key, Object value) {
     if (value instanceof List) {
       List<?> values = (List<?>) value;
+      if (values.isEmpty()) {
+        throw new ConfigException(key, value,
+            "At least one value must be specified. Valid values are: " + canonicalValues);
+      }
       for (Object v : values) {
         if (v == null) {
           validate(key, null);

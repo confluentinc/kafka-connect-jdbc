@@ -23,7 +23,6 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
 
 import java.util.HashMap;
@@ -33,6 +32,7 @@ import com.google.re2j.Pattern;
 
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.*;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import org.easymock.EasyMock;
 
@@ -1254,8 +1254,69 @@ public class JdbcSourceConnectorValidationTest {
 
     assertErrors(QUERY_CONFIG, 1);
     ConfigValue queryConfigValue = valueFor(QUERY_CONFIG);
-    assertTrue(queryConfigValue.errorMessages().get(0).contains("not valid"));
-    assertTrue(queryConfigValue.errorMessages().get(0).contains("SQLState: 42S02"));
+    String errorMessage = queryConfigValue.errorMessages().get(0);
+    assertTrue(errorMessage.contains("not valid"));
+    assertTrue(errorMessage.contains("SQLState: 42S02"));
+    // errorCode defaults to 0 here and must be omitted rather than shown as "errorCode: 0".
+    assertFalse(errorMessage.contains("errorCode"));
+  }
+
+  @Test
+  public void validate_semanticValidationErrorIncludesErrorCodeWhenPresent()
+      throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM nonexistent_table");
+
+    DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
+
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, "SELECT * FROM nonexistent_table");
+    EasyMock.expectLastCall().andThrow(new SQLException(
+        "Invalid object name 'nonexistent_table'.", "S0002", 208));
+    mockConnection.close();
+    EasyMock.expectLastCall();
+    mockDialect.close();
+    EasyMock.expectLastCall();
+
+    EasyMock.replay(mockDialect, mockConnection);
+    validateWithMockDialect(mockDialect);
+    EasyMock.verify(mockDialect, mockConnection);
+
+    assertErrors(QUERY_CONFIG, 1);
+    String errorMessage = valueFor(QUERY_CONFIG).errorMessages().get(0);
+    assertTrue(errorMessage.contains("not valid"));
+    assertTrue(errorMessage.contains("SQLState: S0002"));
+    assertTrue(errorMessage.contains("errorCode: 208"));
+  }
+
+  @Test
+  public void validate_semanticValidationErrorIncludesErrorCodeAloneWhenSqlStateMissing()
+      throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM users");
+
+    DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
+
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, "SELECT * FROM users");
+    EasyMock.expectLastCall().andThrow(new SQLException(
+        "ORA-17002: I/O Error: Connection reset", null, 17002));
+    mockConnection.close();
+    EasyMock.expectLastCall();
+    mockDialect.close();
+    EasyMock.expectLastCall();
+
+    EasyMock.replay(mockDialect, mockConnection);
+    validateWithMockDialect(mockDialect);
+    EasyMock.verify(mockDialect, mockConnection);
+
+    assertErrors(QUERY_CONFIG, 1);
+    String errorMessage = valueFor(QUERY_CONFIG).errorMessages().get(0);
+    assertTrue(errorMessage.contains("not valid"));
+    assertTrue(errorMessage.contains("errorCode: 17002"));
+    assertFalse(errorMessage.contains("SQLState"));
   }
 
   @Test
@@ -1315,78 +1376,6 @@ public class JdbcSourceConnectorValidationTest {
     EasyMock.verify(mockDialect, mockConnection);
 
     assertNoErrors();
-  }
-
-  // ========== getMetaData() Shadow Probe Tests ==========
-  // The probe is invoked from validateQuerySemantics' finally block. It must
-  // never affect the user-visible validation result. The two cases below
-  // exercise both directions: primary succeeds and primary fails.
-
-  @Test
-  public void shadowProbe_failureDoesNotAffectPrimarySuccess() throws Exception {
-    props.put(MODE_CONFIG, MODE_BULK);
-    props.put(QUERY_CONFIG, "SELECT * FROM users");
-
-    DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
-    Connection mockConnection = EasyMock.createMock(Connection.class);
-    PreparedStatement shadowStmt = EasyMock.createNiceMock(PreparedStatement.class);
-
-    // Primary validation succeeds.
-    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
-    mockDialect.validateQuery(mockConnection, "SELECT * FROM users");
-    EasyMock.expectLastCall();
-    // Shadow probe: prepareStatement returns, getMetaData throws. The probe
-    // must swallow the failure so primary success surfaces unchanged.
-    EasyMock.expect(mockConnection.prepareStatement("SELECT * FROM users"))
-        .andReturn(shadowStmt);
-    EasyMock.expect(shadowStmt.getMetaData())
-        .andThrow(new SQLException("driver-side failure", "08006", 17002));
-    mockConnection.close();
-    EasyMock.expectLastCall();
-    mockDialect.close();
-    EasyMock.expectLastCall();
-
-    EasyMock.replay(mockDialect, mockConnection, shadowStmt);
-    validateWithMockDialect(mockDialect);
-    EasyMock.verify(mockDialect, mockConnection, shadowStmt);
-
-    assertNoErrors();
-  }
-
-  @Test
-  public void shadowProbe_runsAndIsSwallowedWhenPrimaryFails() throws Exception {
-    props.put(MODE_CONFIG, MODE_BULK);
-    props.put(QUERY_CONFIG, "SELECT * FROM nonexistent_table");
-
-    DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
-    Connection mockConnection = EasyMock.createMock(Connection.class);
-    PreparedStatement shadowStmt = EasyMock.createNiceMock(PreparedStatement.class);
-
-    // Primary validation fails.
-    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
-    mockDialect.validateQuery(mockConnection, "SELECT * FROM nonexistent_table");
-    EasyMock.expectLastCall().andThrow(new SQLException(
-        "Table 'nonexistent_table' doesn't exist", "42S02"));
-    // Shadow probe still runs in finally and also fails; must not mask the
-    // primary's user-visible error.
-    EasyMock.expect(mockConnection.prepareStatement("SELECT * FROM nonexistent_table"))
-        .andReturn(shadowStmt);
-    EasyMock.expect(shadowStmt.getMetaData())
-        .andThrow(new SQLException("does not exist", "42S02"));
-    mockConnection.close();
-    EasyMock.expectLastCall();
-    mockDialect.close();
-    EasyMock.expectLastCall();
-
-    EasyMock.replay(mockDialect, mockConnection, shadowStmt);
-    validateWithMockDialect(mockDialect);
-    EasyMock.verify(mockDialect, mockConnection, shadowStmt);
-
-    // Primary's SQLState 42S02 surfaces to the user; shadow does not interfere.
-    assertErrors(QUERY_CONFIG, 1);
-    ConfigValue queryConfigValue = valueFor(QUERY_CONFIG);
-    assertTrue(queryConfigValue.errorMessages().get(0).contains("not valid"));
-    assertTrue(queryConfigValue.errorMessages().get(0).contains("SQLState: 42S02"));
   }
 
 }

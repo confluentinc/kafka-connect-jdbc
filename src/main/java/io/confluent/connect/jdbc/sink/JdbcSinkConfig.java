@@ -775,12 +775,7 @@ public class JdbcSinkConfig extends AbstractConfig {
       throw new ConfigException(
           "Primary key mode must be 'record_key' when delete support is enabled");
     }
-    List<String> tableTypeValues = getList(TABLE_TYPES_CONFIG);
-    try {
-      tableTypes = TableType.parse(tableTypeValues);
-    } catch (IllegalArgumentException e) {
-      throw new ConfigException(TABLE_TYPES_CONFIG, tableTypeValues, e.getMessage());
-    }
+    tableTypes = TableType.parse(getList(TABLE_TYPES_CONFIG));
   }
 
   private String getPasswordValue(String key) {

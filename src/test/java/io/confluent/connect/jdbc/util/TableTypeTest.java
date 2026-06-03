@@ -99,6 +99,14 @@ public class TableTypeTest {
   }
 
   @Test
+  public void parseShouldRejectUnknownType() {
+    IllegalArgumentException ex = assertThrows(
+        IllegalArgumentException.class,
+        () -> TableType.parse(Arrays.asList("table", "not-a-type")));
+    assertTrue(ex.getMessage().contains("not-a-type"));
+  }
+
+  @Test
   public void getShouldRejectUnknownTypeWithDescriptiveMessage() {
     IllegalArgumentException ex = assertThrows(
         IllegalArgumentException.class,

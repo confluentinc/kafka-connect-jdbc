@@ -15,10 +15,12 @@
 package io.confluent.connect.jdbc.sink;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
 
+import io.confluent.connect.jdbc.util.EnumRecommender;
 import io.confluent.connect.jdbc.util.TableType;
 
 import org.apache.kafka.common.config.ConfigException;
@@ -27,6 +29,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 
 public class JdbcSinkConfigTest {
 
@@ -143,6 +146,21 @@ public class JdbcSinkConfigTest {
   public void shouldFailToCreateConfigWithInvalidTableType() {
     props.put("table.types", "not-a-type");
     createConfig();
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldFailToCreateConfigWithMixedValidAndInvalidTableTypes() {
+    props.put("table.types", "table,not-a-type");
+    createConfig();
+  }
+
+  @Test
+  public void shouldRejectNullTableType() {
+    // A null element cannot be produced by parsing a config string, so the recommender
+    // that validates table.types is exercised directly for this case.
+    EnumRecommender recommender = EnumRecommender.in(TableType.values());
+    assertThrows(ConfigException.class,
+        () -> recommender.ensureValid("table.types", Collections.singletonList(null)));
   }
 
   @Test(expected = ConfigException.class)

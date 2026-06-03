@@ -56,10 +56,10 @@ public class EnumRecommender implements ConfigDef.Validator, ConfigDef.Recommend
       }
       for (Object v : values) {
         if (v == null) {
-          validate(key, null);
-        } else {
-          validate(key, v);
+          throw new ConfigException(key, value,
+              "Null is not a valid value. Valid values are: " + canonicalValues);
         }
+        validate(key, v);
       }
     } else {
       validate(key, value);

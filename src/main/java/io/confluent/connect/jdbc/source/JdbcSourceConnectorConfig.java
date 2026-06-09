@@ -189,6 +189,19 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "unless ``sql.complex.types.enable`` is true.";
   private static final String HSTORE_HANDLING_MODE_DISPLAY = "HStore Handling Mode";
 
+  public static final String JSON_HANDLING_MODE_CONFIG = "json.handling.mode";
+  public static final String JSON_HANDLING_MODE_MAP = "map";
+  public static final String JSON_HANDLING_MODE_STRING = "string";
+  public static final String JSON_HANDLING_MODE_DEFAULT = JSON_HANDLING_MODE_MAP;
+  private static final String JSON_HANDLING_MODE_DOC =
+      "Controls how PostgreSQL ``json``/``jsonb`` columns are represented when "
+      + "``sql.complex.types.enable`` is true. ``map`` (the default) emits a Connect "
+      + "Map<String,String> with top-level fields projected as entries. ``string`` emits the "
+      + "document as a logical JSON STRING (raw text, lossless, tagged "
+      + "``io.confluent.connect.jdbc.data.Json``). Has no effect unless "
+      + "``sql.complex.types.enable`` is true.";
+  private static final String JSON_HANDLING_MODE_DISPLAY = "JSON Handling Mode";
+
   private static final EnumRecommender NUMERIC_MAPPING_RECOMMENDER =
       EnumRecommender.in(NumericMapping.values());
 
@@ -895,7 +908,18 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         DATABASE_GROUP,
         ++orderInGroup,
         Width.SHORT,
-        HSTORE_HANDLING_MODE_DISPLAY);
+        HSTORE_HANDLING_MODE_DISPLAY
+    ).define(
+        JSON_HANDLING_MODE_CONFIG,
+        Type.STRING,
+        JSON_HANDLING_MODE_DEFAULT,
+        ConfigDef.ValidString.in(JSON_HANDLING_MODE_MAP, JSON_HANDLING_MODE_STRING),
+        Importance.LOW,
+        JSON_HANDLING_MODE_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        JSON_HANDLING_MODE_DISPLAY);
   }
 
   private static final void addModeOptions(ConfigDef config) {

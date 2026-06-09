@@ -273,12 +273,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         }
 
         if (complexTypesEnabled() && isHstoreType(columnDefn)) {
-          SchemaBuilder hstoreBuilder = SchemaBuilder.map(
-              Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA);
-          if (columnDefn.isOptional()) {
-            hstoreBuilder.optional();
-          }
-          builder.field(fieldName, hstoreBuilder.build());
+          builder.field(fieldName, hstoreSchema(columnDefn));
           return fieldName;
         }
 
@@ -349,6 +344,14 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         }
 
         if (complexTypesEnabled() && isHstoreType(columnDefn)) {
+          if (hstoreAsJson()) {
+            return rs -> {
+              Object value = rs.getObject(col);
+              return value == null
+                  ? null
+                  : ConnectJsonConverterUtil.connectValueToJson(null, value);
+            };
+          }
           return rs -> rs.getObject(col);
         }
 
@@ -473,6 +476,38 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
               .SQL_COMPLEX_TYPES_ENABLE_CONFIG);
     }
     return false;
+  }
+
+  /**
+   * Whether PostgreSQL hstore columns should be emitted as a JSON-object STRING (mode
+   * {@code json}) rather than a Connect Map (mode {@code map}, the default). Only the source
+   * connector exposes this; the sink path always uses the Map representation.
+   */
+  private boolean hstoreAsJson() {
+    if (config instanceof io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig) {
+      return io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_JSON
+          .equalsIgnoreCase(config.getString(
+              io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig
+                  .HSTORE_HANDLING_MODE_CONFIG));
+    }
+    return false;
+  }
+
+  /**
+   * Build the Connect schema for a PostgreSQL hstore column, honoring
+   * {@code hstore.handling.mode}: a JSON-object STRING when {@code json}, otherwise a
+   * Map&lt;String,String&gt;.
+   */
+  private Schema hstoreSchema(ColumnDefinition columnDefn) {
+    if (hstoreAsJson()) {
+      return columnDefn.isOptional() ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA;
+    }
+    SchemaBuilder mapBuilder = SchemaBuilder.map(
+        Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA);
+    if (columnDefn.isOptional()) {
+      mapBuilder.optional();
+    }
+    return mapBuilder.build();
   }
 
   @Override

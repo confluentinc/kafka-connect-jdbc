@@ -178,6 +178,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "backwards compatibility with existing pipelines.";
   private static final String SQL_COMPLEX_TYPES_ENABLE_DISPLAY = "Enable SQL Complex Types";
 
+  public static final String HSTORE_HANDLING_MODE_CONFIG = "hstore.handling.mode";
+  public static final String HSTORE_HANDLING_MODE_MAP = "map";
+  public static final String HSTORE_HANDLING_MODE_JSON = "json";
+  public static final String HSTORE_HANDLING_MODE_DEFAULT = HSTORE_HANDLING_MODE_MAP;
+  private static final String HSTORE_HANDLING_MODE_DOC =
+      "Controls how PostgreSQL ``hstore`` columns are represented when "
+      + "``sql.complex.types.enable`` is true. ``map`` (the default) emits a Connect "
+      + "Map<String,String>. ``json`` emits the hstore as a JSON-object STRING. Has no effect "
+      + "unless ``sql.complex.types.enable`` is true.";
+  private static final String HSTORE_HANDLING_MODE_DISPLAY = "HStore Handling Mode";
+
   private static final EnumRecommender NUMERIC_MAPPING_RECOMMENDER =
       EnumRecommender.in(NumericMapping.values());
 
@@ -873,7 +884,18 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         DATABASE_GROUP,
         ++orderInGroup,
         Width.SHORT,
-        SQL_COMPLEX_TYPES_ENABLE_DISPLAY);
+        SQL_COMPLEX_TYPES_ENABLE_DISPLAY
+    ).define(
+        HSTORE_HANDLING_MODE_CONFIG,
+        Type.STRING,
+        HSTORE_HANDLING_MODE_DEFAULT,
+        ConfigDef.ValidString.in(HSTORE_HANDLING_MODE_MAP, HSTORE_HANDLING_MODE_JSON),
+        Importance.LOW,
+        HSTORE_HANDLING_MODE_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        HSTORE_HANDLING_MODE_DISPLAY);
   }
 
   private static final void addModeOptions(ConfigDef config) {

@@ -29,16 +29,20 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.testcontainers.containers.PostgreSQLContainer;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 /**
@@ -62,6 +66,9 @@ public class PostgresLiteralIncludeListIT extends BaseConnectorIT {
   private static final String TABLE_NAME = "customers";
   private static final String TOPIC_PREFIX = "literal-";
   private static final String TOPIC = TOPIC_PREFIX + TABLE_NAME;
+  // Matches EmbeddedConnectCluster's default ("connect-offset-topic-" + cluster name); the
+  // cluster name is set in BaseConnectorIT.startConnect.
+  private static final String OFFSETS_TOPIC = "connect-offset-topic-jdbc-connect-cluster";
   private static final long POLLING_INTERVAL_MS = TimeUnit.SECONDS.toMillis(2);
   private static final long CONSUME_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(30);
 
@@ -77,7 +84,7 @@ public class PostgresLiteralIncludeListIT extends BaseConnectorIT {
 
   @BeforeClass
   public static void setupClass() throws SQLException {
-    postgres.start();
+    // The @ClassRule manages the container lifecycle; only the JDBC connection is set up here.
     connection = DriverManager.getConnection(
         postgres.getJdbcUrl(),
         postgres.getUsername(),
@@ -90,7 +97,6 @@ public class PostgresLiteralIncludeListIT extends BaseConnectorIT {
     if (connection != null && !connection.isClosed()) {
       connection.close();
     }
-    postgres.stop();
   }
 
   @Before
@@ -136,7 +142,7 @@ public class PostgresLiteralIncludeListIT extends BaseConnectorIT {
   @Test
   public void shouldDiscoverTableWithLiteralIncludeListAndResumeOffsetsAcrossRestart()
       throws Exception {
-    insertRows(3);
+    insertRows(0, 3);
     connect.kafka().createTopic(TOPIC, 1);
 
     connect.configureConnector(CONNECTOR_NAME, props);
@@ -146,30 +152,46 @@ public class PostgresLiteralIncludeListIT extends BaseConnectorIT {
         connect.kafka().consume(3, CONSUME_TIMEOUT_MS, TOPIC);
     assertEquals("Should fetch the 3 existing records", 3, records.count());
 
+    // Source offsets are flushed on an interval; wait for the offset record to land before
+    // deleting the connector, otherwise the re-created connector would legitimately re-read
+    // and the resumption assertion below would flake.
+    connect.kafka().consume(1, CONSUME_TIMEOUT_MS, OFFSETS_TOPIC);
+
     // Re-create the connector so the new task must look up the committed offset. If the
     // discovered identifier (the offset partition key) changed, the lookup misses and the
     // table is re-read from the start, surfacing as duplicates below.
     connect.deleteConnector(CONNECTOR_NAME);
-    insertRows(2);
+    insertRows(3, 2);
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, 1);
 
+    // The whole topic must hold each of name_0..name_4 exactly once: a missed offset lookup
+    // re-reads from the start and surfaces here as a duplicate name.
     records = connect.kafka().consume(5, CONSUME_TIMEOUT_MS, TOPIC);
-    assertEquals("Should have exactly 3 old + 2 new records", 5, records.count());
+    List<String> values = new ArrayList<>();
+    records.forEach(r -> values.add(new String(r.value(), StandardCharsets.UTF_8)));
+    for (int i = 0; i < 5; i++) {
+      // Values arrive via the worker's default StringConverter, e.g. "Struct{id=1,name=name_0}"
+      String name = "name=name_" + i + "}";
+      assertEquals("Record with " + name + " should appear exactly once in " + values,
+          1, values.stream().filter(v -> v.contains(name)).count());
+    }
 
     // No 6th record should ever arrive; one would mean the offset was lost and rows re-read.
     try {
       connect.kafka().consume(6, TimeUnit.SECONDS.toMillis(10), TOPIC);
       fail("Consumed more than 5 records: offsets were not resumed and rows were re-read");
-    } catch (RuntimeException expected) {
-      // timed out waiting for a 6th record, i.e. no duplicates
+    } catch (RuntimeException e) {
+      assertTrue("Unexpected consume failure: " + e.getMessage(),
+          e.getMessage() != null
+              && e.getMessage().startsWith("Could not find enough records. found 5"));
     }
   }
 
-  private void insertRows(int count) throws SQLException {
+  private void insertRows(int startIndex, int count) throws SQLException {
     try (PreparedStatement stmt = connection.prepareStatement(
         "INSERT INTO " + SCHEMA_NAME + "." + TABLE_NAME + " (name) VALUES (?)")) {
-      for (int i = 0; i < count; i++) {
+      for (int i = startIndex; i < startIndex + count; i++) {
         stmt.setString(1, "name_" + i);
         stmt.addBatch();
       }

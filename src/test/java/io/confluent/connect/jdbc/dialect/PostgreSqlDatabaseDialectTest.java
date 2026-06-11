@@ -546,6 +546,35 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
+  public void shouldKeepTwoPartTableIdsOnOlderDrivers() throws Exception {
+    ResultSet tableTypesRs = mock(ResultSet.class);
+    when(tableTypesRs.next()).thenReturn(true, false);
+    when(tableTypesRs.getString(1)).thenReturn("TABLE");
+
+    // Drivers before 42.7.5 return a null TABLE_CAT; an empty string is covered for safety
+    ResultSet tablesRs = mock(ResultSet.class);
+    when(tablesRs.next()).thenReturn(true, true, false);
+    when(tablesRs.getString(1)).thenReturn(null, "");
+    when(tablesRs.getString(2)).thenReturn("public", "app");
+    when(tablesRs.getString(3)).thenReturn("customers", "orders");
+
+    DatabaseMetaData metadata = mock(DatabaseMetaData.class);
+    when(metadata.getTableTypes()).thenReturn(tableTypesRs);
+    when(metadata.getTables(any(), any(), eq("%"), any(String[].class))).thenReturn(tablesRs);
+
+    Connection connection = mock(Connection.class);
+    when(connection.getMetaData()).thenReturn(metadata);
+
+    assertEquals(
+        Arrays.asList(
+            new TableId(null, "public", "customers"),
+            new TableId(null, "app", "orders")
+        ),
+        dialect.tableIds(connection)
+    );
+  }
+
+  @Test
   public void shouldTruncateTableNames() {
 
     final String tableFqn = "some.table";

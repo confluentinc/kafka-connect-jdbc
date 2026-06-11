@@ -33,6 +33,7 @@ import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.JDBCType;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -48,6 +49,8 @@ import java.util.concurrent.ThreadLocalRandom;
 
 
 import static org.junit.Assert.assertEquals;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -511,6 +514,64 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     int actualMaxLength = PostgreSqlDatabaseDialect.computeMaxIdentifierLength(connection);
 
     assertEquals(Integer.MAX_VALUE, actualMaxLength);
+  }
+
+  @Test
+  public void shouldStripCatalogFromDiscoveredTableIds() throws Exception {
+    ResultSet tableTypesRs = mock(ResultSet.class);
+    when(tableTypesRs.next()).thenReturn(true, false);
+    when(tableTypesRs.getString(1)).thenReturn("TABLE");
+
+    // pgjdbc 42.7.5+ populates TABLE_CAT with the database name; older drivers returned null
+    ResultSet tablesRs = mock(ResultSet.class);
+    when(tablesRs.next()).thenReturn(true, true, false);
+    when(tablesRs.getString(1)).thenReturn("postgres", "postgres");
+    when(tablesRs.getString(2)).thenReturn("public", "app");
+    when(tablesRs.getString(3)).thenReturn("customers", "orders");
+
+    DatabaseMetaData metadata = mock(DatabaseMetaData.class);
+    when(metadata.getTableTypes()).thenReturn(tableTypesRs);
+    when(metadata.getTables(any(), any(), eq("%"), any(String[].class))).thenReturn(tablesRs);
+
+    Connection connection = mock(Connection.class);
+    when(connection.getMetaData()).thenReturn(metadata);
+
+    assertEquals(
+        Arrays.asList(
+            new TableId(null, "public", "customers"),
+            new TableId(null, "app", "orders")
+        ),
+        dialect.tableIds(connection)
+    );
+  }
+
+  @Test
+  public void shouldKeepTwoPartTableIdsOnOlderDrivers() throws Exception {
+    ResultSet tableTypesRs = mock(ResultSet.class);
+    when(tableTypesRs.next()).thenReturn(true, false);
+    when(tableTypesRs.getString(1)).thenReturn("TABLE");
+
+    // Drivers before 42.7.5 return a null TABLE_CAT; an empty string is covered for safety
+    ResultSet tablesRs = mock(ResultSet.class);
+    when(tablesRs.next()).thenReturn(true, true, false);
+    when(tablesRs.getString(1)).thenReturn(null, "");
+    when(tablesRs.getString(2)).thenReturn("public", "app");
+    when(tablesRs.getString(3)).thenReturn("customers", "orders");
+
+    DatabaseMetaData metadata = mock(DatabaseMetaData.class);
+    when(metadata.getTableTypes()).thenReturn(tableTypesRs);
+    when(metadata.getTables(any(), any(), eq("%"), any(String[].class))).thenReturn(tablesRs);
+
+    Connection connection = mock(Connection.class);
+    when(connection.getMetaData()).thenReturn(metadata);
+
+    assertEquals(
+        Arrays.asList(
+            new TableId(null, "public", "customers"),
+            new TableId(null, "app", "orders")
+        ),
+        dialect.tableIds(connection)
+    );
   }
 
   @Test

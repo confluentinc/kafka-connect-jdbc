@@ -31,6 +31,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.HashMap;
@@ -65,7 +66,7 @@ public class PostgresLiteralIncludeListIT extends BaseConnectorIT {
   private static final long CONSUME_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(30);
 
   @ClassRule
-  public static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:13")
+  public static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:13")
       .withDatabaseName("testdb")
       .withUsername("test")
       .withPassword("test123");
@@ -166,11 +167,13 @@ public class PostgresLiteralIncludeListIT extends BaseConnectorIT {
   }
 
   private void insertRows(int count) throws SQLException {
-    try (Statement stmt = connection.createStatement()) {
+    try (PreparedStatement stmt = connection.prepareStatement(
+        "INSERT INTO " + SCHEMA_NAME + "." + TABLE_NAME + " (name) VALUES (?)")) {
       for (int i = 0; i < count; i++) {
-        stmt.execute("INSERT INTO " + SCHEMA_NAME + "." + TABLE_NAME
-            + " (name) VALUES ('name_" + i + "')");
+        stmt.setString(1, "name_" + i);
+        stmt.addBatch();
       }
+      stmt.executeBatch();
     }
   }
 }

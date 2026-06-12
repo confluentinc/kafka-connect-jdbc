@@ -400,7 +400,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
   public TableId parseTableIdentifier(String fqn) {
     TableId tableId = super.parseTableIdentifier(fqn);
     if (quoteSqlIdentifiers == QuoteMethod.NEVER) {
-      tableId = new TableId(
+      tableId = createTableId(
           tableId.catalogName(),
           tableId.schemaName(),
           tableId.tableName().toUpperCase()

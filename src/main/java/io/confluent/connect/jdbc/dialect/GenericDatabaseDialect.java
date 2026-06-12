@@ -439,16 +439,16 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       throw new IllegalArgumentException("Invalid fully qualified name: '" + fqn + "'");
     }
     if (parts.size() == 1) {
-      return new TableId(null, null, parts.get(0));
+      return createTableId(null, null, parts.get(0));
     }
     if (parts.size() == 3) {
-      return new TableId(parts.get(0), parts.get(1), parts.get(2));
+      return createTableId(parts.get(0), parts.get(1), parts.get(2));
     }
     assert parts.size() >= 2;
     if (useCatalog()) {
-      return new TableId(parts.get(0), null, parts.get(1));
+      return createTableId(parts.get(0), null, parts.get(1));
     }
-    return new TableId(null, parts.get(0), parts.get(1));
+    return createTableId(null, parts.get(0), parts.get(1));
   }
 
   /**
@@ -461,15 +461,13 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   /**
-   * Create a {@link TableId} from table identity components read from driver metadata
-   * ({@code getTables}, {@code getColumns}, {@code getPrimaryKeys}, result set metadata).
-   * All metadata-derived identifiers are built through this single seam so that a dialect
-   * can normalize them consistently; identifiers parsed from configuration go through
-   * {@link #parseTableIdentifier(String)} instead and are not affected.
+   * Single construction point for every {@link TableId} the dialect creates, whether read
+   * from driver metadata or parsed from a configured name. A dialect can override this to
+   * normalize identifiers in one place.
    *
-   * @param catalogName the catalog name reported by the driver; may be null
-   * @param schemaName  the schema name reported by the driver; may be null
-   * @param tableName   the table name reported by the driver
+   * @param catalogName the catalog name; may be null
+   * @param schemaName  the schema name; may be null
+   * @param tableName   the table name; never null
    * @return the table identifier; never null
    */
   protected TableId createTableId(String catalogName, String schemaName, String tableName) {

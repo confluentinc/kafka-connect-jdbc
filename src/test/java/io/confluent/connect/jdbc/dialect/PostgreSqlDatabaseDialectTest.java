@@ -584,6 +584,20 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
+  public void shouldStripCatalogFromParsedTableIdentifiers() {
+    // Configured names go through the same construction seam: an explicit db prefix adds
+    // no information on a single-database connection and is dropped.
+    assertEquals(
+        new TableId(null, METADATA_SCHEMA, CUSTOMERS_TABLE),
+        dialect.parseTableIdentifier("mydb." + METADATA_SCHEMA + "." + CUSTOMERS_TABLE)
+    );
+    assertEquals(
+        new TableId(null, METADATA_SCHEMA, CUSTOMERS_TABLE),
+        dialect.parseTableIdentifier(METADATA_SCHEMA + "." + CUSTOMERS_TABLE)
+    );
+  }
+
+  @Test
   public void shouldStripCatalogFromMetadataColumnIds() throws Exception {
     // getPrimaryKeys and getColumns both report TABLE_CAT on pgjdbc 42.7.5+; the seam must
     // normalize both sides of the pkColumns.contains comparison, not just discovered tables.

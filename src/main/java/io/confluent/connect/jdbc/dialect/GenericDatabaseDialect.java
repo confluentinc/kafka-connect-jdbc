@@ -439,16 +439,16 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       throw new IllegalArgumentException("Invalid fully qualified name: '" + fqn + "'");
     }
     if (parts.size() == 1) {
-      return new TableId(null, null, parts.get(0));
+      return createTableId(null, null, parts.get(0));
     }
     if (parts.size() == 3) {
-      return new TableId(parts.get(0), parts.get(1), parts.get(2));
+      return createTableId(parts.get(0), parts.get(1), parts.get(2));
     }
     assert parts.size() >= 2;
     if (useCatalog()) {
-      return new TableId(parts.get(0), null, parts.get(1));
+      return createTableId(parts.get(0), null, parts.get(1));
     }
-    return new TableId(null, parts.get(0), parts.get(1));
+    return createTableId(null, parts.get(0), parts.get(1));
   }
 
   /**
@@ -458,6 +458,20 @@ public class GenericDatabaseDialect implements DatabaseDialect {
    */
   protected boolean useCatalog() {
     return false;
+  }
+
+  /**
+   * Single construction point for every {@link TableId} the dialect creates, whether read
+   * from driver metadata or parsed from a configured name. A dialect can override this to
+   * normalize identifiers in one place.
+   *
+   * @param catalogName the catalog name; may be null
+   * @param schemaName  the schema name; may be null
+   * @param tableName   the table name; never null
+   * @return the table identifier; never null
+   */
+  protected TableId createTableId(String catalogName, String schemaName, String tableName) {
+    return new TableId(catalogName, schemaName, tableName);
   }
 
   @Override
@@ -473,7 +487,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         String catalogName = rs.getString(1);
         String schemaName = rs.getString(2);
         String tableName = rs.getString(3);
-        TableId tableId = new TableId(catalogName, schemaName, tableName);
+        TableId tableId = createTableId(catalogName, schemaName, tableName);
         if (includeTable(tableId)) {
           tableIds.add(tableId);
         }
@@ -724,7 +738,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         final String catalogName = rs.getString(1);
         final String schemaName = rs.getString(2);
         final String tableName = rs.getString(3);
-        final TableId tableId = new TableId(catalogName, schemaName, tableName);
+        final TableId tableId = createTableId(catalogName, schemaName, tableName);
         final String columnName = rs.getString(4);
         final ColumnId columnId = new ColumnId(tableId, columnName, null);
         final int jdbcType = rs.getInt(5);
@@ -816,7 +830,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     String catalog = rsMetadata.getCatalogName(column);
     String schema = rsMetadata.getSchemaName(column);
     String tableName = rsMetadata.getTableName(column);
-    TableId tableId = new TableId(catalog, schema, tableName);
+    TableId tableId = createTableId(catalog, schema, tableName);
     String name = rsMetadata.getColumnName(column);
     String alias = rsMetadata.getColumnLabel(column);
     ColumnId id = new ColumnId(tableId, name, alias);
@@ -875,7 +889,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         String catalogName = rs.getString(1);
         String schemaName = rs.getString(2);
         String tableName = rs.getString(3);
-        TableId tableId = new TableId(catalogName, schemaName, tableName);
+        TableId tableId = createTableId(catalogName, schemaName, tableName);
         final String colName = rs.getString(4);
         ColumnId columnId = new ColumnId(tableId, colName);
         pkColumns.add(columnId);

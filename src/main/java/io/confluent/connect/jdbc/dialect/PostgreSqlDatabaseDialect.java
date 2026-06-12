@@ -126,6 +126,21 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return properties;
   }
 
+  /**
+   * {@inheritDoc}
+   *
+   * <p>A PostgreSQL connection sees exactly one database, so a catalog adds no information
+   * to an identifier. pgjdbc 42.7.5+ reports the database name where older drivers returned
+   * {@code null}, which turned identifiers into three-part {@code db.schema.table} names —
+   * breaking two-part {@code table.include.list} matching and changing source-offset
+   * partition keys. Dropping the catalog here keeps every identifier this dialect creates
+   * two-part on any driver version.
+   */
+  @Override
+  protected TableId createTableId(String catalogName, String schemaName, String tableName) {
+    return new TableId(null, schemaName, tableName);
+  }
+
   @Override
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
     throw new SQLException("PostgreSQL does not support synonyms. Please use views instead.");
@@ -186,14 +201,14 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           result.tableName(),
           newTableName
       );
-      result = new TableId(
+      result = createTableId(
           result.catalogName(),
           result.schemaName(),
           newTableName
       );
     }
     if (quoteSqlIdentifiers == QuoteMethod.NEVER) {
-      result = new TableId(
+      result = createTableId(
           result.catalogName(),
           result.schemaName(),
           result.tableName().toLowerCase()

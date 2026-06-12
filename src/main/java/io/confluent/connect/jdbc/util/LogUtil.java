@@ -48,14 +48,10 @@ public class LogUtil {
         e.getUpdateCounts());
   }
 
-  // This implementation assumes it to be Postgres, see toString() of ServerErrorMessage.java
-  // as well as the constructor of PSQLException.java with "boolean detail" flag in
-  // https://github.com/pgjdbc/pgjdbc/blob/master/pgjdbc/src/main/java/org/postgresql/util/
-  // For other JDBC Databases it would not fail but might return the same input string back!
+  // Assumes the pgjdbc message shape (also emitted by pgjdbc-derived drivers like redshift-jdbc42).
   private static String getNonSensitiveErrorMessage(String errMsg) {
     final String sensitiveStartSearchText = ") VALUES (";
     final String errorStartSearchText = ": ERROR: ";
-    final String errorEndSearchText = "\n  Detail: ";
 
     if (errMsg == null) {
       return null;
@@ -70,13 +66,21 @@ public class LogUtil {
     String msg1 = errMsg.substring(trimStartIdx, trimEndIdx + 1);
 
     int errorStartIdx = errMsg.indexOf(errorStartSearchText);
-    int errorEndIdx = errMsg.indexOf(errorEndSearchText);
-    if (errorStartIdx < trimEndIdx || errorEndIdx < trimEndIdx
-            || errorEndIdx < errorStartIdx) {
+    if (errorStartIdx < trimEndIdx) {
       return msg1;
     }
 
-    String msg2 = errMsg.substring(errorStartIdx, errorEndIdx);
-    return msg1 + msg2;
+    int errorEndIdx = errMsg.indexOf("\n  Detail: ", errorStartIdx);
+    if (errorEndIdx < 0) {
+      errorEndIdx = errMsg.indexOf("\n  Hint: ", errorStartIdx);
+    }
+    if (errorEndIdx < 0) {
+      errorEndIdx = errMsg.indexOf("  Call getNextException ", errorStartIdx);
+    }
+    if (errorEndIdx < 0) {
+      return msg1;
+    }
+
+    return msg1 + errMsg.substring(errorStartIdx, errorEndIdx);
   }
 }

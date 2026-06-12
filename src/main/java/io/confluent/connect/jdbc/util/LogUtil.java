@@ -48,14 +48,41 @@ public class LogUtil {
         e.getUpdateCounts());
   }
 
-  // This implementation assumes it to be Postgres, see toString() of ServerErrorMessage.java
-  // as well as the constructor of PSQLException.java with "boolean detail" flag in
-  // https://github.com/pgjdbc/pgjdbc/blob/master/pgjdbc/src/main/java/org/postgresql/util/
-  // For other JDBC Databases it would not fail but might return the same input string back!
+  // Right-edge markers used to find the end of the safe ": ERROR: <reason>" segment that follows
+  // a stripped "VALUES (...)" body. The list is ordered for clarity (postgres-style markers first,
+  // followed by the batched-error suffix emitted by pgjdbc-derived drivers); LogUtil picks the
+  // earliest marker found, so order does not affect correctness.
+  //   - "\n  Detail: "             pgjdbc / redshift-jdbc when the server includes a DETAIL field
+  //   - "\n  Hint: "               pgjdbc / redshift-jdbc when the server includes a HINT field
+  //   - "  Call getNextException " pgjdbc BatchResultHandler suffix; redshift-jdbc reuses the same
+  //                                template, so this also bounds Redshift's multi-row INSERT errors
+  //                                when DETAIL/HINT are absent (the case the connector hits in
+  //                                production)
+  // If none of these markers appear after ": ERROR: ", we fall back to returning only the prefix
+  // up to ") " — never the row-data segment.
+  private static final String[] ERROR_END_MARKERS = {
+      "\n  Detail: ",
+      "\n  Hint: ",
+      "  Call getNextException "
+  };
+
+  // This was originally written assuming the Postgres JDBC driver (pgjdbc) message shape, see
+  // toString() of ServerErrorMessage.java and the constructor of PSQLException.java with the
+  // "boolean detail" flag in
+  // https://github.com/pgjdbc/pgjdbc/blob/master/pgjdbc/src/main/java/org/postgresql/util/.
+  //
+  // Redshift's redshift-jdbc42 driver is a pgjdbc fork and reuses the same BatchUpdateException
+  // template ("Batch entry {0} {1} was aborted: {2}  Call getNextException ..." — see
+  // amazon-redshift-jdbc-driver BatchResultHandler.java). However for multi-row INSERT failures
+  // (i.e., `INSERT INTO ... VALUES (...), (...)` — the form emitted by JDBC sink connectors that
+  // batch rows for throughput) the Redshift server omits the DETAIL block, leaving the original
+  // single-marker scan unable to find a right-edge for the ": ERROR: <reason>" segment. To
+  // restore visibility of the error reason on Redshift (and, secondarily, on Postgres when only
+  // HINT is present), this method now scans for any of ERROR_END_MARKERS and uses the earliest
+  // match, falling back conservatively to the prefix-only result if none match.
   private static String getNonSensitiveErrorMessage(String errMsg) {
     final String sensitiveStartSearchText = ") VALUES (";
     final String errorStartSearchText = ": ERROR: ";
-    final String errorEndSearchText = "\n  Detail: ";
 
     if (errMsg == null) {
       return null;
@@ -70,9 +97,18 @@ public class LogUtil {
     String msg1 = errMsg.substring(trimStartIdx, trimEndIdx + 1);
 
     int errorStartIdx = errMsg.indexOf(errorStartSearchText);
-    int errorEndIdx = errMsg.indexOf(errorEndSearchText);
-    if (errorStartIdx < trimEndIdx || errorEndIdx < trimEndIdx
-            || errorEndIdx < errorStartIdx) {
+    if (errorStartIdx < trimEndIdx) {
+      return msg1;
+    }
+
+    int errorEndIdx = -1;
+    for (String marker : ERROR_END_MARKERS) {
+      int idx = errMsg.indexOf(marker, errorStartIdx);
+      if (idx > 0 && (errorEndIdx < 0 || idx < errorEndIdx)) {
+        errorEndIdx = idx;
+      }
+    }
+    if (errorEndIdx < 0) {
       return msg1;
     }
 

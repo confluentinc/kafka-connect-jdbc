@@ -168,6 +168,86 @@ public class LogUtilTest {
     assertEqualsSQLException(expectedTrimmed, actualTrimmed);
   }
 
+  // Redshift's redshift-jdbc42 driver emits this message shape for multi-row
+  // `INSERT INTO ... VALUES (...), (...)` failures (the form JDBC sink connectors batch into for
+  // throughput). The server omits the DETAIL block for many error classes (e.g., string truncation),
+  // so the trailing "  Call getNextException ..." text is the only stable right-edge marker.
+  @Test
+  public void testRedshiftMultiRowBatchUpdateSensitive() {
+    BatchUpdateException e1 = new BatchUpdateException(
+        "Batch entry 0 /* -partner Confluent Redshift Connector */ INSERT INTO "
+            + "\"db\".\"public\".\"t\" (\"id\",\"name\") VALUES (('1'::int4),('ok')),"
+            + "(('2'::int4),('secret-payload-customer-PII')) was aborted: "
+            + "ERROR: value too long for type character varying(5)"
+            + "  Call getNextException to see other errors in the batch.",
+        new int[0]);
+
+    BatchUpdateException expectedTrimmed = new BatchUpdateException(
+        "Batch entry 0 /* -partner Confluent Redshift Connector */ INSERT INTO "
+            + "\"db\".\"public\".\"t\" (\"id\",\"name\"): "
+            + "ERROR: value too long for type character varying(5)",
+        new int[0]);
+
+    SQLException actualTrimmed = LogUtil.trimSensitiveData(e1);
+    assertEqualsSQLException(expectedTrimmed, actualTrimmed);
+  }
+
+  // Postgres can return HINT without DETAIL for some error classes (e.g., undefined function with
+  // a suggested replacement). The HINT marker should bound the safe error segment.
+  @Test
+  public void testBatchUpdateSensitiveHintOnly() {
+    BatchUpdateException e1 = new BatchUpdateException(
+        "Batch entry 0 INSERT INTO \"t\" (\"c\") VALUES ('secret') was aborted: "
+            + "ERROR: function lower(integer) does not exist\n"
+            + "  Hint: No function matches the given name and argument types.",
+        new int[0]);
+
+    BatchUpdateException expectedTrimmed = new BatchUpdateException(
+        "Batch entry 0 INSERT INTO \"t\" (\"c\"): "
+            + "ERROR: function lower(integer) does not exist",
+        new int[0]);
+
+    SQLException actualTrimmed = LogUtil.trimSensitiveData(e1);
+    assertEqualsSQLException(expectedTrimmed, actualTrimmed);
+  }
+
+  // When more than one marker is present, the earliest one (closest to ": ERROR: ") wins.
+  // Here DETAIL precedes HINT so the segment stops at DETAIL; the HINT block is dropped along
+  // with anything that might follow (preserves the existing conservative behavior).
+  @Test
+  public void testBatchUpdateSensitiveDetailBeforeHint() {
+    BatchUpdateException e1 = new BatchUpdateException(
+        "Batch entry 0 INSERT INTO \"t\" (\"c\") VALUES ('secret') was aborted: "
+            + "ERROR: null value in column \"c\" violates not-null constraint\n"
+            + "  Detail: Failing row contains ('secret').\n"
+            + "  Hint: ignore",
+        new int[0]);
+
+    BatchUpdateException expectedTrimmed = new BatchUpdateException(
+        "Batch entry 0 INSERT INTO \"t\" (\"c\"): "
+            + "ERROR: null value in column \"c\" violates not-null constraint",
+        new int[0]);
+
+    SQLException actualTrimmed = LogUtil.trimSensitiveData(e1);
+    assertEqualsSQLException(expectedTrimmed, actualTrimmed);
+  }
+
+  // When no marker matches at all, fall back to the prefix-only result (conservative).
+  @Test
+  public void testBatchUpdateSensitiveNoKnownMarker() {
+    BatchUpdateException e1 = new BatchUpdateException(
+        "Batch entry 0 INSERT INTO \"t\" (\"c\") VALUES ('secret') was aborted: "
+            + "ERROR: some new format we have not seen before",
+        new int[0]);
+
+    BatchUpdateException expectedTrimmed = new BatchUpdateException(
+        "Batch entry 0 INSERT INTO \"t\" (\"c\")",
+        new int[0]);
+
+    SQLException actualTrimmed = LogUtil.trimSensitiveData(e1);
+    assertEqualsSQLException(expectedTrimmed, actualTrimmed);
+  }
+
   private static void assertEqualsSQLException(SQLException expected, SQLException actual) {
     if (expected == actual) {
       return;

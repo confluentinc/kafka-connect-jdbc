@@ -59,6 +59,12 @@ import static org.mockito.Mockito.when;
 
 public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDatabaseDialect> {
 
+  private static final String METADATA_CATALOG = "postgres";
+  private static final String METADATA_SCHEMA = "public";
+  private static final String CUSTOMERS_TABLE = "customers";
+  private static final String ORDERS_TABLE = "orders";
+  private static final String VARCHAR_TYPE = "varchar";
+
   @Override
   protected PostgreSqlDatabaseDialect createDialect() {
     return new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something"));
@@ -203,10 +209,10 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("myTable");
     builder.withColumn("id1").type("int", JDBCType.INTEGER, Integer.class);
     builder.withColumn("id2").type("int", JDBCType.INTEGER, Integer.class);
-    builder.withColumn("columnA").type("varchar", JDBCType.VARCHAR, String.class);
-    builder.withColumn("columnB").type("varchar", JDBCType.VARCHAR, String.class);
-    builder.withColumn("columnC").type("varchar", JDBCType.VARCHAR, String.class);
-    builder.withColumn("columnD").type("varchar", JDBCType.VARCHAR, String.class);
+    builder.withColumn("columnA").type(VARCHAR_TYPE, JDBCType.VARCHAR, String.class);
+    builder.withColumn("columnB").type(VARCHAR_TYPE, JDBCType.VARCHAR, String.class);
+    builder.withColumn("columnC").type(VARCHAR_TYPE, JDBCType.VARCHAR, String.class);
+    builder.withColumn("columnD").type(VARCHAR_TYPE, JDBCType.VARCHAR, String.class);
     TableDefinition tableDefn = builder.build();
     assertEquals(
         "INSERT INTO \"myTable\" (\"id1\",\"id2\",\"columnA\",\"columnB\"," +
@@ -226,7 +232,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     builder = new TableDefinitionBuilder().withTable("myTable");
     builder.withColumn("id1").type("int", JDBCType.INTEGER, Integer.class);
     builder.withColumn("id2").type("int", JDBCType.INTEGER, Integer.class);
-    builder.withColumn("columnA").type("varchar", JDBCType.VARCHAR, Integer.class);
+    builder.withColumn("columnA").type(VARCHAR_TYPE, JDBCType.VARCHAR, Integer.class);
     builder.withColumn("uuidColumn").type("uuid", JDBCType.OTHER, UUID.class);
     builder.withColumn("dateColumn").type("date", JDBCType.DATE, java.sql.Date.class);
     tableDefn = builder.build();
@@ -246,10 +252,10 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("myTable");
     builder.withColumn("id1").type("int", JDBCType.INTEGER, Integer.class);
     builder.withColumn("id2").type("int", JDBCType.INTEGER, Integer.class);
-    builder.withColumn("columnA").type("varchar", JDBCType.VARCHAR, String.class);
-    builder.withColumn("columnB").type("varchar", JDBCType.VARCHAR, String.class);
-    builder.withColumn("columnC").type("varchar", JDBCType.VARCHAR, String.class);
-    builder.withColumn("columnD").type("varchar", JDBCType.VARCHAR, String.class);
+    builder.withColumn("columnA").type(VARCHAR_TYPE, JDBCType.VARCHAR, String.class);
+    builder.withColumn("columnB").type(VARCHAR_TYPE, JDBCType.VARCHAR, String.class);
+    builder.withColumn("columnC").type(VARCHAR_TYPE, JDBCType.VARCHAR, String.class);
+    builder.withColumn("columnD").type(VARCHAR_TYPE, JDBCType.VARCHAR, String.class);
     TableDefinition tableDefn = builder.build();
     assertEquals(
         "INSERT INTO \"myTable\" (\"id1\",\"id2\",\"columnA\",\"columnB\"," +
@@ -275,7 +281,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     builder = new TableDefinitionBuilder().withTable("myTable");
     builder.withColumn("id1").type("int", JDBCType.INTEGER, Integer.class);
     builder.withColumn("id2").type("int", JDBCType.INTEGER, Integer.class);
-    builder.withColumn("columnA").type("varchar", JDBCType.VARCHAR, Integer.class);
+    builder.withColumn("columnA").type(VARCHAR_TYPE, JDBCType.VARCHAR, Integer.class);
     builder.withColumn("uuidColumn").type("uuid", JDBCType.OTHER, UUID.class);
     builder.withColumn("dateColumn").type("date", JDBCType.DATE, java.sql.Date.class);
     tableDefn = builder.build();
@@ -300,7 +306,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("myTable");
     builder.withColumn("id1").type("int", JDBCType.INTEGER, Integer.class);
     builder.withColumn("id2").type("int", JDBCType.INTEGER, Integer.class);
-    builder.withColumn("columnA").type("varchar", JDBCType.VARCHAR, Integer.class);
+    builder.withColumn("columnA").type(VARCHAR_TYPE, JDBCType.VARCHAR, Integer.class);
     builder.withColumn("uuidColumn").type("uuid", JDBCType.OTHER, UUID.class);
     builder.withColumn("dateColumn").type("date", JDBCType.DATE, java.sql.Date.class);
     TableDefinition tableDefn = builder.build();
@@ -358,9 +364,9 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   public void upsert() {
     TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("Customer");
     builder.withColumn("id").type("int", JDBCType.INTEGER, Integer.class);
-    builder.withColumn("name").type("varchar", JDBCType.VARCHAR, String.class);
+    builder.withColumn("name").type(VARCHAR_TYPE, JDBCType.VARCHAR, String.class);
     builder.withColumn("salary").type("real", JDBCType.FLOAT, String.class);
-    builder.withColumn("address").type("varchar", JDBCType.VARCHAR, String.class);
+    builder.withColumn("address").type(VARCHAR_TYPE, JDBCType.VARCHAR, String.class);
     TableDefinition tableDefn = builder.build();
     TableId customer = tableDefn.id();
     assertEquals(
@@ -528,9 +534,9 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     // pgjdbc 42.7.5+ populates TABLE_CAT with the database name; older drivers returned null
     ResultSet tablesRs = mock(ResultSet.class);
     when(tablesRs.next()).thenReturn(true, true, false);
-    when(tablesRs.getString(1)).thenReturn("postgres", "postgres");
-    when(tablesRs.getString(2)).thenReturn("public", "app");
-    when(tablesRs.getString(3)).thenReturn("customers", "orders");
+    when(tablesRs.getString(1)).thenReturn(METADATA_CATALOG, METADATA_CATALOG);
+    when(tablesRs.getString(2)).thenReturn(METADATA_SCHEMA, "app");
+    when(tablesRs.getString(3)).thenReturn(CUSTOMERS_TABLE, ORDERS_TABLE);
 
     DatabaseMetaData metadata = mock(DatabaseMetaData.class);
     when(metadata.getTableTypes()).thenReturn(tableTypesRs);
@@ -541,8 +547,8 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
     assertEquals(
         Arrays.asList(
-            new TableId(null, "public", "customers"),
-            new TableId(null, "app", "orders")
+            new TableId(null, METADATA_SCHEMA, CUSTOMERS_TABLE),
+            new TableId(null, "app", ORDERS_TABLE)
         ),
         dialect.tableIds(connection)
     );
@@ -558,8 +564,8 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     ResultSet tablesRs = mock(ResultSet.class);
     when(tablesRs.next()).thenReturn(true, true, false);
     when(tablesRs.getString(1)).thenReturn(null, "");
-    when(tablesRs.getString(2)).thenReturn("public", "app");
-    when(tablesRs.getString(3)).thenReturn("customers", "orders");
+    when(tablesRs.getString(2)).thenReturn(METADATA_SCHEMA, "app");
+    when(tablesRs.getString(3)).thenReturn(CUSTOMERS_TABLE, ORDERS_TABLE);
 
     DatabaseMetaData metadata = mock(DatabaseMetaData.class);
     when(metadata.getTableTypes()).thenReturn(tableTypesRs);
@@ -570,8 +576,8 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
     assertEquals(
         Arrays.asList(
-            new TableId(null, "public", "customers"),
-            new TableId(null, "app", "orders")
+            new TableId(null, METADATA_SCHEMA, CUSTOMERS_TABLE),
+            new TableId(null, "app", ORDERS_TABLE)
         ),
         dialect.tableIds(connection)
     );
@@ -583,9 +589,9 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     // normalize both sides of the pkColumns.contains comparison, not just discovered tables.
     ResultSet pkRs = mock(ResultSet.class);
     when(pkRs.next()).thenReturn(true, false);
-    when(pkRs.getString(1)).thenReturn("postgres");
-    when(pkRs.getString(2)).thenReturn("public");
-    when(pkRs.getString(3)).thenReturn("customers");
+    when(pkRs.getString(1)).thenReturn(METADATA_CATALOG);
+    when(pkRs.getString(2)).thenReturn(METADATA_SCHEMA);
+    when(pkRs.getString(3)).thenReturn(CUSTOMERS_TABLE);
     when(pkRs.getString(4)).thenReturn("id");
 
     ResultSetMetaData colsRsMetadata = mock(ResultSetMetaData.class);
@@ -594,24 +600,24 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     ResultSet colsRs = mock(ResultSet.class);
     when(colsRs.getMetaData()).thenReturn(colsRsMetadata);
     when(colsRs.next()).thenReturn(true, true, false);
-    when(colsRs.getString(1)).thenReturn("postgres", "postgres");
-    when(colsRs.getString(2)).thenReturn("public", "public");
-    when(colsRs.getString(3)).thenReturn("customers", "customers");
+    when(colsRs.getString(1)).thenReturn(METADATA_CATALOG, METADATA_CATALOG);
+    when(colsRs.getString(2)).thenReturn(METADATA_SCHEMA, METADATA_SCHEMA);
+    when(colsRs.getString(3)).thenReturn(CUSTOMERS_TABLE, CUSTOMERS_TABLE);
     when(colsRs.getString(4)).thenReturn("id", "name");
     when(colsRs.getInt(5)).thenReturn(Types.INTEGER, Types.VARCHAR);
-    when(colsRs.getString(6)).thenReturn("int4", "varchar");
+    when(colsRs.getString(6)).thenReturn("int4", VARCHAR_TYPE);
 
     DatabaseMetaData metadata = mock(DatabaseMetaData.class);
-    when(metadata.getPrimaryKeys("postgres", "public", "customers")).thenReturn(pkRs);
-    when(metadata.getColumns("postgres", "public", "customers", null)).thenReturn(colsRs);
+    when(metadata.getPrimaryKeys(METADATA_CATALOG, METADATA_SCHEMA, CUSTOMERS_TABLE)).thenReturn(pkRs);
+    when(metadata.getColumns(METADATA_CATALOG, METADATA_SCHEMA, CUSTOMERS_TABLE, null)).thenReturn(colsRs);
 
     Connection connection = mock(Connection.class);
     when(connection.getMetaData()).thenReturn(metadata);
 
     Map<ColumnId, ColumnDefinition> defns =
-        dialect.describeColumns(connection, "postgres", "public", "customers", null);
+        dialect.describeColumns(connection, METADATA_CATALOG, METADATA_SCHEMA, CUSTOMERS_TABLE, null);
 
-    TableId expectedTableId = new TableId(null, "public", "customers");
+    TableId expectedTableId = new TableId(null, METADATA_SCHEMA, CUSTOMERS_TABLE);
     assertEquals(2, defns.size());
     for (ColumnId columnId : defns.keySet()) {
       assertEquals(expectedTableId, columnId.tableId());

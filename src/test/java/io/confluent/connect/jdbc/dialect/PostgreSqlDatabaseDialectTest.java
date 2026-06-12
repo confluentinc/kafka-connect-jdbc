@@ -37,6 +37,7 @@ import java.sql.DatabaseMetaData;
 import java.sql.JDBCType;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
@@ -44,11 +45,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
@@ -572,6 +575,50 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         ),
         dialect.tableIds(connection)
     );
+  }
+
+  @Test
+  public void shouldStripCatalogFromMetadataColumnIds() throws Exception {
+    // getPrimaryKeys and getColumns both report TABLE_CAT on pgjdbc 42.7.5+; the seam must
+    // normalize both sides of the pkColumns.contains comparison, not just discovered tables.
+    ResultSet pkRs = mock(ResultSet.class);
+    when(pkRs.next()).thenReturn(true, false);
+    when(pkRs.getString(1)).thenReturn("postgres");
+    when(pkRs.getString(2)).thenReturn("public");
+    when(pkRs.getString(3)).thenReturn("customers");
+    when(pkRs.getString(4)).thenReturn("id");
+
+    ResultSetMetaData colsRsMetadata = mock(ResultSetMetaData.class);
+    when(colsRsMetadata.getColumnCount()).thenReturn(12);
+
+    ResultSet colsRs = mock(ResultSet.class);
+    when(colsRs.getMetaData()).thenReturn(colsRsMetadata);
+    when(colsRs.next()).thenReturn(true, true, false);
+    when(colsRs.getString(1)).thenReturn("postgres", "postgres");
+    when(colsRs.getString(2)).thenReturn("public", "public");
+    when(colsRs.getString(3)).thenReturn("customers", "customers");
+    when(colsRs.getString(4)).thenReturn("id", "name");
+    when(colsRs.getInt(5)).thenReturn(Types.INTEGER, Types.VARCHAR);
+    when(colsRs.getString(6)).thenReturn("int4", "varchar");
+
+    DatabaseMetaData metadata = mock(DatabaseMetaData.class);
+    when(metadata.getPrimaryKeys("postgres", "public", "customers")).thenReturn(pkRs);
+    when(metadata.getColumns("postgres", "public", "customers", null)).thenReturn(colsRs);
+
+    Connection connection = mock(Connection.class);
+    when(connection.getMetaData()).thenReturn(metadata);
+
+    Map<ColumnId, ColumnDefinition> defns =
+        dialect.describeColumns(connection, "postgres", "public", "customers", null);
+
+    TableId expectedTableId = new TableId(null, "public", "customers");
+    assertEquals(2, defns.size());
+    for (ColumnId columnId : defns.keySet()) {
+      assertEquals(expectedTableId, columnId.tableId());
+    }
+    // The pk flag is only set when the pk id and column id agree on the identifier, i.e.
+    // both metadata paths were normalized consistently.
+    assertTrue(defns.get(new ColumnId(expectedTableId, "id")).isPrimaryKey());
   }
 
   @Test

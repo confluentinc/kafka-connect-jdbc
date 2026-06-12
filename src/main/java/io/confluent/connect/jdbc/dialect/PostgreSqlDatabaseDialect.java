@@ -45,12 +45,10 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -131,23 +129,19 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   /**
    * {@inheritDoc}
    *
-   * <p>A PostgreSQL connection is bound to a single database, so every table returned by
-   * {@code DatabaseMetaData.getTables(...)} belongs to {@code current_database()} and the
-   * catalog adds no disambiguation. pgjdbc 42.7.5+ populates {@code TABLE_CAT} with the
-   * database name where older drivers returned {@code null}, which would turn the
-   * connector's table identifiers into three-part {@code db.schema.table} names — breaking
+   * <p>A PostgreSQL connection is bound to a single database, so every identifier the
+   * driver's metadata reports belongs to {@code current_database()} and the catalog adds
+   * no disambiguation. pgjdbc 42.7.5+ populates the catalog columns with the database name
+   * where older drivers returned {@code null}, which would turn the connector's
+   * metadata-derived identifiers into three-part {@code db.schema.table} names — breaking
    * {@code table.include.list}/{@code table.whitelist} matching against the documented
    * two-part {@code schema.table} form and changing the source-offset partition keys.
-   * Dropping the catalog keeps the identifier two-part on every driver version.
+   * Dropping the catalog at this construction seam keeps every metadata-derived identifier
+   * (discovered tables, column ids, primary-key ids) two-part on every driver version.
    */
   @Override
-  public List<TableId> tableIds(Connection conn) throws SQLException {
-    List<TableId> tableIds = super.tableIds(conn);
-    List<TableId> withoutCatalog = new ArrayList<>(tableIds.size());
-    for (TableId tableId : tableIds) {
-      withoutCatalog.add(new TableId(null, tableId.schemaName(), tableId.tableName()));
-    }
-    return withoutCatalog;
+  protected TableId createTableId(String catalogName, String schemaName, String tableName) {
+    return new TableId(null, schemaName, tableName);
   }
 
   @Override

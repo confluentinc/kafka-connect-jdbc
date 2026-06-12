@@ -126,6 +126,24 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return properties;
   }
 
+  /**
+   * {@inheritDoc}
+   *
+   * <p>A PostgreSQL connection is bound to a single database, so every identifier the
+   * driver's metadata reports belongs to {@code current_database()} and the catalog adds
+   * no disambiguation. pgjdbc 42.7.5+ populates the catalog columns with the database name
+   * where older drivers returned {@code null}, which would turn the connector's
+   * metadata-derived identifiers into three-part {@code db.schema.table} names — breaking
+   * {@code table.include.list}/{@code table.whitelist} matching against the documented
+   * two-part {@code schema.table} form and changing the source-offset partition keys.
+   * Dropping the catalog at this construction seam keeps every metadata-derived identifier
+   * (discovered tables, column ids, primary-key ids) two-part on every driver version.
+   */
+  @Override
+  protected TableId createTableId(String catalogName, String schemaName, String tableName) {
+    return new TableId(null, schemaName, tableName);
+  }
+
   @Override
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
     throw new SQLException("PostgreSQL does not support synonyms. Please use views instead.");

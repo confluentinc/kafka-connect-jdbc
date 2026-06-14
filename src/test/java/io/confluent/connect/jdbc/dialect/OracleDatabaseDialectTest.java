@@ -473,5 +473,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
 
     dialect.bindField(statement, index, schema, value, colDef, field);
     return verify(statement, times(1));
-  }
+}
+  // validateQuery behaviour is inherited from GenericDatabaseDialect and exercised in
+  // GenericDatabaseDialectTest; no Oracle-specific override exists to test here.
 }

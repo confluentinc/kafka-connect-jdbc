@@ -27,6 +27,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collection;
+import java.util.Properties;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
@@ -34,9 +35,12 @@ import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
+import io.confluent.connect.jdbc.util.JdbcCredentials;
 import io.confluent.connect.jdbc.util.TableId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG;
 
 /**
  * A {@link DatabaseDialect} for MySQL.
@@ -68,6 +72,29 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
     super(config, new IdentifierRules(".", "`", "`"));
   }
 
+  @Override
+  protected Properties buildAuthenticationProperties(JdbcCredentials jdbcCredentials) {
+    Properties properties = new Properties();
+
+    // For Azure MySQL with Entra ID authentication, username is required
+    // The provider integration currently returns username as null.
+    // If the provider does not return a username, attempt to get it from the connector config
+    String username = jdbcCredentials.getUsername();
+    if (username == null) {
+      username = config.getString(CONNECTION_USER_CONFIG);
+    }
+    if (username != null) {
+      properties.setProperty("user", username);
+    }
+
+    // For MySQL, the access token goes in the password field (not a separate property)
+    if (jdbcCredentials.getPassword() != null) {
+      properties.setProperty("password", jdbcCredentials.getPassword());
+    }
+
+    return properties;
+  }
+
   /**
    * Perform any operations on a {@link PreparedStatement} before it is used. This is called from
    * the {@link #createPreparedStatement(Connection, String)} method after the statement is
@@ -84,7 +111,9 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
   protected void initializePreparedStatement(PreparedStatement stmt) throws SQLException {
     super.initializePreparedStatement(stmt);
 
-    log.trace("Initializing PreparedStatement fetch direction to FETCH_FORWARD for '{}'", stmt);
+    log.trace(
+        "Initializing PreparedStatement fetch direction to FETCH_FORWARD for '{}'",
+        shouldRedactSensitiveLogs(stmt.toString()));
     stmt.setFetchDirection(ResultSet.FETCH_FORWARD);
   }
 
@@ -115,7 +144,7 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
         return "INT";
       case INT64:
         if (config instanceof JdbcSinkConfig
-             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
+            && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
           return "DATETIME(6)";
         }
         return "BIGINT";
@@ -127,7 +156,7 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
         return "TINYINT";
       case STRING:
         if (config instanceof JdbcSinkConfig
-             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
+            && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
           return "DATETIME(6)";
         }
         return "TEXT";
@@ -157,16 +186,16 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
     builder.append(table);
     builder.append("(");
     builder.appendList()
-           .delimitedBy(",")
-           .transformedBy(ExpressionBuilder.columnNames())
-           .of(keyColumns, nonKeyColumns);
+        .delimitedBy(",")
+        .transformedBy(ExpressionBuilder.columnNames())
+        .of(keyColumns, nonKeyColumns);
     builder.append(") values(");
     builder.appendMultiple(",", "?", keyColumns.size() + nonKeyColumns.size());
     builder.append(") on duplicate key update ");
     builder.appendList()
-           .delimitedBy(",")
-           .transformedBy(transform)
-           .of(nonKeyColumns.isEmpty() ? keyColumns : nonKeyColumns);
+        .delimitedBy(",")
+        .transformedBy(transform)
+        .of(nonKeyColumns.isEmpty() ? keyColumns : nonKeyColumns);
     return builder.toString();
   }
 
@@ -175,12 +204,13 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
     // MySQL can also have "username:password@" at the beginning of the host list and
     // in parenthetical properties
     return super.sanitizedUrl(url)
-                .replaceAll("(?i)([(,]password=)[^,)]*", "$1****")
-                .replaceAll("(://[^:]*:)([^@]*)@", "$1****@");
+        .replaceAll("(?i)([(,]password=)[^,)]*", "$1****")
+        .replaceAll("(://[^:]*:)([^@]*)@", "$1****@");
   }
 
   @Override
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
     throw new SQLException("MySQL does not support synonyms. Please use views instead.");
   }
+
 }

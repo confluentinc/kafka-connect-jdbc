@@ -15,6 +15,8 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import java.sql.CallableStatement;
+import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -488,4 +490,7 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
     dialect.bindField(stmtNvarchar, index, schema, value, colDefNvarchar, field);
     verify(stmtNvarchar, times(1)).setNString(index, value);
   }
+
+  // validateQuery behaviour is inherited from GenericDatabaseDialect and exercised in
+  // GenericDatabaseDialectTest; no SQL Server-specific override exists to test here.
 }

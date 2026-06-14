@@ -100,7 +100,8 @@ public class TimestampIncrementingTableQuerierTest {
         10211197100L, // Timestamp delay
         ZoneId.of("UTC"),
         "",
-        JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL
+        JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL,
+        false
     );
   }
 

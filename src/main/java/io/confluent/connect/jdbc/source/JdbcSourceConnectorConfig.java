@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.microsoft.sqlserver.jdbc.SQLServerConnection;
@@ -54,6 +55,7 @@ import org.apache.kafka.common.config.ConfigDef.Type;
 import org.apache.kafka.common.config.ConfigDef.Validator;
 import org.apache.kafka.common.config.ConfigDef.Width;
 import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -73,7 +75,14 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
           + "For example: ``jdbc:oracle:thin:@localhost:1521:orclpdb1``, "
           + "``jdbc:mysql://localhost/db_name``, "
           + "``jdbc:sqlserver://localhost;instance=SQLEXPRESS;"
-          + "databaseName=db_name``";
+          + "databaseName=db_name``\n"
+          + "For SQL Server (Driver 10.2.4+) - TLS encryption is recommended."
+          + "Use ``encrypt=true;trustServerCertificate=false`` for secure connections, "
+          + "In order to bypass certificate validation (not recommended for production), "
+          + "use ``encrypt=true;trustServerCertificate=true`` and in order to disable  "
+          + "TLS encryption entirely, use ``encrypt=false`` "
+          + "(not recommended for production).";
+
   private static final String CONNECTION_URL_DISPLAY = "JDBC URL";
   private static final String CONNECTION_URL_DEFAULT = "";
 
@@ -336,6 +345,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String QUERY_DEFAULT = "";
   private static final String QUERY_DISPLAY = "Query";
 
+  public static final String QUERY_MASKED_CONFIG = "query.masked";
+  private static final String QUERY_MASKED_DOC =
+      "Same as 'query' configuration but the query string is masked"
+      + "Use this config to prevent sensitive information from being logged.";
+  private static final String QUERY_MASKED_DISPLAY = "Query (Masked)";
+
   public static final String TOPIC_PREFIX_CONFIG = "topic.prefix";
   private static final String TOPIC_PREFIX_DOC =
       "Prefix to prepend to table names to generate the name of the Kafka topic to publish data "
@@ -419,6 +434,25 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
+
+  /**
+   * A recommender that hides configuration parameters from being displayed in config list
+   * This is used for sensitive or internal configurations that should not be exposed
+   * to users through standard configuration interfaces.
+   */
+  private static final ConfigDef.Recommender HIDDEN_RECOMMENDER =
+      new ConfigDef.Recommender() {
+        @Override
+        public java.util.List<Object> validValues(
+            String name, Map<String, Object> config) {
+          return java.util.Collections.emptyList();
+        }
+
+        @Override
+        public boolean visible(String name, Map<String, Object> config) {
+          return false;
+        }
+      };
 
   public static final String DATABASE_GROUP = "Database";
   public static final String MODE_GROUP = "Mode";
@@ -825,6 +859,13 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   private static final void addModeOptions(ConfigDef config) {
     int orderInGroup = 0;
+    orderInGroup = defineModeConfig(config, orderInGroup);
+    orderInGroup = defineIncrementTimestampConfigs(config, orderInGroup);
+    orderInGroup = defineQueryAndQuoteConfigs(config, orderInGroup);
+    defineTransactionAndRetryConfigs(config, orderInGroup);
+  }
+
+  private static int defineModeConfig(ConfigDef config, int orderInGroup) {
     config.define(
         MODE_CONFIG,
         Type.STRING,
@@ -849,7 +890,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
             TIMESTAMP_COLUMN_MAPPING_CONFIG,
             VALIDATE_NON_NULL_CONFIG
         )
-    ).define(
+    );
+    return orderInGroup;
+  }
+
+  private static int defineIncrementTimestampConfigs(ConfigDef config, int orderInGroup) {
+    config.define(
         INCREMENTING_COLUMN_NAME_CONFIG,
         Type.STRING,
         INCREMENTING_COLUMN_NAME_DEFAULT,
@@ -917,7 +963,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         Width.SHORT,
         VALIDATE_NON_NULL_DISPLAY,
         MODE_DEPENDENTS_RECOMMENDER
-    ).define(
+    );
+    return orderInGroup;
+  }
+
+  private static int defineQueryAndQuoteConfigs(ConfigDef config, int orderInGroup) {
+    config.define(
         QUERY_CONFIG,
         Type.STRING,
         QUERY_DEFAULT,
@@ -927,6 +978,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.SHORT,
         QUERY_DISPLAY
+    ).define(
+        QUERY_MASKED_CONFIG,
+        Type.PASSWORD,
+        QUERY_DEFAULT,
+        Importance.MEDIUM,
+        QUERY_MASKED_DOC,
+        MODE_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        QUERY_MASKED_DISPLAY,
+        HIDDEN_RECOMMENDER
     ).define(
         QUOTE_SQL_IDENTIFIERS_CONFIG,
         Type.STRING,
@@ -948,7 +1010,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.MEDIUM,
         QUERY_SUFFIX_DISPLAY
-    ).define(
+    );
+    return orderInGroup;
+  }
+
+  private static void defineTransactionAndRetryConfigs(ConfigDef config, int orderInGroup) {
+    config.define(
         TRANSACTION_ISOLATION_MODE_CONFIG,
         Type.STRING,
         TRANSACTION_ISOLATION_MODE_DEFAULT,
@@ -1108,7 +1175,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final ConfigDef CONFIG_DEF = baseConfigDef();
 
   public JdbcSourceConnectorConfig(Map<String, ?> props) {
-    super(CONFIG_DEF, props);
+    super(CONFIG_DEF, props, shouldLog(props));
   }
 
   public String topicPrefix() {
@@ -1367,7 +1434,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
 
   protected JdbcSourceConnectorConfig(ConfigDef subclassConfigDef, Map<String, String> props) {
-    super(subclassConfigDef, props);
+    super(subclassConfigDef, props, shouldLog(props));
   }
 
   public NumericMapping numericMapping() {
@@ -1430,6 +1497,36 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     return incrementingColumnMapping().stream()
         .map(mapping -> mapping.split(":")[0].trim())
         .collect(java.util.stream.Collectors.toList());
+  }
+
+  /**
+ * Get the query string from either query or query.masked config.
+ *
+ * @return Optional containing the query string if present, empty Optional otherwise.
+ */
+  public Optional<String> getQuery() {
+    Password maskedQuery = getPassword(QUERY_MASKED_CONFIG);
+    if (maskedQuery != null && maskedQuery.value() != null && !maskedQuery.value().isEmpty()) {
+      return Optional.of(maskedQuery.value());
+    }
+
+    String query = getString(QUERY_CONFIG);
+    if (query != null && !query.isEmpty()) {
+      return Optional.of(query);
+    }
+
+    return Optional.empty();
+  }
+
+  public boolean isQueryMasked() {
+    Password maskedQuery = getPassword(QUERY_MASKED_CONFIG);
+    return maskedQuery != null
+        && maskedQuery.value() != null
+        && !maskedQuery.value().isEmpty();
+  }
+
+  public static boolean shouldLog(Map<String, ?> props) {
+    return !props.containsKey(QUERY_MASKED_CONFIG);
   }
 
   public boolean modeUsesTimestampColumn() {

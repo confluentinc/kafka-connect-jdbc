@@ -38,7 +38,7 @@ import static org.junit.Assert.assertTrue;
 public class MicrosoftSqlServerSinkIT extends BaseConnectorIT {
     private static final Logger log = LoggerFactory.getLogger(MicrosoftSqlServerSinkIT.class);
     private static final String CONNECTOR_NAME = "jdbc-sink-connector";
-    private static final String MSSQL_URL = "jdbc:sqlserver://0.0.0.0:1433";
+    private static final String MSSQL_URL = "jdbc:sqlserver://0.0.0.0:1433;encrypt=true;trustServerCertificate=true";
     private Map<String, String> props;
     private Connection connection;
     private JsonConverter jsonConverter;

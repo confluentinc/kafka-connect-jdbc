@@ -24,6 +24,7 @@ import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
+import io.confluent.connect.jdbc.util.JdbcCredentials;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
@@ -51,6 +52,9 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.Properties;
+
+import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG;
 
 /**
  * A {@link DatabaseDialect} for PostgreSQL.
@@ -100,6 +104,27 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     super(config, new IdentifierRules(".", "\"", "\""));
   }
 
+  @Override
+  protected Properties buildAuthenticationProperties(JdbcCredentials jdbcCredentials) {
+    Properties properties = new Properties();
+
+    // For Azure PostgreSQL with Entra ID authentication, username is required
+    // If username is null, use provider.integration.id (Client/Application ID)
+    String username = jdbcCredentials.getUsername();
+    if (username == null) {
+      username = config.getString(CONNECTION_USER_CONFIG);
+    }
+    if (username != null) {
+      properties.setProperty("user", username);
+    }
+
+    // For PostgreSQL, the access token goes in the password field (not a separate property)
+    if (jdbcCredentials.getPassword() != null) {
+      properties.setProperty("password", jdbcCredentials.getPassword());
+    }
+
+    return properties;
+  }
 
   @Override
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
@@ -122,7 +147,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         + "the connector may fail to write to tables with long names";
     // https://stackoverflow.com/questions/27865770/how-long-can-postgresql-table-names-be/27865772#27865772
     String nameLengthQuery = "SELECT length(repeat('1234567890', 1000)::NAME);";
-    
+
     int result;
     try (ResultSet rs = connection.createStatement().executeQuery(nameLengthQuery)) {
       if (rs.next()) {
@@ -193,10 +218,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   protected void initializePreparedStatement(PreparedStatement stmt) throws SQLException {
     super.initializePreparedStatement(stmt);
 
-    log.trace("Initializing PreparedStatement fetch direction to FETCH_FORWARD for '{}'", stmt);
+    log.trace(
+        "Initializing PreparedStatement fetch direction to FETCH_FORWARD for '{}'",
+        shouldRedactSensitiveLogs(stmt.toString()));
     stmt.setFetchDirection(ResultSet.FETCH_FORWARD);
   }
-
 
   @Override
   public String addFieldToSchema(
@@ -237,11 +263,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
         if (UUID.class.getName().equals(columnDefn.classNameForType())) {
           builder.field(
-                  fieldName,
-                  columnDefn.isOptional()
-                          ?
-                          Schema.OPTIONAL_STRING_SCHEMA :
-                          Schema.STRING_SCHEMA
+              fieldName,
+              columnDefn.isOptional()
+                  ?
+                  Schema.OPTIONAL_STRING_SCHEMA :
+                  Schema.STRING_SCHEMA
           );
           return fieldName;
         }
@@ -326,7 +352,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         return "INT";
       case INT64:
         if (config instanceof JdbcSinkConfig
-             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
+            && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
           return "TIMESTAMP";
         }
         return "BIGINT";
@@ -338,7 +364,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         return "BOOLEAN";
       case STRING:
         if (config instanceof JdbcSinkConfig
-             && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
+            && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name())) {
           return "TIMESTAMP";
         }
         return "TEXT";
@@ -346,10 +372,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         return "BYTEA";
       case ARRAY:
         SinkRecordField childField = new SinkRecordField(
-              field.schema().valueSchema(),
-              field.name(),
-              field.isPrimaryKey()
-            );
+            field.schema().valueSchema(),
+            field.name(),
+            field.isPrimaryKey()
+        );
         return getSqlType(childField) + "[]";
       default:
         return super.getSqlType(field);
@@ -368,14 +394,14 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     builder.append(table);
     builder.append(" (");
     builder.appendList()
-           .delimitedBy(",")
-           .transformedBy(ExpressionBuilder.columnNames())
-           .of(keyColumns, nonKeyColumns);
+        .delimitedBy(",")
+        .transformedBy(ExpressionBuilder.columnNames())
+        .of(keyColumns, nonKeyColumns);
     builder.append(") VALUES (");
     builder.appendList()
-           .delimitedBy(",")
-           .transformedBy(this.columnValueVariables(definition))
-           .of(keyColumns, nonKeyColumns);
+        .delimitedBy(",")
+        .transformedBy(this.columnValueVariables(definition))
+        .of(keyColumns, nonKeyColumns);
     builder.append(")");
     return builder.toString();
   }
@@ -392,15 +418,15 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     builder.append(table);
     builder.append(" SET ");
     builder.appendList()
-           .delimitedBy(", ")
-           .transformedBy(this.columnNamesWithValueVariables(definition))
-           .of(nonKeyColumns);
+        .delimitedBy(", ")
+        .transformedBy(this.columnNamesWithValueVariables(definition))
+        .of(nonKeyColumns);
     if (!keyColumns.isEmpty()) {
       builder.append(" WHERE ");
       builder.appendList()
-             .delimitedBy(" AND ")
-             .transformedBy(ExpressionBuilder.columnNamesWith(" = ?"))
-             .of(keyColumns);
+          .delimitedBy(" AND ")
+          .transformedBy(ExpressionBuilder.columnNamesWith(" = ?"))
+          .of(keyColumns);
     }
     return builder.toString();
   }
@@ -414,8 +440,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   ) {
     final Transform<ColumnId> transform = (builder, col) -> {
       builder.appendColumnName(col.name())
-             .append("=EXCLUDED.")
-             .appendColumnName(col.name());
+          .append("=EXCLUDED.")
+          .appendColumnName(col.name());
     };
 
     ExpressionBuilder builder = expressionBuilder();
@@ -423,27 +449,27 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     builder.append(table);
     builder.append(" (");
     builder.appendList()
-           .delimitedBy(",")
-           .transformedBy(ExpressionBuilder.columnNames())
-           .of(keyColumns, nonKeyColumns);
+        .delimitedBy(",")
+        .transformedBy(ExpressionBuilder.columnNames())
+        .of(keyColumns, nonKeyColumns);
     builder.append(") VALUES (");
     builder.appendList()
-           .delimitedBy(",")
-           .transformedBy(this.columnValueVariables(definition))
-           .of(keyColumns, nonKeyColumns);
+        .delimitedBy(",")
+        .transformedBy(this.columnValueVariables(definition))
+        .of(keyColumns, nonKeyColumns);
     builder.append(") ON CONFLICT (");
     builder.appendList()
-           .delimitedBy(",")
-           .transformedBy(ExpressionBuilder.columnNames())
-           .of(keyColumns);
+        .delimitedBy(",")
+        .transformedBy(ExpressionBuilder.columnNames())
+        .of(keyColumns);
     if (nonKeyColumns.isEmpty()) {
       builder.append(") DO NOTHING");
     } else {
       builder.append(") DO UPDATE SET ");
       builder.appendList()
-              .delimitedBy(",")
-              .transformedBy(transform)
-              .of(nonKeyColumns);
+          .delimitedBy(",")
+          .transformedBy(transform)
+          .of(nonKeyColumns);
     }
     return builder.toString();
   }
@@ -487,9 +513,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       throw new ConnectException("Unsupported type for array value: " + value.getClass().getName());
     }
     builder.appendList()
-            .delimitedBy(",")
-            .transformedBy(PostgreSqlDatabaseDialect::formatArrayItem)
-            .of(valueCollection);
+        .delimitedBy(",")
+        .transformedBy(PostgreSqlDatabaseDialect::formatArrayItem)
+        .of(valueCollection);
     builder.append("]");
   }
 

@@ -26,6 +26,7 @@ import java.sql.SQLException;
 import static org.junit.Assert.assertEquals;
 
 public class LogUtilTest {
+  private static final String REDACTED = "<redacted>";
 
   @Test
   public void testNonSqlThrowable() {
@@ -128,6 +129,62 @@ public class LogUtilTest {
 
     SQLException actualTrimmed = LogUtil.trimSensitiveData(e1);
     assertEqualsSQLException(expectedTrimmed, actualTrimmed);
+  }
+
+  @Test
+  public void testSensitiveLogWithTrimEnabled() {
+    String sensitiveMessage = "SELECT * FROM users WHERE password='secret123'";
+    String result = LogUtil.maybeRedact(true, sensitiveMessage);
+    assertEquals(REDACTED, result);
+  }
+
+  @Test
+  public void testSensitiveLogWithTrimDisabled() {
+    String message = "SELECT * FROM users WHERE id=1";
+    String result = LogUtil.maybeRedact(false, message);
+    assertEquals(message, result);
+  }
+
+  @Test
+  public void testRedactSensitiveDataWithNonSqlThrowable() {
+    Throwable t = new RuntimeException("secret");
+    Assert.assertSame(t, LogUtil.redactSensitiveData(t));
+  }
+
+  @Test
+  public void testRedactSensitiveDataWithSqlExceptionChain() {
+    SQLException e1 = new SQLException("sensitive-message-e1", "42000", 10);
+    SQLException e2 = new SQLException("sensitive-message-e2", "42001", 20);
+    e1.setNextException(e2);
+
+    SQLException expected = new SQLException(REDACTED, "42000", 10);
+    SQLException expectedChild = new SQLException(REDACTED, "42001", 20);
+    expected.setNextException(expectedChild);
+
+    SQLException redacted = LogUtil.redactSensitiveData(e1);
+
+    assertEqualsSQLException(expected, redacted);
+  }
+
+  @Test
+  public void testRedactSensitiveDataWithBatchUpdateException() {
+    BatchUpdateException e1 =
+        new BatchUpdateException("sensitive message-e1", "42002", 30, new int[0]);
+
+    SQLException e2 = new SQLException("sensitive message-e2", "42003", 40);
+    e1.setNextException(e2);
+
+    BatchUpdateException expected =
+        new BatchUpdateException(REDACTED, "42002", 30, new int[0]);
+    SQLException expectedChild = new SQLException(REDACTED, "42003", 40);
+    expected.setNextException(expectedChild);
+
+    SQLException actual = LogUtil.redactSensitiveData(e1);
+    Assert.assertTrue(actual instanceof BatchUpdateException);
+    Assert.assertArrayEquals(
+        expected.getUpdateCounts(), ((BatchUpdateException) actual).getUpdateCounts());
+
+    assertEqualsSQLException(expected, actual);
   }
 
   @Test

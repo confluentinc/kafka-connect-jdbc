@@ -21,7 +21,6 @@ import java.time.ZoneOffset;
 import org.apache.kafka.common.Configurable;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigException;
-import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
@@ -94,8 +93,8 @@ import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.JdbcCredentials;
 import io.confluent.connect.jdbc.util.JdbcCredentialsProvider;
 import io.confluent.connect.jdbc.util.JdbcDriverInfo;
+import io.confluent.connect.jdbc.util.LogUtil;
 import io.confluent.connect.jdbc.util.QuoteMethod;
-import io.confluent.connect.jdbc.util.StringUtils;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.TableType;
@@ -117,6 +116,10 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   protected static final int NUMERIC_TYPE_SCALE_HIGH = 127;
   protected static final int NUMERIC_TYPE_SCALE_UNSET = -127;
 
+  // Bounds the getMetaData() compile round-trip during query validation; drivers
+  // honour setQueryTimeout() best-effort, guarding against slow planners.
+  private static final int VALIDATE_QUERY_TIMEOUT_SECONDS = 60;
+
   // The maximum precision that can be achieved in a signed 64-bit integer is 2^63 ~= 9.223372e+18
   private static final int MAX_INTEGER_TYPE_PRECISION = 18;
 
@@ -130,7 +133,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   public static class Provider extends FixedScoreProvider {
     public Provider() {
       super(GenericDatabaseDialect.class.getSimpleName(),
-            DatabaseDialectProvider.AVERAGE_MATCHING_SCORE
+          DatabaseDialectProvider.AVERAGE_MATCHING_SCORE
       );
     }
 
@@ -258,10 +261,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     return zoneId;
   }
 
-  @Override
-  public Connection getConnection() throws SQLException {
-    JdbcCredentials jdbcCredentials = jdbcCredentialsProvider.getJdbcCredentials();
-
+  /**
+   * Build authentication properties from credentials.
+   * Subclasses can override to customize authentication property handling.
+   *
+   * @param jdbcCredentials the credentials to use for authentication
+   * @return properties containing authentication information
+   */
+  protected Properties buildAuthenticationProperties(JdbcCredentials jdbcCredentials) {
     Properties properties = new Properties();
     if (jdbcCredentials.getUsername() != null) {
       properties.setProperty("user", jdbcCredentials.getUsername());
@@ -269,6 +276,13 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     if (jdbcCredentials.getPassword() != null) {
       properties.setProperty("password", jdbcCredentials.getPassword());
     }
+    return properties;
+  }
+
+  @Override
+  public Connection getConnection() throws SQLException {
+    JdbcCredentials jdbcCredentials = jdbcCredentialsProvider.getJdbcCredentials();
+    Properties properties = buildAuthenticationProperties(jdbcCredentials);
     properties = addConnectionProperties(properties);
     // Timeout is 40 seconds to be as long as possible for customer to have a long connection
     // handshake, while still giving enough time to validate once in the follower worker,
@@ -391,7 +405,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       Connection db,
       String query
   ) throws SQLException {
-    glog.trace("Creating a PreparedStatement '{}'", query);
+    glog.trace(
+        "Creating a PreparedStatement '{}'", shouldRedactSensitiveLogs(query));
     PreparedStatement stmt = db.prepareStatement(query);
     initializePreparedStatement(stmt);
     return stmt;
@@ -561,7 +576,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   @Override
   public ExpressionBuilder expressionBuilder() {
     return identifierRules().expressionBuilder()
-                            .setQuoteIdentifiers(quoteSqlIdentifiers);
+        .setQuoteIdentifiers(quoteSqlIdentifiers);
   }
 
   /**
@@ -633,16 +648,16 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   public void setConnectionIsolationMode(
-          Connection connection,
-          TransactionIsolationMode transactionIsolationMode
+      Connection connection,
+      TransactionIsolationMode transactionIsolationMode
   ) {
     log.info("Setting connection isolation mode to: {}", transactionIsolationMode.name());
     if (transactionIsolationMode
-            == TransactionIsolationMode.DEFAULT) {
+        == TransactionIsolationMode.DEFAULT) {
       return;
     }
     int isolationMode = TransactionIsolationMode.get(
-            transactionIsolationMode
+        transactionIsolationMode
     );
     try {
       DatabaseMetaData metadata = connection.getMetaData();
@@ -653,7 +668,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       }
     } catch (SQLException | ConfigException ex) {
       log.warn("Unable to set transaction.isolation.mode: " +  transactionIsolationMode.name()
-              +  ". No transaction isolation mode will be set for the queries: " + ex.getMessage());
+          +  ". No transaction isolation mode will be set for the queries: " + ex.getMessage());
     }
   }
 
@@ -891,8 +906,8 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       TableId tableId
   ) throws SQLException {
     Map<ColumnId, ColumnDefinition> columnDefns = describeColumns(connection, tableId.catalogName(),
-                                                                  tableId.schemaName(),
-                                                                  tableId.tableName(), null
+        tableId.schemaName(),
+        tableId.tableName(), null
     );
     if (columnDefns.isEmpty()) {
       return null;
@@ -1035,7 +1050,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       SchemaBuilder builder
   ) {
     return addFieldToSchema(columnDefn, builder, fieldNameFor(columnDefn), columnDefn.type(),
-                            columnDefn.isOptional()
+        columnDefn.isOptional()
     );
   }
 
@@ -1282,7 +1297,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       ColumnMapping mapping
   ) {
     return columnConverterFor(mapping, mapping.columnDefn(), mapping.columnNumber(),
-                              jdbcDriverInfo().jdbcVersionAtLeast(4, 0)
+        jdbcDriverInfo().jdbcVersionAtLeast(4, 0)
     );
   }
 
@@ -1588,9 +1603,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     builder.append(table);
     builder.append("(");
     builder.appendList()
-           .delimitedBy(",")
-           .transformedBy(ExpressionBuilder.columnNames())
-           .of(keyColumns, nonKeyColumns);
+        .delimitedBy(",")
+        .transformedBy(ExpressionBuilder.columnNames())
+        .of(keyColumns, nonKeyColumns);
     builder.append(") VALUES(");
     builder.appendMultiple(",", "?", keyColumns.size() + nonKeyColumns.size());
     builder.append(")");
@@ -1609,15 +1624,15 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     builder.append(table);
     builder.append(" SET ");
     builder.appendList()
-           .delimitedBy(", ")
-           .transformedBy(ExpressionBuilder.columnNamesWith(" = ?"))
-           .of(nonKeyColumns);
+        .delimitedBy(", ")
+        .transformedBy(ExpressionBuilder.columnNamesWith(" = ?"))
+        .of(nonKeyColumns);
     if (!keyColumns.isEmpty()) {
       builder.append(" WHERE ");
       builder.appendList()
-             .delimitedBy(" AND ")
-             .transformedBy(ExpressionBuilder.columnNamesWith(" = ?"))
-             .of(keyColumns);
+          .delimitedBy(" AND ")
+          .transformedBy(ExpressionBuilder.columnNamesWith(" = ?"))
+          .of(keyColumns);
     }
     return builder.toString();
   }
@@ -1876,9 +1891,9 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       builder.append(System.lineSeparator());
       builder.append("PRIMARY KEY(");
       builder.appendList()
-             .delimitedBy(",")
-             .transformedBy(ExpressionBuilder.quote())
-             .of(pkFieldNames);
+          .delimitedBy(",")
+          .transformedBy(ExpressionBuilder.quote())
+          .of(pkFieldNames);
       builder.append(")");
     }
     builder.append(")");
@@ -1923,17 +1938,29 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     builder.append(table);
     builder.append(" ");
     builder.appendList()
-           .delimitedBy(",")
-           .transformedBy(transform)
-           .of(fields);
+        .delimitedBy(",")
+        .transformedBy(transform)
+        .of(fields);
     return Collections.singletonList(builder.toString());
   }
 
   @Override
   public void validateSpecificColumnTypes(
-          ResultSetMetaData rsMetadata,
-          List<ColumnId> columns
+      ResultSetMetaData rsMetadata,
+      List<ColumnId> columns
   ) throws ConnectException { }
+
+  /**
+   * Validates the query via {@link PreparedStatement#getMetaData()}, bounded by a
+   * query timeout. See {@link DatabaseDialect#validateQuery(Connection, String)}.
+   */
+  @Override
+  public void validateQuery(Connection connection, String query) throws SQLException {
+    try (PreparedStatement stmt = connection.prepareStatement(query)) {
+      stmt.setQueryTimeout(VALIDATE_QUERY_TIMEOUT_SECONDS);
+      stmt.getMetaData();
+    }
+  }
 
   protected List<String> extractPrimaryKeyFieldNames(Collection<SinkRecordField> fields) {
     final List<String> pks = new ArrayList<>();
@@ -2076,8 +2103,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     // All the config key variables referred in this method are same in both source and sink
     // connector. Using source connector config keys here but method should work for sink
     // connector as well.
-    String username = config.getString(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG);
-    Password dbPassword = config.getPassword(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG);
 
     try {
       JdbcCredentialsProvider provider = ((Class<? extends JdbcCredentialsProvider>)
@@ -2085,21 +2110,19 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       ).newInstance();
 
       if (provider instanceof Configurable) {
-        Map<String, Object> configs = config.originalsWithPrefix(
+        Map<String, Object> configs = config.originals();
+
+        // To maintain backward compatability, strip configs prefixed with
+        // CREDENTIALS_PROVIDER_CONFIG_PREFIX add it to the config entries
+        configs.putAll(config.originalsWithPrefix(
             JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX
-        );
+        ));
+
         configs.remove(
             JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG.substring(
                 JdbcSourceConnectorConfig.CREDENTIALS_PROVIDER_CONFIG_PREFIX.length()
             )
         );
-
-        if (StringUtils.isNotBlank(username)) {
-          configs.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, username);
-        }
-        if (dbPassword != null && StringUtils.isNotBlank(dbPassword.value())) {
-          configs.put(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, dbPassword.value());
-        }
 
         ((Configurable) provider).configure(configs);
       }
@@ -2114,6 +2137,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   @Override
   public String identifier() {
     return name() + " database " + sanitizedUrl(jdbcUrl);
+  }
+
+  public String shouldRedactSensitiveLogs(String queryString) {
+    if (config instanceof JdbcSourceConnectorConfig) {
+      return LogUtil.maybeRedact(
+          ((JdbcSourceConnectorConfig) config).isQueryMasked(), queryString);
+    }
+    return queryString;
   }
 
   @Override

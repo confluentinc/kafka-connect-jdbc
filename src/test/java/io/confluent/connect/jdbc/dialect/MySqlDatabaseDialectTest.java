@@ -255,4 +255,7 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
         + "user=smith&password=****&other=value"
     );
   }
+
+  // validateQuery behaviour is inherited from GenericDatabaseDialect and exercised in
+  // GenericDatabaseDialectTest; no MySQL-specific override exists to test here.
 }

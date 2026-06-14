@@ -20,7 +20,7 @@ public class TestConfigurableJdbcCredentialsProvider implements JdbcCredentialsP
 
   @Override
   public JdbcCredentials getJdbcCredentials() {
-    return new BasicJdbcCredentials((String) configMap.get("username"),
-        (String) configMap.get("password"));
+    return new BasicJdbcCredentials((String) configMap.get("connection.username"),
+        (String) configMap.get("connection.password"));
   }
 }

@@ -46,6 +46,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
+
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -648,5 +649,9 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     dialect.formatColumnValue(builder, null, null, Schema.Type.ARRAY, input);
     assertEquals(expected, builder.toString());
   }
+
+
+  // validateQuery behaviour is inherited from GenericDatabaseDialect and exercised in
+  // GenericDatabaseDialectTest; no PostgreSQL-specific override exists to test here.
 
 }

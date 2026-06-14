@@ -50,6 +50,19 @@ public class LogUtil {
         e.getUpdateCounts());
   }
 
+  // Structured ServerErrorMessage labels — only ever appear at field boundaries, so safe to trust.
+  // Redshift's redshift-jdbc42 driver is a pgjdbc fork and emits the same shape.
+  private static final String[] STRUCTURED_END_MARKERS = {
+      "\n  Detail: ",
+      "\n  Hint: "
+  };
+
+  // pgjdbc BatchResultHandler suffix (reused verbatim by redshift-jdbc42). Free-form sentence text,
+  // so used only as a fallback when no structured label is present — a reason could plausibly
+  // contain this phrase (e.g., a trigger's RAISE EXCEPTION message), in which case earliest-wins
+  // across both tiers would truncate the reason mid-sentence.
+  private static final String BATCH_SUFFIX_FALLBACK = "  Call getNextException ";
+
   public static SQLException redactSensitiveData(SQLException e) {
     return (SQLException) redactSensitiveData((Throwable) e);
   }
@@ -87,11 +100,12 @@ public class LogUtil {
   // This implementation assumes it to be Postgres, see toString() of ServerErrorMessage.java
   // as well as the constructor of PSQLException.java with "boolean detail" flag in
   // https://github.com/pgjdbc/pgjdbc/blob/master/pgjdbc/src/main/java/org/postgresql/util/
+  // Redshift's redshift-jdbc42 driver is a pgjdbc fork that emits the same message shape,
+  // including the BatchResultHandler "Call getNextException" suffix used as the Tier 2 fallback.
   // For other JDBC Databases it would not fail but might return the same input string back!
   private static String getNonSensitiveErrorMessage(String errMsg) {
     final String sensitiveStartSearchText = ") VALUES (";
     final String errorStartSearchText = ": ERROR: ";
-    final String errorEndSearchText = "\n  Detail: ";
 
     if (errMsg == null) {
       return null;
@@ -106,14 +120,27 @@ public class LogUtil {
     String msg1 = errMsg.substring(trimStartIdx, trimEndIdx + 1);
 
     int errorStartIdx = errMsg.indexOf(errorStartSearchText);
-    int errorEndIdx = errMsg.indexOf(errorEndSearchText);
-    if (errorStartIdx < trimEndIdx || errorEndIdx < trimEndIdx
-            || errorEndIdx < errorStartIdx) {
+    if (errorStartIdx < trimEndIdx) {
       return msg1;
     }
 
-    String msg2 = errMsg.substring(errorStartIdx, errorEndIdx);
-    return msg1 + msg2;
+    // Tier 1: structured server-side field labels. Earliest match wins between them.
+    int errorEndIdx = -1;
+    for (String marker : STRUCTURED_END_MARKERS) {
+      int idx = errMsg.indexOf(marker, errorStartIdx);
+      if (idx > 0 && (errorEndIdx < 0 || idx < errorEndIdx)) {
+        errorEndIdx = idx;
+      }
+    }
+    // Tier 2: fall back to the BatchResultHandler suffix only if no structured marker matched.
+    if (errorEndIdx < 0) {
+      errorEndIdx = errMsg.indexOf(BATCH_SUFFIX_FALLBACK, errorStartIdx);
+    }
+    if (errorEndIdx < 0) {
+      return msg1;
+    }
+
+    return msg1 + errMsg.substring(errorStartIdx, errorEndIdx);
   }
 
   public static String maybeRedact(boolean shouldRedactSensitiveLogs, String msg) {

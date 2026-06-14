@@ -36,7 +36,7 @@ public final class Json {
 
   /**
    * Returns a {@link SchemaBuilder} for a JSON-typed STRING field. Callers may further configure
-   * it (e.g. {@code optional()}) before building.
+   * it (e.g. {@code optional()}, a default value, or documentation) before building.
    *
    * @return the schema builder; never null
    */
@@ -47,11 +47,23 @@ public final class Json {
   }
 
   /**
-   * Returns a JSON-typed STRING {@link Schema} with default settings.
+   * Returns a JSON-typed STRING {@link Schema} with all other default settings.
    *
    * @return the schema; never null
+   * @see #builder()
    */
   public static Schema schema() {
     return builder().build();
+  }
+
+  /**
+   * Returns an optional JSON-typed STRING {@link Schema} with all other default settings, e.g. for
+   * use as an array element type.
+   *
+   * @return the optional schema; never null
+   * @see #builder()
+   */
+  public static Schema optionalSchema() {
+    return builder().optional().build();
   }
 }

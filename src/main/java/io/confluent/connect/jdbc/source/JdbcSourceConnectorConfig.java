@@ -192,13 +192,13 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String JSON_HANDLING_MODE_CONFIG = "json.handling.mode";
   public static final String JSON_HANDLING_MODE_MAP = "map";
   public static final String JSON_HANDLING_MODE_STRING = "string";
-  public static final String JSON_HANDLING_MODE_DEFAULT = JSON_HANDLING_MODE_MAP;
+  public static final String JSON_HANDLING_MODE_DEFAULT = JSON_HANDLING_MODE_STRING;
   private static final String JSON_HANDLING_MODE_DOC =
       "Controls how PostgreSQL ``json``/``jsonb`` columns are represented when "
-      + "``sql.complex.types.enable`` is true. ``map`` (the default) emits a Connect "
-      + "Map<String,String> with top-level fields projected as entries. ``string`` emits the "
-      + "document as a logical JSON STRING (raw text, lossless, tagged "
-      + "``io.confluent.connect.jdbc.data.Json``). Has no effect unless "
+      + "``sql.complex.types.enable`` is true. ``string`` (the default) emits the document as a "
+      + "logical JSON STRING (raw text, lossless, tagged "
+      + "``io.confluent.connect.jdbc.data.Json``). ``map`` emits a Connect Map<String,String> with "
+      + "top-level fields projected as entries. Has no effect unless "
       + "``sql.complex.types.enable`` is true.";
   private static final String JSON_HANDLING_MODE_DISPLAY = "JSON Handling Mode";
 

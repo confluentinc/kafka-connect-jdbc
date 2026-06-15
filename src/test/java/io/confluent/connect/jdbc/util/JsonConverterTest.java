@@ -30,24 +30,24 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
-public class ConnectJsonConverterUtilTest {
+public class JsonConverterTest {
 
   @Test
-  public void shallowMapNullStaysNull() {
-    assertNull(ConnectJsonConverterUtil.jsonStringToShallowMap(null));
+  public void mapNullStaysNull() {
+    assertNull(JsonConverter.jsonStringToMap(null));
   }
 
   @Test
-  public void shallowMapJsonNullBecomesEmpty() {
-    Map<String, String> result = ConnectJsonConverterUtil.jsonStringToShallowMap("null");
+  public void mapJsonNullBecomesEmpty() {
+    Map<String, String> result = JsonConverter.jsonStringToMap("null");
     assertTrue(result.isEmpty());
   }
 
   @Test
-  public void shallowMapDecodesScalarsAndKeepsNestedAsJsonStrings() {
+  public void mapDecodesScalarsAndKeepsNestedAsJsonStrings() {
     String json = "{\"name\":\"sensor-1\",\"temp\":42,\"on\":true,\"miss\":null,"
         + "\"meta\":{\"loc\":\"x\"},\"tags\":[1,2]}";
-    Map<String, String> result = ConnectJsonConverterUtil.jsonStringToShallowMap(json);
+    Map<String, String> result = JsonConverter.jsonStringToMap(json);
     assertEquals("sensor-1", result.get("name"));
     assertEquals("42", result.get("temp"));
     assertEquals("true", result.get("on"));
@@ -57,14 +57,14 @@ public class ConnectJsonConverterUtilTest {
   }
 
   @Test
-  public void shallowMapRejectsTopLevelArray() {
+  public void mapRejectsTopLevelArray() {
     assertThrows(DataException.class,
-        () -> ConnectJsonConverterUtil.jsonStringToShallowMap("[1,2,3]"));
+        () -> JsonConverter.jsonStringToMap("[1,2,3]"));
   }
 
   @Test
   public void serializeNullValueReturnsNull() {
-    assertNull(ConnectJsonConverterUtil.connectValueToJson(Schema.OPTIONAL_STRING_SCHEMA, null));
+    assertNull(JsonConverter.connectValueToJson(Schema.OPTIONAL_STRING_SCHEMA, null));
   }
 
   @Test
@@ -74,7 +74,7 @@ public class ConnectJsonConverterUtilTest {
         .field("name", Schema.STRING_SCHEMA)
         .build();
     Struct struct = new Struct(schema).put("id", 7).put("name", "alice");
-    String json = ConnectJsonConverterUtil.connectValueToJson(schema, struct);
+    String json = JsonConverter.connectValueToJson(schema, struct);
     assertEquals("{\"id\":7,\"name\":\"alice\"}", json);
   }
 
@@ -84,14 +84,14 @@ public class ConnectJsonConverterUtilTest {
     Map<String, Integer> input = new LinkedHashMap<>();
     input.put("a", 1);
     input.put("b", 2);
-    String json = ConnectJsonConverterUtil.connectValueToJson(schema, input);
+    String json = JsonConverter.connectValueToJson(schema, input);
     assertEquals("{\"a\":1,\"b\":2}", json);
   }
 
   @Test
   public void serializeArray() {
     Schema schema = SchemaBuilder.array(Schema.INT32_SCHEMA).build();
-    String json = ConnectJsonConverterUtil.connectValueToJson(schema, Arrays.asList(1, 2, 3));
+    String json = JsonConverter.connectValueToJson(schema, Arrays.asList(1, 2, 3));
     assertEquals("[1,2,3]", json);
   }
 
@@ -111,7 +111,7 @@ public class ConnectJsonConverterUtilTest {
         .put("inner", new Struct(inner).put("loc", "lab"))
         .put("tags", Arrays.asList("a", "b"))
         .put("attrs", attrs);
-    String json = ConnectJsonConverterUtil.connectValueToJson(schema, struct);
+    String json = JsonConverter.connectValueToJson(schema, struct);
     assertEquals("{\"inner\":{\"loc\":\"lab\"},\"tags\":[\"a\",\"b\"],\"attrs\":{\"temp\":42}}",
         json);
   }

@@ -18,65 +18,46 @@ package io.confluent.connect.jdbc.util;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.data.Time;
+import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.DataException;
 
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.util.Base64;
-import java.util.Date;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Helpers that bridge JDBC JSON / JSONB columns and Kafka Connect schema-bearing values.
- *
- * <p>Used by the JDBC source path (parsing a JSON String into a Connect-friendly
- * {@code Map<String,String>}) and by the JDBC sink path (serializing a Connect
- * Struct/Map/List back into a JSON String suitable for binding into a JSON or JSONB column).
- *
- * <p>The map representation is intentionally shallow: each top-level entry maps the JSON
- * field name to the JSON-encoded representation of its value. This keeps the schema fixed
- * (Map&lt;STRING,STRING&gt;) while still letting downstream consumers (ksqlDB, SMTs) walk into
- * individual top-level fields without re-parsing the whole document.
+ * Bridges JDBC JSON/JSONB columns and Kafka Connect schema-bearing values: parses a JSON document
+ * into a {@code Map<String,String>} for the source path, and serializes a Connect
+ * Struct/Map/List/primitive back into a JSON string for the sink path.
  */
-public final class ConnectJsonConverterUtil {
+public final class JsonConverter {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
-  private ConnectJsonConverterUtil() {
+  private JsonConverter() {
   }
 
   /**
-   * Parse a JSON string into a {@code Map<String,String>} where each top-level value is
-   * projected to a String according to its JSON type:
+   * Parse a JSON object into a {@code Map<String,String>} keyed by top-level field name. Scalars
+   * become their decoded text, nested objects/arrays keep their JSON text, and a JSON null becomes
+   * a null map value. Returns null for null input, and an empty map for a JSON null document.
    *
-   * <ul>
-   *   <li>JSON string → decoded text (no surrounding quotes), so a JSONB→MAP→JSONB
-   *       round-trip preserves the original literal.
-   *   <li>JSON number / boolean → its textual form ({@code "1"}, {@code "true"}).
-   *   <li>JSON object / array → its JSON-encoded text, so structure is preserved as a
-   *       sub-document inside the MAP value.
-   *   <li>JSON null → Java {@code null} map value.
-   * </ul>
-   *
-   * <p>Examples:
-   * <ul>
-   *   <li>{@code {"a":1,"b":"x"}} → {@code {"a":"1", "b":"x"}}
-   *   <li>{@code {"sensor":{"temp":50}}} → {@code {"sensor":"{\"temp\":50}"}}
-   * </ul>
-   *
-   * <p>Returns null if the input is null. Returns an empty map if the input represents
-   * a JSON null. Throws if the JSON top-level is not an object.
+   * @throws DataException if the input cannot be parsed or its top level is not a JSON object
    */
-  public static Map<String, String> jsonStringToShallowMap(String json) {
+  public static Map<String, String> jsonStringToMap(String json) {
     if (json == null) {
       return null;
     }
@@ -90,9 +71,7 @@ public final class ConnectJsonConverterUtil {
       return new LinkedHashMap<>();
     }
     if (!root.isObject()) {
-      throw new DataException(
-          "Expected JSON object at top-level for shallow Map conversion but found "
-              + root.getNodeType());
+      throw new DataException("Expected a top-level JSON object but found " + root.getNodeType());
     }
     Map<String, String> out = new LinkedHashMap<>();
     Iterator<Map.Entry<String, JsonNode>> fields = root.fields();
@@ -108,7 +87,6 @@ public final class ConnectJsonConverterUtil {
       return null;
     }
     if (node.isValueNode()) {
-      // Scalars (string/number/boolean) → decoded text so a JSONB round-trip stays clean.
       return node.asText();
     }
     try {
@@ -119,19 +97,16 @@ public final class ConnectJsonConverterUtil {
   }
 
   /**
-   * Serialize a Kafka Connect value (Struct, Map, List, primitive, logical type) into a
-   * JSON string suitable for binding into a database JSON / JSONB column.
-   *
-   * <p>The schema is used when present to honor logical types (Decimal, Date, Time,
-   * Timestamp, byte arrays). When the schema is null, types are inferred from the value.
+   * Serialize a Connect value (Struct, Map, List, primitive, or logical type) into a JSON string
+   * for binding into a JSON/JSONB column. When present the schema is used to honor logical types
+   * (Decimal, Date, Time, Timestamp, bytes); otherwise the type is inferred from the value.
    */
   public static String connectValueToJson(Schema schema, Object value) {
     if (value == null) {
       return null;
     }
-    JsonNode node = toJsonNode(schema, value);
     try {
-      return MAPPER.writeValueAsString(node);
+      return MAPPER.writeValueAsString(toJsonNode(schema, value));
     } catch (JsonProcessingException e) {
       throw new DataException("Failed to serialize Connect value to JSON", e);
     }
@@ -145,10 +120,7 @@ public final class ConnectJsonConverterUtil {
     if (logical != null) {
       return logical;
     }
-    if (schema != null) {
-      return schemaTypeToJsonNode(schema, value);
-    }
-    return inferToJsonNode(value);
+    return schema != null ? schemaTypeToJsonNode(schema, value) : inferToJsonNode(value);
   }
 
   private static JsonNode logicalToJsonNode(Schema schema, Object value) {
@@ -158,10 +130,10 @@ public final class ConnectJsonConverterUtil {
     switch (schema.name()) {
       case Decimal.LOGICAL_NAME:
         return MAPPER.valueToTree(((BigDecimal) value).toPlainString());
-      case org.apache.kafka.connect.data.Date.LOGICAL_NAME:
-      case org.apache.kafka.connect.data.Time.LOGICAL_NAME:
-      case org.apache.kafka.connect.data.Timestamp.LOGICAL_NAME:
-        return MAPPER.valueToTree(((Date) value).getTime());
+      case Date.LOGICAL_NAME:
+      case Time.LOGICAL_NAME:
+      case Timestamp.LOGICAL_NAME:
+        return MAPPER.valueToTree(((java.util.Date) value).getTime());
       default:
         return null;
     }
@@ -200,16 +172,14 @@ public final class ConnectJsonConverterUtil {
 
   private static JsonNode structToJsonNode(Struct struct) {
     ObjectNode obj = MAPPER.createObjectNode();
-    Schema schema = struct.schema();
-    for (Field field : schema.fields()) {
-      Object fieldValue = struct.get(field);
-      obj.set(field.name(), toJsonNode(field.schema(), fieldValue));
+    for (Field field : struct.schema().fields()) {
+      obj.set(field.name(), toJsonNode(field.schema(), struct.get(field)));
     }
     return obj;
   }
 
   private static JsonNode mapToJsonNode(Schema schema, Map<?, ?> map) {
-    Schema valueSchema = (schema != null) ? schema.valueSchema() : null;
+    Schema valueSchema = schema != null ? schema.valueSchema() : null;
     ObjectNode obj = MAPPER.createObjectNode();
     for (Map.Entry<?, ?> entry : map.entrySet()) {
       if (entry.getKey() == null) {
@@ -221,8 +191,8 @@ public final class ConnectJsonConverterUtil {
   }
 
   private static JsonNode listToJsonNode(Schema schema, List<?> list) {
-    Schema valueSchema = (schema != null) ? schema.valueSchema() : null;
-    com.fasterxml.jackson.databind.node.ArrayNode arr = MAPPER.createArrayNode();
+    Schema valueSchema = schema != null ? schema.valueSchema() : null;
+    ArrayNode arr = MAPPER.createArrayNode();
     for (Object element : list) {
       arr.add(toJsonNode(valueSchema, element));
     }

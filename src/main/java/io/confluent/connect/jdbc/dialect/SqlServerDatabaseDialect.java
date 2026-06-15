@@ -143,7 +143,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
   public TableId parseTableIdentifier(String fqn) {
     TableId tableId = super.parseTableIdentifier(fqn);
     if (tableId.schemaName() == null) {
-      return createTableId(tableId.catalogName(), "dbo", tableId.tableName());
+      return new TableId(tableId.catalogName(), "dbo", tableId.tableName());
     }
     return tableId;
   }

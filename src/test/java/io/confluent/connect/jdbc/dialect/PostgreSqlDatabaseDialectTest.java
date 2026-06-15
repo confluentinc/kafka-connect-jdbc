@@ -584,11 +584,13 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
-  public void shouldStripCatalogFromParsedTableIdentifiers() {
-    // Configured names go through the same construction seam: an explicit db prefix adds
-    // no information on a single-database connection and is dropped.
+  public void shouldPreserveCatalogFromParsedTableIdentifiers() {
+    // Configured names (e.g. table.name.format) are user intent, not driver metadata, so the
+    // catalog strip does NOT apply here. A configured database must survive parsing: dropping
+    // it would let JdbcDbWriter back-fill the connected database and silently write to the
+    // wrong one instead of failing loudly on the cross-database reference.
     assertEquals(
-        new TableId(null, METADATA_SCHEMA, CUSTOMERS_TABLE),
+        new TableId("mydb", METADATA_SCHEMA, CUSTOMERS_TABLE),
         dialect.parseTableIdentifier("mydb." + METADATA_SCHEMA + "." + CUSTOMERS_TABLE)
     );
     assertEquals(

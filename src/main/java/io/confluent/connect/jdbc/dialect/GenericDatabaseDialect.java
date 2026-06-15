@@ -439,16 +439,16 @@ public class GenericDatabaseDialect implements DatabaseDialect {
       throw new IllegalArgumentException("Invalid fully qualified name: '" + fqn + "'");
     }
     if (parts.size() == 1) {
-      return createTableId(null, null, parts.get(0));
+      return new TableId(null, null, parts.get(0));
     }
     if (parts.size() == 3) {
-      return createTableId(parts.get(0), parts.get(1), parts.get(2));
+      return new TableId(parts.get(0), parts.get(1), parts.get(2));
     }
     assert parts.size() >= 2;
     if (useCatalog()) {
-      return createTableId(parts.get(0), null, parts.get(1));
+      return new TableId(parts.get(0), null, parts.get(1));
     }
-    return createTableId(null, parts.get(0), parts.get(1));
+    return new TableId(null, parts.get(0), parts.get(1));
   }
 
   /**
@@ -461,13 +461,18 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   /**
-   * Single construction point for every {@link TableId} the dialect creates, whether read
-   * from driver metadata or parsed from a configured name. A dialect can override this to
-   * normalize identifiers in one place.
+   * Construct a {@link TableId} from identity components read from driver metadata
+   * ({@code getTables}, {@code getColumns}, {@code getPrimaryKeys}, result-set metadata).
+   * A dialect can override this to normalize discovered identifiers in one place. The
+   * catalog here comes from the driver, so it only ever echoes the connected database.
    *
-   * @param catalogName the catalog name; may be null
-   * @param schemaName  the schema name; may be null
-   * @param tableName   the table name; never null
+   * <p>Identifiers parsed from configuration go through {@link #parseTableIdentifier(String)}
+   * and deliberately do not route through this seam: a configured catalog is user intent,
+   * not driver noise, and must be preserved.
+   *
+   * @param catalogName the catalog name reported by the driver; may be null
+   * @param schemaName  the schema name reported by the driver; may be null
+   * @param tableName   the table name reported by the driver; never null
    * @return the table identifier; never null
    */
   protected TableId createTableId(String catalogName, String schemaName, String tableName) {

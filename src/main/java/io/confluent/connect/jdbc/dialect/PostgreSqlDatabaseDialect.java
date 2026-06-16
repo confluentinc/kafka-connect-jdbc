@@ -424,13 +424,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         return Schema.OPTIONAL_BOOLEAN_SCHEMA;
       case "numeric":
       case "decimal":
-        // Array element scale is not exposed via JDBC metadata (typmod -1 for arrays), so the
-        // per-value scale is carried with each element via VariableScaleDecimal.
+        // Per-value scale carried via VariableScaleDecimal (array typmod is -1 in JDBC metadata).
         return VariableScaleDecimal.optionalSchema();
       case "json":
       case "jsonb":
-        // Each element is carried as raw JSON text via the Json logical type (lossless,
-        // round-trips to a native jsonb[] column on the sink).
+        // Raw JSON text via the Json logical type; round-trips to a native jsonb[] sink column.
         return Json.optionalSchema();
       case "date":
         return Date.builder().optional().build();
@@ -439,8 +437,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       case "timestamp":
         return Timestamp.builder().optional().build();
       case "timestamptz":
-        // Timezone-aware: carried as a ZonedTimestamp logical STRING so it round-trips to a native
-        // timestamptz[] column on the sink (the built-in Timestamp would lose the tz designation).
+        // ZonedTimestamp STRING (built-in Timestamp drops the zone); round-trips to timestamptz[].
         return ZonedTimestamp.optionalSchema();
       default:
         return null;
@@ -496,10 +493,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * Read a PostgreSQL {@code timestamptz[]} array, decoding each element into an ISO-8601 offset
-   * string (UTC) carried by the {@code ZonedTimestamp} logical type. Reads the instant via the
-   * element {@link ResultSet} with a UTC Calendar (the instant is absolute, so this is correct
-   * regardless of the session/connector timezone).
+   * Read a {@code timestamptz[]} array into ISO-8601 UTC strings ({@code ZonedTimestamp}), decoding
+   * each element via the element {@link ResultSet} with a UTC Calendar.
    */
   private static List<Object> readZonedTimestampArray(ResultSet rs, int col)
       throws SQLException {
@@ -531,9 +526,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * Read a PostgreSQL temporal array, decoding each element in UTC into the Connect logical value
-   * (Date/Time/Timestamp). Reads via the element {@link ResultSet} so a timezone-aware Calendar
-   * can be applied per element ({@code getArray()} parses in the JVM zone, which is not safe).
+   * Read a temporal array into Connect Date/Time/Timestamp values, decoding each element in UTC via
+   * the element {@link ResultSet} ({@code getArray()} would parse in the JVM zone).
    */
   private static List<Object> readTemporalArray(ResultSet rs, int col, String elementName)
       throws SQLException {
@@ -597,10 +591,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * Whether the materialized JDBC array elements are themselves arrays — i.e. the column is a
-   * multi-dimensional array such as {@code int[][]}. Multi-dimensional arrays report the same type
-   * name as their single-dimension form, so they can only be detected from the values, not from the
-   * column metadata.
+   * Whether the array elements are themselves arrays (a multi-dimensional column like
+   * {@code int[][]}), which reports the same type name as 1-D and is only detectable from values.
    */
   private static boolean isMultiDimensional(Object[] elements) {
     for (Object element : elements) {
@@ -633,8 +625,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     if (json == null) {
       statement.setNull(index, Types.OTHER);
     } else {
-      // Bind the JSON text; the dialect adds a ::jsonb cast for jsonb columns (see valueTypeCast),
-      // so PostgreSQL parses it into jsonb — the same path used for the logical JSON STRING type.
+      // Bind as text; the ::jsonb cast (see valueTypeCast) parses it into jsonb server-side.
       statement.setString(index, json);
     }
     return true;
@@ -737,16 +728,13 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         case Timestamp.LOGICAL_NAME:
           return "TIMESTAMP";
         case ZonedTimestamp.LOGICAL_NAME:
-          // Timezone-aware timestamp; land it in a native TIMESTAMP WITH TIME ZONE column (as an
-          // array element this yields TIMESTAMP WITH TIME ZONE[] via the ARRAY case below).
+          // Native TIMESTAMP WITH TIME ZONE (and TIMESTAMP WITH TIME ZONE[] as an array element).
           return "TIMESTAMP WITH TIME ZONE";
         case Json.LOGICAL_NAME:
-          // json.handling.mode=string emits a logical JSON STRING; land it in a native JSONB
-          // column. The raw JSON text binds via the existing ::jsonb cast for jsonb columns.
+          // Logical JSON STRING -> native JSONB; text binds via the existing ::jsonb cast.
           return JSONB_TYPE_NAME.toUpperCase();
         case VariableScaleDecimal.LOGICAL_NAME:
-          // Each numeric[] element carries its own scale; land it in an unconstrained NUMERIC
-          // column (as an element type this yields NUMERIC[] via the ARRAY case below).
+          // Per-value scale -> unconstrained NUMERIC (and NUMERIC[] as an array element).
           return NUMERIC_TYPE_NAME.toUpperCase();
         default:
           // fall through to normal types

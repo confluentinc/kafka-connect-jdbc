@@ -667,8 +667,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
 
-  // validateQuery behaviour is inherited from GenericDatabaseDialect and exercised in
-  // GenericDatabaseDialectTest; no PostgreSQL-specific override exists to test here.
+  // validateQuery is inherited from GenericDatabaseDialect; tested in GenericDatabaseDialectTest.
 
   // ========== Complex SQL types (sql.complex.types.enable) ==========
 
@@ -792,8 +791,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
   @Test
   public void shouldBindZonedTimestampArrayAsNativeTimestamptzArray() throws Exception {
-    // ZonedTimestamp elements are already ISO-8601 offset strings; they bind straight into a
-    // native timestamptz[] column.
+    // ZonedTimestamp elements are ISO-8601 offset strings; they bind straight into timestamptz[].
     verifyArrayBind(
         ZonedTimestamp.optionalSchema(),
         Collections.singletonList("2025-06-10T13:00:00Z"),
@@ -830,8 +828,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
   @Test
   public void shouldBindStructValueAsJsonStringForJsonbColumn() throws Exception {
-    // STRUCT/MAP values (json.handling.mode=map, hstore=map) serialize to JSON and bind as a
-    // String; the dialect's ::jsonb cast lands them in a native jsonb column.
+    // STRUCT/MAP (json/hstore map mode) serialize to JSON, bind as String, cast ::jsonb on the sink.
     PreparedStatement statement = mock(PreparedStatement.class);
     ColumnDefinition colDef = mock(ColumnDefinition.class);
     Schema schema = SchemaBuilder.struct().field("a", Schema.INT32_SCHEMA).optional().build();

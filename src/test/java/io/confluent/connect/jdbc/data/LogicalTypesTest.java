@@ -81,8 +81,7 @@ public class LogicalTypesTest {
     assertRoundTrip(new BigDecimal("100"));                              // scale 0
     assertRoundTrip(BigDecimal.ZERO);                                    // 0, scale 0
 
-    // Negative scale, e.g. PostgreSQL numeric(p,-s): the value rounds to tens/hundreds and the
-    // unscaled magnitude carries a negative exponent. BigDecimal supports this directly.
+    // Negative scale, e.g. PostgreSQL numeric(p,-s); BigDecimal supports this directly.
     assertRoundTrip(new BigDecimal(BigInteger.valueOf(15), -2));         // 1.5E+3  == 1500
     assertRoundTrip(new BigDecimal(BigInteger.valueOf(-7), -3));         // -7E+3   == -7000
   }

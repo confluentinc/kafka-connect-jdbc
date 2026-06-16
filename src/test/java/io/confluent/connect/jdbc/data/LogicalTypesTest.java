@@ -21,15 +21,39 @@ import org.junit.Test;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.util.Date;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-public class VariableScaleDecimalTest {
+/**
+ * Unit tests for the custom Connect logical types in this package: {@link Json},
+ * {@link VariableScaleDecimal}, and {@link ZonedTimestamp}.
+ */
+public class LogicalTypesTest {
+
+  // ----- Json -----
 
   @Test
-  public void schemaShouldBeStructWithScaleAndValueFields() {
+  public void jsonSchemaIsNamedStringType() {
+    Schema schema = Json.schema();
+    assertEquals(Schema.Type.STRING, schema.type());
+    assertEquals(Json.LOGICAL_NAME, schema.name());
+    assertEquals(Integer.valueOf(Json.SCHEMA_VERSION), schema.version());
+    assertFalse(schema.isOptional());
+  }
+
+  @Test
+  public void jsonOptionalSchemaIsOptional() {
+    assertTrue(Json.optionalSchema().isOptional());
+  }
+
+  // ----- VariableScaleDecimal -----
+
+  @Test
+  public void variableScaleDecimalSchemaHasScaleAndValueFields() {
     Schema schema = VariableScaleDecimal.schema();
     assertEquals(Schema.Type.STRUCT, schema.type());
     assertEquals(VariableScaleDecimal.LOGICAL_NAME, schema.name());
@@ -40,12 +64,12 @@ public class VariableScaleDecimalTest {
   }
 
   @Test
-  public void optionalSchemaShouldBeOptional() {
+  public void variableScaleDecimalOptionalSchemaIsOptional() {
     assertTrue(VariableScaleDecimal.optionalSchema().isOptional());
   }
 
   @Test
-  public void shouldRoundTripAcrossPositiveZeroAndNegativeScales() {
+  public void variableScaleDecimalRoundTripsAcrossPositiveZeroAndNegativeScales() {
     // Positive scale (the common case), including trailing zeros and unconstrained precision.
     assertRoundTrip(new BigDecimal("1.50"));                              // scale 2
     assertRoundTrip(new BigDecimal("3.14159"));                          // scale 5
@@ -66,8 +90,36 @@ public class VariableScaleDecimalTest {
   private static void assertRoundTrip(BigDecimal value) {
     Struct encoded = VariableScaleDecimal.fromLogical(VariableScaleDecimal.schema(), value);
     BigDecimal decoded = VariableScaleDecimal.toLogical(encoded);
-    // Equality (not compareTo) so that the scale, e.g. the trailing zeros of "1.50", is preserved.
+    // Equality (not compareTo) so the scale, e.g. the trailing zeros of "1.50", is preserved.
     assertEquals(value, decoded);
     assertEquals(value.scale(), decoded.scale());
+  }
+
+  // ----- ZonedTimestamp -----
+
+  @Test
+  public void zonedTimestampSchemaIsNamedStringType() {
+    Schema schema = ZonedTimestamp.schema();
+    assertEquals(Schema.Type.STRING, schema.type());
+    assertEquals(ZonedTimestamp.LOGICAL_NAME, schema.name());
+    assertEquals(Integer.valueOf(ZonedTimestamp.SCHEMA_VERSION), schema.version());
+    assertFalse(schema.isOptional());
+  }
+
+  @Test
+  public void zonedTimestampOptionalSchemaIsOptional() {
+    assertTrue(ZonedTimestamp.optionalSchema().isOptional());
+  }
+
+  @Test
+  public void zonedTimestampRendersInstantAsUtcIsoOffsetString() {
+    assertEquals("1970-01-01T00:00:00Z", ZonedTimestamp.toIsoString(new Date(0L)));
+    // 2025-06-10 13:00:00 UTC
+    assertEquals("2025-06-10T13:00:00Z", ZonedTimestamp.toIsoString(new Date(1749560400000L)));
+  }
+
+  @Test
+  public void zonedTimestampReturnsNullForNullInstant() {
+    assertNull(ZonedTimestamp.toIsoString(null));
   }
 }

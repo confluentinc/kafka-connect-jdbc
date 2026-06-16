@@ -43,7 +43,6 @@ import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
-import org.postgresql.util.PGobject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -626,8 +625,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       PreparedStatement statement,
       int index,
       Schema schema,
-      Object value,
-      String fieldName
+      Object value
   ) throws SQLException {
     if (!isJsonBindCandidate(schema)) {
       return false;
@@ -635,16 +633,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     String json = JsonConverter.connectValueToJson(schema, value);
     if (json == null) {
       statement.setNull(index, Types.OTHER);
-      return true;
+    } else {
+      // Bind the JSON text; the dialect adds a ::jsonb cast for jsonb columns (see valueTypeCast),
+      // so PostgreSQL parses it into jsonb — the same path used for the logical JSON STRING type.
+      statement.setString(index, json);
     }
-    PGobject pgo = new PGobject();
-    pgo.setType(JSONB_TYPE_NAME);
-    try {
-      pgo.setValue(json);
-    } catch (SQLException e) {
-      throw new DataException("Failed to bind JSONB value for field " + fieldName, e);
-    }
-    statement.setObject(index, pgo);
     return true;
   }
 
@@ -966,7 +959,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       Object value,
       String fieldName
   ) throws SQLException {
-    if (maybeBindJson(statement, index, schema, value, fieldName)) {
+    if (maybeBindJson(statement, index, schema, value)) {
       return true;
     }
     if (schema.type() == Schema.Type.ARRAY && bindArray(statement, index, schema, value)) {

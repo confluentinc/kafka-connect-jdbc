@@ -172,9 +172,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String SQL_COMPLEX_TYPES_ENABLE_CONFIG = "sql.complex.types.enable";
   public static final boolean SQL_COMPLEX_TYPES_ENABLE_DEFAULT = false;
   private static final String SQL_COMPLEX_TYPES_ENABLE_DOC =
-      "When enabled, the source connector maps native complex column types (e.g. PostgreSQL JSONB "
-      + "and JSON) to Connect Schema Map values instead of returning their textual representation "
-      + "as STRING. When disabled (the default), the column is emitted as STRING to preserve "
+      "When enabled, the source connector maps native complex PostgreSQL column types "
+      + "(json/jsonb, hstore, and native arrays) to complex-aware Connect representations "
+      + "instead of plain STRING: json/jsonb and hstore become a logical JSON STRING or a "
+      + "Connect Map per json.handling.mode / hstore.handling.mode, and arrays become a "
+      + "Connect ARRAY of the mapped element type. When disabled (the default), json/jsonb "
+      + "and hstore are emitted as STRING and array columns are skipped, preserving "
       + "backwards compatibility with existing pipelines.";
   private static final String SQL_COMPLEX_TYPES_ENABLE_DISPLAY = "Enable SQL Complex Types";
 
@@ -198,8 +201,9 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "``sql.complex.types.enable`` is true. ``string`` (the default) emits the document as a "
       + "logical JSON STRING (raw text, lossless, tagged "
       + "``io.confluent.connect.jdbc.data.Json``). ``map`` emits a Connect Map<String,String> with "
-      + "top-level fields projected as entries. Has no effect unless "
-      + "``sql.complex.types.enable`` is true.";
+      + "top-level object fields projected as entries; this mode requires the top-level value to "
+      + "be a JSON object (top-level arrays or scalars fail the task), so use ``string`` for "
+      + "arbitrary JSON documents. Has no effect unless ``sql.complex.types.enable`` is true.";
   private static final String JSON_HANDLING_MODE_DISPLAY = "JSON Handling Mode";
 
   private static final EnumRecommender NUMERIC_MAPPING_RECOMMENDER =

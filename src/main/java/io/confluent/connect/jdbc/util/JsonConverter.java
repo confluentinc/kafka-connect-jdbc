@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.util;
 
+import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -45,7 +46,9 @@ import java.util.Map;
  */
 public final class JsonConverter {
 
-  private static final ObjectMapper MAPPER = new ObjectMapper();
+  // WRITE_BIGDECIMAL_AS_PLAIN keeps decimals in plain notation (e.g. 1500 rather than 1.5E+3).
+  private static final ObjectMapper MAPPER = new ObjectMapper()
+      .configure(JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN, true);
 
   private JsonConverter() {
   }
@@ -129,7 +132,8 @@ public final class JsonConverter {
     }
     switch (schema.name()) {
       case Decimal.LOGICAL_NAME:
-        return MAPPER.valueToTree(((BigDecimal) value).toPlainString());
+        // Emit as a JSON number; jsonb stores it losslessly as arbitrary-precision numeric.
+        return MAPPER.valueToTree((BigDecimal) value);
       case Date.LOGICAL_NAME:
       case Time.LOGICAL_NAME:
       case Timestamp.LOGICAL_NAME:

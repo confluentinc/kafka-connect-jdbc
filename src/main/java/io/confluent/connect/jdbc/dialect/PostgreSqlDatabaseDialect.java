@@ -126,6 +126,23 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return properties;
   }
 
+  /**
+   * {@inheritDoc}
+   *
+   * <p>A PostgreSQL connection sees exactly one database, so the catalog the driver reports
+   * only echoes the connected database and adds no information. pgjdbc 42.7.5+ reports that
+   * name where older drivers returned {@code null}, which turned discovered identifiers into
+   * three-part {@code db.schema.table} names — breaking two-part {@code table.include.list}
+   * matching and changing source-offset partition keys. Dropping the driver-reported catalog
+   * keeps discovered identifiers two-part on any driver version. Configured catalogs are not
+   * affected: they arrive via {@link #parseTableIdentifier(String)}, which does not route
+   * through this seam, so a user-supplied database in {@code table.name.format} is preserved.
+   */
+  @Override
+  protected TableId createTableId(String catalogName, String schemaName, String tableName) {
+    return new TableId(null, schemaName, tableName);
+  }
+
   @Override
   public String resolveSynonym(Connection connection, String synonymName) throws SQLException {
     throw new SQLException("PostgreSQL does not support synonyms. Please use views instead.");

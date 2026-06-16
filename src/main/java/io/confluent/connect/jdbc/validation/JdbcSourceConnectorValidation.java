@@ -362,10 +362,11 @@ public class JdbcSourceConnectorValidation {
   }
 
   /**
-   * Validate the user's custom query against the database by performing a lightweight
-   * semantic check using the database-specific EXPLAIN mechanism. This validates:
+   * Validate the user query via the dialect. Surfaces syntax, missing-object,
+   * and {@code SELECT}-permission errors without scanning user data.
    *
-   * @return true if validation passes or no query is configured, false if validation fails
+   * @return {@code true} if validation passes or no query is configured;
+   *         {@code false} on {@link SQLException}
    */
   protected boolean validateQuerySemantics() {
     Optional<String> queryVal = config.getQuery();
@@ -389,8 +390,16 @@ public class JdbcSourceConnectorValidation {
       String msg = "The configured query is not valid and has database/connection errors"
           + ". Please provide the correct query by validating the "
           + "query syntax and the existing table/column names with the database being connected";
-      if (e.getSQLState() != null) {
-        msg += " (SQLState: " + e.getSQLState() + ")";
+      // Append SQLState and vendor errorCode when present so the user can look up
+      // the exact cause; errorCode 0 is the JDBC default for "unset" and is omitted.
+      String sqlState = e.getSQLState();
+      int errorCode = e.getErrorCode();
+      if (sqlState != null && errorCode != 0) {
+        msg += " (SQLState: " + sqlState + ", errorCode: " + errorCode + ")";
+      } else if (sqlState != null) {
+        msg += " (SQLState: " + sqlState + ")";
+      } else if (errorCode != 0) {
+        msg += " (errorCode: " + errorCode + ")";
       }
       addConfigError(configKey, msg);
       return false;

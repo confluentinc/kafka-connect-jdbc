@@ -32,6 +32,7 @@ import org.testcontainers.shaded.com.google.common.collect.ImmutableList;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
@@ -740,35 +741,117 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
   }
 
   // ========== validateQuery Tests ==========
+  // Validation delegates to PreparedStatement.getMetaData() with the query passed
+  // through unmodified, bounded by a query timeout.
+  private static final int VALIDATE_QUERY_TIMEOUT_SECONDS = 60;
 
   @Test
-  public void validateQuery_shouldUsePrepareStatement() throws SQLException {
+  public void validateQuery_shouldDelegateToGetMetaData() throws SQLException {
     Connection mockConnection = EasyMock.createMock(Connection.class);
     PreparedStatement mockStmt = EasyMock.createMock(PreparedStatement.class);
-    expect(mockConnection.prepareStatement("SELECT * FROM users")).andReturn(mockStmt);
+    ResultSetMetaData mockMd = EasyMock.createNiceMock(ResultSetMetaData.class);
+    String query = "SELECT * FROM users";
+
+    expect(mockConnection.prepareStatement(query)).andReturn(mockStmt);
+    mockStmt.setQueryTimeout(VALIDATE_QUERY_TIMEOUT_SECONDS);
+    EasyMock.expectLastCall();
+    expect(mockStmt.getMetaData()).andReturn(mockMd);
+    mockStmt.close();
+    EasyMock.expectLastCall();
+    replay(mockConnection, mockStmt, mockMd);
+
+    dialect.validateQuery(mockConnection, query);
+
+    verify(mockConnection, mockStmt, mockMd);
+  }
+
+  @Test
+  public void validateQuery_shouldApplyQueryTimeoutBeforeMetaDataCall()
+      throws SQLException {
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+    PreparedStatement mockStmt = EasyMock.createMock(PreparedStatement.class);
+    ResultSetMetaData mockMd = EasyMock.createNiceMock(ResultSetMetaData.class);
+    String query = "SELECT * FROM users";
+
+    EasyMock.checkOrder(mockStmt, true);
+    expect(mockConnection.prepareStatement(query)).andReturn(mockStmt);
+    mockStmt.setQueryTimeout(VALIDATE_QUERY_TIMEOUT_SECONDS);
+    EasyMock.expectLastCall();
+    expect(mockStmt.getMetaData()).andReturn(mockMd);
+    mockStmt.close();
+    EasyMock.expectLastCall();
+    replay(mockConnection, mockStmt, mockMd);
+
+    dialect.validateQuery(mockConnection, query);
+
+    verify(mockConnection, mockStmt, mockMd);
+  }
+
+  @Test
+  public void validateQuery_shouldPropagateSqlExceptionFromGetMetaData()
+      throws SQLException {
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+    PreparedStatement mockStmt = EasyMock.createMock(PreparedStatement.class);
+    String query = "SELECT * FROM nonexistent";
+
+    expect(mockConnection.prepareStatement(query)).andReturn(mockStmt);
+    mockStmt.setQueryTimeout(VALIDATE_QUERY_TIMEOUT_SECONDS);
+    EasyMock.expectLastCall();
+    expect(mockStmt.getMetaData())
+        .andThrow(new SQLException("table not found", "42S02"));
     mockStmt.close();
     EasyMock.expectLastCall();
     replay(mockConnection, mockStmt);
 
-    dialect.validateQuery(mockConnection, "SELECT * FROM users");
-
-    verify(mockConnection, mockStmt);
-  }
-
-  @Test
-  public void validateQuery_shouldPropagateExceptionForInvalidQuery() throws SQLException {
-    Connection mockConnection = EasyMock.createMock(Connection.class);
-    expect(mockConnection.prepareStatement("SELECT * FROM nonexistent"))
-        .andThrow(new SQLException("table not found", "42S02"));
-    replay(mockConnection);
-
     try {
-      dialect.validateQuery(mockConnection, "SELECT * FROM nonexistent");
+      dialect.validateQuery(mockConnection, query);
       org.junit.Assert.fail("Expected SQLException to be thrown");
     } catch (SQLException e) {
       assertEquals("42S02", e.getSQLState());
     }
 
+    verify(mockConnection, mockStmt);
+  }
+
+  @Test
+  public void validateQuery_shouldPropagateSqlExceptionFromPrepareStatement()
+      throws SQLException {
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+    String query = "SELECT FROM";
+
+    expect(mockConnection.prepareStatement(query))
+        .andThrow(new SQLException("ORA-00936: missing expression", "42000", 936));
+    replay(mockConnection);
+
+    try {
+      dialect.validateQuery(mockConnection, query);
+      org.junit.Assert.fail("Expected SQLException to be thrown");
+    } catch (SQLException e) {
+      assertEquals("42000", e.getSQLState());
+      assertEquals(936, e.getErrorCode());
+    }
+
     verify(mockConnection);
+  }
+
+  @Test
+  public void validateQuery_shouldPassQueryThroughUnmodified() throws SQLException {
+    Connection mockConnection = EasyMock.createMock(Connection.class);
+    PreparedStatement mockStmt = EasyMock.createMock(PreparedStatement.class);
+    ResultSetMetaData mockMd = EasyMock.createNiceMock(ResultSetMetaData.class);
+    String complexQuery = "SELECT a.id, b.name FROM users a "
+        + "INNER JOIN orders b ON a.id = b.user_id ORDER BY a.id";
+
+    expect(mockConnection.prepareStatement(complexQuery)).andReturn(mockStmt);
+    mockStmt.setQueryTimeout(VALIDATE_QUERY_TIMEOUT_SECONDS);
+    EasyMock.expectLastCall();
+    expect(mockStmt.getMetaData()).andReturn(mockMd);
+    mockStmt.close();
+    EasyMock.expectLastCall();
+    replay(mockConnection, mockStmt, mockMd);
+
+    dialect.validateQuery(mockConnection, complexQuery);
+
+    verify(mockConnection, mockStmt, mockMd);
   }
 }

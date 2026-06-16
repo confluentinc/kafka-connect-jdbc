@@ -32,6 +32,7 @@ import com.google.re2j.Pattern;
 
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.*;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import org.easymock.EasyMock;
 
@@ -1213,7 +1214,7 @@ public class JdbcSourceConnectorValidationTest {
     props.put(QUERY_CONFIG, "SELECT id, name FROM users WHERE active = true");
 
     DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
-    Connection mockConnection = EasyMock.createMock(Connection.class);
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
 
     EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
     mockDialect.validateQuery(mockConnection, "SELECT id, name FROM users WHERE active = true");
@@ -1236,7 +1237,7 @@ public class JdbcSourceConnectorValidationTest {
     props.put(QUERY_CONFIG, "SELECT * FROM nonexistent_table");
 
     DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
-    Connection mockConnection = EasyMock.createMock(Connection.class);
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
 
     EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
     mockDialect.validateQuery(mockConnection, "SELECT * FROM nonexistent_table");
@@ -1253,8 +1254,69 @@ public class JdbcSourceConnectorValidationTest {
 
     assertErrors(QUERY_CONFIG, 1);
     ConfigValue queryConfigValue = valueFor(QUERY_CONFIG);
-    assertTrue(queryConfigValue.errorMessages().get(0).contains("not valid"));
-    assertTrue(queryConfigValue.errorMessages().get(0).contains("SQLState: 42S02"));
+    String errorMessage = queryConfigValue.errorMessages().get(0);
+    assertTrue(errorMessage.contains("not valid"));
+    assertTrue(errorMessage.contains("SQLState: 42S02"));
+    // errorCode defaults to 0 here and must be omitted rather than shown as "errorCode: 0".
+    assertFalse(errorMessage.contains("errorCode"));
+  }
+
+  @Test
+  public void validate_semanticValidationErrorIncludesErrorCodeWhenPresent()
+      throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM nonexistent_table");
+
+    DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
+
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, "SELECT * FROM nonexistent_table");
+    EasyMock.expectLastCall().andThrow(new SQLException(
+        "Invalid object name 'nonexistent_table'.", "S0002", 208));
+    mockConnection.close();
+    EasyMock.expectLastCall();
+    mockDialect.close();
+    EasyMock.expectLastCall();
+
+    EasyMock.replay(mockDialect, mockConnection);
+    validateWithMockDialect(mockDialect);
+    EasyMock.verify(mockDialect, mockConnection);
+
+    assertErrors(QUERY_CONFIG, 1);
+    String errorMessage = valueFor(QUERY_CONFIG).errorMessages().get(0);
+    assertTrue(errorMessage.contains("not valid"));
+    assertTrue(errorMessage.contains("SQLState: S0002"));
+    assertTrue(errorMessage.contains("errorCode: 208"));
+  }
+
+  @Test
+  public void validate_semanticValidationErrorIncludesErrorCodeAloneWhenSqlStateMissing()
+      throws Exception {
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM users");
+
+    DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
+
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, "SELECT * FROM users");
+    EasyMock.expectLastCall().andThrow(new SQLException(
+        "ORA-17002: I/O Error: Connection reset", null, 17002));
+    mockConnection.close();
+    EasyMock.expectLastCall();
+    mockDialect.close();
+    EasyMock.expectLastCall();
+
+    EasyMock.replay(mockDialect, mockConnection);
+    validateWithMockDialect(mockDialect);
+    EasyMock.verify(mockDialect, mockConnection);
+
+    assertErrors(QUERY_CONFIG, 1);
+    String errorMessage = valueFor(QUERY_CONFIG).errorMessages().get(0);
+    assertTrue(errorMessage.contains("not valid"));
+    assertTrue(errorMessage.contains("errorCode: 17002"));
+    assertFalse(errorMessage.contains("SQLState"));
   }
 
   @Test
@@ -1299,7 +1361,7 @@ public class JdbcSourceConnectorValidationTest {
     props.put(QUERY_MASKED_CONFIG, "SELECT * FROM sensitive_data");
 
     DatabaseDialect mockDialect = EasyMock.createMock(DatabaseDialect.class);
-    Connection mockConnection = EasyMock.createMock(Connection.class);
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
 
     EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
     mockDialect.validateQuery(mockConnection, "SELECT * FROM sensitive_data");

@@ -88,6 +88,8 @@ public class JdbcSourceConnectorValidation {
       boolean validationResult = validateMultiConfigs()
           && validateLegacyNewConfigCompatibility()
           && validateQueryConfigs()
+          && validateMappingConfigsNotUsedWithQuery()
+          && validateQueryModeColumnRequirements()
           && validateQuerySemantics();
 
       if (validationResult && isUsingNewConfigs()) {
@@ -359,6 +361,105 @@ public class JdbcSourceConnectorValidation {
     }
 
     return true;
+  }
+
+  /**
+   * Reject column <em>mapping</em> configs when a custom query is configured.
+   *
+   * <p>{@code timestamp.column.mapping} / {@code incrementing.column.mapping} map columns by
+   * table-name regex and are only honored on the table-filtering path (they require a
+   * {@code table.include.list}, which cannot be combined with a query). In query mode there is
+   * no table for the regex to match, so these mappings are silently ignored at runtime and the
+   * connector falls back to the legacy {@code *.column.name} configs. Rather than letting a user
+   * believe a mapping is in effect, reject it up front with a dedicated, distinct error that
+   * points them at the supported name config for query mode.
+   */
+  private boolean validateMappingConfigsNotUsedWithQuery() {
+    if (!config.getQuery().isPresent()) {
+      return true;
+    }
+
+    boolean valid = true;
+
+    List<String> incrementingColumnMapping = config.getIncrementingColumnMapping();
+    if (incrementingColumnMapping != null && !incrementingColumnMapping.isEmpty()) {
+      String msg = String.format(
+          "'%s' is not supported with a custom query. Column mappings match columns by "
+          + "table-name regex, which does not apply in query mode. Use '%s' instead.",
+          JdbcSourceConnectorConfig.INCREMENTING_COLUMN_MAPPING_CONFIG,
+          JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG);
+      addConfigError(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_MAPPING_CONFIG, msg);
+      log.error(msg);
+      valid = false;
+    }
+
+    List<String> timestampColumnsMapping = config.getTimestampColumnMapping();
+    if (timestampColumnsMapping != null && !timestampColumnsMapping.isEmpty()) {
+      String msg = String.format(
+          "'%s' is not supported with a custom query. Column mappings match columns by "
+          + "table-name regex, which does not apply in query mode. Use '%s' instead.",
+          JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_MAPPING_CONFIG,
+          JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
+      addConfigError(JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_MAPPING_CONFIG, msg);
+      log.error(msg);
+      valid = false;
+    }
+
+    return valid;
+  }
+
+  /**
+   * Validate that, in query mode, the mode-dependent column names are explicitly provided.
+   *
+   * <p>In query mode the querier is constructed without a {@code TableId}, so the connector
+   * cannot auto-discover the incrementing column from table metadata the way it can in table
+   * mode. With mode {@code incrementing} / {@code timestamp+incrementing} and an empty
+   * {@code incrementing.column.name}, or mode {@code timestamp} / {@code timestamp+incrementing}
+   * and an empty {@code timestamp.column.name}, the connector hits an unrecoverable
+   * {@link NullPointerException} on every poll (the task is killed and restarted indefinitely).
+   * Fail fast at validation time instead so the misconfiguration is caught at create / validate.
+   */
+  private boolean validateQueryModeColumnRequirements() {
+    if (!config.getQuery().isPresent()) {
+      return true;
+    }
+
+    boolean valid = true;
+
+    if (config.modeUsesIncrementingColumn()) {
+      String incrementingColumnName = config.getIncrementingColumnName();
+      if (incrementingColumnName == null || incrementingColumnName.trim().isEmpty()) {
+        String msg = String.format(
+            "'%s' must be provided when using mode '%s' or '%s' with a custom query. "
+            + "The incrementing column cannot be auto-discovered in query mode because there "
+            + "is no table to inspect.",
+            JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG,
+            JdbcSourceConnectorConfig.MODE_INCREMENTING,
+            JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING);
+        addConfigError(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG, msg);
+        log.error(msg);
+        valid = false;
+      }
+    }
+
+    if (config.modeUsesTimestampColumn()) {
+      List<String> timestampColumnName = config.getTimestampColumnName();
+      boolean hasTimestampColumn = timestampColumnName != null
+          && timestampColumnName.stream()
+              .anyMatch(col -> col != null && !col.trim().isEmpty());
+      if (!hasTimestampColumn) {
+        String msg = String.format(
+            "'%s' must be provided when using mode '%s' or '%s' with a custom query.",
+            JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG,
+            JdbcSourceConnectorConfig.MODE_TIMESTAMP,
+            JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING);
+        addConfigError(JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG, msg);
+        log.error(msg);
+        valid = false;
+      }
+    }
+
+    return valid;
   }
 
   /**

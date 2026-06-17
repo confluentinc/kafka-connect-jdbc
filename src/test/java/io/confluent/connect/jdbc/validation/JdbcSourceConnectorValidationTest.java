@@ -929,6 +929,135 @@ public class JdbcSourceConnectorValidationTest {
     );
   }
 
+  // ========== Query-Mode Column Requirement Tests ==========
+  // These guard against the runtime NPE (INC-10982) that occurs when a custom query is
+  // configured with an incrementing/timestamp mode but no incrementing.column.name /
+  // timestamp.column.name. In query mode the querier has no TableId to auto-discover from,
+  // so TimestampIncrementingTableQuerier.findDefaultAutoIncrementingColumn NPEs on every poll.
+
+  @Test
+  public void validate_withQueryAndTimestampIncrementingModeAndEmptyColumns_setsError() {
+    // Exact repro from the incident: mode=timestamp+incrementing, custom query,
+    // empty incrementing.column.name and empty timestamp.column.name.
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "");
+    props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "");
+
+    validate();
+
+    assertErrors(2);
+    assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
+    assertErrors(TIMESTAMP_COLUMN_NAME_CONFIG, 1);
+    assertErrorMatches(
+        INCREMENTING_COLUMN_NAME_CONFIG,
+        ".*must be provided when using mode.*with a custom query.*");
+    assertErrorMatches(
+        TIMESTAMP_COLUMN_NAME_CONFIG,
+        ".*must be provided when using mode.*with a custom query.*");
+  }
+
+  @Test
+  public void validate_withQueryAndIncrementingModeAndMissingIncrementingColumn_setsError() {
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    // incrementing.column.name not set at all
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
+    assertErrorMatches(
+        INCREMENTING_COLUMN_NAME_CONFIG,
+        ".*incrementing column cannot be auto-discovered in query mode.*");
+  }
+
+  @Test
+  public void validate_withQueryAndIncrementingModeAndEmptyIncrementingColumn_setsError() {
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "   ");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
+  }
+
+  @Test
+  public void validate_withQueryMaskedAndIncrementingModeAndMissingColumn_setsError() {
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM dbo.SomeTable");
+    // incrementing.column.name not set at all
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
+  }
+
+  @Test
+  public void validate_withQueryAndTimestampModeAndMissingTimestampColumn_setsError() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    // timestamp.column.name not set at all
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(TIMESTAMP_COLUMN_NAME_CONFIG, 1);
+    assertErrorMatches(
+        TIMESTAMP_COLUMN_NAME_CONFIG,
+        ".*must be provided when using mode.*with a custom query.*");
+  }
+
+  @Test
+  public void validate_withQueryAndTimestampIncrementingModeAndAllColumns_noErrors() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");
+    props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "modified_at");
+
+    validate();
+
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_withQueryAndIncrementingModeAndIncrementingColumn_noErrors() {
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");
+
+    validate();
+
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_withQueryAndBulkModeAndNoColumns_noErrors() {
+    // Bulk mode does not require any incrementing/timestamp column, even in query mode.
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+
+    validate();
+
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_withQueryAndTimestampIncrementingModeAndOnlyIncrementingColumn_setsError() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");
+    // timestamp.column.name missing
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(TIMESTAMP_COLUMN_NAME_CONFIG, 1);
+  }
+
   // ========== Semantic Query Validation Tests ==========
 
   @Test

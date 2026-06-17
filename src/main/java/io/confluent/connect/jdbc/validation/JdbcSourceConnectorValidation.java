@@ -88,6 +88,7 @@ public class JdbcSourceConnectorValidation {
       boolean validationResult = validateMultiConfigs()
           && validateLegacyNewConfigCompatibility()
           && validateQueryConfigs()
+          && validateQueryModeColumnRequirements()
           && validateQuerySemantics();
 
       if (validationResult && isUsingNewConfigs()) {
@@ -359,6 +360,60 @@ public class JdbcSourceConnectorValidation {
     }
 
     return true;
+  }
+
+  /**
+   * Validate that, in query mode, the mode-dependent column names are explicitly provided.
+   *
+   * <p>In query mode the querier is constructed without a {@code TableId}, so the connector
+   * cannot auto-discover the incrementing column from table metadata the way it can in table
+   * mode. With mode {@code incrementing} / {@code timestamp+incrementing} and an empty
+   * {@code incrementing.column.name}, or mode {@code timestamp} / {@code timestamp+incrementing}
+   * and an empty {@code timestamp.column.name}, the connector hits an unrecoverable
+   * {@link NullPointerException} on every poll (the task is killed and restarted indefinitely).
+   * Fail fast at validation time instead so the misconfiguration is caught at create / validate.
+   */
+  private boolean validateQueryModeColumnRequirements() {
+    if (!config.getQuery().isPresent()) {
+      return true;
+    }
+
+    boolean valid = true;
+
+    if (config.modeUsesIncrementingColumn()) {
+      String incrementingColumnName = config.getIncrementingColumnName();
+      if (incrementingColumnName == null || incrementingColumnName.trim().isEmpty()) {
+        String msg = String.format(
+            "'%s' must be provided when using mode '%s' or '%s' with a custom query. "
+            + "The incrementing column cannot be auto-discovered in query mode because there "
+            + "is no table to inspect.",
+            JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG,
+            JdbcSourceConnectorConfig.MODE_INCREMENTING,
+            JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING);
+        addConfigError(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG, msg);
+        log.error(msg);
+        valid = false;
+      }
+    }
+
+    if (config.modeUsesTimestampColumn()) {
+      List<String> timestampColumnName = config.getTimestampColumnName();
+      boolean hasTimestampColumn = timestampColumnName != null
+          && timestampColumnName.stream()
+              .anyMatch(col -> col != null && !col.trim().isEmpty());
+      if (!hasTimestampColumn) {
+        String msg = String.format(
+            "'%s' must be provided when using mode '%s' or '%s' with a custom query.",
+            JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG,
+            JdbcSourceConnectorConfig.MODE_TIMESTAMP,
+            JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING);
+        addConfigError(JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG, msg);
+        log.error(msg);
+        valid = false;
+      }
+    }
+
+    return valid;
   }
 
   /**

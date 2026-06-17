@@ -88,6 +88,7 @@ public class JdbcSourceConnectorValidation {
       boolean validationResult = validateMultiConfigs()
           && validateLegacyNewConfigCompatibility()
           && validateQueryConfigs()
+          && validateMappingConfigsNotUsedWithQuery()
           && validateQueryModeColumnRequirements()
           && validateQuerySemantics();
 
@@ -360,6 +361,51 @@ public class JdbcSourceConnectorValidation {
     }
 
     return true;
+  }
+
+  /**
+   * Reject column <em>mapping</em> configs when a custom query is configured.
+   *
+   * <p>{@code timestamp.column.mapping} / {@code incrementing.column.mapping} map columns by
+   * table-name regex and are only honored on the table-filtering path (they require a
+   * {@code table.include.list}, which cannot be combined with a query). In query mode there is
+   * no table for the regex to match, so these mappings are silently ignored at runtime and the
+   * connector falls back to the legacy {@code *.column.name} configs. Rather than letting a user
+   * believe a mapping is in effect, reject it up front with a dedicated, distinct error that
+   * points them at the supported name config for query mode.
+   */
+  private boolean validateMappingConfigsNotUsedWithQuery() {
+    if (!config.getQuery().isPresent()) {
+      return true;
+    }
+
+    boolean valid = true;
+
+    List<String> incrementingColumnMapping = config.getIncrementingColumnMapping();
+    if (incrementingColumnMapping != null && !incrementingColumnMapping.isEmpty()) {
+      String msg = String.format(
+          "'%s' is not supported with a custom query. Column mappings match columns by "
+          + "table-name regex, which does not apply in query mode. Use '%s' instead.",
+          JdbcSourceConnectorConfig.INCREMENTING_COLUMN_MAPPING_CONFIG,
+          JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG);
+      addConfigError(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_MAPPING_CONFIG, msg);
+      log.error(msg);
+      valid = false;
+    }
+
+    List<String> timestampColumnsMapping = config.getTimestampColumnMapping();
+    if (timestampColumnsMapping != null && !timestampColumnsMapping.isEmpty()) {
+      String msg = String.format(
+          "'%s' is not supported with a custom query. Column mappings match columns by "
+          + "table-name regex, which does not apply in query mode. Use '%s' instead.",
+          JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_MAPPING_CONFIG,
+          JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG);
+      addConfigError(JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_MAPPING_CONFIG, msg);
+      log.error(msg);
+      valid = false;
+    }
+
+    return valid;
   }
 
   /**

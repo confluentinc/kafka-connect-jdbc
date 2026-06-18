@@ -50,7 +50,7 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
   private final Map<String, String> connectorConfigs;
 
   public JdbcSourceConnectorValidation(JdbcSourceConnectorConfig config,
-                                       Config validationResult) {
+                                          Config validationResult) {
     this.config = config;
     this.validationResult = validationResult;
     this.connectorConfigs = null;
@@ -75,7 +75,7 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
       }
 
       boolean hasValidateAllErrors = validationResult.configValues().stream()
-          .anyMatch(configValue -> !configValue.errorMessages().isEmpty());
+              .anyMatch(configValue -> !configValue.errorMessages().isEmpty());
 
       if (hasValidateAllErrors) {
         log.info("Validation failed due to validator errors");
@@ -94,7 +94,7 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
 
       if (validationResult && isUsingNewConfigs()) {
         validationResult = validateTableInclusionConfigs()
-            && validateTsAndIncModeColumnRequirements();
+                           && validateTsAndIncModeColumnRequirements();
       }
 
       validationResult = validationResult && validatePluginSpecificNeeds();
@@ -134,7 +134,7 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
       } else {
         dialect = DatabaseDialects.findBestFor(
             config.getString(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG),
-            config);
+                config);
       }
       if (!dialect.name().equals(
           DatabaseDialects.create(
@@ -356,7 +356,7 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
     }
     if (hasQueryMasked
         && !validateSelectStatement(
-        queryMaskedValue, JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG)) {
+            queryMaskedValue, JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG)) {
       return false;
     }
 
@@ -447,9 +447,9 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
    */
   private boolean validateTsAndIncModeColumnRequirements() {
     return validateTsColProvidedWhenRequired()
-        && validateTsColNotProvidedWhenNotRequired()
-        && validateIncrColProvidedWhenRequired()
-        && validateIncrColumnNotProvidedWhenNotRequired();
+           && validateTsColNotProvidedWhenNotRequired()
+           && validateIncrColProvidedWhenRequired()
+           && validateIncrColumnNotProvidedWhenNotRequired();
   }
 
 
@@ -465,7 +465,7 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
       if (!hasNewTimestampConfig) {
         String msg = String.format(
             "Timestamp column configuration must be provided when using mode '%s' or '%s'. "
-                + "Provide 'timestamp.columns.mapping'.",
+            + "Provide 'timestamp.columns.mapping'.",
             JdbcSourceConnectorConfig.MODE_TIMESTAMP,
             JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING
         );
@@ -489,7 +489,7 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
       if (hasNewTimestampConfig) {
         String msg = String.format(
             "Timestamp column configurations should not be provided if mode is not '%s' or '%s'. "
-                + "Remove 'timestamp.columns.mapping'.",
+            + "Remove 'timestamp.columns.mapping'.",
             JdbcSourceConnectorConfig.MODE_TIMESTAMP,
             JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING
         );
@@ -515,7 +515,7 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
       if (!hasNewIncrementingConfig) {
         String msg = String.format(
             "Incrementing column configuration must be provided when using mode '%s' or '%s'. "
-                + "Provide 'incrementing.column.mapping'.",
+            + "Provide 'incrementing.column.mapping'.",
             JdbcSourceConnectorConfig.MODE_INCREMENTING,
             JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING
         );
@@ -539,8 +539,8 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
       if (hasNewIncrementingConfig) {
         String msg = String.format(
             "Incrementing column configurations "
-                + "should not be provided if mode is not '%s' or '%s'. "
-                + "Remove 'incrementing.column.mapping'.",
+            + "should not be provided if mode is not '%s' or '%s'. "
+            + "Remove 'incrementing.column.mapping'.",
             JdbcSourceConnectorConfig.MODE_INCREMENTING,
             JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING
         );
@@ -569,7 +569,7 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
       String msg =
           String.format(
               "Only SELECT statements are supported for '%s'. Please provide "
-                  + "a statement that starts with SELECT.",
+              + "a statement that starts with SELECT.",
               configKey);
       addConfigError(configKey, msg);
       log.error(msg);

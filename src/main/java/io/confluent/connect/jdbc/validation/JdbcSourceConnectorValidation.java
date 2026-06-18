@@ -539,8 +539,8 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
       if (hasNewIncrementingConfig) {
         String msg = String.format(
             "Incrementing column configurations "
-            + "should not be provided if mode is not '%s' or '%s'. "
-            + "Remove 'incrementing.column.mapping'.",
+              + "should not be provided if mode is not '%s' or '%s'. "
+              + "Remove 'incrementing.column.mapping'.",
             JdbcSourceConnectorConfig.MODE_INCREMENTING,
             JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING
         );

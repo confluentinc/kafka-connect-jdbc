@@ -34,18 +34,19 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 
+import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG;
+
 /**
  * Validation class for JDBC Source Connector configurations.
  * This class handles all validation logic for the JDBC Source Connector,
  * including static config conflicts and mode-dependent requirements.
  */
-public class JdbcSourceConnectorValidation {
+public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidation {
 
   private static final Logger log = LoggerFactory.getLogger(JdbcSourceConnectorValidation.class);
   private static final Pattern SELECT_STATEMENT_PATTERN =
       Pattern.compile("(?is)^SELECT\\b");
   protected JdbcSourceConnectorConfig config;
-  protected Config validationResult;
   private final Map<String, String> connectorConfigs;
 
   public JdbcSourceConnectorValidation(JdbcSourceConnectorConfig config,
@@ -88,6 +89,7 @@ public class JdbcSourceConnectorValidation {
       boolean validationResult = validateMultiConfigs()
           && validateLegacyNewConfigCompatibility()
           && validateQueryConfigs()
+          && validateConnection(CONNECTION_URL_CONFIG)
           && validateQuerySemantics();
 
       if (validationResult && isUsingNewConfigs()) {
@@ -419,6 +421,7 @@ public class JdbcSourceConnectorValidation {
    *
    * @return a new dialect instance; never null
    */
+  @Override
   protected DatabaseDialect createDialect() {
     final String dialectName = config.getString(
         JdbcSourceConnectorConfig.DIALECT_NAME_CONFIG);
@@ -536,8 +539,8 @@ public class JdbcSourceConnectorValidation {
       if (hasNewIncrementingConfig) {
         String msg = String.format(
             "Incrementing column configurations "
-              + "should not be provided if mode is not '%s' or '%s'. "
-              + "Remove 'incrementing.column.mapping'.",
+            + "should not be provided if mode is not '%s' or '%s'. "
+            + "Remove 'incrementing.column.mapping'.",
             JdbcSourceConnectorConfig.MODE_INCREMENTING,
             JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING
         );

@@ -89,6 +89,7 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
       boolean validationResult = validateMultiConfigs()
           && validateLegacyNewConfigCompatibility()
           && validateQueryConfigs()
+          && validateQueryModeIncrementingColumnRequired()
           && validateConnection(CONNECTION_URL_CONFIG)
           && validateQuerySemantics();
 
@@ -357,6 +358,40 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
     if (hasQueryMasked
         && !validateSelectStatement(
             queryMaskedValue, JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Require an explicit {@code incrementing.column.name} for {@code incrementing} /
+   * {@code timestamp+incrementing} modes in query mode, where the column cannot be auto-discovered
+   * (no {@code TableId}) and an empty value NPEs on every poll (INC-10982).
+   *
+   * <p>Scoped to the incrementing column only: a missing {@code timestamp.column.name} does not
+   * NPE, so it is not rejected here.
+   */
+  private boolean validateQueryModeIncrementingColumnRequired() {
+    if (!config.getQuery().isPresent() || !config.modeUsesIncrementingColumn()) {
+      return true;
+    }
+
+    String incrementingColumnName = config.getIncrementingColumnName();
+    if (incrementingColumnName == null || incrementingColumnName.trim().isEmpty()) {
+      String msg = String.format(
+          "'%s' must be provided when using mode '%s' or '%s' with a custom query. "
+          + "The incrementing column cannot be auto-discovered in query mode because there "
+          + "is no table to inspect. Note that '%s' is not applied in query mode (it maps "
+          + "columns by table-name regex, and a custom query has no underlying table to match), "
+          + "so '%s' must be set explicitly.",
+          JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG,
+          JdbcSourceConnectorConfig.MODE_INCREMENTING,
+          JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING,
+          JdbcSourceConnectorConfig.INCREMENTING_COLUMN_MAPPING_CONFIG,
+          JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG);
+      addConfigError(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG, msg);
+      log.error(msg);
       return false;
     }
 

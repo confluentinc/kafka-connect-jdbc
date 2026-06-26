@@ -969,6 +969,104 @@ public class JdbcSourceConnectorValidationTest {
     );
   }
 
+  // ========== Query-Mode Incrementing-Column Requirement Tests ==========
+  // These exercise validateQueryModeIncrementingColumnRequired, which guards the runtime NPE
+  // (INC-10982): in query mode an empty incrementing.column.name with an incrementing-tracking
+  // mode makes TimestampIncrementingTableQuerier.findDefaultAutoIncrementingColumn NPE on every
+  // poll. The check is scoped to that one shape; everything else is left to existing validation.
+  // (Base props are set in beforeEach.)
+
+  @Test
+  public void validate_withQueryAndIncrementingModeAndUnsetColumn_setsError() {
+    // incrementing mode, incrementing.column.name not set at all.
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
+    assertErrorMatches(INCREMENTING_COLUMN_NAME_CONFIG,
+        ".*incrementing column cannot be auto-discovered in query mode.*");
+  }
+
+  @Test
+  public void validate_withQueryAndIncrementingModeAndWhitespaceColumn_setsError() {
+    // incrementing mode, whitespace-only incrementing.column.name (trim path).
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "   ");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
+  }
+
+  @Test
+  public void validate_withQueryMaskedAndIncrementingModeAndMissingColumn_setsError() {
+    // query.masked resolves to query mode the same way as query.
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM dbo.SomeTable");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
+  }
+
+  @Test
+  public void validate_withQueryAndTimestampIncrementingModeAndEmptyColumns_setsError() {
+    // Incident repro: timestamp+incrementing with both names blank -> only the incrementing
+    // error (the timestamp side does not NPE and is no longer rejected).
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "");
+    props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "");
+
+    validate();
+
+    assertErrors(1);
+    assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
+  }
+
+  @Test
+  public void validate_withQueryAndIncrementingModeAndColumn_noErrors() {
+    // incrementing mode with incrementing.column.name.
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");
+
+    validate();
+
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_withQueryAndTimestampIncrementingModeAndOnlyIncrementingColumn_noErrors() {
+    // timestamp+incrementing with only the incrementing name set (timestamp missing) -> runs
+    // today (tracks by the incrementing column), so it must NOT be rejected.
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");
+
+    validate();
+
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_withQueryAndTimestampModeWithoutColumn_noErrors() {
+    // The check applies only to incrementing-tracking modes: timestamp mode without a column
+    // does not NPE and must NOT be rejected (it runs today).
+    props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+
+    validate();
+
+    assertNoErrors();
+  }
+
   // ========== Semantic Query Validation Tests ==========
 
   @Test

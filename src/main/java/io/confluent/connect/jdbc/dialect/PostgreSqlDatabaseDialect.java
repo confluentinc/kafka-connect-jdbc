@@ -15,16 +15,21 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.data.Json;
+import io.confluent.connect.jdbc.data.VariableScaleDecimal;
+import io.confluent.connect.jdbc.data.ZonedTimestamp;
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.JdbcCredentials;
+import io.confluent.connect.jdbc.util.JsonConverter;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
@@ -33,6 +38,7 @@ import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
+import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -40,19 +46,26 @@ import org.apache.kafka.connect.errors.DataException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.math.BigDecimal;
+import java.sql.Array;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
-import java.util.Properties;
 
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG;
 
@@ -83,6 +96,16 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   static final String JSON_TYPE_NAME = "json";
   static final String JSONB_TYPE_NAME = "jsonb";
   static final String UUID_TYPE_NAME = "uuid";
+  static final String NUMERIC_TYPE_NAME = "numeric";
+  static final String DATE_TYPE_NAME = "date";
+  static final String TIME_TYPE_NAME = "time";
+  static final String TIMESTAMP_TYPE_NAME = "timestamp";
+  static final String TIMESTAMPTZ_TYPE_NAME = "timestamptz";
+  static final String HSTORE_TYPE_NAME = "hstore";
+
+  private static final String MULTI_DIMENSIONAL_ARRAY_WARNING =
+      "Skipping unsupported multi-dimensional array at column index {}; only single-dimension "
+          + "arrays are supported";
 
   /**
    * Define the PG datatypes that require casting upon insert/update statements.
@@ -271,10 +294,12 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         // Some of these types will have fixed size, but we drop this from the schema conversion
         // since only fixed byte arrays can have a fixed size
         if (isJsonType(columnDefn)) {
-          builder.field(
-              fieldName,
-              columnDefn.isOptional() ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA
-          );
+          builder.field(fieldName, jsonSchema(columnDefn));
+          return fieldName;
+        }
+
+        if (complexTypesEnabled() && isHstoreType(columnDefn)) {
+          builder.field(fieldName, hstoreSchema(columnDefn));
           return fieldName;
         }
 
@@ -289,6 +314,20 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           return fieldName;
         }
 
+        break;
+      }
+      case Types.ARRAY: {
+        if (complexTypesEnabled()) {
+          Schema elementSchema = arrayElementSchemaFor(columnDefn);
+          if (elementSchema != null) {
+            SchemaBuilder arrayBuilder = SchemaBuilder.array(elementSchema);
+            if (columnDefn.isOptional()) {
+              arrayBuilder.optional();
+            }
+            builder.field(fieldName, arrayBuilder.build());
+            return fieldName;
+          }
+        }
         break;
       }
       default:
@@ -324,11 +363,33 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       }
       case Types.OTHER: {
         if (isJsonType(columnDefn)) {
+          if (complexTypesEnabled() && !jsonAsString()) {
+            return rs -> JsonConverter.jsonStringToMap(rs.getString(col));
+          }
           return rs -> rs.getString(col);
+        }
+
+        if (complexTypesEnabled() && isHstoreType(columnDefn)) {
+          if (hstoreAsJson()) {
+            return rs -> {
+              Object value = rs.getObject(col);
+              return value == null
+                  ? null
+                  : JsonConverter.connectValueToJson(null, value);
+            };
+          }
+          return rs -> rs.getObject(col);
         }
 
         if (UUID.class.getName().equals(columnDefn.classNameForType())) {
           return rs -> rs.getString(col);
+        }
+        break;
+      }
+      case Types.ARRAY: {
+        ColumnConverter arrayConverter = arrayColumnConverter(columnDefn, col);
+        if (arrayConverter != null) {
+          return arrayConverter;
         }
         break;
       }
@@ -345,6 +406,332 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return JSON_TYPE_NAME.equalsIgnoreCase(typeName) || JSONB_TYPE_NAME.equalsIgnoreCase(typeName);
   }
 
+  protected boolean isHstoreType(ColumnDefinition columnDefn) {
+    return HSTORE_TYPE_NAME.equalsIgnoreCase(columnDefn.typeName());
+  }
+
+  /**
+   * Map a PostgreSQL array column's element JDBC type to a Connect element {@link Schema}.
+   * Returns null when the element type isn't covered by this MVP (callers fall through to the
+   * generic dialect, which will skip the column with a WARN).
+   */
+  private Schema arrayElementSchemaFor(ColumnDefinition columnDefn) {
+    String base = arrayElementBaseType(columnDefn);
+    if (base == null) {
+      return null;
+    }
+    switch (base) {
+      case "text":
+      case "varchar":
+      case "bpchar":
+      case "char":
+        return Schema.OPTIONAL_STRING_SCHEMA;
+      case "int2":
+        return Schema.OPTIONAL_INT16_SCHEMA;
+      case "int4":
+        return Schema.OPTIONAL_INT32_SCHEMA;
+      case "int8":
+        return Schema.OPTIONAL_INT64_SCHEMA;
+      case "float4":
+        return Schema.OPTIONAL_FLOAT32_SCHEMA;
+      case "float8":
+        return Schema.OPTIONAL_FLOAT64_SCHEMA;
+      case "bool":
+      case "boolean":
+        return Schema.OPTIONAL_BOOLEAN_SCHEMA;
+      case "numeric":
+      case "decimal":
+        // Per-value scale carried via VariableScaleDecimal (array typmod is -1 in JDBC metadata).
+        return VariableScaleDecimal.optionalSchema();
+      case "json":
+      case "jsonb":
+        // Raw JSON text via the Json logical type; round-trips to a native jsonb[] sink column.
+        return Json.optionalSchema();
+      case "date":
+        return Date.builder().optional().build();
+      case "time":
+        return Time.builder().optional().build();
+      case "timestamp":
+        return Timestamp.builder().optional().build();
+      case "timestamptz":
+        // ZonedTimestamp STRING (built-in Timestamp drops the zone); round-trips to timestamptz[].
+        return ZonedTimestamp.optionalSchema();
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * Lowercased element type name of a PostgreSQL array column (strips the leading {@code _}).
+   */
+  private static String arrayElementBaseType(ColumnDefinition columnDefn) {
+    String typeName = columnDefn.typeName();
+    if (typeName == null) {
+      return null;
+    }
+    String base = typeName.startsWith("_") ? typeName.substring(1) : typeName;
+    return base.toLowerCase();
+  }
+
+  /**
+   * Select the value converter for a PostgreSQL array column, routing by the element's Connect
+   * logical type (as decided by {@link #arrayElementSchemaFor}). Returns null when the feature is
+   * disabled or the element type is not supported.
+   */
+  private ColumnConverter arrayColumnConverter(ColumnDefinition columnDefn, int col) {
+    if (!complexTypesEnabled()) {
+      return null;
+    }
+    final Schema elementSchema = arrayElementSchemaFor(columnDefn);
+    if (elementSchema == null) {
+      return null;
+    }
+    String elementName = elementSchema.name();
+    if (elementName != null) {
+      switch (elementName) {
+        case VariableScaleDecimal.LOGICAL_NAME:
+          return rs -> readJdbcArray(rs, col, value ->
+              VariableScaleDecimal.fromLogical(elementSchema, (BigDecimal) value));
+        case Json.LOGICAL_NAME:
+          // Element is the raw JSON text; toString() covers both String and PGobject.
+          return rs -> readJdbcArray(rs, col, Object::toString);
+        case ZonedTimestamp.LOGICAL_NAME:
+          return rs -> readZonedTimestampArray(rs, col);
+        case Date.LOGICAL_NAME:
+        case Time.LOGICAL_NAME:
+        case Timestamp.LOGICAL_NAME:
+          return rs -> readTemporalArray(rs, col, elementName);
+        default:
+          break;
+      }
+    }
+    // Primitive elements pass through directly: the driver already returns the matching Java type.
+    return rs -> readJdbcArray(rs, col, value -> value);
+  }
+
+  /**
+   * Read a {@code timestamptz[]} array into ISO-8601 UTC strings ({@code ZonedTimestamp}), decoding
+   * each element via the element {@link ResultSet} with a UTC Calendar.
+   */
+  private static List<Object> readZonedTimestampArray(ResultSet rs, int col)
+      throws SQLException {
+    Array arr = rs.getArray(col);
+    if (arr == null) {
+      return null;
+    }
+    try {
+      Object raw = arr.getArray();
+      if (raw instanceof Object[] && isMultiDimensional((Object[]) raw)) {
+        log.warn(MULTI_DIMENSIONAL_ARRAY_WARNING, col);
+        return null;
+      }
+      Calendar utc =
+          DateTimeUtils.getZoneIdCalendar(ZoneOffset.UTC);
+      try (ResultSet elementRs = arr.getResultSet()) {
+        List<Object> out = new ArrayList<>();
+        while (elementRs.next()) {
+          java.sql.Timestamp ts = elementRs.getTimestamp(2, utc);
+          out.add(elementRs.wasNull()
+              ? null
+              : ZonedTimestamp.toIsoString(ts));
+        }
+        return out;
+      }
+    } finally {
+      arr.free();
+    }
+  }
+
+  /**
+   * Read a temporal array into Connect Date/Time/Timestamp values, decoding each element in UTC via
+   * the element {@link ResultSet} ({@code getArray()} would parse in the JVM zone).
+   */
+  private static List<Object> readTemporalArray(ResultSet rs, int col, String elementName)
+      throws SQLException {
+    Array arr = rs.getArray(col);
+    if (arr == null) {
+      return null;
+    }
+    try {
+      Object raw = arr.getArray();
+      if (raw instanceof Object[] && isMultiDimensional((Object[]) raw)) {
+        log.warn(MULTI_DIMENSIONAL_ARRAY_WARNING, col);
+        return null;
+      }
+      Calendar utc =
+          DateTimeUtils.getZoneIdCalendar(ZoneOffset.UTC);
+      try (ResultSet elementRs = arr.getResultSet()) {
+        List<Object> out = new ArrayList<>();
+        while (elementRs.next()) {
+          Object converted;
+          if (Date.LOGICAL_NAME.equals(elementName)) {
+            converted = elementRs.getDate(2, utc);
+          } else if (Time.LOGICAL_NAME.equals(elementName)) {
+            converted = elementRs.getTime(2, utc);
+          } else {
+            converted = elementRs.getTimestamp(2, utc);
+          }
+          out.add(elementRs.wasNull() ? null : converted);
+        }
+        return out;
+      }
+    } finally {
+      arr.free();
+    }
+  }
+
+  private static List<Object> readJdbcArray(
+      ResultSet rs, int col, java.util.function.Function<Object, Object> elementMapper)
+      throws SQLException {
+    Array arr = rs.getArray(col);
+    if (arr == null) {
+      return null;
+    }
+    try {
+      Object raw = arr.getArray();
+      if (raw == null) {
+        return null;
+      }
+      Object[] elements = (Object[]) raw;
+      if (isMultiDimensional(elements)) {
+        log.warn(MULTI_DIMENSIONAL_ARRAY_WARNING, col);
+        return null;
+      }
+      List<Object> out = new ArrayList<>(elements.length);
+      for (Object element : elements) {
+        out.add(element == null ? null : elementMapper.apply(element));
+      }
+      return out;
+    } finally {
+      arr.free();
+    }
+  }
+
+  /**
+   * Whether the array elements are themselves arrays (a multi-dimensional column like
+   * {@code int[][]}), which reports the same type name as 1-D and is only detectable from values.
+   */
+  private static boolean isMultiDimensional(Object[] elements) {
+    for (Object element : elements) {
+      if (element != null) {
+        return element.getClass().isArray();
+      }
+    }
+    return false;
+  }
+
+  private boolean isJsonBindCandidate(Schema schema) {
+    Schema.Type type = schema.type();
+    if (type != Schema.Type.STRUCT && type != Schema.Type.MAP) {
+      return false;
+    }
+    return config instanceof JdbcSinkConfig
+        && ((JdbcSinkConfig) config).sqlComplexTypesEnable;
+  }
+
+  private boolean maybeBindJson(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
+      Object value
+  ) throws SQLException {
+    if (!isJsonBindCandidate(schema)) {
+      return false;
+    }
+    String json = JsonConverter.connectValueToJson(schema, value);
+    if (json == null) {
+      statement.setNull(index, Types.OTHER);
+    } else {
+      // Bind as text; the ::jsonb cast (see valueTypeCast) parses it into jsonb server-side.
+      statement.setString(index, json);
+    }
+    return true;
+  }
+
+  private boolean complexTypesEnabled() {
+    if (config instanceof JdbcSinkConfig) {
+      return ((JdbcSinkConfig) config).sqlComplexTypesEnable;
+    }
+    if (config instanceof io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig) {
+      return config.getBoolean(
+          io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig
+              .SQL_COMPLEX_TYPES_ENABLE_CONFIG);
+    }
+    return false;
+  }
+
+  /**
+   * Whether PostgreSQL hstore columns should be emitted as a JSON-object STRING (mode
+   * {@code json}) rather than a Connect Map (mode {@code map}, the default). Only the source
+   * connector exposes this; the sink path always uses the Map representation.
+   */
+  private boolean hstoreAsJson() {
+    if (config instanceof io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig) {
+      return io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_JSON
+          .equalsIgnoreCase(config.getString(
+              io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig
+                  .HSTORE_HANDLING_MODE_CONFIG));
+    }
+    return false;
+  }
+
+  /**
+   * Whether PostgreSQL json/jsonb columns should be emitted as a logical JSON STRING (mode
+   * {@code string}) rather than a Connect Map (mode {@code map}, the default). Only the source
+   * connector exposes this.
+   */
+  private boolean jsonAsString() {
+    if (config instanceof io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig) {
+      return io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.JSON_HANDLING_MODE_STRING
+          .equalsIgnoreCase(config.getString(
+              io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig
+                  .JSON_HANDLING_MODE_CONFIG));
+    }
+    return false;
+  }
+
+  /**
+   * Build the Connect schema for a PostgreSQL json/jsonb column. When complex types are disabled
+   * the column stays a plain STRING. When enabled it is a logical JSON STRING (mode
+   * {@code string}) or a Map&lt;String,String&gt; (mode {@code map}, the default).
+   */
+  private Schema jsonSchema(ColumnDefinition columnDefn) {
+    boolean optional = columnDefn.isOptional();
+    if (!complexTypesEnabled()) {
+      return optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA;
+    }
+    if (jsonAsString()) {
+      SchemaBuilder jsonBuilder = Json.builder();
+      if (optional) {
+        jsonBuilder.optional();
+      }
+      return jsonBuilder.build();
+    }
+    SchemaBuilder mapBuilder = SchemaBuilder.map(
+        Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA);
+    if (optional) {
+      mapBuilder.optional();
+    }
+    return mapBuilder.build();
+  }
+
+  /**
+   * Build the Connect schema for a PostgreSQL hstore column, honoring
+   * {@code hstore.handling.mode}: a JSON-object STRING when {@code json}, otherwise a
+   * Map&lt;String,String&gt;.
+   */
+  private Schema hstoreSchema(ColumnDefinition columnDefn) {
+    if (hstoreAsJson()) {
+      return columnDefn.isOptional() ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA;
+    }
+    SchemaBuilder mapBuilder = SchemaBuilder.map(
+        Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA);
+    if (columnDefn.isOptional()) {
+      mapBuilder.optional();
+    }
+    return mapBuilder.build();
+  }
+
   @Override
   protected String getSqlType(SinkRecordField field) {
     if (field.schemaName() != null) {
@@ -357,6 +744,15 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           return "TIME";
         case Timestamp.LOGICAL_NAME:
           return "TIMESTAMP";
+        case ZonedTimestamp.LOGICAL_NAME:
+          // Native TIMESTAMP WITH TIME ZONE (and TIMESTAMP WITH TIME ZONE[] as an array element).
+          return "TIMESTAMP WITH TIME ZONE";
+        case Json.LOGICAL_NAME:
+          // Logical JSON STRING -> native JSONB; text binds via the existing ::jsonb cast.
+          return JSONB_TYPE_NAME.toUpperCase();
+        case VariableScaleDecimal.LOGICAL_NAME:
+          // Per-value scale -> unconstrained NUMERIC (and NUMERIC[] as an array element).
+          return NUMERIC_TYPE_NAME.toUpperCase();
         default:
           // fall through to normal types
       }
@@ -394,6 +790,13 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
             field.isPrimaryKey()
         );
         return getSqlType(childField) + "[]";
+      case STRUCT:
+      case MAP:
+        if (config instanceof JdbcSinkConfig
+            && ((JdbcSinkConfig) config).sqlComplexTypesEnable) {
+          return JSONB_TYPE_NAME.toUpperCase();
+        }
+        return super.getSqlType(field);
       default:
         return super.getSqlType(field);
     }
@@ -560,69 +963,210 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       Object value,
       String fieldName
   ) throws SQLException {
-    switch (schema.type()) {
-      case ARRAY: {
-        Class<?> valueClass = value.getClass();
-        Object newValue = null;
-        Collection<?> valueCollection;
-        if (Collection.class.isAssignableFrom(valueClass)) {
-          valueCollection = (Collection<?>) value;
-        } else if (valueClass.isArray()) {
-          valueCollection = Arrays.asList((Object[]) value);
-        } else {
-          throw new DataException(
-              String.format("Type '%s' is not supported for Array.", valueClass.getName())
-          );
-        }
-
-        // All typecasts below are based on pgjdbc's documentation on how to use primitive arrays
-        // - https://jdbc.postgresql.org/documentation/head/arrays.html
-        switch (schema.valueSchema().type()) {
-          case INT8: {
-            // Gotta do this the long way, as Postgres has no single-byte integer,
-            // so we want to cast to short as the next best thing, and we can't do that with
-            // toArray.
-
-            newValue = valueCollection.stream()
-                .map(o -> ((Byte) o).shortValue())
-                .toArray(Short[]::new);
-            break;
-          }
-          case INT32:
-            newValue = valueCollection.toArray(new Integer[0]);
-            break;
-          case INT16:
-            newValue = valueCollection.toArray(new Short[0]);
-            break;
-          case BOOLEAN:
-            newValue = valueCollection.toArray(new Boolean[0]);
-            break;
-          case STRING:
-            newValue = valueCollection.toArray(new String[0]);
-            break;
-          case FLOAT64:
-            newValue = valueCollection.toArray(new Double[0]);
-            break;
-          case FLOAT32:
-            newValue = valueCollection.toArray(new Float[0]);
-            break;
-          case INT64:
-            newValue = valueCollection.toArray(new Long[0]);
-            break;
-          default:
-            break;
-        }
-
-        if (newValue != null) {
-          statement.setObject(index, newValue, Types.ARRAY);
-          return true;
-        }
-        break;
-      }
-      default:
-        break;
+    if (maybeBindJson(statement, index, schema, value)) {
+      return true;
+    }
+    if (schema.type() == Schema.Type.ARRAY && bindArray(statement, index, schema, value)) {
+      return true;
     }
     return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
+  }
+
+  /**
+   * Bind a Connect ARRAY value to a native PostgreSQL array parameter by dispatching on the element
+   * type. Each {@code maybeBind...Array} helper handles a single element type and returns true once
+   * it binds; returns false if the element type is not handled here.
+   */
+  private boolean bindArray(PreparedStatement statement, int index, Schema schema, Object value)
+      throws SQLException {
+    Collection<?> values = arrayValueCollection(value);
+    Schema elementSchema = schema.valueSchema();
+    String elementName = elementSchema != null ? elementSchema.name() : null;
+    if (maybeBindJsonArray(statement, index, elementName, values)) {
+      return true;
+    }
+    if (maybeBindZonedTimestampArray(statement, index, elementName, values)) {
+      return true;
+    }
+    if (maybeBindVariableScaleDecimalArray(statement, index, elementName, values)) {
+      return true;
+    }
+    if (maybeBindTemporalArray(statement, index, elementName, values)) {
+      return true;
+    }
+    return maybeBindPrimitiveArray(statement, index, elementSchema, values);
+  }
+
+  /**
+   * Coerce a Connect ARRAY value into a {@link Collection} of elements.
+   */
+  private static Collection<?> arrayValueCollection(Object value) {
+    Class<?> valueClass = value.getClass();
+    if (Collection.class.isAssignableFrom(valueClass)) {
+      return (Collection<?>) value;
+    } else if (valueClass.isArray()) {
+      return Arrays.asList((Object[]) value);
+    }
+    throw new DataException(
+        String.format("Type '%s' is not supported for Array.", valueClass.getName()));
+  }
+
+  /**
+   * Bind an array of the Json logical type as a native {@code jsonb[]} (each element is raw JSON
+   * text). Returns false if the element type is not Json.
+   */
+  private boolean maybeBindJsonArray(PreparedStatement statement, int index, String elementName,
+      Collection<?> values) throws SQLException {
+    if (!Json.LOGICAL_NAME.equals(elementName)) {
+      return false;
+    }
+    Array array = statement.getConnection()
+        .createArrayOf(JSONB_TYPE_NAME, values.toArray());
+    statement.setArray(index, array);
+    return true;
+  }
+
+  /**
+   * Bind an array of the ZonedTimestamp logical type as a native {@code timestamptz[]} (each
+   * element is an ISO-8601 offset string). Returns false if the element type is not ZonedTimestamp.
+   */
+  private boolean maybeBindZonedTimestampArray(PreparedStatement statement, int index,
+      String elementName, Collection<?> values) throws SQLException {
+    if (!ZonedTimestamp.LOGICAL_NAME.equals(elementName)) {
+      return false;
+    }
+    Array array = statement.getConnection()
+        .createArrayOf(TIMESTAMPTZ_TYPE_NAME, values.toArray());
+    statement.setArray(index, array);
+    return true;
+  }
+
+  /**
+   * Bind an array of VariableScaleDecimal as a native {@code numeric[]}, decoding each
+   * {@code {scale,value}} struct back to its exact BigDecimal. Returns false if the element type is
+   * not VariableScaleDecimal.
+   */
+  private boolean maybeBindVariableScaleDecimalArray(PreparedStatement statement, int index,
+      String elementName, Collection<?> values) throws SQLException {
+    if (!VariableScaleDecimal.LOGICAL_NAME.equals(elementName)) {
+      return false;
+    }
+    Array array = statement.getConnection()
+        .createArrayOf(NUMERIC_TYPE_NAME, bigDecimalArrayFor(values));
+    statement.setArray(index, array);
+    return true;
+  }
+
+  /**
+   * Bind an array of the temporal logical types as a native {@code date[]}/{@code time[]}/
+   * {@code timestamp[]}, rendering each element as a UTC text literal (timezone-safe regardless of
+   * the JVM default zone). Returns false if the element type is not a non-zoned temporal type.
+   */
+  private boolean maybeBindTemporalArray(PreparedStatement statement, int index, String elementName,
+      Collection<?> values) throws SQLException {
+    String temporalType = temporalArrayType(elementName);
+    if (temporalType == null) {
+      return false;
+    }
+    Array array = statement.getConnection()
+        .createArrayOf(temporalType, temporalArrayFor(elementName, values));
+    statement.setArray(index, array);
+    return true;
+  }
+
+  /**
+   * Bind an array of a primitive element type per pgjdbc's documented array mapping. Returns false
+   * if the element type is not a supported primitive.
+   */
+  private boolean maybeBindPrimitiveArray(PreparedStatement statement, int index,
+      Schema elementSchema, Collection<?> values) throws SQLException {
+    Object newValue =
+        elementSchema == null ? null : primitiveArrayFor(elementSchema.type(), values);
+    if (newValue == null) {
+      return false;
+    }
+    statement.setObject(index, newValue, Types.ARRAY);
+    return true;
+  }
+
+  /**
+   * Decode a collection of VariableScaleDecimal structs back into a {@code BigDecimal[]}, each with
+   * its own scale, for binding into a native {@code numeric[]} column. Null elements are preserved.
+   */
+  private static BigDecimal[] bigDecimalArrayFor(Collection<?> valueCollection) {
+    return valueCollection.stream()
+        .map(o -> o == null ? null
+            : VariableScaleDecimal.toLogical(
+                (Struct) o))
+        .toArray(BigDecimal[]::new);
+  }
+
+  /**
+   * Map a temporal logical element name to its PostgreSQL array element type name, or null if the
+   * element is not one of the temporal logical types handled here.
+   */
+  private static String temporalArrayType(String elementName) {
+    if (Date.LOGICAL_NAME.equals(elementName)) {
+      return DATE_TYPE_NAME;
+    } else if (Time.LOGICAL_NAME.equals(elementName)) {
+      return TIME_TYPE_NAME;
+    } else if (Timestamp.LOGICAL_NAME.equals(elementName)) {
+      return TIMESTAMP_TYPE_NAME;
+    }
+    return null;
+  }
+
+  /**
+   * Render each temporal element (a {@code java.util.Date} carrying a logical Date/Time/Timestamp)
+   * as a UTC text literal for binding into a native date[]/time[]/timestamp[] column. Formatting in
+   * UTC keeps the value timezone-safe irrespective of the JVM default zone. Nulls are preserved.
+   */
+  private static Object[] temporalArrayFor(String elementName, Collection<?> valueCollection) {
+    DateTimeFormatter fmt = temporalFormatter(elementName);
+    return valueCollection.stream()
+        .map(o -> o == null ? null
+            : fmt.format(((java.util.Date) o).toInstant().atZone(ZoneOffset.UTC)))
+        .toArray(String[]::new);
+  }
+
+  /**
+   * Return the UTC text format for a temporal logical element name (date, time, or timestamp).
+   */
+  private static DateTimeFormatter temporalFormatter(String elementName) {
+    if (Date.LOGICAL_NAME.equals(elementName)) {
+      return DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    } else if (Time.LOGICAL_NAME.equals(elementName)) {
+      return DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
+    }
+    return DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
+  }
+
+  /**
+   * Convert a collection into a typed Java array for a primitive Connect element type, following
+   * pgjdbc's documented array mapping. Returns null for unhandled element types.
+   */
+  private static Object primitiveArrayFor(Schema.Type elementType, Collection<?> valueCollection) {
+    switch (elementType) {
+      case INT8:
+        // PostgreSQL has no single-byte integer; widen to short.
+        return valueCollection.stream().map(o -> ((Byte) o).shortValue()).toArray(Short[]::new);
+      case INT16:
+        return valueCollection.toArray(new Short[0]);
+      case INT32:
+        return valueCollection.toArray(new Integer[0]);
+      case INT64:
+        return valueCollection.toArray(new Long[0]);
+      case FLOAT32:
+        return valueCollection.toArray(new Float[0]);
+      case FLOAT64:
+        return valueCollection.toArray(new Double[0]);
+      case BOOLEAN:
+        return valueCollection.toArray(new Boolean[0]);
+      case STRING:
+        return valueCollection.toArray(new String[0]);
+      default:
+        return null;
+    }
   }
 
   /**

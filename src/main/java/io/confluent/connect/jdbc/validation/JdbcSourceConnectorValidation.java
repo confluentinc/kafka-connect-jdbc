@@ -382,10 +382,14 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
       String msg = String.format(
           "'%s' must be provided when using mode '%s' or '%s' with a custom query. "
           + "The incrementing column cannot be auto-discovered in query mode because there "
-          + "is no table to inspect.",
+          + "is no table to inspect. Note that '%s' is not applied in query mode (it maps "
+          + "columns by table-name regex, and a custom query has no underlying table to match), "
+          + "so '%s' must be set explicitly.",
           JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG,
           JdbcSourceConnectorConfig.MODE_INCREMENTING,
-          JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING);
+          JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING,
+          JdbcSourceConnectorConfig.INCREMENTING_COLUMN_MAPPING_CONFIG,
+          JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG);
       addConfigError(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG, msg);
       log.error(msg);
       return false;

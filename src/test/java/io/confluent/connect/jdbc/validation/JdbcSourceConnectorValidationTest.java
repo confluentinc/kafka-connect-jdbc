@@ -969,6 +969,197 @@ public class JdbcSourceConnectorValidationTest {
     );
   }
 
+  // ========== Query-Mode Incrementing-Column Requirement Tests ==========
+  // These guard against the runtime NPE (INC-10982): in query mode the querier has no TableId to
+  // auto-discover from, so an empty incrementing.column.name with an incrementing-tracking mode
+  // makes TimestampIncrementingTableQuerier.findDefaultAutoIncrementingColumn NPE on every poll.
+  // Only this incrementing case crashes; a missing timestamp.column.name does not NPE (pure
+  // timestamp mode passes null for the incrementing column), and the unsupported-in-query-mode
+  // column mapping configs are silently ignored at runtime, so neither is rejected here.
+
+  @Test
+  public void validate_withQueryAndIncrementingColumnMissing_setsError() {
+    // The only rejected (NPE-causing) shape: query + incrementing-tracking mode + no usable
+    // incrementing.column.name. Covered across every "missing" form and both modes.
+
+    // incrementing mode, incrementing.column.name not set at all.
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    validate();
+    assertErrors(1);
+    assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
+    assertErrorMatches(INCREMENTING_COLUMN_NAME_CONFIG,
+        ".*incrementing column cannot be auto-discovered in query mode.*");
+
+    // incrementing mode, whitespace-only incrementing.column.name (trim path).
+    props.clear();
+    props.put("name", "jdbc-connector");
+    props.put(CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(CONNECTION_USER_CONFIG, "testUser");
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "   ");
+    validate();
+    assertErrors(1);
+    assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
+
+    // query.masked resolves to query mode the same way as query.
+    props.clear();
+    props.put("name", "jdbc-connector");
+    props.put(CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(CONNECTION_USER_CONFIG, "testUser");
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM dbo.SomeTable");
+    validate();
+    assertErrors(1);
+    assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
+
+    // incident repro: timestamp+incrementing with both names blank -> only the incrementing
+    // error (the timestamp side does not NPE and is no longer rejected).
+    props.clear();
+    props.put("name", "jdbc-connector");
+    props.put(CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(CONNECTION_USER_CONFIG, "testUser");
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "");
+    props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "");
+    validate();
+    assertErrors(1);
+    assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
+
+    // timestamp+incrementing with only the timestamp name set -> incrementing error remains.
+    props.clear();
+    props.put("name", "jdbc-connector");
+    props.put(CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(CONNECTION_USER_CONFIG, "testUser");
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "modified_at");
+    validate();
+    assertErrors(1);
+    assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
+
+    // a column mapping does not substitute for the required name: still the NPE error.
+    props.clear();
+    props.put("name", "jdbc-connector");
+    props.put(CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(CONNECTION_USER_CONFIG, "testUser");
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
+    validate();
+    assertErrors(1);
+    assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
+  }
+
+  @Test
+  public void validate_withQueryAndIncrementingColumnProvided_noErrors() {
+    // incrementing mode with incrementing.column.name.
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");
+    validate();
+    assertNoErrors();
+
+    // timestamp+incrementing with both names.
+    props.clear();
+    props.put("name", "jdbc-connector");
+    props.put(CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(CONNECTION_USER_CONFIG, "testUser");
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");
+    props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "modified_at");
+    validate();
+    assertNoErrors();
+
+    // timestamp+incrementing with only the incrementing name set (timestamp missing) -> runs
+    // today (tracks by the incrementing column), so it must NOT be rejected.
+    props.clear();
+    props.put("name", "jdbc-connector");
+    props.put(CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(CONNECTION_USER_CONFIG, "testUser");
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");
+    validate();
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_withQueryAndTimestampOrBulkModeWithoutColumns_noErrors() {
+    // A missing timestamp.column.name does not NPE; these run today, so they must NOT be rejected.
+
+    // timestamp mode with no timestamp.column.name.
+    props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    validate();
+    assertNoErrors();
+
+    // timestamp mode with a timestamp.column.name.
+    props.clear();
+    props.put("name", "jdbc-connector");
+    props.put(CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(CONNECTION_USER_CONFIG, "testUser");
+    props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "modified_at");
+    validate();
+    assertNoErrors();
+
+    // bulk mode requires no column, even in query mode.
+    props.clear();
+    props.put("name", "jdbc-connector");
+    props.put(CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(CONNECTION_USER_CONFIG, "testUser");
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    validate();
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_withQueryAndColumnMappings_noErrors() {
+    // Column mapping configs are silently ignored in query mode (no table for the regex to
+    // match); a connector can run today with this combination, so validation must NOT fail it.
+
+    // timestamp mode + timestamp.columns.mapping, no name -> no error (timestamp not required).
+    props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
+    validate();
+    assertNoErrors();
+
+    // timestamp+incrementing + incrementing.column.name + both mappings -> no error (the name
+    // satisfies the NPE guard; the mappings are accepted and ignored).
+    props.clear();
+    props.put("name", "jdbc-connector");
+    props.put(CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(CONNECTION_USER_CONFIG, "testUser");
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");
+    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
+    validate();
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_withTableModeAndMappingsNoQuery_unaffectedByQueryModeCheck_noErrors() {
+    // The query-mode guard must be a no-op when no query is configured: mapping-based configs
+    // on the table-filtering (table.include.list) path remain fully valid for ts/inc modes.
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(TABLE_INCLUDE_LIST_CONFIG, "database.schema.table.*");
+    props.put(TIMESTAMP_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:[ts_col1|ts_col2]");
+    props.put(INCREMENTING_COLUMN_MAPPING_CONFIG, "database.schema.table_test.*:inc_col1");
+
+    validate();
+
+    assertNoErrors();
+  }
+
   // ========== Semantic Query Validation Tests ==========
 
   @Test

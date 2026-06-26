@@ -89,6 +89,7 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
       boolean validationResult = validateMultiConfigs()
           && validateLegacyNewConfigCompatibility()
           && validateQueryConfigs()
+          && validateQueryModeIncrementingColumnRequired()
           && validateConnection(CONNECTION_URL_CONFIG)
           && validateQuerySemantics();
 
@@ -357,6 +358,46 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
     if (hasQueryMasked
         && !validateSelectStatement(
             queryMaskedValue, JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Require an explicit {@code incrementing.column.name} in query mode for modes that track an
+   * incrementing column.
+   *
+   * <p>In query mode the querier is constructed without a {@code TableId}, so the connector
+   * cannot auto-discover the incrementing column from table metadata the way it can in table
+   * mode. For mode {@code incrementing} / {@code timestamp+incrementing} with an empty
+   * {@code incrementing.column.name}, {@code TimestampIncrementingTableQuerier
+   * .findDefaultAutoIncrementingColumn} dereferences the null {@code TableId} and hits an
+   * unrecoverable {@link NullPointerException} on every poll (the task is killed and restarted
+   * indefinitely). Fail fast at validation time so the misconfiguration is caught at create /
+   * validate.
+   *
+   * <p>This is scoped to the incrementing column only. A missing {@code timestamp.column.name}
+   * (pure {@code timestamp} mode, or {@code timestamp+incrementing} with the incrementing column
+   * set) does <em>not</em> NPE — {@code TimestampTableQuerier} passes {@code null} for the
+   * incrementing column so the auto-discovery branch is skipped — so it is not rejected here.
+   */
+  private boolean validateQueryModeIncrementingColumnRequired() {
+    if (!config.getQuery().isPresent() || !config.modeUsesIncrementingColumn()) {
+      return true;
+    }
+
+    String incrementingColumnName = config.getIncrementingColumnName();
+    if (incrementingColumnName == null || incrementingColumnName.trim().isEmpty()) {
+      String msg = String.format(
+          "'%s' must be provided when using mode '%s' or '%s' with a custom query. "
+          + "The incrementing column cannot be auto-discovered in query mode because there "
+          + "is no table to inspect.",
+          JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG,
+          JdbcSourceConnectorConfig.MODE_INCREMENTING,
+          JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING);
+      addConfigError(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG, msg);
+      log.error(msg);
       return false;
     }
 

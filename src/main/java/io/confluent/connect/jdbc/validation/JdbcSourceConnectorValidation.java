@@ -365,22 +365,12 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
   }
 
   /**
-   * Require an explicit {@code incrementing.column.name} in query mode for modes that track an
-   * incrementing column.
+   * Require an explicit {@code incrementing.column.name} for {@code incrementing} /
+   * {@code timestamp+incrementing} modes in query mode, where the column cannot be auto-discovered
+   * (no {@code TableId}) and an empty value NPEs on every poll (INC-10982).
    *
-   * <p>In query mode the querier is constructed without a {@code TableId}, so the connector
-   * cannot auto-discover the incrementing column from table metadata the way it can in table
-   * mode. For mode {@code incrementing} / {@code timestamp+incrementing} with an empty
-   * {@code incrementing.column.name}, {@code TimestampIncrementingTableQuerier
-   * .findDefaultAutoIncrementingColumn} dereferences the null {@code TableId} and hits an
-   * unrecoverable {@link NullPointerException} on every poll (the task is killed and restarted
-   * indefinitely). Fail fast at validation time so the misconfiguration is caught at create /
-   * validate.
-   *
-   * <p>This is scoped to the incrementing column only. A missing {@code timestamp.column.name}
-   * (pure {@code timestamp} mode, or {@code timestamp+incrementing} with the incrementing column
-   * set) does <em>not</em> NPE — {@code TimestampTableQuerier} passes {@code null} for the
-   * incrementing column so the auto-discovery branch is skipped — so it is not rejected here.
+   * <p>Scoped to the incrementing column only: a missing {@code timestamp.column.name} does not
+   * NPE, so it is not rejected here.
    */
   private boolean validateQueryModeIncrementingColumnRequired() {
     if (!config.getQuery().isPresent() || !config.modeUsesIncrementingColumn()) {

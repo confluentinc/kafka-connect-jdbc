@@ -969,6 +969,96 @@ public class JdbcSourceConnectorValidationTest {
     );
   }
 
+  // ========== Query-Mode Incrementing-Column Requirement Tests ==========
+  // These exercise validateQueryModeIncrementingColumnRequired, which guards the runtime NPE
+  // (INC-10982): in query mode an empty incrementing.column.name with an incrementing-tracking
+  // mode makes TimestampIncrementingTableQuerier.findDefaultAutoIncrementingColumn NPE on every
+  // poll. The check is scoped to that one shape; everything else is left to existing validation.
+
+  @Test
+  public void validate_withQueryAndIncrementingColumnMissing_setsError() {
+    // The rejected (NPE-causing) shape: query + incrementing-tracking mode + no usable
+    // incrementing.column.name, across the empty/whitespace/query.masked forms and both modes.
+
+    // incrementing mode, incrementing.column.name not set at all.
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    validate();
+    assertErrors(1);
+    assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
+    assertErrorMatches(INCREMENTING_COLUMN_NAME_CONFIG,
+        ".*incrementing column cannot be auto-discovered in query mode.*");
+
+    // incrementing mode, whitespace-only incrementing.column.name (trim path).
+    props.clear();
+    props.put("name", "jdbc-connector");
+    props.put(CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(CONNECTION_USER_CONFIG, "testUser");
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "   ");
+    validate();
+    assertErrors(1);
+    assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
+
+    // query.masked resolves to query mode the same way as query.
+    props.clear();
+    props.put("name", "jdbc-connector");
+    props.put(CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(CONNECTION_USER_CONFIG, "testUser");
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM dbo.SomeTable");
+    validate();
+    assertErrors(1);
+    assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
+
+    // incident repro: timestamp+incrementing with both names blank -> only the incrementing
+    // error (the timestamp side does not NPE and is no longer rejected).
+    props.clear();
+    props.put("name", "jdbc-connector");
+    props.put(CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(CONNECTION_USER_CONFIG, "testUser");
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "");
+    props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "");
+    validate();
+    assertErrors(1);
+    assertErrors(INCREMENTING_COLUMN_NAME_CONFIG, 1);
+  }
+
+  @Test
+  public void validate_withQueryAndIncrementingColumnProvided_noErrors() {
+    // incrementing mode with incrementing.column.name.
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");
+    validate();
+    assertNoErrors();
+
+    // timestamp+incrementing with only the incrementing name set (timestamp missing) -> runs
+    // today (tracks by the incrementing column), so it must NOT be rejected.
+    props.clear();
+    props.put("name", "jdbc-connector");
+    props.put(CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost:5432/testdb");
+    props.put(CONNECTION_USER_CONFIG, "testUser");
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");
+    validate();
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_withQueryAndNonIncrementingMode_noErrors() {
+    // The check applies only to incrementing-tracking modes: timestamp mode without a column
+    // does not NPE and must NOT be rejected (it runs today).
+    props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(QUERY_CONFIG, "SELECT * FROM dbo.SomeTable");
+    validate();
+    assertNoErrors();
+  }
+
   // ========== Semantic Query Validation Tests ==========
 
   @Test

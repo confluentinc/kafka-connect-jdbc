@@ -21,14 +21,20 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.junit.Test;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 
 public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDialect> {
 
@@ -258,4 +264,187 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
 
   // validateQuery behaviour is inherited from GenericDatabaseDialect and exercised in
   // GenericDatabaseDialectTest; no MySQL-specific override exists to test here.
+
+  // ----- Security: blocked JDBC URL parameters -----
+
+  @Test
+  public void shouldRejectAllowLoadLocalInfileInUrl() {
+    assertBlockedInUrl("allowLoadLocalInfile=true");
+  }
+
+  @Test
+  public void shouldRejectAllowLocalInfileInUrl() {
+    assertBlockedInUrl("allowLocalInfile=true");
+  }
+
+  @Test
+  public void shouldRejectAllowUrlInLocalInfileInUrl() {
+    assertBlockedInUrl("allowUrlInLocalInfile=true");
+  }
+
+  @Test
+  public void shouldRejectAutoDeserializeInUrl() {
+    assertBlockedInUrl("autoDeserialize=true");
+  }
+
+  @Test
+  public void shouldRejectQueryInterceptorsInUrl() {
+    assertBlockedInUrl(
+        "queryInterceptors=com.mysql.cj.jdbc.interceptors.ServerStatusDiffInterceptor");
+  }
+
+  @Test
+  public void shouldRejectStatementInterceptorsInUrl() {
+    assertBlockedInUrl("statementInterceptors=com.example.Evil");
+  }
+
+  @Test
+  public void shouldRejectAllowMultiQueriesInUrl() {
+    assertBlockedInUrl("allowMultiQueries=true");
+  }
+
+  @Test
+  public void shouldRejectAmpersandBeforeQueryStringInUrl() {
+    // connection.host="evil.host&allowLoadLocalInfile=true" produces & before ?
+    MySqlDatabaseDialect d = new MySqlDatabaseDialect(
+        sourceConfigWithUrl("jdbc:mysql://host:3306/db"));
+    assertThrows(ConnectException.class, () -> d.validateJdbcUrlParams(
+        "jdbc:mysql://evil.host&allowLoadLocalInfile=true:3306/db"));
+  }
+
+  @Test
+  public void shouldRejectFragmentInUrl() {
+    MySqlDatabaseDialect d = new MySqlDatabaseDialect(
+        sourceConfigWithUrl("jdbc:mysql://host:3306/db"));
+    assertThrows(ConnectException.class, () -> d.validateJdbcUrlParams(
+        "jdbc:mysql://host:3306/db#fragment"));
+  }
+
+  @Test
+  public void shouldRejectBlockedParamAmongOthersInUrl() {
+    MySqlDatabaseDialect d = new MySqlDatabaseDialect(
+        sourceConfigWithUrl("jdbc:mysql://host:3306/db"));
+    assertThrows(ConnectException.class, () -> d.validateJdbcUrlParams(
+        "jdbc:mysql://host:3306/db?useSSL=true&allowLoadLocalInfile=true&charset=utf8"));
+  }
+
+  @Test
+  public void shouldAllowSafeUrlParams() {
+    MySqlDatabaseDialect d = new MySqlDatabaseDialect(
+        sourceConfigWithUrl("jdbc:mysql://host:3306/db?useSSL=true&charset=utf8"));
+    d.validateJdbcUrlParams("jdbc:mysql://host:3306/db?useSSL=true&charset=utf8");
+  }
+
+  @Test
+  public void shouldAllowUrlWithNoParams() {
+    MySqlDatabaseDialect d = new MySqlDatabaseDialect(
+        sourceConfigWithUrl("jdbc:mysql://host:3306/db"));
+    d.validateJdbcUrlParams("jdbc:mysql://host:3306/db");
+  }
+
+  // ----- Security: blocked connection.* properties -----
+
+  @Test
+  public void shouldRejectAllowLoadLocalInfileAsConnectionProperty() {
+    assertBlockedAsConnectionProperty("connection.allowLoadLocalInfile", "true");
+  }
+
+  @Test
+  public void shouldRejectAllowLocalInfileAsConnectionProperty() {
+    assertBlockedAsConnectionProperty("connection.allowLocalInfile", "true");
+  }
+
+  @Test
+  public void shouldRejectAllowUrlInLocalInfileAsConnectionProperty() {
+    assertBlockedAsConnectionProperty("connection.allowUrlInLocalInfile", "true");
+  }
+
+  @Test
+  public void shouldRejectAutoDeserializeAsConnectionProperty() {
+    assertBlockedAsConnectionProperty("connection.autoDeserialize", "true");
+  }
+
+  @Test
+  public void shouldRejectQueryInterceptorsAsConnectionProperty() {
+    assertBlockedAsConnectionProperty("connection.queryInterceptors",
+        "com.mysql.cj.jdbc.interceptors.ServerStatusDiffInterceptor");
+  }
+
+  @Test
+  public void shouldRejectStatementInterceptorsAsConnectionProperty() {
+    assertBlockedAsConnectionProperty("connection.statementInterceptors", "com.example.Evil");
+  }
+
+  @Test
+  public void shouldRejectAllowMultiQueriesAsConnectionProperty() {
+    assertBlockedAsConnectionProperty("connection.allowMultiQueries", "true");
+  }
+
+  @Test
+  public void shouldAllowSafeConnectionProperties() {
+    Map<String, String> props = baseConnProps("jdbc:mysql://host:3306/db");
+    props.put("connection.useSSL", "true");
+    props.put("connection.characterEncoding", "utf8");
+    MySqlDatabaseDialect d = new MySqlDatabaseDialect(new JdbcSourceConnectorConfig(props));
+    Properties result = d.addConnectionProperties(new Properties());
+    assertEquals("true", result.get("useSSL"));
+    assertEquals("utf8", result.get("characterEncoding"));
+  }
+
+  // ----- Security: safe defaults are pinned regardless of driver defaults -----
+
+  @Test
+  public void shouldPinAllowLoadLocalInfileToFalse() {
+    MySqlDatabaseDialect d = new MySqlDatabaseDialect(
+        new JdbcSourceConnectorConfig(baseConnProps("jdbc:mysql://host:3306/db")));
+    Properties result = d.addConnectionProperties(new Properties());
+    assertEquals("false", result.getProperty("allowLoadLocalInfile"));
+  }
+
+  @Test
+  public void shouldPinAllowLocalInfileToFalse() {
+    MySqlDatabaseDialect d = new MySqlDatabaseDialect(
+        new JdbcSourceConnectorConfig(baseConnProps("jdbc:mysql://host:3306/db")));
+    Properties result = d.addConnectionProperties(new Properties());
+    assertEquals("false", result.getProperty("allowLocalInfile"));
+  }
+
+  @Test
+  public void shouldPinAllowUrlInLocalInfileToFalse() {
+    MySqlDatabaseDialect d = new MySqlDatabaseDialect(
+        new JdbcSourceConnectorConfig(baseConnProps("jdbc:mysql://host:3306/db")));
+    Properties result = d.addConnectionProperties(new Properties());
+    assertEquals("false", result.getProperty("allowUrlInLocalInfile"));
+  }
+
+  @Test
+  public void shouldPinAutoDeserializeToFalse() {
+    MySqlDatabaseDialect d = new MySqlDatabaseDialect(
+        new JdbcSourceConnectorConfig(baseConnProps("jdbc:mysql://host:3306/db")));
+    Properties result = d.addConnectionProperties(new Properties());
+    assertEquals("false", result.getProperty("autoDeserialize"));
+  }
+
+  // ----- helpers -----
+
+  private void assertBlockedInUrl(String param) {
+    String url = "jdbc:mysql://host:3306/db?" + param;
+    MySqlDatabaseDialect d = new MySqlDatabaseDialect(sourceConfigWithUrl("jdbc:mysql://host:3306/db"));
+    assertThrows(ConnectException.class, () -> d.validateJdbcUrlParams(url));
+  }
+
+  private void assertBlockedAsConnectionProperty(String key, String value) {
+    Map<String, String> props = baseConnProps("jdbc:mysql://host:3306/db");
+    props.put(key, value);
+    MySqlDatabaseDialect d = new MySqlDatabaseDialect(new JdbcSourceConnectorConfig(props));
+    assertThrows(ConnectException.class, () -> d.addConnectionProperties(new Properties()));
+  }
+
+  private Map<String, String> baseConnProps(String url) {
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, url);
+    props.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
+    props.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, "test-");
+    return props;
+  }
 }

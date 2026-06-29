@@ -356,7 +356,13 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
               + "possible metacharacter injection in connection host.");
     }
 
-    // Check authority section property bags: (host=h,port=p,prop=val,...)
+    checkAuthorityBags(preQuery);
+    if (queryStart >= 0) {
+      checkQueryString(url.substring(queryStart + 1));
+    }
+  }
+
+  private void checkAuthorityBags(String preQuery) {
     Matcher bagMatcher = AUTHORITY_PROPERTY_BAG_PATTERN.matcher(preQuery);
     while (bagMatcher.find()) {
       for (String prop : bagMatcher.group(1).split(",")) {
@@ -366,16 +372,15 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
         }
       }
     }
+  }
 
-    // Check standard ?key=value&key=value query string
-    if (queryStart >= 0) {
-      for (String param : url.substring(queryStart + 1).split("&")) {
-        if (param.isEmpty()) {
-          continue;
-        }
-        int eq = param.indexOf('=');
-        checkBlockedKey(eq > 0 ? param.substring(0, eq) : param);
+  private void checkQueryString(String queryString) {
+    for (String param : queryString.split("&")) {
+      if (param.isEmpty()) {
+        continue;
       }
+      int eq = param.indexOf('=');
+      checkBlockedKey(eq > 0 ? param.substring(0, eq) : param);
     }
   }
 

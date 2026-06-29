@@ -408,6 +408,14 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
     d.validateJdbcUrlParams("jdbc:mysql://host:3306/db");
   }
 
+  @Test
+  public void shouldAllowNullUrl() {
+    MySqlDatabaseDialect d = new MySqlDatabaseDialect(
+        sourceConfigWithUrl("jdbc:mysql://host:3306/db"));
+    // null url must not throw NPE — caller may pass null when url is not yet set
+    d.validateJdbcUrlParams(null);
+  }
+
   // ----- Security: blocked connection.* properties -----
 
   @Test

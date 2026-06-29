@@ -102,6 +102,9 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
   static {
     // TreeSet with CASE_INSENSITIVE_ORDER so blocked.contains() matches regardless of casing
     Set<String> set = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+    // Known Connector/J aliases for each blocked property are listed explicitly.
+    // Connector/J also has a PropertyKey enum that can canonicalise unknown aliases; if
+    // new aliases are discovered in a future driver version, resolve them through that enum.
     set.addAll(Arrays.asList(
         // file read / SSRF
         "allowLoadLocalInfile",
@@ -334,6 +337,9 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
    */
   @Override
   protected void validateJdbcUrlParams(String url) {
+    if (url == null) {
+      return;
+    }
     // # is never valid in a JDBC URL
     if (url.indexOf('#') >= 0) {
       throw new ConnectException(

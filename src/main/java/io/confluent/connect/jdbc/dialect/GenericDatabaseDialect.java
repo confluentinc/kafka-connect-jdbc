@@ -279,8 +279,30 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     return properties;
   }
 
+  /**
+   * Returns the set of connection property names that must never be passed to the JDBC driver.
+   * Override in subclasses to block dialect-specific dangerous properties.
+   *
+   * @return unmodifiable set of blocked property names (without {@code connection.} prefix)
+   */
+  protected Set<String> getBlockedJdbcConnectionProperties() {
+    return Collections.emptySet();
+  }
+
+  /**
+   * Validates that the JDBC URL does not contain blocked connection parameters.
+   * Override in subclasses to enforce dialect-specific URL parameter restrictions.
+   *
+   * @param url the JDBC URL to validate
+   * @throws ConnectException if the URL contains a blocked parameter
+   */
+  protected void validateJdbcUrlParams(String url) {
+    // Base implementation: no blocked URL params. Override in subclasses.
+  }
+
   @Override
   public Connection getConnection() throws SQLException {
+    validateJdbcUrlParams(jdbcUrl);
     JdbcCredentials jdbcCredentials = jdbcCredentialsProvider.getJdbcCredentials();
     Properties properties = buildAuthenticationProperties(jdbcCredentials);
     properties = addConnectionProperties(properties);
@@ -389,10 +411,13 @@ public class GenericDatabaseDialect implements DatabaseDialect {
    *     should be returned; never null
    */
   protected Properties addConnectionProperties(Properties properties) {
-    // Get the set of config keys that are known to the connector
     Set<String> configKeys = config.values().keySet();
-    // Add any configuration property that begins with 'connection.` and that is not known
-    config.originalsWithPrefix(JdbcSourceConnectorConfig.CONNECTION_PREFIX).forEach((k,v) -> {
+    Set<String> blocked = getBlockedJdbcConnectionProperties();
+    config.originalsWithPrefix(JdbcSourceConnectorConfig.CONNECTION_PREFIX).forEach((k, v) -> {
+      if (blocked.contains(k)) {
+        throw new ConnectException(
+            "JDBC connection property '" + k + "' is not permitted for security reasons.");
+      }
       if (!configKeys.contains(JdbcSourceConnectorConfig.CONNECTION_PREFIX + k)) {
         properties.put(k, v);
       }

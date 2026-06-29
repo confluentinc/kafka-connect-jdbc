@@ -26,8 +26,16 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
+
+import org.apache.kafka.connect.errors.ConnectException;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
@@ -48,6 +56,51 @@ import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CONNECT
 public class MySqlDatabaseDialect extends GenericDatabaseDialect {
 
   private final Logger log = LoggerFactory.getLogger(MySqlDatabaseDialect.class);
+
+  /**
+   * MySQL/MariaDB JDBC connection properties that must never be set by tenants.
+   *
+   * <ul>
+   *   <li>{@code allowLoadLocalInfile} / {@code allowLocalInfile} — server-driven
+   *       {@code LOAD DATA LOCAL INFILE} reads arbitrary worker files.</li>
+   *   <li>{@code allowUrlInLocalInfile} — same mechanism via arbitrary URLs → SSRF.</li>
+   *   <li>{@code autoDeserialize} — BLOBs auto-deserialized as Java objects; a malicious
+   *       server can craft a gadget chain → RCE (see CVE-2019-2692).</li>
+   *   <li>{@code queryInterceptors} / {@code statementInterceptors} — custom interceptor
+   *       classes run per query; combined with {@code autoDeserialize} → RCE on connect.</li>
+   *   <li>{@code allowMultiQueries} — permits multiple {@code ;}-separated statements,
+   *       amplifying any SQL-injection impact.</li>
+   * </ul>
+   */
+  private static final Set<String> MYSQL_BLOCKED_JDBC_PROPERTIES =
+      Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+          // file read / SSRF
+          "allowLoadLocalInfile",
+          "allowLocalInfile",       // MariaDB Connector/J spelling
+          "allowUrlInLocalInfile",
+          // RCE via Java deserialization
+          "autoDeserialize",
+          "queryInterceptors",
+          "statementInterceptors",  // Connector/J 5.x name for queryInterceptors
+          // SQL injection amplification
+          "allowMultiQueries"
+      )));
+
+  /**
+   * Safe values pinned for properties whose defaults are dangerous in old Connector/J 5.x
+   * (e.g. allowLoadLocalInfile was true by default). These are applied unconditionally after
+   * user-provided connection.* props are processed, so a driver default can never be dangerous
+   * even if the blocklist above is somehow bypassed.
+   */
+  private static final Map<String, String> MYSQL_SAFE_PROPERTY_PINS;
+  static {
+    Map<String, String> pins = new HashMap<>();
+    pins.put("allowLoadLocalInfile", "false");
+    pins.put("allowLocalInfile", "false");
+    pins.put("allowUrlInLocalInfile", "false");
+    pins.put("autoDeserialize", "false");
+    MYSQL_SAFE_PROPERTY_PINS = Collections.unmodifiableMap(pins);
+  }
 
   /**
    * The provider for {@link MySqlDatabaseDialect}.
@@ -197,6 +250,69 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
         .transformedBy(transform)
         .of(nonKeyColumns.isEmpty() ? keyColumns : nonKeyColumns);
     return builder.toString();
+  }
+
+  @Override
+  protected Set<String> getBlockedJdbcConnectionProperties() {
+    return MYSQL_BLOCKED_JDBC_PROPERTIES;
+  }
+
+  @Override
+  protected Properties addConnectionProperties(Properties properties) {
+    // Super checks user-provided connection.* props against the blocklist and passes safe ones.
+    Properties result = super.addConnectionProperties(properties);
+    // Pin safe values last — guards against old Connector/J 5.x driver defaults
+    // (allowLoadLocalInfile was true by default pre-8.x) even if the URL or blocklist
+    // is somehow bypassed. URL params take precedence over Properties, so validateJdbcUrlParams
+    // must reject blocked params in URLs; these pins cover the Properties vector only.
+    MYSQL_SAFE_PROPERTY_PINS.forEach(result::setProperty);
+    return result;
+  }
+
+  /**
+   * Rejects MySQL JDBC URLs that carry blocked query-string parameters or URL metacharacters
+   * in the host/authority portion.
+   *
+   * <p>MySQL Connector/J uses {@code ?key=value&key=value} syntax after the database name.
+   * Injecting {@code allowLoadLocalInfile=true} here lets a malicious server issue
+   * {@code LOAD DATA LOCAL INFILE} requests and read arbitrary files from the worker.
+   *
+   * <p>An attacker may also inject metacharacters directly into {@code connection.host} so that
+   * the assembled URL {@code jdbc:mysql://<host>:<port>/<db>} smuggles extra parameters.
+   * We reject any {@code &} that appears before the {@code ?} query separator, and any {@code #}
+   * fragment identifier, neither of which has a legitimate place in a MySQL JDBC URL.
+   */
+  @Override
+  protected void validateJdbcUrlParams(String url) {
+    int queryStart = url.indexOf('?');
+    // & must not appear before the query-string delimiter — that would mean a metacharacter
+    // was injected into the host/path portion (e.g. connection.host="host&allowLoadLocalInfile=true")
+    String preQuery = queryStart >= 0 ? url.substring(0, queryStart) : url;
+    if (preQuery.indexOf('&') >= 0) {
+      throw new ConnectException(
+          "JDBC URL contains '&' outside of the query-string — possible metacharacter injection "
+              + "in connection host.");
+    }
+    // Fragment identifiers (#) are never valid in JDBC URLs
+    if (url.indexOf('#') >= 0) {
+      throw new ConnectException(
+          "JDBC URL contains invalid character '#' which is not permitted.");
+    }
+    if (queryStart == -1) {
+      return;
+    }
+    String queryString = url.substring(queryStart + 1);
+    for (String param : queryString.split("&")) {
+      if (param.isEmpty()) {
+        continue;
+      }
+      String key = param.contains("=") ? param.substring(0, param.indexOf('=')) : param;
+      if (MYSQL_BLOCKED_JDBC_PROPERTIES.contains(key)) {
+        throw new ConnectException(
+            "JDBC URL contains blocked connection parameter '" + key
+                + "' which is not permitted for security reasons.");
+      }
+    }
   }
 
   @Override

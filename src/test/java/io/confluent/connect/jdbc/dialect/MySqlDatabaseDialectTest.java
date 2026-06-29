@@ -265,7 +265,7 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
   // validateQuery behaviour is inherited from GenericDatabaseDialect and exercised in
   // GenericDatabaseDialectTest; no MySQL-specific override exists to test here.
 
-  // ----- Security: blocked JDBC URL parameters -----
+  // ----- Security: blocked JDBC URL parameters — query string -----
 
   @Test
   public void shouldRejectAllowLoadLocalInfileInUrl() {
@@ -280,6 +280,11 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
   @Test
   public void shouldRejectAllowUrlInLocalInfileInUrl() {
     assertBlockedInUrl("allowUrlInLocalInfile=true");
+  }
+
+  @Test
+  public void shouldRejectAllowLoadLocalInfileInPathInUrl() {
+    assertBlockedInUrl("allowLoadLocalInfileInPath=/");
   }
 
   @Test
@@ -304,6 +309,29 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
   }
 
   @Test
+  public void shouldRejectBlockedParamCaseInsensitiveInUrl() {
+    // Driver normalises property names case-insensitively; our check must too
+    assertBlockedInUrl("ALLOWLOADLOCALINFILE=true");
+    assertBlockedInUrl("AutoDeserialize=true");
+    assertBlockedInUrl("allowMULTIqueries=true");
+  }
+
+  @Test
+  public void shouldRejectUrlEncodedBlockedParamInUrl() {
+    // Driver URL-decodes %xx before applying properties; e.g. allow%4CoadLocalInfile == allowLoadLocalInfile
+    assertBlockedInUrl("allow%4CoadLocalInfile=true");   // %4C = L
+    assertBlockedInUrl("autoDeseriali%7Ae=true");        // %7A = z
+  }
+
+  @Test
+  public void shouldRejectBlockedParamAmongOthersInUrl() {
+    MySqlDatabaseDialect d = new MySqlDatabaseDialect(
+        sourceConfigWithUrl("jdbc:mysql://host:3306/db"));
+    assertThrows(ConnectException.class, () -> d.validateJdbcUrlParams(
+        "jdbc:mysql://host:3306/db?useSSL=true&allowLoadLocalInfile=true&charset=utf8"));
+  }
+
+  @Test
   public void shouldRejectAmpersandBeforeQueryStringInUrl() {
     // connection.host="evil.host&allowLoadLocalInfile=true" produces & before ?
     MySqlDatabaseDialect d = new MySqlDatabaseDialect(
@@ -320,12 +348,40 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
         "jdbc:mysql://host:3306/db#fragment"));
   }
 
+  // ----- Security: blocked params in authority property bags -----
+
   @Test
-  public void shouldRejectBlockedParamAmongOthersInUrl() {
+  public void shouldRejectAllowLoadLocalInfileInAuthorityBag() {
+    // jdbc:mysql://(host=h,port=p,allowLoadLocalInfile=true)/db bypasses ?-query parsing
     MySqlDatabaseDialect d = new MySqlDatabaseDialect(
         sourceConfigWithUrl("jdbc:mysql://host:3306/db"));
     assertThrows(ConnectException.class, () -> d.validateJdbcUrlParams(
-        "jdbc:mysql://host:3306/db?useSSL=true&allowLoadLocalInfile=true&charset=utf8"));
+        "jdbc:mysql://(host=myhost,port=3306,allowLoadLocalInfile=true)/db"));
+  }
+
+  @Test
+  public void shouldRejectAutoDeserializeInAuthorityBag() {
+    MySqlDatabaseDialect d = new MySqlDatabaseDialect(
+        sourceConfigWithUrl("jdbc:mysql://host:3306/db"));
+    assertThrows(ConnectException.class, () -> d.validateJdbcUrlParams(
+        "jdbc:mysql://[(host=myhost,port=3306,autoDeserialize=true)]/db"));
+  }
+
+  @Test
+  public void shouldRejectBlockedParamCaseInsensitiveInAuthorityBag() {
+    MySqlDatabaseDialect d = new MySqlDatabaseDialect(
+        sourceConfigWithUrl("jdbc:mysql://host:3306/db"));
+    assertThrows(ConnectException.class, () -> d.validateJdbcUrlParams(
+        "jdbc:mysql://(host=myhost,port=3306,ALLOWLOADLOCALINFILE=true)/db"));
+  }
+
+  @Test
+  public void shouldAllowSafeAuthorityBag() {
+    MySqlDatabaseDialect d = new MySqlDatabaseDialect(
+        sourceConfigWithUrl("jdbc:mysql://host:3306/db"));
+    // Legitimate multi-host URL with safe properties in authority bags
+    d.validateJdbcUrlParams(
+        "jdbc:mysql://[(host=myhost1,port=3306,user=alice),(host=myhost2,port=3306)]/db");
   }
 
   @Test
@@ -378,6 +434,18 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
   @Test
   public void shouldRejectAllowMultiQueriesAsConnectionProperty() {
     assertBlockedAsConnectionProperty("connection.allowMultiQueries", "true");
+  }
+
+  @Test
+  public void shouldRejectAllowLoadLocalInfileInPathAsConnectionProperty() {
+    assertBlockedAsConnectionProperty("connection.allowLoadLocalInfileInPath", "/");
+  }
+
+  @Test
+  public void shouldRejectBlockedPropertyCaseInsensitiveAsConnectionProperty() {
+    // Kafka configs arrive with the casing the user typed; driver accepts any casing
+    assertBlockedAsConnectionProperty("connection.ALLOWLOADLOCALINFILE", "true");
+    assertBlockedAsConnectionProperty("connection.AutoDeserialize", "true");
   }
 
   @Test

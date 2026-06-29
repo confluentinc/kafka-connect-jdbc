@@ -30,7 +30,10 @@ import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.junit.Test;
+
+import static org.junit.Assert.assertThrows;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -783,5 +786,67 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
   // validateQuery behaviour is inherited from GenericDatabaseDialect and exercised in
   // GenericDatabaseDialectTest; no PostgreSQL-specific override exists to test here.
+
+  // ----- Security: blocked URL params -----
+
+  @Test
+  public void shouldRejectSocketFactoryInUrl() {
+    PostgreSqlDatabaseDialect d = postgresDialect("jdbc:postgresql://host:5432/db");
+    assertThrows(ConnectException.class,
+        () -> d.validateJdbcUrlParams(
+            "jdbc:postgresql://host:5432/db?socketFactory=com.evil.F"));
+  }
+
+  @Test
+  public void shouldRejectSslFactoryInUrl() {
+    PostgreSqlDatabaseDialect d = postgresDialect("jdbc:postgresql://host:5432/db");
+    assertThrows(ConnectException.class,
+        () -> d.validateJdbcUrlParams(
+            "jdbc:postgresql://host:5432/db?sslfactory=com.evil.F"));
+  }
+
+  @Test
+  public void shouldRejectSslHostnameVerifierInUrl() {
+    PostgreSqlDatabaseDialect d = postgresDialect("jdbc:postgresql://host:5432/db");
+    assertThrows(ConnectException.class,
+        () -> d.validateJdbcUrlParams(
+            "jdbc:postgresql://host:5432/db?sslhostnameverifier=com.evil.V"));
+  }
+
+  @Test
+  public void shouldRejectBlockedParamCaseInsensitiveInPostgresUrl() {
+    PostgreSqlDatabaseDialect d = postgresDialect("jdbc:postgresql://host:5432/db");
+    assertThrows(ConnectException.class,
+        () -> d.validateJdbcUrlParams(
+            "jdbc:postgresql://host:5432/db?SOCKETFACTORY=com.evil.F"));
+  }
+
+  @Test
+  public void shouldAllowSafePostgresUrlParams() {
+    PostgreSqlDatabaseDialect d = postgresDialect("jdbc:postgresql://host:5432/db");
+    d.validateJdbcUrlParams("jdbc:postgresql://host:5432/db?ssl=true&sslmode=verify-full");
+  }
+
+  // ----- Security: blocked connection.* properties -----
+
+  @Test
+  public void shouldRejectSocketFactoryAsConnectionProperty() {
+    assertThrows(ConnectException.class, () ->
+        postgresDialect("jdbc:postgresql://host:5432/db",
+            "connection.socketFactory", "com.evil.Factory")
+            .addConnectionProperties(new java.util.Properties()));
+  }
+
+  @Test
+  public void shouldRejectSslFactoryAsConnectionProperty() {
+    assertThrows(ConnectException.class, () ->
+        postgresDialect("jdbc:postgresql://host:5432/db",
+            "connection.sslfactory", "com.evil.Factory")
+            .addConnectionProperties(new java.util.Properties()));
+  }
+
+  private PostgreSqlDatabaseDialect postgresDialect(String url, String... propertyPairs) {
+    return new PostgreSqlDatabaseDialect(sourceConfigWithUrl(url, propertyPairs));
+  }
 
 }

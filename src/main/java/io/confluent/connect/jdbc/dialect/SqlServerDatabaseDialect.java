@@ -39,11 +39,14 @@ import java.sql.Types;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
+import java.util.TreeSet;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode;
@@ -73,6 +76,28 @@ import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TIMESTA
 public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
 
   private static final Logger log = LoggerFactory.getLogger(SqlServerDatabaseDialect.class);
+
+  private static final Set<String> SQLSERVER_BLOCKED_JDBC_PROPERTIES;
+
+  static {
+    // TreeSet with CASE_INSENSITIVE_ORDER so blocked.contains() matches regardless of casing
+    Set<String> set = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+    set.addAll(Arrays.asList(
+        // class-loading — driver calls Class.forName(value).newInstance()
+        "socketFactoryClass",
+        "socketFactoryConstructorArg",
+        // file-read
+        "trustStore",
+        "clientCertificate",
+        "clientKey"
+    ));
+    SQLSERVER_BLOCKED_JDBC_PROPERTIES = Collections.unmodifiableSet(set);
+  }
+
+  @Override
+  protected Set<String> getBlockedJdbcConnectionProperties() {
+    return SQLSERVER_BLOCKED_JDBC_PROPERTIES;
+  }
 
   /**
    * JDBC Type constant for SQL Server's custom data types.

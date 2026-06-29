@@ -854,4 +854,64 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
 
     verify(mockConnection, mockStmt, mockMd);
   }
+
+  // ----- Security: addConnectionProperties blocklist hook -----
+
+  @Test
+  public void addConnectionPropertiesBlocksPropertyWhenSubclassDefinesBlocklist() {
+    // Subclass returns a custom blocklist
+    GenericDatabaseDialect d = new GenericDatabaseDialect(config, new IdentifierRules(".", "\"", "\"")) {
+      @Override
+      protected String getSqlType(SinkRecordField f) { return "TEXT"; }
+      @Override
+      protected Set<String> getBlockedJdbcConnectionProperties() {
+        return Collections.singleton("dangerousProp");
+      }
+    };
+    Map<String, String> props = new HashMap<>(connProps);
+    props.put("connection.dangerousProp", "evil");
+    GenericDatabaseDialect d2 = new GenericDatabaseDialect(
+        new JdbcSourceConnectorConfig(props),
+        new IdentifierRules(".", "\"", "\"")) {
+      @Override
+      protected String getSqlType(SinkRecordField f) { return "TEXT"; }
+      @Override
+      protected Set<String> getBlockedJdbcConnectionProperties() {
+        return Collections.singleton("dangerousProp");
+      }
+    };
+    org.junit.Assert.assertThrows(
+        ConnectException.class,
+        () -> d2.addConnectionProperties(new Properties()));
+  }
+
+  @Test
+  public void addConnectionPropertiesBaseClassDoesNotBlockAnything() {
+    // With no subclass override the base blocklist is empty — safe connection.* props pass through
+    Map<String, String> props = new HashMap<>(connProps);
+    props.put("connection.someExtraParam", "someValue");
+    config = new JdbcSourceConnectorConfig(props);
+    dialect = createDialect(config);
+    Properties result = dialect.addConnectionProperties(new Properties());
+    assertEquals("someValue", result.getProperty("someExtraParam"));
+  }
+
+  @Test
+  public void validateJdbcUrlParamsBaseImplementationAllowsSafeUrl() {
+    // Base class allows safe URLs — subclasses opt in to additional restrictions by overriding
+    dialect.validateJdbcUrlParams("jdbc:acme://host:1234/db?allowLoadLocalInfile=true");
+    // Should not throw
+  }
+
+  @Test
+  public void shouldRejectFragmentInBaseValidation() {
+    assertThrows(ConnectException.class,
+        () -> dialect.validateJdbcUrlParams("jdbc:other://host/db#fragment"));
+  }
+
+  @Test
+  public void shouldAllowNullUrlInBaseValidation() {
+    // must not throw NPE
+    dialect.validateJdbcUrlParams(null);
+  }
 }

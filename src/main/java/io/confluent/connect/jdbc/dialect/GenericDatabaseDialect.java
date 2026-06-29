@@ -34,6 +34,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.URL;
+import java.net.URLDecoder;
 import java.nio.ByteBuffer;
 import java.sql.Blob;
 import java.sql.Clob;
@@ -279,8 +280,100 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     return properties;
   }
 
+  /**
+   * Returns the set of connection property names that must never be passed to the JDBC driver.
+   * Override in subclasses to block dialect-specific dangerous properties.
+   *
+   * @return unmodifiable set of blocked property names (without {@code connection.} prefix)
+   */
+  protected Set<String> getBlockedJdbcConnectionProperties() {
+    return Collections.emptySet();
+  }
+
+  /**
+   * Validates that the JDBC URL does not contain blocked connection parameters.
+   *
+   * <p>The base implementation rejects the {@code #} fragment character (never valid in any
+   * JDBC URL) and then checks both {@code ?}-prefixed query-string parameters and
+   * {@code ;}-delimited property-bag parameters against the set returned by
+   * {@link #getBlockedJdbcConnectionProperties()}.</p>
+   *
+   * <p>Subclasses that need fundamentally different URL parsing (e.g. MySQL authority-bag
+   * syntax) should override this method entirely. Subclasses that only need to block
+   * additional properties should instead override {@link #getBlockedJdbcConnectionProperties()}.
+   * </p>
+   *
+   * @param url the JDBC URL to validate; silently ignored if {@code null}
+   * @throws ConnectException if the URL contains a blocked parameter or invalid character
+   */
+  protected void validateJdbcUrlParams(String url) {
+    if (url == null) {
+      return;
+    }
+    // '#' is never valid in any JDBC URL
+    if (url.indexOf('#') >= 0) {
+      throw new ConnectException(
+          "JDBC URL contains invalid character '#' which is not permitted.");
+    }
+    Set<String> blocked = getBlockedJdbcConnectionProperties();
+    if (blocked.isEmpty()) {
+      return;
+    }
+    checkQueryStringParams(url, blocked);
+    checkSemicolonParams(url, blocked);
+  }
+
+  private static void checkQueryStringParams(String url, Set<String> blocked) {
+    int queryStart = url.indexOf('?');
+    if (queryStart < 0) {
+      return;
+    }
+    for (String param : url.substring(queryStart + 1).split("&")) {
+      if (!param.isEmpty()) {
+        int eq = param.indexOf('=');
+        checkBlockedJdbcUrlKey(eq > 0 ? param.substring(0, eq) : param, blocked);
+      }
+    }
+  }
+
+  private static void checkSemicolonParams(String url, Set<String> blocked) {
+    int semiStart = url.indexOf(';');
+    if (semiStart < 0) {
+      return;
+    }
+    for (String param : url.substring(semiStart + 1).split(";")) {
+      if (!param.isEmpty()) {
+        int eq = param.indexOf('=');
+        checkBlockedJdbcUrlKey(eq > 0 ? param.substring(0, eq) : param, blocked);
+      }
+    }
+  }
+
+  /**
+   * URL-decodes rawKey, trims it, and throws ConnectException if it is in blockedProperties.
+   * The blockedProperties set MUST use case-insensitive ordering (e.g. TreeSet with
+   * String.CASE_INSENSITIVE_ORDER) so that UPPER-CASE and %xx-encoded variants are both caught.
+   */
+  protected static void checkBlockedJdbcUrlKey(
+      String rawKey,
+      Set<String> blockedProperties
+  ) {
+    String key;
+    try {
+      key = URLDecoder.decode(rawKey.trim(), "UTF-8");
+    } catch (Exception e) {
+      key = rawKey.trim();
+    }
+    if (blockedProperties.contains(key)) {
+      throw new ConnectException(
+          "JDBC URL contains blocked connection parameter '" + rawKey.trim()
+              + "' which is not permitted for security reasons.");
+    }
+  }
+
   @Override
   public Connection getConnection() throws SQLException {
+    validateJdbcUrlParams(jdbcUrl);
     JdbcCredentials jdbcCredentials = jdbcCredentialsProvider.getJdbcCredentials();
     Properties properties = buildAuthenticationProperties(jdbcCredentials);
     properties = addConnectionProperties(properties);
@@ -389,10 +482,13 @@ public class GenericDatabaseDialect implements DatabaseDialect {
    *     should be returned; never null
    */
   protected Properties addConnectionProperties(Properties properties) {
-    // Get the set of config keys that are known to the connector
     Set<String> configKeys = config.values().keySet();
-    // Add any configuration property that begins with 'connection.` and that is not known
-    config.originalsWithPrefix(JdbcSourceConnectorConfig.CONNECTION_PREFIX).forEach((k,v) -> {
+    Set<String> blocked = getBlockedJdbcConnectionProperties();
+    config.originalsWithPrefix(JdbcSourceConnectorConfig.CONNECTION_PREFIX).forEach((k, v) -> {
+      if (blocked.contains(k)) {
+        throw new ConnectException(
+            "JDBC connection property '" + k + "' is not permitted for security reasons.");
+      }
       if (!configKeys.contains(JdbcSourceConnectorConfig.CONNECTION_PREFIX + k)) {
         properties.put(k, v);
       }

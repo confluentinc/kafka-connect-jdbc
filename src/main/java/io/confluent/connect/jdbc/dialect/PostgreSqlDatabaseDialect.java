@@ -51,6 +51,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 import java.util.Properties;
 
@@ -65,6 +66,32 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
   // Visible for testing
   volatile int maxIdentifierLength = 0;
+
+  private static final Set<String> POSTGRESQL_BLOCKED_JDBC_PROPERTIES;
+
+  static {
+    // TreeSet with CASE_INSENSITIVE_ORDER so blocked.contains() matches regardless of casing
+    Set<String> set = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+    set.addAll(Arrays.asList(
+        // class-loading — pgjdbc calls Class.forName(value).newInstance()
+        "socketFactory",
+        "socketFactoryArg",
+        "sslfactory",
+        "sslhostnameverifier",
+        "sslpasswordcallback",
+        // file-read
+        "loggerFile",
+        "sslcert",
+        "sslkey",
+        "sslrootcert"
+    ));
+    POSTGRESQL_BLOCKED_JDBC_PROPERTIES = Collections.unmodifiableSet(set);
+  }
+
+  @Override
+  protected Set<String> getBlockedJdbcConnectionProperties() {
+    return POSTGRESQL_BLOCKED_JDBC_PROPERTIES;
+  }
 
   /**
    * The provider for {@link PostgreSqlDatabaseDialect}.

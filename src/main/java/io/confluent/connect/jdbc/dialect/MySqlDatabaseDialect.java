@@ -22,12 +22,23 @@ import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 
+import java.net.URLDecoder;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import org.apache.kafka.connect.errors.ConnectException;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
@@ -48,6 +59,94 @@ import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CONNECT
 public class MySqlDatabaseDialect extends GenericDatabaseDialect {
 
   private final Logger log = LoggerFactory.getLogger(MySqlDatabaseDialect.class);
+
+  /**
+   * MySQL/MariaDB JDBC connection properties that must never be set by tenants.
+   * Stored in a case-insensitive set because MySQL Connector/J normalises property names
+   * via {@code PropertyKey.normalizeCase()} before applying them, so {@code ALLOWLOADLOCALINFILE}
+   * and {@code allowLoadLocalInfile} are treated identically by the driver.
+   *
+   * <p><b>Currently-exploitable properties:</b>
+   * <ul>
+   *   <li>{@code allowLoadLocalInfile} / {@code allowLocalInfile} — server-driven
+   *       {@code LOAD DATA LOCAL INFILE} reads arbitrary worker files.</li>
+   *   <li>{@code allowUrlInLocalInfile} — same mechanism via arbitrary URLs → SSRF.</li>
+   *   <li>{@code allowLoadLocalInfileInPath} — path-restricted variant;
+   *       setting to {@code /} is equivalent to {@code allowLoadLocalInfile=true}.</li>
+   *   <li>{@code autoDeserialize} — BLOBs auto-deserialized as Java objects; a malicious
+   *       server can craft a gadget chain → RCE (see CVE-2019-2692).</li>
+   *   <li>{@code queryInterceptors} / {@code statementInterceptors} — custom interceptor
+   *       classes loaded per query; combined with {@code autoDeserialize} → RCE on connect.</li>
+   *   <li>{@code allowMultiQueries} — permits multiple {@code ;}-separated statements,
+   *       amplifying any SQL-injection impact.</li>
+   * </ul>
+   *
+   * <p><b>Class-loading properties (defence-in-depth):</b> not weaponisable on
+   * mysql-connector-j 8.0.33 (driver uses {@code forName(initialize=false)} +
+   * {@code isAssignableFrom} before construction; no gadget on the worker classpath),
+   * but a future Connector/J upgrade or new classpath dependency could change that.
+   * Blocked now so the denylist does not silently regress.
+   * <ul>
+   *   <li>{@code socketFactory} — arbitrary socket factory class → SSRF / traffic
+   *       interception.</li>
+   *   <li>{@code authenticationPlugins} / {@code defaultAuthenticationPlugin} — custom auth
+   *       class loaded on every connect.</li>
+   *   <li>{@code clientInfoProvider} — custom client-info class loaded on connect.</li>
+   *   <li>{@code propertiesTransform} — class that rewrites all connection properties before
+   *       they are applied; could undo safe-value pins.</li>
+   *   <li>{@code serverRSAPublicKeyFile} — file path read by the driver (file-read vector).</li>
+   * </ul>
+   */
+  private static final Set<String> MYSQL_BLOCKED_JDBC_PROPERTIES;
+
+  static {
+    // TreeSet with CASE_INSENSITIVE_ORDER so blocked.contains() matches regardless of casing
+    Set<String> set = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+    set.addAll(Arrays.asList(
+        // file read / SSRF
+        "allowLoadLocalInfile",
+        "allowLocalInfile",             // MariaDB Connector/J spelling
+        "allowUrlInLocalInfile",
+        "allowLoadLocalInfileInPath",   // path-restricted variant; / == full access
+        // RCE via Java deserialization
+        "autoDeserialize",
+        "queryInterceptors",
+        "statementInterceptors",        // Connector/J 5.x name for queryInterceptors
+        // SQL injection amplification
+        "allowMultiQueries",
+        // class-loading / file-read (defence-in-depth; not weaponisable today but
+        // could regress with a Connector/J upgrade or new worker classpath entry)
+        "socketFactory",
+        "authenticationPlugins",
+        "defaultAuthenticationPlugin",
+        "clientInfoProvider",
+        "propertiesTransform",
+        "serverRSAPublicKeyFile"
+    ));
+    MYSQL_BLOCKED_JDBC_PROPERTIES = Collections.unmodifiableSet(set);
+  }
+
+  // Matches parenthetical property bags in the MySQL JDBC URL authority section:
+  // jdbc:mysql://(host=h,port=p,allowLoadLocalInfile=true)/db
+  // jdbc:mysql://[(host=h,...),(host=h2,...)]/db
+  private static final Pattern AUTHORITY_PROPERTY_BAG_PATTERN = Pattern.compile("\\(([^)]+)\\)");
+
+  /**
+   * Safe values pinned for properties whose defaults are dangerous in old Connector/J 5.x
+   * (e.g. allowLoadLocalInfile was true by default). These are applied unconditionally after
+   * user-provided connection.* props are processed, so a driver default can never be dangerous
+   * even if the blocklist above is somehow bypassed.
+   */
+  private static final Map<String, String> MYSQL_SAFE_PROPERTY_PINS;
+
+  static {
+    Map<String, String> pins = new HashMap<>();
+    pins.put("allowLoadLocalInfile", "false");
+    pins.put("allowLocalInfile", "false");
+    pins.put("allowUrlInLocalInfile", "false");
+    pins.put("autoDeserialize", "false");
+    MYSQL_SAFE_PROPERTY_PINS = Collections.unmodifiableMap(pins);
+  }
 
   /**
    * The provider for {@link MySqlDatabaseDialect}.
@@ -197,6 +296,99 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
         .transformedBy(transform)
         .of(nonKeyColumns.isEmpty() ? keyColumns : nonKeyColumns);
     return builder.toString();
+  }
+
+  @Override
+  protected Set<String> getBlockedJdbcConnectionProperties() {
+    return MYSQL_BLOCKED_JDBC_PROPERTIES;
+  }
+
+  @Override
+  protected Properties addConnectionProperties(Properties properties) {
+    // Super checks user-provided connection.* props against the blocklist and passes safe ones.
+    Properties result = super.addConnectionProperties(properties);
+    // Pin safe values last. Connector/J applies Properties AFTER URL params, so these pins
+    // take effect even when a dangerous property appears in the URL (defence-in-depth on top
+    // of validateJdbcUrlParams). Also guards against old Connector/J 5.x driver defaults
+    // (allowLoadLocalInfile defaulted to true pre-8.x).
+    MYSQL_SAFE_PROPERTY_PINS.forEach(result::setProperty);
+    return result;
+  }
+
+  /**
+   * Rejects MySQL JDBC URLs that carry blocked connection parameters, covering all three
+   * locations where MySQL Connector/J accepts properties:
+   *
+   * <ol>
+   *   <li><b>Query string</b>: {@code jdbc:mysql://host/db?allowLoadLocalInfile=true}</li>
+   *   <li><b>Authority property bags</b>:
+   *       {@code jdbc:mysql://(host=h,allowLoadLocalInfile=true)/db}</li>
+   *   <li><b>Host metacharacter injection</b>: {@code connection.host="h&prop=v"} produces
+   *       {@code &} before {@code ?} in the assembled URL.</li>
+   * </ol>
+   *
+   * <p>Keys are URL-decoded and compared case-insensitively because MySQL Connector/J normalises
+   * property names via {@code PropertyKey.normalizeCase()} and decodes {@code %xx} sequences
+   * before applying them — so {@code ALLOWLOADLOCALINFILE} and {@code allow%4CoadLocalInfile}
+   * are treated identically by the driver.
+   */
+  @Override
+  protected void validateJdbcUrlParams(String url) {
+    // # is never valid in a JDBC URL
+    if (url.indexOf('#') >= 0) {
+      throw new ConnectException(
+          "JDBC URL contains invalid character '#' which is not permitted.");
+    }
+
+    int queryStart = url.indexOf('?');
+    String preQuery = queryStart >= 0 ? url.substring(0, queryStart) : url;
+
+    // & before ? means a metacharacter was injected into the host/path portion
+    if (preQuery.indexOf('&') >= 0) {
+      throw new ConnectException(
+          "JDBC URL contains '&' outside of the query-string — "
+              + "possible metacharacter injection in connection host.");
+    }
+
+    // Check authority section property bags: (host=h,port=p,prop=val,...)
+    Matcher bagMatcher = AUTHORITY_PROPERTY_BAG_PATTERN.matcher(preQuery);
+    while (bagMatcher.find()) {
+      for (String prop : bagMatcher.group(1).split(",")) {
+        int eq = prop.indexOf('=');
+        if (eq > 0) {
+          checkBlockedKey(prop.substring(0, eq).trim());
+        }
+      }
+    }
+
+    // Check standard ?key=value&key=value query string
+    if (queryStart >= 0) {
+      for (String param : url.substring(queryStart + 1).split("&")) {
+        if (param.isEmpty()) {
+          continue;
+        }
+        int eq = param.indexOf('=');
+        checkBlockedKey(eq > 0 ? param.substring(0, eq) : param);
+      }
+    }
+  }
+
+  /**
+   * Normalises a raw JDBC property key (URL-decoded, trimmed, lower-cased) and throws
+   * {@link ConnectException} if it names a blocked property.
+   */
+  private void checkBlockedKey(String rawKey) {
+    String key;
+    try {
+      key = URLDecoder.decode(rawKey.trim(), "UTF-8");
+    } catch (Exception e) {
+      key = rawKey.trim();
+    }
+    if (MYSQL_BLOCKED_JDBC_PROPERTIES.contains(key)) {
+      throw new ConnectException(
+          "JDBC URL contains blocked connection parameter '" + rawKey.trim()
+              + "' which is not permitted for security reasons.");
+    }
   }
 
   @Override

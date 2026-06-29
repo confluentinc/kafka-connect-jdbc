@@ -67,18 +67,34 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
    * via {@code PropertyKey.normalizeCase()} before applying them, so {@code ALLOWLOADLOCALINFILE}
    * and {@code allowLoadLocalInfile} are treated identically by the driver.
    *
+   * <p><b>Currently-exploitable properties:</b>
    * <ul>
    *   <li>{@code allowLoadLocalInfile} / {@code allowLocalInfile} — server-driven
    *       {@code LOAD DATA LOCAL INFILE} reads arbitrary worker files.</li>
    *   <li>{@code allowUrlInLocalInfile} — same mechanism via arbitrary URLs → SSRF.</li>
-   *   <li>{@code allowLoadLocalInfileInPath} — restricts file read to a path; setting to
-   *       {@code /} is equivalent to {@code allowLoadLocalInfile=true}.</li>
+   *   <li>{@code allowLoadLocalInfileInPath} — path-restricted variant;
+   *       setting to {@code /} is equivalent to {@code allowLoadLocalInfile=true}.</li>
    *   <li>{@code autoDeserialize} — BLOBs auto-deserialized as Java objects; a malicious
    *       server can craft a gadget chain → RCE (see CVE-2019-2692).</li>
    *   <li>{@code queryInterceptors} / {@code statementInterceptors} — custom interceptor
-   *       classes run per query; combined with {@code autoDeserialize} → RCE on connect.</li>
+   *       classes loaded per query; combined with {@code autoDeserialize} → RCE on connect.</li>
    *   <li>{@code allowMultiQueries} — permits multiple {@code ;}-separated statements,
    *       amplifying any SQL-injection impact.</li>
+   * </ul>
+   *
+   * <p><b>Class-loading properties (defence-in-depth):</b> not weaponisable on
+   * mysql-connector-j 8.0.33 (driver uses {@code forName(initialize=false)} +
+   * {@code isAssignableFrom} before construction; no gadget on the worker classpath),
+   * but a future Connector/J upgrade or new classpath dependency could change that.
+   * Blocked now so the denylist does not silently regress.
+   * <ul>
+   *   <li>{@code socketFactory} — arbitrary socket factory class → SSRF / traffic interception.</li>
+   *   <li>{@code authenticationPlugins} / {@code defaultAuthenticationPlugin} — custom auth
+   *       class loaded on every connect.</li>
+   *   <li>{@code clientInfoProvider} — custom client-info class loaded on connect.</li>
+   *   <li>{@code propertiesTransform} — class that rewrites all connection properties before
+   *       they are applied; could undo safe-value pins.</li>
+   *   <li>{@code serverRSAPublicKeyFile} — file path read by the driver (file-read vector).</li>
    * </ul>
    */
   private static final Set<String> MYSQL_BLOCKED_JDBC_PROPERTIES;
@@ -96,7 +112,15 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
         "queryInterceptors",
         "statementInterceptors",        // Connector/J 5.x name for queryInterceptors
         // SQL injection amplification
-        "allowMultiQueries"
+        "allowMultiQueries",
+        // class-loading / file-read (defence-in-depth; not weaponisable today but
+        // could regress with a Connector/J upgrade or new worker classpath entry)
+        "socketFactory",
+        "authenticationPlugins",
+        "defaultAuthenticationPlugin",
+        "clientInfoProvider",
+        "propertiesTransform",
+        "serverRSAPublicKeyFile"
     ));
     MYSQL_BLOCKED_JDBC_PROPERTIES = Collections.unmodifiableSet(set);
   }

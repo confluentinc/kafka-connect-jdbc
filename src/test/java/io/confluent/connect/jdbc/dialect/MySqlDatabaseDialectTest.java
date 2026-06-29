@@ -288,6 +288,16 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
   }
 
   @Test
+  public void shouldRejectClassLoadingPropertiesInUrl() {
+    assertBlockedInUrl("socketFactory=com.example.Evil");
+    assertBlockedInUrl("authenticationPlugins=com.example.Evil");
+    assertBlockedInUrl("defaultAuthenticationPlugin=com.example.Evil");
+    assertBlockedInUrl("clientInfoProvider=com.example.Evil");
+    assertBlockedInUrl("propertiesTransform=com.example.Evil");
+    assertBlockedInUrl("serverRSAPublicKeyFile=/etc/passwd");
+  }
+
+  @Test
   public void shouldRejectAutoDeserializeInUrl() {
     assertBlockedInUrl("autoDeserialize=true");
   }
@@ -439,6 +449,36 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
   @Test
   public void shouldRejectAllowLoadLocalInfileInPathAsConnectionProperty() {
     assertBlockedAsConnectionProperty("connection.allowLoadLocalInfileInPath", "/");
+  }
+
+  @Test
+  public void shouldRejectSocketFactoryAsConnectionProperty() {
+    assertBlockedAsConnectionProperty("connection.socketFactory", "com.example.Evil");
+  }
+
+  @Test
+  public void shouldRejectAuthenticationPluginsAsConnectionProperty() {
+    assertBlockedAsConnectionProperty("connection.authenticationPlugins", "com.example.Evil");
+  }
+
+  @Test
+  public void shouldRejectDefaultAuthenticationPluginAsConnectionProperty() {
+    assertBlockedAsConnectionProperty("connection.defaultAuthenticationPlugin", "com.example.Evil");
+  }
+
+  @Test
+  public void shouldRejectClientInfoProviderAsConnectionProperty() {
+    assertBlockedAsConnectionProperty("connection.clientInfoProvider", "com.example.Evil");
+  }
+
+  @Test
+  public void shouldRejectPropertiesTransformAsConnectionProperty() {
+    assertBlockedAsConnectionProperty("connection.propertiesTransform", "com.example.Evil");
+  }
+
+  @Test
+  public void shouldRejectServerRsaPublicKeyFileAsConnectionProperty() {
+    assertBlockedAsConnectionProperty("connection.serverRSAPublicKeyFile", "/etc/passwd");
   }
 
   @Test

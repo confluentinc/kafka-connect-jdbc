@@ -43,6 +43,7 @@ import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 import org.mockito.Mockito;
 
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -493,4 +494,59 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
 
   // validateQuery behaviour is inherited from GenericDatabaseDialect and exercised in
   // GenericDatabaseDialectTest; no SQL Server-specific override exists to test here.
+
+  // ----- Security: blocked URL params -----
+
+  @Test
+  public void shouldRejectSocketFactoryClassInUrl() {
+    SqlServerDatabaseDialect d = sqlServerDialect("jdbc:sqlserver://host:1433");
+    assertThrows(ConnectException.class,
+        () -> d.validateJdbcUrlParams(
+            "jdbc:sqlserver://host:1433;socketFactoryClass=com.evil.F"));
+  }
+
+  @Test
+  public void shouldRejectTrustStoreInUrl() {
+    SqlServerDatabaseDialect d = sqlServerDialect("jdbc:sqlserver://host:1433");
+    assertThrows(ConnectException.class,
+        () -> d.validateJdbcUrlParams(
+            "jdbc:sqlserver://host:1433;DatabaseName=db;trustStore=/etc/passwd"));
+  }
+
+  @Test
+  public void shouldRejectBlockedParamCaseInsensitiveInSqlServerUrl() {
+    SqlServerDatabaseDialect d = sqlServerDialect("jdbc:sqlserver://host:1433");
+    assertThrows(ConnectException.class,
+        () -> d.validateJdbcUrlParams(
+            "jdbc:sqlserver://host:1433;SOCKETFACTORYCLASS=com.evil.F"));
+  }
+
+  @Test
+  public void shouldAllowSafeSqlServerUrlParams() {
+    SqlServerDatabaseDialect d = sqlServerDialect("jdbc:sqlserver://host:1433");
+    d.validateJdbcUrlParams("jdbc:sqlserver://host:1433;DatabaseName=mydb;encrypt=true");
+  }
+
+  // ----- Security: blocked connection.* properties -----
+
+  @Test
+  public void shouldRejectSocketFactoryClassAsConnectionProperty() {
+    assertThrows(ConnectException.class, () ->
+        sqlServerDialect("jdbc:sqlserver://host:1433",
+            "connection.socketFactoryClass", "com.evil.Factory")
+            .addConnectionProperties(new java.util.Properties()));
+  }
+
+  @Test
+  public void shouldRejectTrustStoreAsConnectionProperty() {
+    assertThrows(ConnectException.class, () ->
+        sqlServerDialect("jdbc:sqlserver://host:1433",
+            "connection.trustStore", "/etc/passwd")
+            .addConnectionProperties(new java.util.Properties()));
+  }
+
+  private SqlServerDatabaseDialect sqlServerDialect(String url, String... propertyPairs) {
+    return new MockSqlServerDatabaseDialect(sourceConfigWithUrl(url, propertyPairs));
+  }
+
 }

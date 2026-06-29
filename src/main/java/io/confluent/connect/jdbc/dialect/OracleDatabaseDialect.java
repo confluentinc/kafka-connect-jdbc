@@ -40,9 +40,12 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
@@ -59,6 +62,24 @@ import oracle.jdbc.OraclePreparedStatement;
  * A {@link DatabaseDialect} for Oracle.
  */
 public class OracleDatabaseDialect extends GenericDatabaseDialect {
+
+  private static final Set<String> ORACLE_BLOCKED_JDBC_PROPERTIES;
+
+  static {
+    // TreeSet with CASE_INSENSITIVE_ORDER so blocked.contains() matches regardless of casing
+    Set<String> set = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+    set.addAll(Arrays.asList(
+        // file-read — driver reads these directories/files during connection setup
+        "oracle.net.wallet_location",
+        "oracle.net.tns_admin"
+    ));
+    ORACLE_BLOCKED_JDBC_PROPERTIES = Collections.unmodifiableSet(set);
+  }
+
+  @Override
+  protected Set<String> getBlockedJdbcConnectionProperties() {
+    return ORACLE_BLOCKED_JDBC_PROPERTIES;
+  }
 
   /**
    * The provider for {@link OracleDatabaseDialect}.

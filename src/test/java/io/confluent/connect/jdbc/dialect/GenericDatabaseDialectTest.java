@@ -897,9 +897,21 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
   }
 
   @Test
-  public void validateJdbcUrlParamsBaseImplementationIsNoop() {
-    // Base class imposes no URL restrictions — subclasses opt in by overriding
+  public void validateJdbcUrlParamsBaseImplementationAllowsSafeUrl() {
+    // Base class allows safe URLs — subclasses opt in to additional restrictions by overriding
     dialect.validateJdbcUrlParams("jdbc:acme://host:1234/db?allowLoadLocalInfile=true");
     // Should not throw
+  }
+
+  @Test
+  public void shouldRejectFragmentInBaseValidation() {
+    assertThrows(ConnectException.class,
+        () -> dialect.validateJdbcUrlParams("jdbc:other://host/db#fragment"));
+  }
+
+  @Test
+  public void shouldAllowNullUrlInBaseValidation() {
+    // must not throw NPE
+    dialect.validateJdbcUrlParams(null);
   }
 }

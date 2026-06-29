@@ -31,7 +31,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
@@ -88,7 +87,8 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
    * but a future Connector/J upgrade or new classpath dependency could change that.
    * Blocked now so the denylist does not silently regress.
    * <ul>
-   *   <li>{@code socketFactory} — arbitrary socket factory class → SSRF / traffic interception.</li>
+   *   <li>{@code socketFactory} — arbitrary socket factory class → SSRF / traffic
+   *       interception.</li>
    *   <li>{@code authenticationPlugins} / {@code defaultAuthenticationPlugin} — custom auth
    *       class loaded on every connect.</li>
    *   <li>{@code clientInfoProvider} — custom client-info class loaded on connect.</li>
@@ -98,6 +98,7 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
    * </ul>
    */
   private static final Set<String> MYSQL_BLOCKED_JDBC_PROPERTIES;
+
   static {
     // TreeSet with CASE_INSENSITIVE_ORDER so blocked.contains() matches regardless of casing
     Set<String> set = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
@@ -137,6 +138,7 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
    * even if the blocklist above is somehow bypassed.
    */
   private static final Map<String, String> MYSQL_SAFE_PROPERTY_PINS;
+
   static {
     Map<String, String> pins = new HashMap<>();
     pins.put("allowLoadLocalInfile", "false");

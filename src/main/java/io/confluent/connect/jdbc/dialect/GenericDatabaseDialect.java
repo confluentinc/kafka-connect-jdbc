@@ -34,6 +34,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.URL;
+import java.net.URLDecoder;
 import java.nio.ByteBuffer;
 import java.sql.Blob;
 import java.sql.Clob;
@@ -62,8 +63,11 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Queue;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.FixedScoreProvider;
@@ -281,6 +285,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
   @Override
   public Connection getConnection() throws SQLException {
+    validateJdbcUrlParams(jdbcUrl);
     JdbcCredentials jdbcCredentials = jdbcCredentialsProvider.getJdbcCredentials();
     Properties properties = buildAuthenticationProperties(jdbcCredentials);
     properties = addConnectionProperties(properties);
@@ -294,6 +299,77 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     }
     connections.add(connection);
     return connection;
+  }
+
+  /**
+   * System property naming a comma-separated, case-insensitive list of JDBC URL parameter names
+   * that must not appear in {@code connection.url}. It is set by the worker operator at JVM
+   * startup and cannot be supplied through a connector's REST config, so users cannot change it.
+   * Unset or empty means no restriction, making enforcement entirely opt-in.
+   */
+  public static final String BLOCKED_JDBC_URL_PARAMS_PROPERTY =
+      "jdbc.connection.url.blocked.params";
+
+  /**
+   * Environment-variable fallback for {@link #BLOCKED_JDBC_URL_PARAMS_PROPERTY}.
+   */
+  public static final String BLOCKED_JDBC_URL_PARAMS_ENV_VAR =
+      "JDBC_CONNECTION_URL_BLOCKED_PARAMS";
+
+  // Captures the name of any "name=value" parameter, regardless of the '?', '&', ';', ',' or
+  // MySQL '(...)' property-bag delimiter that introduces it.
+  private static final Pattern JDBC_URL_PARAM_NAME = Pattern.compile("([\\w.%-]+)\\s*=");
+
+  /**
+   * Rejects any {@code connection.url} containing a parameter named in the operator-configured
+   * blocklist ({@link #BLOCKED_JDBC_URL_PARAMS_PROPERTY}). Names are URL-decoded and matched
+   * case-insensitively to defeat encoding and casing evasions. No-op when the blocklist is empty,
+   * so default behaviour is unchanged.
+   *
+   * @param url the JDBC URL to validate; ignored if {@code null}
+   * @throws ConnectException if the URL contains a blocked parameter
+   */
+  protected void validateJdbcUrlParams(String url) {
+    if (url == null) {
+      return;
+    }
+    Set<String> blocked = blockedJdbcUrlParams();
+    if (blocked.isEmpty()) {
+      return;
+    }
+    Matcher matcher = JDBC_URL_PARAM_NAME.matcher(url);
+    while (matcher.find()) {
+      String name = matcher.group(1).trim();
+      if (blocked.contains(decode(name))) {
+        throw new ConnectException("JDBC URL contains blocked connection parameter '" + name
+            + "' which is not permitted by the Connect cluster's configured policy.");
+      }
+    }
+  }
+
+  private static Set<String> blockedJdbcUrlParams() {
+    String configured = System.getProperty(BLOCKED_JDBC_URL_PARAMS_PROPERTY);
+    if (configured == null) {
+      configured = System.getenv(BLOCKED_JDBC_URL_PARAMS_ENV_VAR);
+    }
+    if (configured == null || configured.trim().isEmpty()) {
+      return Collections.emptySet();
+    }
+    Set<String> blocked = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+    for (String name : configured.split(",")) {
+      if (!name.trim().isEmpty()) {
+        blocked.add(name.trim());
+      }
+    }
+    return blocked;
+  }
+
+  private static String decode(String value) {
+    try {
+      return URLDecoder.decode(value, "UTF-8");
+    } catch (Exception e) {
+      return value;
+    }
   }
 
   @Override

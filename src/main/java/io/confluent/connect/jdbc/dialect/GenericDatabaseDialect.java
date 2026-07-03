@@ -289,6 +289,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     JdbcCredentials jdbcCredentials = jdbcCredentialsProvider.getJdbcCredentials();
     Properties properties = buildAuthenticationProperties(jdbcCredentials);
     properties = addConnectionProperties(properties);
+    validateConnectionProperties(properties);
     // Timeout is 40 seconds to be as long as possible for customer to have a long connection
     // handshake, while still giving enough time to validate once in the follower worker,
     // and again in the leader worker and still be under 90s REST serving timeout
@@ -302,10 +303,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   /**
-   * System property naming a comma-separated, case-insensitive list of JDBC URL parameter names
-   * that must not appear in {@code connection.url}. It is set by the worker operator at JVM
-   * startup and cannot be supplied through a connector's REST config, so users cannot change it.
-   * Unset or empty means no restriction, making enforcement entirely opt-in.
+   * System property naming a comma-separated, case-insensitive list of blocked JDBC driver
+   * parameter names. It is set by the worker operator at JVM startup and cannot be supplied
+   * through a connector's REST config, so users cannot change it. Unset or empty means no
+   * restriction, making enforcement entirely opt-in. Applies both to parameters embedded in
+   * {@code connection.url} and to driver properties passed through via {@code connection.*}.
    */
   public static final String BLOCKED_JDBC_URL_PARAMS_PROPERTY =
       "jdbc.connection.url.blocked.params";
@@ -333,7 +335,7 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     if (url == null) {
       return;
     }
-    Set<String> blocked = blockedJdbcUrlParams();
+    Set<String> blocked = blockedParams();
     if (blocked.isEmpty()) {
       return;
     }
@@ -347,7 +349,30 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     }
   }
 
-  private static Set<String> blockedJdbcUrlParams() {
+  /**
+   * Rejects any driver property whose name is in the operator-configured blocklist
+   * ({@link #BLOCKED_JDBC_URL_PARAMS_PROPERTY}). This covers the {@code connection.*} passthrough
+   * (see {@link #addConnectionProperties(Properties)}), which would otherwise let a blocked
+   * parameter reach the driver without appearing in {@code connection.url}. No-op when the
+   * blocklist is empty.
+   *
+   * @param properties the driver properties about to be passed to {@link DriverManager}
+   * @throws ConnectException if a property name is blocked
+   */
+  protected void validateConnectionProperties(Properties properties) {
+    Set<String> blocked = blockedParams();
+    if (blocked.isEmpty()) {
+      return;
+    }
+    for (Object name : properties.keySet()) {
+      if (blocked.contains(name.toString())) {
+        throw new ConnectException("JDBC connection property '" + name
+            + "' is not permitted by the Connect cluster's configured policy.");
+      }
+    }
+  }
+
+  private static Set<String> blockedParams() {
     String configured = System.getProperty(BLOCKED_JDBC_URL_PARAMS_PROPERTY);
     if (configured == null) {
       configured = System.getenv(BLOCKED_JDBC_URL_PARAMS_ENV_VAR);

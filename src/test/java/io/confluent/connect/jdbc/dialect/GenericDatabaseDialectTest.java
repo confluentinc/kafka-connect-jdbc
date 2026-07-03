@@ -896,4 +896,27 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
       System.clearProperty(GenericDatabaseDialect.BLOCKED_JDBC_URL_PARAMS_PROPERTY);
     }
   }
+
+  @Test
+  public void validateConnectionPropertiesBlocksPassthroughConfigParams() {
+    // A blocked param can also be smuggled as a connection.* passthrough config, not just in the
+    // URL. The property reaches the driver via addConnectionProperties() with the prefix stripped.
+    connProps.put("connection.allowLoadLocalInfile", "true");
+    dialect = createDialect(new JdbcSourceConnectorConfig(connProps));
+    Properties props = dialect.addConnectionProperties(new Properties());
+    assertEquals("true", props.get("allowLoadLocalInfile"));
+
+    // No blocklist configured => passthrough property is allowed.
+    System.clearProperty(GenericDatabaseDialect.BLOCKED_JDBC_URL_PARAMS_PROPERTY);
+    dialect.validateConnectionProperties(props);
+
+    // Blocklist configured => the passthrough property is rejected.
+    System.setProperty(
+        GenericDatabaseDialect.BLOCKED_JDBC_URL_PARAMS_PROPERTY, "allowLoadLocalInfile");
+    try {
+      assertThrows(ConnectException.class, () -> dialect.validateConnectionProperties(props));
+    } finally {
+      System.clearProperty(GenericDatabaseDialect.BLOCKED_JDBC_URL_PARAMS_PROPERTY);
+    }
+  }
 }

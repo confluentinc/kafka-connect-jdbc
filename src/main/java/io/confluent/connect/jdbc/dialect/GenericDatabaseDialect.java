@@ -303,40 +303,27 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   /**
-   * System property naming a comma-separated, case-insensitive list of blocked JDBC driver
-   * parameter names. It is set by the worker operator at JVM startup and cannot be supplied
-   * through a connector's REST config, so users cannot change it. Unset or empty means no
-   * restriction, making enforcement entirely opt-in. Applies both to parameters embedded in
-   * {@code connection.url} and to driver properties passed through via {@code connection.*}.
+   * Comma-separated, case-insensitive list of JDBC driver parameter names the operator forbids.
+   * Set on the worker JVM at startup, not via connector config, so users cannot change it;
+   * unset/empty means no restriction. Covers both {@code connection.url} and {@code connection.*}.
    */
   public static final String BLOCKED_JDBC_URL_PARAMS_PROPERTY =
       "jdbc.connection.url.blocked.params";
 
-  /**
-   * Environment-variable fallback for {@link #BLOCKED_JDBC_URL_PARAMS_PROPERTY}.
-   */
-  public static final String BLOCKED_JDBC_URL_PARAMS_ENV_VAR =
-      "JDBC_CONNECTION_URL_BLOCKED_PARAMS";
+  // Environment-variable fallback for BLOCKED_JDBC_URL_PARAMS_PROPERTY.
+  static final String BLOCKED_JDBC_URL_PARAMS_ENV_VAR = "JDBC_CONNECTION_URL_BLOCKED_PARAMS";
 
-  // Captures the name of any "name=value" parameter, regardless of the '?', '&', ';', ',' or
-  // MySQL '(...)' property-bag delimiter that introduces it.
+  // Captures the name in any "name=value" parameter, whatever '?', '&', ';', ',' or MySQL
+  // '(...)' delimiter introduces it.
   private static final Pattern JDBC_URL_PARAM_NAME = Pattern.compile("([\\w.%-]+)\\s*=");
 
   /**
-   * Rejects any {@code connection.url} containing a parameter named in the operator-configured
-   * blocklist ({@link #BLOCKED_JDBC_URL_PARAMS_PROPERTY}). Names are URL-decoded and matched
-   * case-insensitively to defeat encoding and casing evasions. No-op when the blocklist is empty,
-   * so default behaviour is unchanged.
-   *
-   * @param url the JDBC URL to validate; ignored if {@code null}
-   * @throws ConnectException if the URL contains a blocked parameter
+   * Rejects a {@code connection.url} carrying a blocklisted parameter. Names are URL-decoded and
+   * matched case-insensitively; no-op when the blocklist is empty.
    */
   protected void validateJdbcUrlParams(String url) {
-    if (url == null) {
-      return;
-    }
     Set<String> blocked = blockedParams();
-    if (blocked.isEmpty()) {
+    if (url == null || blocked.isEmpty()) {
       return;
     }
     Matcher matcher = JDBC_URL_PARAM_NAME.matcher(url);
@@ -350,20 +337,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   }
 
   /**
-   * Rejects any driver property whose name is in the operator-configured blocklist
-   * ({@link #BLOCKED_JDBC_URL_PARAMS_PROPERTY}). This covers the {@code connection.*} passthrough
-   * (see {@link #addConnectionProperties(Properties)}), which would otherwise let a blocked
-   * parameter reach the driver without appearing in {@code connection.url}. No-op when the
-   * blocklist is empty.
-   *
-   * @param properties the driver properties about to be passed to {@link DriverManager}
-   * @throws ConnectException if a property name is blocked
+   * Rejects a blocklisted driver property, covering the {@code connection.*} passthrough added by
+   * {@link #addConnectionProperties(Properties)}; no-op when the blocklist is empty.
    */
   protected void validateConnectionProperties(Properties properties) {
     Set<String> blocked = blockedParams();
-    if (blocked.isEmpty()) {
-      return;
-    }
     for (Object name : properties.keySet()) {
       if (blocked.contains(name.toString())) {
         throw new ConnectException("JDBC connection property '" + name
@@ -377,13 +355,14 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     if (configured == null) {
       configured = System.getenv(BLOCKED_JDBC_URL_PARAMS_ENV_VAR);
     }
-    if (configured == null || configured.trim().isEmpty()) {
+    if (configured == null) {
       return Collections.emptySet();
     }
     Set<String> blocked = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
     for (String name : configured.split(",")) {
-      if (!name.trim().isEmpty()) {
-        blocked.add(name.trim());
+      String trimmed = name.trim();
+      if (!trimmed.isEmpty()) {
+        blocked.add(trimmed);
       }
     }
     return blocked;

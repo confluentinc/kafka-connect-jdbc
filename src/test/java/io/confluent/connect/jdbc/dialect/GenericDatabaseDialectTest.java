@@ -854,4 +854,69 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
 
     verify(mockConnection, mockStmt, mockMd);
   }
+
+  @Test
+  public void validateJdbcUrlParamsIsNoOpWhenAdminHasNotOptedIn() {
+    // No system property / env var configured => nothing is blocked (opt-in).
+    System.clearProperty(GenericDatabaseDialect.BLOCKED_JDBC_URL_PARAMS_PROPERTY);
+    dialect.validateJdbcUrlParams(
+        "jdbc:mysql://host:3306/db?allowLoadLocalInfile=true");
+    dialect.validateJdbcUrlParams("jdbc:postgresql://host:5432/db");
+    dialect.validateJdbcUrlParams(null);
+  }
+
+  @Test
+  public void validateJdbcUrlParamsBlocksConfiguredParams() {
+    System.setProperty(
+        GenericDatabaseDialect.BLOCKED_JDBC_URL_PARAMS_PROPERTY,
+        "allowLoadLocalInfile, autoDeserialize");
+    try {
+      // Clean URL is allowed.
+      dialect.validateJdbcUrlParams("jdbc:postgresql://host:5432/db?ssl=true");
+
+      // Query-string param.
+      assertThrows(ConnectException.class, () -> dialect.validateJdbcUrlParams(
+          "jdbc:mysql://host:3306/db?allowLoadLocalInfile=true"));
+      // Case-insensitive.
+      assertThrows(ConnectException.class, () -> dialect.validateJdbcUrlParams(
+          "jdbc:mysql://host:3306/db?ALLOWLOADLOCALINFILE=true"));
+      // URL-encoded param name.
+      assertThrows(ConnectException.class, () -> dialect.validateJdbcUrlParams(
+          "jdbc:mysql://host:3306/db?%61llowLoadLocalInfile=true"));
+      // Semicolon-delimited (e.g. SQL Server style).
+      assertThrows(ConnectException.class, () -> dialect.validateJdbcUrlParams(
+          "jdbc:sqlserver://host:1433;autoDeserialize=true"));
+      // Parenthetical property bag (e.g. MySQL authority syntax).
+      assertThrows(ConnectException.class, () -> dialect.validateJdbcUrlParams(
+          "jdbc:mysql://(host=h,allowLoadLocalInfile=true)/db"));
+      // A param NOT on the blocklist is still allowed.
+      dialect.validateJdbcUrlParams(
+          "jdbc:mysql://host:3306/db?allowMultiQueries=true");
+    } finally {
+      System.clearProperty(GenericDatabaseDialect.BLOCKED_JDBC_URL_PARAMS_PROPERTY);
+    }
+  }
+
+  @Test
+  public void validateConnectionPropertiesBlocksPassthroughConfigParams() {
+    // A blocked param can also be smuggled as a connection.* passthrough config, not just in the
+    // URL. The property reaches the driver via addConnectionProperties() with the prefix stripped.
+    connProps.put("connection.allowLoadLocalInfile", "true");
+    dialect = createDialect(new JdbcSourceConnectorConfig(connProps));
+    Properties props = dialect.addConnectionProperties(new Properties());
+    assertEquals("true", props.get("allowLoadLocalInfile"));
+
+    // No blocklist configured => passthrough property is allowed.
+    System.clearProperty(GenericDatabaseDialect.BLOCKED_JDBC_URL_PARAMS_PROPERTY);
+    dialect.validateConnectionProperties(props);
+
+    // Blocklist configured => the passthrough property is rejected.
+    System.setProperty(
+        GenericDatabaseDialect.BLOCKED_JDBC_URL_PARAMS_PROPERTY, "allowLoadLocalInfile");
+    try {
+      assertThrows(ConnectException.class, () -> dialect.validateConnectionProperties(props));
+    } finally {
+      System.clearProperty(GenericDatabaseDialect.BLOCKED_JDBC_URL_PARAMS_PROPERTY);
+    }
+  }
 }

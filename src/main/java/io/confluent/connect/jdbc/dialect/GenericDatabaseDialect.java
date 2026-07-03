@@ -34,6 +34,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.URL;
+import java.net.URLDecoder;
 import java.nio.ByteBuffer;
 import java.sql.Blob;
 import java.sql.Clob;
@@ -62,8 +63,11 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Queue;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.FixedScoreProvider;
@@ -281,9 +285,11 @@ public class GenericDatabaseDialect implements DatabaseDialect {
 
   @Override
   public Connection getConnection() throws SQLException {
+    validateJdbcUrlParams(jdbcUrl);
     JdbcCredentials jdbcCredentials = jdbcCredentialsProvider.getJdbcCredentials();
     Properties properties = buildAuthenticationProperties(jdbcCredentials);
     properties = addConnectionProperties(properties);
+    validateConnectionProperties(properties);
     // Timeout is 40 seconds to be as long as possible for customer to have a long connection
     // handshake, while still giving enough time to validate once in the follower worker,
     // and again in the leader worker and still be under 90s REST serving timeout
@@ -294,6 +300,80 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     }
     connections.add(connection);
     return connection;
+  }
+
+  /**
+   * Comma-separated, case-insensitive list of JDBC driver parameter names the operator forbids.
+   * Set on the worker JVM at startup, not via connector config, so users cannot change it;
+   * unset/empty means no restriction. Covers both {@code connection.url} and {@code connection.*}.
+   */
+  public static final String BLOCKED_JDBC_URL_PARAMS_PROPERTY =
+      "jdbc.connection.url.blocked.params";
+
+  // Environment-variable fallback for BLOCKED_JDBC_URL_PARAMS_PROPERTY.
+  static final String BLOCKED_JDBC_URL_PARAMS_ENV_VAR = "JDBC_CONNECTION_URL_BLOCKED_PARAMS";
+
+  // Captures the name in any "name=value" parameter, whatever '?', '&', ';', ',' or MySQL
+  // '(...)' delimiter introduces it.
+  private static final Pattern JDBC_URL_PARAM_NAME = Pattern.compile("([\\w.%-]+)\\s*=");
+
+  /**
+   * Rejects a {@code connection.url} carrying a blocklisted parameter. Names are URL-decoded and
+   * matched case-insensitively; no-op when the blocklist is empty.
+   */
+  protected void validateJdbcUrlParams(String url) {
+    Set<String> blocked = blockedParams();
+    if (url == null || blocked.isEmpty()) {
+      return;
+    }
+    Matcher matcher = JDBC_URL_PARAM_NAME.matcher(url);
+    while (matcher.find()) {
+      String name = matcher.group(1).trim();
+      if (blocked.contains(decode(name))) {
+        throw new ConnectException("JDBC URL contains blocked connection parameter '" + name
+            + "' which is not permitted by the Connect cluster's configured policy.");
+      }
+    }
+  }
+
+  /**
+   * Rejects a blocklisted driver property, covering the {@code connection.*} passthrough added by
+   * {@link #addConnectionProperties(Properties)}; no-op when the blocklist is empty.
+   */
+  protected void validateConnectionProperties(Properties properties) {
+    Set<String> blocked = blockedParams();
+    for (Object name : properties.keySet()) {
+      if (blocked.contains(name.toString())) {
+        throw new ConnectException("JDBC connection property '" + name
+            + "' is not permitted by the Connect cluster's configured policy.");
+      }
+    }
+  }
+
+  private static Set<String> blockedParams() {
+    String configured = System.getProperty(BLOCKED_JDBC_URL_PARAMS_PROPERTY);
+    if (configured == null) {
+      configured = System.getenv(BLOCKED_JDBC_URL_PARAMS_ENV_VAR);
+    }
+    if (configured == null) {
+      return Collections.emptySet();
+    }
+    Set<String> blocked = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+    for (String name : configured.split(",")) {
+      String trimmed = name.trim();
+      if (!trimmed.isEmpty()) {
+        blocked.add(trimmed);
+      }
+    }
+    return blocked;
+  }
+
+  private static String decode(String value) {
+    try {
+      return URLDecoder.decode(value, "UTF-8");
+    } catch (Exception e) {
+      return value;
+    }
   }
 
   @Override

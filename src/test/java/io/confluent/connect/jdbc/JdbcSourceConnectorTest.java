@@ -371,4 +371,64 @@ public class JdbcSourceConnectorTest {
     builder.appendList().delimitedBy(",").of(tableIds);
     return builder.toString();
   }
+
+  /**
+   * Known-good config back-compatibility guard. Representative configs that customers actually run
+   * must keep passing {@code validate()} so a future validation-rule change cannot make a
+   * previously valid config unsatisfiable at deploy time. This is the regression class behind
+   * GitHub issue 1591, where a new mandatory table-filter validation made query-mode configs
+   * unsatisfiable. Each config below is asserted to produce no error-level config values.
+   */
+  @Test
+  public void testKnownGoodConfigsPassValidation() throws SQLException {
+    db.createTable("orders", "id", "INTEGER", "ts", "TIMESTAMP");
+
+    // Bulk mode with a table filter.
+    Map<String, String> bulk = baseSourceProps();
+    bulk.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
+    bulk.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "orders");
+    assertConfigHasNoErrors("bulk + whitelist", bulk);
+
+    // Incrementing mode with an explicit incrementing column.
+    Map<String, String> incrementing = baseSourceProps();
+    incrementing.put(JdbcSourceConnectorConfig.MODE_CONFIG,
+        JdbcSourceConnectorConfig.MODE_INCREMENTING);
+    incrementing.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "orders");
+    incrementing.put(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_NAME_CONFIG, "id");
+    assertConfigHasNoErrors("incrementing", incrementing);
+
+    // Timestamp mode with an explicit timestamp column.
+    Map<String, String> timestamp = baseSourceProps();
+    timestamp.put(JdbcSourceConnectorConfig.MODE_CONFIG,
+        JdbcSourceConnectorConfig.MODE_TIMESTAMP);
+    timestamp.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, "orders");
+    timestamp.put(JdbcSourceConnectorConfig.TIMESTAMP_COLUMN_NAME_CONFIG, "ts");
+    assertConfigHasNoErrors("timestamp", timestamp);
+
+    // Query mode: a custom query with no table filter, the documented combination. This is the
+    // exact shape that regressed in GitHub issue 1591.
+    Map<String, String> query = baseSourceProps();
+    query.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
+    query.put(JdbcSourceConnectorConfig.QUERY_CONFIG, "SELECT * FROM \"orders\"");
+    assertConfigHasNoErrors("query mode", query);
+  }
+
+  private Map<String, String> baseSourceProps() {
+    Map<String, String> p = new HashMap<>();
+    p.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, db.getUrl());
+    p.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, "test-");
+    return p;
+  }
+
+  private void assertConfigHasNoErrors(String label, Map<String, String> connectorProps) {
+    Config config = connector.validate(connectorProps);
+    List<String> errors = new ArrayList<>();
+    for (ConfigValue value : config.configValues()) {
+      for (String message : value.errorMessages()) {
+        errors.add(value.name() + ": " + message);
+      }
+    }
+    assertTrue("Known-good config [" + label + "] should validate without errors but got: "
+        + errors, errors.isEmpty());
+  }
 }

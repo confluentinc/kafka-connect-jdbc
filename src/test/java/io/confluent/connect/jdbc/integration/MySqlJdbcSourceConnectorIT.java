@@ -23,6 +23,7 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 
+import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -51,7 +52,13 @@ public class MySqlJdbcSourceConnectorIT extends AbstractJdbcSourceConnectorIT {
     configBuilder.setPort(0); // pick a free port
     db = DB.newEmbeddedDB(configBuilder.build());
     db.start();
-    db.createDB(DB_NAME);
+    // Create the database over JDBC against the always-present "mysql" schema. mariadb4j's own
+    // client-based createDB is unreliable on CI (it shells out to the mysql client).
+    try (Connection admin = DriverManager.getConnection(
+            configBuilder.getURL("mysql"), DB_USER, DB_PASSWORD);
+        Statement stmt = admin.createStatement()) {
+      stmt.execute("CREATE DATABASE IF NOT EXISTS " + DB_NAME);
+    }
     jdbcUrl = configBuilder.getURL(DB_NAME);
     connection = DriverManager.getConnection(jdbcUrl, DB_USER, DB_PASSWORD);
   }

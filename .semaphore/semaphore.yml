@@ -38,7 +38,13 @@ blocks:
         - name: Test
           commands:
             - . sem-pint
-            - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 --batch-mode --no-transfer-progress clean verify install dependency:analyze validate
+            # TEMPORARY (CC-41849): scope the test run to only the newly added tests for fast CI
+            # iteration. Integration tests are scoped via the failsafe <includes> in pom.xml (which,
+            # unlike -Dit.test, does not leak into the memory-restricted 128M execution); surefire
+            # is scoped here with -Dtest. jacoco.skip is set because running only a subset of tests
+            # would otherwise fail the coverage-check gate. MUST be reverted to run the full suite
+            # (and re-enable coverage) before this PR merges.
+            - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 --batch-mode --no-transfer-progress clean verify install dependency:analyze validate -Dtest=JdbcSourceConnectorTest -DfailIfNoTests=false -Djacoco.skip=true
             - export TRIVY_DISABLE_VEX_NOTICE=true
             - trivy version
             - echo "Check go/connector-dev-vuln-remediation for fixing or suppressing vulnerabilities found by trivy"

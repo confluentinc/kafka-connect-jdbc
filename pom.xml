@@ -546,19 +546,9 @@
                         <!--normal integration tests should not run the memory-restricted tests -->
                         <id>integration-test</id>
                         <configuration>
-                            <!-- TEMPORARY (CC-41849): scope to only the newly added ITs for fast CI
-                                 iteration. Revert to the single "**/*OOM*.java" exclude before merge. -->
-                            <includes>
-                                <include>**/MySqlJdbcSourceConnectorIT.java</include>
-                                <include>**/MsSqlJdbcSourceConnectorIT.java</include>
-                                <include>**/PostgresNumericMappingIT.java</include>
-                                <include>**/PostgresSchemaPatternIT.java</include>
-                                <include>**/PostgresQuotedIdentifierSourceIT.java</include>
-                                <include>**/PostgresTableLifecycleIT.java</include>
-                                <include>**/PostgresSchemaEvolutionIT.java</include>
-                                <include>**/PostgresQueryModeIT.java</include>
-                                <include>**/PostgresMultiTaskIT.java</include>
-                            </includes>
+                            <excludes>
+                                <exclude>**/*OOM*.java</exclude>
+                            </excludes>
                             <trimStackTrace>false</trimStackTrace>
                         </configuration>
                     </execution>
@@ -568,9 +558,6 @@
                             <goal>integration-test</goal>
                         </goals>
                         <configuration>
-                            <!-- TEMPORARY (CC-41849): skip the OOM tests during fast iteration.
-                                 Revert (remove skipTests) before merge. -->
-                            <skipTests>true</skipTests>
                             <!-- out-of-memory tests should have a restricted heap size-->
                             <argLine>@{argLine} -Djava.awt.headless=true -Xmx128M</argLine>
                             <includes>

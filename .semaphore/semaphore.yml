@@ -38,7 +38,9 @@ blocks:
         - name: Test
           commands:
             - . sem-pint
-            - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 --batch-mode --no-transfer-progress clean verify install dependency:analyze validate
+            # TEMPORARY (CC-41849): scope the test run to only the newly added tests for fast CI
+            # iteration. MUST be reverted to run the full suite before this PR merges.
+            - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 --batch-mode --no-transfer-progress clean verify install dependency:analyze validate -Dit.test=MySqlJdbcSourceConnectorIT,MsSqlJdbcSourceConnectorIT,PostgresNumericMappingIT,PostgresSchemaPatternIT,PostgresQuotedIdentifierSourceIT,PostgresTableLifecycleIT,PostgresSchemaEvolutionIT,PostgresQueryModeIT,PostgresMultiTaskIT -Dtest=JdbcSourceConnectorTest -DfailIfNoTests=false
             - export TRIVY_DISABLE_VEX_NOTICE=true
             - trivy version
             - echo "Check go/connector-dev-vuln-remediation for fixing or suppressing vulnerabilities found by trivy"

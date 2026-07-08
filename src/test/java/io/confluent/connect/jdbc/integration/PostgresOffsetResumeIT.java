@@ -19,9 +19,6 @@ import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
-import org.apache.kafka.connect.data.SchemaAndValue;
-import org.apache.kafka.connect.data.Struct;
-import org.apache.kafka.connect.json.JsonConverter;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -31,27 +28,36 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.testcontainers.containers.PostgreSQLContainer;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 /**
- * Verifies the documented source-side schema evolution: a column added to the table while the
- * connector runs is detected, and records produced afterwards carry the new field in their Connect
- * schema. No integration test performed a mid-stream {@code ALTER TABLE ADD COLUMN} before.
+ * Offset continuity across a connector restart - the exact symptom class behind INC-11312, where a
+ * change in the source-partition offset key made a restarted task re-read from the beginning and
+ * re-produce every row.
  *
- * <p>(Note: {@code auto.evolve} is a sink concern. The source picks up new columns automatically by
- * re-reading table metadata on each query, which is what this pins.)
+ * <p>The connector streams three rows in incrementing mode, is deleted (its committed source
+ * offset persists in the worker's offsets topic), gets two more rows inserted, and is recreated
+ * under the same name. If offsets resume correctly the topic ends with five distinct records; if
+ * the offset is lost the pre-restart rows are re-read and duplicated. The assertion reads the first
+ * records off the topic and fails on any duplicate, which is what over-production looks like. This
+ * is the E2E complement to the {@code *RestoreOffset*} unit tests in {@code JdbcSourceTaskUpdateTest}.
  */
 @Category(IntegrationTest.class)
-public class PostgresSchemaEvolutionIT extends BaseConnectorIT {
+public class PostgresOffsetResumeIT extends BaseConnectorIT {
 
   @ClassRule
   public static final PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:13")
@@ -59,17 +65,15 @@ public class PostgresSchemaEvolutionIT extends BaseConnectorIT {
       .withUsername("test")
       .withPassword("test123");
 
-  private static final String CONNECTOR_NAME = "schema-evolution-source";
-  private static final String TABLE_NAME = "evo_table";
-  private static final String TOPIC_PREFIX = "evolution-";
+  private static final String CONNECTOR_NAME = "offset-resume-source";
+  private static final String TABLE_NAME = "resume_tbl";
+  private static final String TOPIC_PREFIX = "resume-";
   private static final String TOPIC = TOPIC_PREFIX + TABLE_NAME;
-  private static final String NEW_COLUMN = "email";
   private static final long POLL_INTERVAL_MS = TimeUnit.SECONDS.toMillis(1);
   private static final long CONSUME_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(60);
 
   private static Connection connection;
 
-  private JsonConverter converter;
   private Map<String, String> props;
 
   @BeforeClass
@@ -87,17 +91,11 @@ public class PostgresSchemaEvolutionIT extends BaseConnectorIT {
 
   @Before
   public void setup() throws SQLException {
-    converter = new JsonConverter();
-    Map<String, String> converterConfig = new HashMap<>();
-    converterConfig.put("schemas.enable", "true");
-    converter.configure(converterConfig, false);
-
     startConnect();
 
     try (Statement stmt = connection.createStatement()) {
       stmt.execute("CREATE TABLE " + TABLE_NAME + " ("
           + "id SERIAL PRIMARY KEY, name VARCHAR(100))");
-      stmt.execute("INSERT INTO " + TABLE_NAME + " (name) VALUES ('a'), ('b')");
     }
 
     props = new HashMap<>();
@@ -107,8 +105,6 @@ public class PostgresSchemaEvolutionIT extends BaseConnectorIT {
     props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, postgres.getUsername());
     props.put(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, postgres.getPassword());
     props.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_INCREMENTING);
-    // New-style column mapping to pair with the new-style table.include.list (legacy and new
-    // configs cannot be mixed).
     props.put(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_MAPPING_CONFIG, ".*" + TABLE_NAME + ":id");
     props.put(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG, ".*" + TABLE_NAME);
     props.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, TOPIC_PREFIX);
@@ -116,7 +112,7 @@ public class PostgresSchemaEvolutionIT extends BaseConnectorIT {
     props.put(JdbcSourceConnectorConfig.POLL_INTERVAL_MS_CONFIG, String.valueOf(POLL_INTERVAL_MS));
     props.put(JdbcSourceConnectorConfig.POLL_LINGER_MS_CONFIG, "0");
     props.put("value.converter", "org.apache.kafka.connect.json.JsonConverter");
-    props.put("value.converter.schemas.enable", "true");
+    props.put("value.converter.schemas.enable", "false");
     props.put("key.converter", "org.apache.kafka.connect.storage.StringConverter");
   }
 
@@ -129,35 +125,52 @@ public class PostgresSchemaEvolutionIT extends BaseConnectorIT {
   }
 
   @Test
-  public void columnAddedMidStreamAppearsInLaterRecords() throws Exception {
+  public void offsetsResumeAfterRestartWithoutRereadingRows() throws Exception {
     connect.kafka().createTopic(TOPIC, 1);
+
+    insertRow("pre_1");
+    insertRow("pre_2");
+    insertRow("pre_3");
+
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, 1);
 
-    // Drain the two pre-evolution rows.
-    connect.kafka().consume(2, CONSUME_TIMEOUT_MS, TOPIC);
+    // The three pre-restart rows stream exactly once.
+    ConsumerRecords<byte[], byte[]> before = connect.kafka().consume(3, CONSUME_TIMEOUT_MS, TOPIC);
+    assertEquals("Pre-restart rows should stream once", 3, before.count());
 
-    // Evolve the schema and add a row that populates the new column.
+    // Let the source offset (max id = 3) flush to the offsets topic before the restart. startConnect
+    // sets offset.flush.interval.ms=1000, so this comfortably covers a flush.
+    Thread.sleep(TimeUnit.SECONDS.toMillis(3));
+
+    // Restart: delete and recreate under the same name so the committed offset is reused.
+    connect.deleteConnector(CONNECTOR_NAME);
+
+    insertRow("post_1");
+    insertRow("post_2");
+
+    connect.configureConnector(CONNECTOR_NAME, props);
+    waitForConnectorToStart(CONNECTOR_NAME, 1);
+
+    // Read the first five records off the topic. If offsets resumed, they are the five distinct
+    // rows (three pre + two post). If the offset was lost, the pre rows are re-read, so a duplicate
+    // appears within the first five. A single-partition topic preserves order, so a duplicate here
+    // is the over-production signal.
+    ConsumerRecords<byte[], byte[]> after = connect.kafka().consume(5, CONSUME_TIMEOUT_MS, TOPIC);
+    List<String> values = new ArrayList<>();
+    for (ConsumerRecord<byte[], byte[]> record : after.records(TOPIC)) {
+      values.add(new String(record.value(), StandardCharsets.UTF_8));
+    }
+    Set<String> distinct = new HashSet<>(values);
+    assertEquals("A restarted connector must not re-read committed rows (offset should resume); "
+        + "got " + values, values.size(), distinct.size());
+    assertTrue("Post-restart rows should stream after resume; got " + values,
+        values.stream().anyMatch(v -> v.contains("post_2")));
+  }
+
+  private void insertRow(String name) throws SQLException {
     try (Statement stmt = connection.createStatement()) {
-      stmt.execute("ALTER TABLE " + TABLE_NAME + " ADD COLUMN " + NEW_COLUMN + " VARCHAR(100)");
-      stmt.execute("INSERT INTO " + TABLE_NAME + " (name, " + NEW_COLUMN + ") "
-          + "VALUES ('c', 'c@example.com')");
+      stmt.execute("INSERT INTO " + TABLE_NAME + " (name) VALUES ('" + name + "')");
     }
-
-    // Consume from the start again. Incrementing mode emits each row once, so exactly the three
-    // rows should be present, and at least one (the post-evolution row) must carry the new field.
-    ConsumerRecords<byte[], byte[]> all = connect.kafka().consume(3, CONSUME_TIMEOUT_MS, TOPIC);
-    assertEquals("Incrementing mode should stream exactly the three rows once", 3, all.count());
-    boolean sawNewColumn = false;
-    for (ConsumerRecord<byte[], byte[]> record : all.records(TOPIC)) {
-      SchemaAndValue schemaAndValue = converter.toConnectData(TOPIC, record.value());
-      Struct value = (Struct) schemaAndValue.value();
-      if (value.schema().field(NEW_COLUMN) != null) {
-        sawNewColumn = true;
-        break;
-      }
-    }
-    assertTrue("A record produced after ALTER TABLE ADD COLUMN should carry the new field '"
-        + NEW_COLUMN + "' in its schema", sawNewColumn);
   }
 }

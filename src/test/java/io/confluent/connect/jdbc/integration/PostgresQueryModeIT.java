@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.integration;
 
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -35,6 +36,9 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import java.nio.charset.StandardCharsets;
+
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -119,15 +123,31 @@ public class PostgresQueryModeIT extends BaseConnectorIT {
   }
 
   @Test
-  public void queryWithSuffixStreamsRows() throws Exception {
-    // query.suffix is appended to the generated SQL; ORDER BY keeps the row set intact and proves
-    // the suffix is applied without breaking the SQL.
-    props.put(JdbcSourceConnectorConfig.QUERY_SUFFIX_CONFIG, "ORDER BY id");
+  public void queryWithSuffixFiltersRows() throws Exception {
+    // query.suffix is appended verbatim after the query. Use a WHERE suffix that actually changes
+    // the result set (id 3 excluded) so the assertion detects a silently-ignored suffix; an
+    // ORDER BY suffix would not, since it leaves the row set unchanged.
+    props.put(JdbcSourceConnectorConfig.QUERY_SUFFIX_CONFIG, "WHERE id <= 2");
     connect.kafka().createTopic(TOPIC, 1);
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, 1);
 
-    ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(3, CONSUME_TIMEOUT_MS, TOPIC);
-    assertTrue("Query mode with a suffix should stream the query's rows", records.count() >= 3);
+    // Bulk+query re-emits the result set every poll, so read a couple of polls' worth and assert
+    // the excluded row never appears while the included rows do.
+    ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(4, CONSUME_TIMEOUT_MS, TOPIC);
+    boolean sawIncluded = false;
+    boolean sawExcluded = false;
+    for (ConsumerRecord<byte[], byte[]> record : records.records(TOPIC)) {
+      String value = new String(record.value(), StandardCharsets.UTF_8);
+      if (value.contains("\"id\":1") || value.contains("\"id\":2")) {
+        sawIncluded = true;
+      }
+      if (value.contains("\"id\":3")) {
+        sawExcluded = true;
+      }
+    }
+    assertTrue("query.suffix WHERE should still stream the included rows", sawIncluded);
+    assertFalse("query.suffix 'WHERE id <= 2' must exclude id 3; an ignored suffix would leak it",
+        sawExcluded);
   }
 }

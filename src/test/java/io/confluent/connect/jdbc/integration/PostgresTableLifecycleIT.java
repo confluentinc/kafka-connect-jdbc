@@ -35,7 +35,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
 
 /**
  * Verifies the {@link io.confluent.connect.jdbc.source.TableMonitorThread} lifecycle: a table that
@@ -127,9 +127,10 @@ public class PostgresTableLifecycleIT extends BaseConnectorIT {
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, 1);
 
-    // The pre-existing table streams immediately.
+    // The pre-existing table streams immediately. Incrementing mode emits each row once, so assert
+    // the exact count - a re-read or over-production would push this above 2.
     ConsumerRecords<byte[], byte[]> fromA = connect.kafka().consume(2, CONSUME_TIMEOUT_MS, topicA);
-    assertTrue("Pre-existing table should stream its rows", fromA.count() >= 2);
+    assertEquals("Pre-existing table should stream exactly its rows", 2, fromA.count());
 
     // Create a matching table after the connector is already running.
     createTable(TABLE_B);
@@ -138,7 +139,8 @@ public class PostgresTableLifecycleIT extends BaseConnectorIT {
     // The monitor thread should discover it within the poll interval, trigger reconfiguration,
     // and its rows should arrive.
     ConsumerRecords<byte[], byte[]> fromB = connect.kafka().consume(3, CONSUME_TIMEOUT_MS, topicB);
-    assertTrue("Table created mid-run should be discovered and streamed", fromB.count() >= 3);
+    assertEquals("Table created mid-run should be discovered and stream exactly its rows",
+        3, fromB.count());
   }
 
   private void createTable(String tableName) throws SQLException {

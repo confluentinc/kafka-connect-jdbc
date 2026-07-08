@@ -35,7 +35,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
 
 /**
  * Runs the source connector with {@code tasks.max = 2} across two tables and asserts both tables'
@@ -130,8 +130,10 @@ public class PostgresMultiTaskIT extends BaseConnectorIT {
     ConsumerRecords<byte[], byte[]> fromTwo =
         connect.kafka().consume(4, CONSUME_TIMEOUT_MS, topicTwo);
 
-    assertTrue("First table should stream its rows", fromOne.count() >= 3);
-    assertTrue("Second table should stream its rows", fromTwo.count() >= 4);
+    // Incrementing mode emits each row once, so assert exact counts: a re-read or a table landing
+    // on the wrong task would change these.
+    assertEquals("First table should stream exactly its rows", 3, fromOne.count());
+    assertEquals("Second table should stream exactly its rows", 4, fromTwo.count());
   }
 
   private void createTable(String tableName) throws SQLException {

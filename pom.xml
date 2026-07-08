@@ -546,9 +546,11 @@
                         <!--normal integration tests should not run the memory-restricted tests -->
                         <id>integration-test</id>
                         <configuration>
-                            <excludes>
-                                <exclude>**/*OOM*.java</exclude>
-                            </excludes>
+                            <!-- TEMPORARY (CC-41849): scope to the new sink IT for fast CI
+                                 iteration. Revert to "**/*OOM*.java" exclude before merge. -->
+                            <includes>
+                                <include>**/MySqlJdbcSinkConnectorIT.java</include>
+                            </includes>
                             <trimStackTrace>false</trimStackTrace>
                         </configuration>
                     </execution>
@@ -558,6 +560,8 @@
                             <goal>integration-test</goal>
                         </goals>
                         <configuration>
+                            <!-- TEMPORARY (CC-41849): skip OOM tests during fast iteration. Revert before merge. -->
+                            <skipTests>true</skipTests>
                             <!-- out-of-memory tests should have a restricted heap size-->
                             <argLine>@{argLine} -Djava.awt.headless=true -Xmx128M</argLine>
                             <includes>

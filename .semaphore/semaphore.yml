@@ -38,7 +38,10 @@ blocks:
         - name: Test
           commands:
             - . sem-pint
-            - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 --batch-mode --no-transfer-progress clean verify install dependency:analyze validate
+            # TEMPORARY (CC-41849): scope to the new sink IT for fast CI iteration (failsafe
+            # <includes> in pom.xml, surefire via -Dtest, jacoco skipped for a partial run).
+            # Revert all of this before merge.
+            - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 --batch-mode --no-transfer-progress clean verify install dependency:analyze validate -Dtest=JdbcSinkConnectorTest -DfailIfNoTests=false -Djacoco.skip=true
             - export TRIVY_DISABLE_VEX_NOTICE=true
             - trivy version
             - echo "Check go/connector-dev-vuln-remediation for fixing or suppressing vulnerabilities found by trivy"

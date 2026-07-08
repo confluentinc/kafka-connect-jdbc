@@ -107,8 +107,7 @@ public class PostgresSchemaEvolutionIT extends BaseConnectorIT {
     props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, postgres.getUsername());
     props.put(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, postgres.getPassword());
     props.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_INCREMENTING);
-    // New-style column mapping to pair with the new-style table.include.list (legacy and new
-    // configs cannot be mixed).
+    // New-style column mapping to pair with the new-style include list (the two config styles cannot be mixed).
     props.put(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_MAPPING_CONFIG, ".*" + TABLE_NAME + ":id");
     props.put(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG, ".*" + TABLE_NAME);
     props.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, TOPIC_PREFIX);
@@ -137,15 +136,13 @@ public class PostgresSchemaEvolutionIT extends BaseConnectorIT {
     // Drain the two pre-evolution rows.
     connect.kafka().consume(2, CONSUME_TIMEOUT_MS, TOPIC);
 
-    // Evolve the schema and add a row that populates the new column.
     try (Statement stmt = connection.createStatement()) {
       stmt.execute("ALTER TABLE " + TABLE_NAME + " ADD COLUMN " + NEW_COLUMN + " VARCHAR(100)");
       stmt.execute("INSERT INTO " + TABLE_NAME + " (name, " + NEW_COLUMN + ") "
           + "VALUES ('c', 'c@example.com')");
     }
 
-    // Consume from the start again. Incrementing mode emits each row once, so exactly the three
-    // rows should be present, and at least one (the post-evolution row) must carry the new field.
+    // Incrementing mode emits each row once, so exactly three rows; one must carry the new field.
     ConsumerRecords<byte[], byte[]> all = connect.kafka().consume(3, CONSUME_TIMEOUT_MS, TOPIC);
     assertEquals("Incrementing mode should stream exactly the three rows once", 3, all.count());
     boolean sawNewColumn = false;

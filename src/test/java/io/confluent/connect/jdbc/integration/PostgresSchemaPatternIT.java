@@ -130,16 +130,15 @@ public class PostgresSchemaPatternIT extends BaseConnectorIT {
 
   @Test
   public void duplicateUnqualifiedNamesFailWithoutSchemaPattern() throws Exception {
-    // No schema.pattern: both app1.orders and app2.orders are discovered, they share the
-    // unqualified name "orders", and the connector must refuse to start.
+    // No schema.pattern: app1.orders and app2.orders share the unqualified name "orders", so the
+    // connector must refuse to start.
     connect.configureConnector(CONNECTOR_NAME, props);
     assertFailsWith(CONNECTOR_NAME, "duplicate unqualified table names");
   }
 
   @Test
   public void schemaPatternNarrowsDiscoveryToOneSchema() throws Exception {
-    // Narrowing to app1 leaves a single "orders" table, so the connector runs and streams only
-    // app1's rows. If app2 were still discovered, the duplicate check above would fail the start.
+    // Narrowing to app1 leaves a single "orders" table, so the connector runs and streams app1's rows.
     props.put(JdbcSourceConnectorConfig.SCHEMA_PATTERN_CONFIG, SCHEMA_ONE);
     connect.kafka().createTopic(TOPIC, 1);
 

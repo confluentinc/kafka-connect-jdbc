@@ -139,8 +139,7 @@ public class PostgresOffsetResumeIT extends BaseConnectorIT {
     ConsumerRecords<byte[], byte[]> before = connect.kafka().consume(3, CONSUME_TIMEOUT_MS, TOPIC);
     assertEquals("Pre-restart rows should stream once", 3, before.count());
 
-    // Let the source offset (max id = 3) flush to the offsets topic before the restart. startConnect
-    // sets offset.flush.interval.ms=1000, so this comfortably covers a flush.
+    // Let the source offset flush before the restart (startConnect uses offset.flush.interval.ms=1000).
     Thread.sleep(TimeUnit.SECONDS.toMillis(3));
 
     // Restart: delete and recreate under the same name so the committed offset is reused.
@@ -152,10 +151,8 @@ public class PostgresOffsetResumeIT extends BaseConnectorIT {
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, 1);
 
-    // Read the first five records off the topic. If offsets resumed, they are the five distinct
-    // rows (three pre + two post). If the offset was lost, the pre rows are re-read, so a duplicate
-    // appears within the first five. A single-partition topic preserves order, so a duplicate here
-    // is the over-production signal.
+    // If offsets resumed, the first five records are the five distinct rows; a lost offset re-reads
+    // the pre rows, so a duplicate shows up within the first five (single-partition topic keeps order).
     ConsumerRecords<byte[], byte[]> after = connect.kafka().consume(5, CONSUME_TIMEOUT_MS, TOPIC);
     List<String> values = new ArrayList<>();
     for (ConsumerRecord<byte[], byte[]> record : after.records(TOPIC)) {

@@ -93,8 +93,7 @@ public class PostgresTableLifecycleIT extends BaseConnectorIT {
     props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, postgres.getUsername());
     props.put(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, postgres.getPassword());
     props.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_INCREMENTING);
-    // Use the new-style column mapping to match the new-style table.include.list; the connector
-    // rejects mixing legacy (incrementing.column.name) with new (table.include.list) configs.
+    // New-style column mapping to match the new-style include list (the two config styles cannot be mixed).
     props.put(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_MAPPING_CONFIG, ".*test_.*:id");
     props.put(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG, ".*test_.*");
     props.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, TOPIC_PREFIX);
@@ -127,17 +126,14 @@ public class PostgresTableLifecycleIT extends BaseConnectorIT {
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, 1);
 
-    // The pre-existing table streams immediately. Incrementing mode emits each row once, so assert
-    // the exact count - a re-read or over-production would push this above 2.
+    // Incrementing mode emits each row once, so assert the exact count.
     ConsumerRecords<byte[], byte[]> fromA = connect.kafka().consume(2, CONSUME_TIMEOUT_MS, topicA);
     assertEquals("Pre-existing table should stream exactly its rows", 2, fromA.count());
 
-    // Create a matching table after the connector is already running.
     createTable(TABLE_B);
     insertRows(TABLE_B, 3);
 
-    // The monitor thread should discover it within the poll interval, trigger reconfiguration,
-    // and its rows should arrive.
+    // The monitor thread discovers the new table within the poll interval and its rows arrive.
     ConsumerRecords<byte[], byte[]> fromB = connect.kafka().consume(3, CONSUME_TIMEOUT_MS, topicB);
     assertEquals("Table created mid-run should be discovered and stream exactly its rows",
         3, fromB.count());

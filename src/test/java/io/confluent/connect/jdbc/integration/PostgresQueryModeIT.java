@@ -124,16 +124,13 @@ public class PostgresQueryModeIT extends BaseConnectorIT {
 
   @Test
   public void queryWithSuffixFiltersRows() throws Exception {
-    // query.suffix is appended verbatim after the query. Use a WHERE suffix that actually changes
-    // the result set (id 3 excluded) so the assertion detects a silently-ignored suffix; an
-    // ORDER BY suffix would not, since it leaves the row set unchanged.
+    // A WHERE suffix (not ORDER BY) so that an ignored suffix is detectable: id 3 must not appear.
     props.put(JdbcSourceConnectorConfig.QUERY_SUFFIX_CONFIG, "WHERE id <= 2");
     connect.kafka().createTopic(TOPIC, 1);
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, 1);
 
-    // Bulk+query re-emits the result set every poll, so read a couple of polls' worth and assert
-    // the excluded row never appears while the included rows do.
+    // Bulk+query re-emits the result set every poll, so read a couple of polls' worth.
     ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(4, CONSUME_TIMEOUT_MS, TOPIC);
     boolean sawIncluded = false;
     boolean sawExcluded = false;

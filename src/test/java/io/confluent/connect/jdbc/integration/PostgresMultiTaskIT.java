@@ -92,8 +92,7 @@ public class PostgresMultiTaskIT extends BaseConnectorIT {
     props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, postgres.getUsername());
     props.put(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, postgres.getPassword());
     props.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_INCREMENTING);
-    // New-style column mapping to pair with the new-style table.include.list (legacy and new
-    // configs cannot be mixed).
+    // New-style column mapping to pair with the new-style include list (the two config styles cannot be mixed).
     props.put(JdbcSourceConnectorConfig.INCREMENTING_COLUMN_MAPPING_CONFIG, ".*multitask_.*:id");
     props.put(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG, ".*multitask_.*");
     props.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, TOPIC_PREFIX);
@@ -122,7 +121,6 @@ public class PostgresMultiTaskIT extends BaseConnectorIT {
     connect.kafka().createTopic(topicTwo, 1);
 
     connect.configureConnector(CONNECTOR_NAME, props);
-    // Two tables with tasks.max=2 should yield two running tasks.
     waitForConnectorToStart(CONNECTOR_NAME, 2);
 
     ConsumerRecords<byte[], byte[]> fromOne =
@@ -130,8 +128,7 @@ public class PostgresMultiTaskIT extends BaseConnectorIT {
     ConsumerRecords<byte[], byte[]> fromTwo =
         connect.kafka().consume(4, CONSUME_TIMEOUT_MS, topicTwo);
 
-    // Incrementing mode emits each row once, so assert exact counts: a re-read or a table landing
-    // on the wrong task would change these.
+    // Incrementing mode emits each row once, so assert exact counts.
     assertEquals("First table should stream exactly its rows", 3, fromOne.count());
     assertEquals("Second table should stream exactly its rows", 4, fromTwo.count());
   }

@@ -20,6 +20,7 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBase
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
@@ -415,11 +416,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * connector exposes this; the sink path always uses the Map representation.
    */
   private boolean hstoreAsJson() {
-    if (config instanceof io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig) {
-      return io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_JSON
-          .equalsIgnoreCase(config.getString(
-              io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig
-                  .HSTORE_HANDLING_MODE_CONFIG));
+    if (config instanceof JdbcSourceConnectorConfig) {
+      return JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_JSON.equalsIgnoreCase(
+          config.getString(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG));
     }
     return false;
   }

@@ -900,6 +900,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     if (maybeBindTemporalArray(statement, index, elementName, values)) {
       return true;
     }
+    if (maybeBindStructOrMapArray(statement, index, elementSchema, values)) {
+      return true;
+    }
     return maybeBindPrimitiveArray(statement, index, elementSchema, values);
   }
 
@@ -981,6 +984,28 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
+   * Bind an array of Connect STRUCT/MAP elements as a native {@code jsonb[]}, serializing each
+   * element to its JSON text (symmetric with {@link #getSqlType}, which maps a STRUCT/MAP array
+   * element to {@code jsonb}). Must be dispatched after the named logical-type binders, since some
+   * logical types (e.g. VariableScaleDecimal) are themselves STRUCTs. Returns false if the element
+   * type is neither STRUCT nor MAP.
+   */
+  private boolean maybeBindStructOrMapArray(PreparedStatement statement, int index,
+      Schema elementSchema, Collection<?> values) throws SQLException {
+    if (elementSchema == null) {
+      return false;
+    }
+    Schema.Type type = elementSchema.type();
+    if (type != Schema.Type.STRUCT && type != Schema.Type.MAP) {
+      return false;
+    }
+    Array array = statement.getConnection()
+        .createArrayOf(JSONB_TYPE_NAME, jsonbArrayFor(elementSchema, values));
+    statement.setArray(index, array);
+    return true;
+  }
+
+  /**
    * Bind an array of a primitive element type per pgjdbc's documented array mapping. Returns false
    * if the element type is not a supported primitive.
    */
@@ -1005,6 +1030,16 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
             : VariableScaleDecimal.toLogical(
                 (Struct) o))
         .toArray(BigDecimal[]::new);
+  }
+
+  /**
+   * Serialize each STRUCT/MAP element to its JSON text for binding into a native {@code jsonb[]}
+   * column. Null elements are preserved as SQL NULL.
+   */
+  private static Object[] jsonbArrayFor(Schema elementSchema, Collection<?> valueCollection) {
+    return valueCollection.stream()
+        .map(o -> o == null ? null : JsonConverter.connectValueToJson(elementSchema, o))
+        .toArray();
   }
 
   /**

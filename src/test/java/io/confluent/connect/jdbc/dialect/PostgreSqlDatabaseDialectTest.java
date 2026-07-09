@@ -836,6 +836,30 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
+  public void shouldBuildOptionalArrayFieldEvenForNotNullColumn() {
+    // A multi-dimensional array reports the same type name as 1-D and is skipped (null) at read
+    // time; array fields are therefore always optional so that null is accepted rather than
+    // failing a required field, even when the source column is NOT NULL.
+    ColumnDefinition notNull = column(Types.ARRAY, "_int4", ColumnDefinition.Nullability.NOT_NULL);
+    SchemaBuilder builder = SchemaBuilder.struct();
+    String fieldName = complexTypesDialect().addFieldToSchema(notNull, builder);
+    Schema fieldSchema = builder.build().field(fieldName).schema();
+    assertEquals(Type.ARRAY, fieldSchema.type());
+    assertTrue("array field must be optional even for a NOT NULL column", fieldSchema.isOptional());
+  }
+
+  @Test
+  public void shouldAcceptNullValueForNotNullArrayColumnField() {
+    // The multi-dim skip returns null; the (optional) field must accept it without throwing,
+    // which is what keeps the task alive instead of crashing on the record.
+    ColumnDefinition notNull = column(Types.ARRAY, "_int4", ColumnDefinition.Nullability.NOT_NULL);
+    SchemaBuilder builder = SchemaBuilder.struct();
+    String fieldName = complexTypesDialect().addFieldToSchema(notNull, builder);
+    Schema schema = builder.build();
+    new Struct(schema).put(fieldName, null); // no exception => skipped multi-dim value is tolerated
+  }
+
+  @Test
   public void shouldMapComplexTypesToSqlTypes() {
     // Arrays -> native elementType[]; the element DDL is exercised through the ARRAY recursion.
     verifyDataTypeMapping("TEXT[]", arraySchema(Schema.STRING_SCHEMA));
@@ -985,10 +1009,15 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   private ColumnDefinition column(int jdbcType, String typeName) {
+    return column(jdbcType, typeName, ColumnDefinition.Nullability.NULL);
+  }
+
+  private ColumnDefinition column(
+      int jdbcType, String typeName, ColumnDefinition.Nullability nullability) {
     return new ColumnDefinition(
         new ColumnId(new TableId(null, null, "t"), "col"),
         jdbcType, typeName, Object.class.getName(),
-        ColumnDefinition.Nullability.NULL, ColumnDefinition.Mutability.UNKNOWN,
+        nullability, ColumnDefinition.Mutability.UNKNOWN,
         0, 0, false, 1, false, false, false, false, false);
   }
 

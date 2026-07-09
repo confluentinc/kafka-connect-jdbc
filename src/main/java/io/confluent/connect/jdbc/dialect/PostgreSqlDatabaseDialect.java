@@ -317,11 +317,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         if (complexTypesEnabled()) {
           Schema elementSchema = arrayElementSchemaFor(columnDefn);
           if (elementSchema != null) {
-            SchemaBuilder arrayBuilder = SchemaBuilder.array(elementSchema);
-            if (columnDefn.isOptional()) {
-              arrayBuilder.optional();
-            }
-            builder.field(fieldName, arrayBuilder.build());
+            // Optional even for NOT NULL: multi-dim arrays skip to null (same type name as 1-D).
+            builder.field(fieldName, SchemaBuilder.array(elementSchema).optional().build());
             return fieldName;
           }
         }

@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.data.Json;
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
@@ -25,6 +26,7 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.JdbcCredentials;
+import io.confluent.connect.jdbc.util.JsonConverter;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
@@ -345,6 +347,46 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return JSON_TYPE_NAME.equalsIgnoreCase(typeName) || JSONB_TYPE_NAME.equalsIgnoreCase(typeName);
   }
 
+  private boolean isJsonBindCandidate(Schema schema) {
+    Schema.Type type = schema.type();
+    if (type != Schema.Type.STRUCT && type != Schema.Type.MAP) {
+      return false;
+    }
+    return config instanceof JdbcSinkConfig
+        && ((JdbcSinkConfig) config).sqlComplexTypesEnable;
+  }
+
+  private boolean maybeBindJson(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
+      Object value
+  ) throws SQLException {
+    if (!isJsonBindCandidate(schema)) {
+      return false;
+    }
+    String json = JsonConverter.connectValueToJson(schema, value);
+    if (json == null) {
+      statement.setNull(index, Types.OTHER);
+    } else {
+      // Bind as text; the ::jsonb cast (see valueTypeCast) parses it into jsonb server-side.
+      statement.setString(index, json);
+    }
+    return true;
+  }
+
+  private boolean complexTypesEnabled() {
+    if (config instanceof JdbcSinkConfig) {
+      return ((JdbcSinkConfig) config).sqlComplexTypesEnable;
+    }
+    if (config instanceof io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig) {
+      return config.getBoolean(
+          io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig
+              .SQL_COMPLEX_TYPES_ENABLE_CONFIG);
+    }
+    return false;
+  }
+
   @Override
   protected String getSqlType(SinkRecordField field) {
     if (field.schemaName() != null) {
@@ -357,6 +399,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           return "TIME";
         case Timestamp.LOGICAL_NAME:
           return "TIMESTAMP";
+        case Json.LOGICAL_NAME:
+          // Logical JSON STRING -> native JSONB; text binds via the existing ::jsonb cast.
+          return JSONB_TYPE_NAME.toUpperCase();
         default:
           // fall through to normal types
       }
@@ -394,6 +439,13 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
             field.isPrimaryKey()
         );
         return getSqlType(childField) + "[]";
+      case STRUCT:
+      case MAP:
+        if (config instanceof JdbcSinkConfig
+            && ((JdbcSinkConfig) config).sqlComplexTypesEnable) {
+          return JSONB_TYPE_NAME.toUpperCase();
+        }
+        return super.getSqlType(field);
       default:
         return super.getSqlType(field);
     }
@@ -560,6 +612,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       Object value,
       String fieldName
   ) throws SQLException {
+    if (maybeBindJson(statement, index, schema, value)) {
+      return true;
+    }
     switch (schema.type()) {
       case ARRAY: {
         Class<?> valueClass = value.getClass();

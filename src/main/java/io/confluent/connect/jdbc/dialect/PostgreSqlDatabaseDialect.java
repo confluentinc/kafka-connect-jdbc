@@ -20,6 +20,7 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBase
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
@@ -379,10 +380,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     if (config instanceof JdbcSinkConfig) {
       return ((JdbcSinkConfig) config).sqlComplexTypesEnable;
     }
-    if (config instanceof io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig) {
-      return config.getBoolean(
-          io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig
-              .SQL_COMPLEX_TYPES_ENABLE_CONFIG);
+    if (config instanceof JdbcSourceConnectorConfig) {
+      return config.getBoolean(JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG);
     }
     return false;
   }

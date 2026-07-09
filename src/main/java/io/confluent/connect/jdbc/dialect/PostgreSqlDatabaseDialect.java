@@ -273,10 +273,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         // Some of these types will have fixed size, but we drop this from the schema conversion
         // since only fixed byte arrays can have a fixed size
         if (isJsonType(columnDefn)) {
-          builder.field(
-              fieldName,
-              columnDefn.isOptional() ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA
-          );
+          builder.field(fieldName, jsonSchema(columnDefn));
           return fieldName;
         }
 
@@ -326,6 +323,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       }
       case Types.OTHER: {
         if (isJsonType(columnDefn)) {
+          if (complexTypesEnabled() && !jsonAsString()) {
+            return rs -> JsonConverter.jsonStringToMap(rs.getString(col));
+          }
           return rs -> rs.getString(col);
         }
 
@@ -385,6 +385,46 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
               .SQL_COMPLEX_TYPES_ENABLE_CONFIG);
     }
     return false;
+  }
+
+  /**
+   * Whether PostgreSQL json/jsonb columns should be emitted as a logical JSON STRING (mode
+   * {@code string}) rather than a Connect Map (mode {@code map}, the default). Only the source
+   * connector exposes this.
+   */
+  private boolean jsonAsString() {
+    if (config instanceof io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig) {
+      return io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.JSON_HANDLING_MODE_STRING
+          .equalsIgnoreCase(config.getString(
+              io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig
+                  .JSON_HANDLING_MODE_CONFIG));
+    }
+    return false;
+  }
+
+  /**
+   * Build the Connect schema for a PostgreSQL json/jsonb column. When complex types are disabled
+   * the column stays a plain STRING. When enabled it is a logical JSON STRING (mode
+   * {@code string}) or a Map&lt;String,String&gt; (mode {@code map}, the default).
+   */
+  private Schema jsonSchema(ColumnDefinition columnDefn) {
+    boolean optional = columnDefn.isOptional();
+    if (!complexTypesEnabled()) {
+      return optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA;
+    }
+    if (jsonAsString()) {
+      SchemaBuilder jsonBuilder = Json.builder();
+      if (optional) {
+        jsonBuilder.optional();
+      }
+      return jsonBuilder.build();
+    }
+    SchemaBuilder mapBuilder = SchemaBuilder.map(
+        Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA);
+    if (optional) {
+      mapBuilder.optional();
+    }
+    return mapBuilder.build();
   }
 
   @Override

@@ -85,6 +85,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   static final String JSON_TYPE_NAME = "json";
   static final String JSONB_TYPE_NAME = "jsonb";
   static final String UUID_TYPE_NAME = "uuid";
+  static final String HSTORE_TYPE_NAME = "hstore";
 
   /**
    * Define the PG datatypes that require casting upon insert/update statements.
@@ -280,6 +281,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           return fieldName;
         }
 
+        if (complexTypesEnabled() && isHstoreType(columnDefn)) {
+          builder.field(fieldName, hstoreSchema(columnDefn));
+          return fieldName;
+        }
+
         if (UUID.class.getName().equals(columnDefn.classNameForType())) {
           builder.field(
               fieldName,
@@ -329,6 +335,18 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           return rs -> rs.getString(col);
         }
 
+        if (complexTypesEnabled() && isHstoreType(columnDefn)) {
+          if (hstoreAsJson()) {
+            return rs -> {
+              Object value = rs.getObject(col);
+              return value == null
+                  ? null
+                  : JsonConverter.connectValueToJson(null, value);
+            };
+          }
+          return rs -> rs.getObject(col);
+        }
+
         if (UUID.class.getName().equals(columnDefn.classNameForType())) {
           return rs -> rs.getString(col);
         }
@@ -345,6 +363,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   protected boolean isJsonType(ColumnDefinition columnDefn) {
     String typeName = columnDefn.typeName();
     return JSON_TYPE_NAME.equalsIgnoreCase(typeName) || JSONB_TYPE_NAME.equalsIgnoreCase(typeName);
+  }
+
+  protected boolean isHstoreType(ColumnDefinition columnDefn) {
+    return HSTORE_TYPE_NAME.equalsIgnoreCase(columnDefn.typeName());
   }
 
   private boolean isJsonBindCandidate(Schema schema) {
@@ -385,6 +407,38 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
               .SQL_COMPLEX_TYPES_ENABLE_CONFIG);
     }
     return false;
+  }
+
+  /**
+   * Whether PostgreSQL hstore columns should be emitted as a JSON-object STRING (mode
+   * {@code json}) rather than a Connect Map (mode {@code map}, the default). Only the source
+   * connector exposes this; the sink path always uses the Map representation.
+   */
+  private boolean hstoreAsJson() {
+    if (config instanceof io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig) {
+      return io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_JSON
+          .equalsIgnoreCase(config.getString(
+              io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig
+                  .HSTORE_HANDLING_MODE_CONFIG));
+    }
+    return false;
+  }
+
+  /**
+   * Build the Connect schema for a PostgreSQL hstore column, honoring
+   * {@code hstore.handling.mode}: a JSON-object STRING when {@code json}, otherwise a
+   * Map&lt;String,String&gt;.
+   */
+  private Schema hstoreSchema(ColumnDefinition columnDefn) {
+    if (hstoreAsJson()) {
+      return columnDefn.isOptional() ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA;
+    }
+    SchemaBuilder mapBuilder = SchemaBuilder.map(
+        Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA);
+    if (columnDefn.isOptional()) {
+      mapBuilder.optional();
+    }
+    return mapBuilder.build();
   }
 
   @Override

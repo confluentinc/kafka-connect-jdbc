@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.QuoteMethod;
@@ -51,6 +52,7 @@ import java.util.concurrent.ThreadLocalRandom;
 
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
@@ -781,7 +783,49 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
 
-  // validateQuery behaviour is inherited from GenericDatabaseDialect and exercised in
-  // GenericDatabaseDialectTest; no PostgreSQL-specific override exists to test here.
+  // validateQuery is inherited from GenericDatabaseDialect; tested in GenericDatabaseDialectTest.
+
+  // ========== Complex SQL types (sql.complex.types.enable) ==========
+
+  @Test
+  public void hstoreHandlingModeShouldSelectSourceSchema() {
+    // Default is "map": a Map<String,String>.
+    assertEquals(Type.MAP,
+        sourceFieldSchema(complexTypesDialect(), Types.OTHER, "hstore").type());
+
+    // "json": a plain (untagged) STRING, which the sink lands in a TEXT column.
+    PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG,
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_JSON);
+    Schema jsonMode = sourceFieldSchema(jsonDialect, Types.OTHER, "hstore");
+    assertEquals(Type.STRING, jsonMode.type());
+    assertNull(jsonMode.name());
+  }
+
+  // ----- complex-type test helpers -----
+
+  private PostgreSqlDatabaseDialect complexTypesDialect(String... extraProps) {
+    String[] props = new String[extraProps.length + 2];
+    props[0] = JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG;
+    props[1] = "true";
+    System.arraycopy(extraProps, 0, props, 2, extraProps.length);
+    return new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something", props));
+  }
+
+  private Schema sourceFieldSchema(
+      PostgreSqlDatabaseDialect dialect, int jdbcType, String typeName) {
+    ColumnDefinition column = column(jdbcType, typeName);
+    SchemaBuilder builder = SchemaBuilder.struct();
+    String fieldName = dialect.addFieldToSchema(column, builder);
+    return fieldName == null ? null : builder.build().field(fieldName).schema();
+  }
+
+  private ColumnDefinition column(int jdbcType, String typeName) {
+    return new ColumnDefinition(
+        new ColumnId(new TableId(null, null, "t"), "col"),
+        jdbcType, typeName, Object.class.getName(),
+        ColumnDefinition.Nullability.NULL, ColumnDefinition.Mutability.UNKNOWN,
+        0, 0, false, 1, false, false, false, false, false);
+  }
 
 }

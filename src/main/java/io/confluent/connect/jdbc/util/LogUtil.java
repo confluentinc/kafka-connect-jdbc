@@ -17,6 +17,8 @@ package io.confluent.connect.jdbc.util;
 
 import java.sql.BatchUpdateException;
 import java.sql.SQLException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * A stop-gap utility class to find a tradeoff between 2 things: To have reasonably good exception/
@@ -141,6 +143,132 @@ public class LogUtil {
     }
 
     return msg1 + errMsg.substring(errorStartIdx, errorEndIdx);
+  }
+
+  public static SQLException sanitizeSensitiveData(SQLException e) {
+    return (SQLException) sanitizeSensitiveData((Throwable) e);
+  }
+
+  public static Throwable sanitizeSensitiveData(Throwable t) {
+    if (!(t instanceof SQLException)) {
+      // Also the recursion termination condition, i.e. when t is null.
+      return t;
+    }
+    SQLException sqe = (SQLException) t;
+    Throwable next = sanitizeSensitiveData(sqe.getNextException());
+    SQLException out;
+    if (t instanceof BatchUpdateException) {
+      BatchUpdateException b = (BatchUpdateException) t;
+      out = new BatchUpdateException(
+          sanitizeMessage(b.getMessage()), b.getSQLState(), b.getErrorCode(),
+          b.getUpdateCounts());
+    } else {
+      out = new SQLException(
+          sanitizeMessage(sqe.getMessage()), sqe.getSQLState(), sqe.getErrorCode());
+    }
+    if (next instanceof SQLException) {
+      out.setNextException((SQLException) next);
+    }
+    out.setStackTrace(sqe.getStackTrace());
+    return out;
+  }
+
+  // Token that begins a value region inside a "Batch entry ... was aborted" statement.
+  private static final Pattern VALUE_REGION =
+      Pattern.compile("\\s(VALUES\\s*\\(|SET\\s|WHERE\\s)", Pattern.CASE_INSENSITIVE);
+  private static final String ABORTED_MARKER = " was aborted";
+  private static final String ERROR_MARKER = ": ERROR:";
+
+  // Right-edge markers that bound the safe ERROR reason; earliest match across all of them wins.
+  private static final Pattern[] REASON_END_MARKERS = {
+      Pattern.compile("\\n\\s*Detail:"),
+      Pattern.compile("\\n\\s*Hint:"),
+      Pattern.compile("\\n\\s*Where:"),
+      Pattern.compile("\\n\\s*Position:"),
+      Pattern.compile("\\s{2}Call getNextException"),
+  };
+
+  // Value-group redaction patterns applied after the statement-trim pass; these catch unquoted
+  // numerics/uuids that the single-quoted-literal pass misses because they aren't quoted.
+  private static final Pattern DETAIL_FAILING_ROW =
+      Pattern.compile("(Detail:\\s*Failing row contains \\()[^\\n]*?(\\)\\.?)");
+  private static final Pattern DETAIL_KEY =
+      Pattern.compile("(Detail:\\s*Key\\s*\\([^)]*\\)=\\()[^\\n]*?(\\))");
+  private static final Pattern DUPLICATE_KEY_VALUE_IS =
+      Pattern.compile("(The duplicate key value is \\()[^\\n]*?(\\)\\.?)");
+  private static final Pattern EQUALS_PAREN =
+      Pattern.compile("(=\\s*\\()[^)]*?(\\))");
+
+  // Single-quoted literal redaction; driver-agnostic. Identifiers use "" / `` / [] so are
+  // untouched by this pattern. Handles doubled '' escapes inside the literal.
+  private static final Pattern SINGLE_QUOTED = Pattern.compile("'(?:[^']|'')*'");
+
+  /**
+   * Package-private so it can be unit-tested directly. Three cooperating passes:
+   * (1) trim the pgjdbc/Redshift batch statement down to its safe head + bounded ERROR reason,
+   * (2) redact unquoted value groups in known positions,
+   * (3) redact single-quoted literals.
+   */
+  static String sanitizeMessage(String msg) {
+    if (msg == null) {
+      return null;
+    }
+    String base = trimBatchStatement(msg);
+    if (base == null) {
+      base = msg;
+    }
+    base = redactValueGroups(base);
+    base = redactSingleQuoted(base);
+    return base;
+  }
+
+  // Only for the pgjdbc/Redshift "Batch entry N <verb> ... was aborted" shape. Returns null
+  // (no-op / fall through to raw message) if the message doesn't match that shape.
+  private static String trimBatchStatement(String msg) {
+    if (!msg.trim().startsWith("Batch entry")) {
+      return null;
+    }
+    int abortedIdx = msg.indexOf(ABORTED_MARKER);
+    if (abortedIdx < 0) {
+      return null;
+    }
+    Matcher valueRegion = VALUE_REGION.matcher(msg);
+    int headEnd = (valueRegion.find() && valueRegion.start() < abortedIdx)
+        ? valueRegion.start() : abortedIdx;
+    String head = msg.substring(0, headEnd);
+
+    int errIdx = msg.indexOf(ERROR_MARKER, abortedIdx);
+    if (errIdx < 0) {
+      // Fail-closed: no reason marker found, keep only the statement head.
+      return head;
+    }
+    return head + boundedReason(msg, errIdx);
+  }
+
+  // Reason text starting at `start` (index of ": ERROR:"), cut at the earliest right-edge marker.
+  private static String boundedReason(String msg, int start) {
+    int end = msg.length();
+    for (Pattern pattern : REASON_END_MARKERS) {
+      Matcher m = pattern.matcher(msg);
+      if (m.find(start) && m.start() < end) {
+        end = m.start();
+      }
+    }
+    return msg.substring(start, end);
+  }
+
+  private static String redactValueGroups(String msg) {
+    String redactedReplacement = Matcher.quoteReplacement(REDACTED_VALUE);
+    msg = DETAIL_FAILING_ROW.matcher(msg).replaceAll("$1" + redactedReplacement + "$2");
+    msg = DETAIL_KEY.matcher(msg).replaceAll("$1" + redactedReplacement + "$2");
+    msg = DUPLICATE_KEY_VALUE_IS.matcher(msg).replaceAll("$1" + redactedReplacement + "$2");
+    msg = EQUALS_PAREN.matcher(msg).replaceAll("$1" + redactedReplacement + "$2");
+    return msg;
+  }
+
+  private static String redactSingleQuoted(String msg) {
+    String replacement = Matcher.quoteReplacement("'" + REDACTED_VALUE + "'");
+    return SINGLE_QUOTED.matcher(msg).replaceAll(replacement);
   }
 
   public static String maybeRedact(boolean shouldRedactSensitiveLogs, String msg) {

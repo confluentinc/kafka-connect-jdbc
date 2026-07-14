@@ -98,7 +98,7 @@ public class JdbcSinkTask extends SinkTask {
       }
     } catch (SQLException sqle) {
       SQLException trimmedException = shouldTrimSensitiveLogs
-              ? LogUtil.trimSensitiveData(sqle) : sqle;
+              ? LogUtil.sanitizeSensitiveData(sqle) : sqle;
       log.warn(
           "Write of {} records failed, remainingRetries={}",
           records.size(),
@@ -160,7 +160,7 @@ public class JdbcSinkTask extends SinkTask {
   private SQLException getAllMessagesException(SQLException sqle) {
     String sqleAllMessages = "Exception chain:" + System.lineSeparator();
     SQLException trimmedException = shouldTrimSensitiveLogs
-            ? LogUtil.trimSensitiveData(sqle) : sqle;
+            ? LogUtil.sanitizeSensitiveData(sqle) : sqle;
     for (Throwable e : trimmedException) {
       sqleAllMessages += e + System.lineSeparator();
     }

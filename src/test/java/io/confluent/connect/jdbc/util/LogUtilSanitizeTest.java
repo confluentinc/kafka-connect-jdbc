@@ -350,6 +350,89 @@ public class LogUtilSanitizeTest {
     Assert.assertEquals(once, twice);
   }
 
+  // ---------------------------------------------------------------------------------------------
+  // A1 + A2 (PR #1663 review fix-ups, phase 2): redaction-shape correctness against the REAL
+  // captured driver messages under .superpowers/pr1663-fixup/evidence/. Values (row data) must be
+  // redacted; identifiers (key/column/constraint/object names) must be kept; and values that
+  // legitimately contain ')' must not leak their tail past a naive first-')' terminator.
+  // ---------------------------------------------------------------------------------------------
+
+  @Test
+  public void testMySqlDuplicateEntryKeepsIdentifierRedactsValue() {
+    // Real MySQL capture: MySQL single-quotes BOTH the value and the identifier, so the redactor
+    // must anchor on the preceding keyword ('entry ' => value, 'for key ' => identifier).
+    SQLException e = new SQLException(
+        "Duplicate entry 'dupval)x' for key 'evid_dup.uk_name'", "23000", 1062);
+
+    String out = LogUtil.sanitizeSensitiveData(e).getMessage();
+
+    assertNoLeak(out, "dupval)x");
+    assertKept(out, "Duplicate entry", "for key ", "'evid_dup.uk_name'");
+  }
+
+  @Test
+  public void testMySqlIncorrectDatetimeKeepsColumnRedactsValue() {
+    // Real MySQL capture: 'value: ' => value (redact), 'for column ' => identifier (keep).
+    SQLException e = new SQLException(
+        "Data truncation: Incorrect datetime value: 'not-a-date)x' for column 'dt' at row 1",
+        "22007", 1292);
+
+    String out = LogUtil.sanitizeSensitiveData(e).getMessage();
+
+    assertNoLeak(out, "not-a-date)x");
+    assertKept(out, "Incorrect datetime value", "for column ", "'dt'", "at row 1");
+  }
+
+  @Test
+  public void testSqlServerPkKeepsConstraintAndObjectRedactsValue() {
+    // Real SQL Server capture: single quotes mark IDENTIFIERS (constraint, object) which must be
+    // KEPT; the redactable value is the parenthesized 'value is (1)' tuple.
+    SQLException e = new SQLException(
+        "Violation of PRIMARY KEY constraint 'pk_evid'. Cannot insert duplicate key in object "
+            + "'dbo.evid_pk'. The duplicate key value is (1).", "23000", 2627);
+
+    String out = LogUtil.sanitizeSensitiveData(e).getMessage();
+
+    assertNoLeak(out, "is (1)");
+    assertKept(out, "Violation of PRIMARY KEY", "constraint 'pk_evid'", "in object 'dbo.evid_pk'",
+        "The duplicate key value is (");
+  }
+
+  @Test
+  public void testPgFailingRowParenInValueDoesNotLeakTail() {
+    // Real Postgres capture: the row value 'foo)bar(baz)qux' contains ')', so a non-greedy
+    // first-')' terminator would leak ')bar(baz)qux'. The true terminator is ').'.
+    SQLException e = new SQLException(
+        "ERROR: null value in column \"email\" of relation \"evid_orders\" violates not-null "
+            + "constraint\n"
+            + "  Detail: Failing row contains (10, null, foo)bar(baz)qux).", "23502", 0);
+
+    String out = LogUtil.sanitizeSensitiveData(e).getMessage();
+
+    assertNoLeak(out, "foo)bar(baz)qux", ")bar", "(baz)", "qux");
+    assertKept(out, "\"email\"", "\"evid_orders\"", "violates not-null constraint",
+        "Detail: Failing row contains (", ").");
+    // Nothing after the value survives unredacted: the whole tuple is replaced.
+    Assert.assertTrue(out.endsWith("Detail: Failing row contains (<redacted>)."));
+  }
+
+  @Test
+  public void testPgDetailKeyParenInValueKeepsColumnListRedactsValue() {
+    // Real Postgres capture: 'Key (code)' is the key COLUMN LIST (identifier, keep); the value
+    // 'dupcode)x' contains ')' and must be redacted whole ('=(...)' up to ' already exists').
+    SQLException e = new SQLException(
+        "ERROR: duplicate key value violates unique constraint \"evid_orders_code_key\"\n"
+            + "  Detail: Key (code)=(dupcode)x) already exists.", "23505", 0);
+
+    String out = LogUtil.sanitizeSensitiveData(e).getMessage();
+
+    assertNoLeak(out, "dupcode)x", "dupcode");
+    assertKept(out, "\"evid_orders_code_key\"", "duplicate key value violates unique constraint",
+        "Detail: Key (code)=(", ") already exists.");
+    // No tail leak: the whole value is replaced, the ')x' tail cannot survive.
+    Assert.assertTrue(out.endsWith("Detail: Key (code)=(<redacted>) already exists."));
+  }
+
   @Test
   public void testStackTraceIsPreserved() {
     SQLException e = new SQLException("Duplicate entry 'canary-uuid-PII' for key 'PRIMARY'");

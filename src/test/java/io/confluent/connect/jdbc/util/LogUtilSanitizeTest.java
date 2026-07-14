@@ -216,6 +216,20 @@ public class LogUtilSanitizeTest {
   }
 
   @Test
+  public void testPgBatchAbortedNoErrorMarkerFailsClosedToHeadOnly() {
+    BatchUpdateException e = new BatchUpdateException(
+        "Batch entry 0 UPDATE \"t\" SET \"x\" = ('secret-canary') "
+            + "was aborted due to a driver-internal error",
+        new int[0]);
+
+    SQLException sanitized = LogUtil.sanitizeSensitiveData(e);
+    String out = sanitized.getMessage();
+
+    assertNoLeak(out, "secret-canary");
+    assertKept(out, "UPDATE");
+  }
+
+  @Test
   public void testNonSqlThrowableReturnedUnchanged() {
     Throwable t = new RuntimeException("secret-value");
     Assert.assertSame(t, LogUtil.sanitizeSensitiveData(t));

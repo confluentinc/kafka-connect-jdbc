@@ -199,9 +199,43 @@ public class LogUtil {
   private static final Pattern EQUALS_PAREN =
       Pattern.compile("(=\\s*\\()[^)]*?(\\))");
 
-  // Single-quoted literal redaction; driver-agnostic. Identifiers use "" / `` / [] so are
-  // untouched by this pattern. Handles doubled '' escapes inside the literal.
-  private static final Pattern SINGLE_QUOTED = Pattern.compile("'(?:[^']|'')*'");
+  // Delimiters that may legitimately precede an opening value-quote: whitespace, or one of the
+  // punctuation characters that typically introduce a SQL literal (open-paren, equals, comma,
+  // colon). A quote preceded by anything else (e.g. a letter, as in a prose contraction like
+  // "couldn't") is treated as a stray apostrophe, not the start of a quoted value, so it can't
+  // shift the pairing and hide a genuine value-quote that follows it.
+  private static final String OPENING_QUOTE_DELIMITER_PUNCTUATION = "(=,:";
+
+  private static boolean isOpeningQuoteContext(String msg, int idx) {
+    if (idx == 0) {
+      return true;
+    }
+    char prev = msg.charAt(idx - 1);
+    if (Character.isWhitespace(prev)) {
+      return true;
+    }
+    return OPENING_QUOTE_DELIMITER_PUNCTUATION.indexOf(prev) >= 0;
+  }
+
+  // Scans forward from `start` (just past an opening quote) for the matching closing quote,
+  // treating a doubled '' as an escaped literal quote (not the close), mirroring the semantics
+  // of the old '(?:[^']|'')*' pattern. Returns -1 if no closing quote is found.
+  private static int findClosingQuote(String msg, int start) {
+    int n = msg.length();
+    int j = start;
+    while (j < n) {
+      char c = msg.charAt(j);
+      if (c == '\'') {
+        if (j + 1 < n && msg.charAt(j + 1) == '\'') {
+          j += 2;
+          continue;
+        }
+        return j;
+      }
+      j++;
+    }
+    return -1;
+  }
 
   /**
    * Package-private so it can be unit-tested directly. Three cooperating passes:
@@ -266,9 +300,36 @@ public class LogUtil {
     return msg;
   }
 
+  // Single-quoted literal redaction; driver-agnostic. Identifiers use "" / `` / [] so are
+  // untouched by this scan. Handles doubled '' escapes inside the literal, and only pairs a
+  // quote as an "opening" quote when it sits in a position where a real SQL literal would start
+  // (see isOpeningQuoteContext) so a stray prose apostrophe (e.g. "couldn't") can't shift the
+  // pairing and leave a genuine value unredacted. Fail-closed: an opening quote with no matching
+  // close redacts through end-of-line/string rather than leaving the tail unredacted.
   private static String redactSingleQuoted(String msg) {
-    String replacement = Matcher.quoteReplacement("'" + REDACTED_VALUE + "'");
-    return SINGLE_QUOTED.matcher(msg).replaceAll(replacement);
+    StringBuilder sb = new StringBuilder(msg.length());
+    int n = msg.length();
+    int i = 0;
+    while (i < n) {
+      char c = msg.charAt(i);
+      if (c == '\'' && isOpeningQuoteContext(msg, i)) {
+        int closeIdx = findClosingQuote(msg, i + 1);
+        if (closeIdx >= 0) {
+          sb.append('\'').append(REDACTED_VALUE).append('\'');
+          i = closeIdx + 1;
+          continue;
+        }
+        // Fail-closed: unmatched opening quote, redact through end-of-line/string.
+        int eol = msg.indexOf('\n', i);
+        int end = eol < 0 ? n : eol;
+        sb.append('\'').append(REDACTED_VALUE);
+        i = end;
+        continue;
+      }
+      sb.append(c);
+      i++;
+    }
+    return sb.toString();
   }
 
   public static String maybeRedact(boolean shouldRedactSensitiveLogs, String msg) {

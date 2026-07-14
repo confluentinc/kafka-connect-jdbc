@@ -102,7 +102,7 @@ public class JdbcDbWriterTest {
   }
 
   @Test
-  public void maybeTrimReturnsExceptionAsIsWhenFlagDisabled() {
+  public void maybeSanitizeReturnsExceptionAsIsWhenFlagDisabled() {
     Map<String, String> props = new HashMap<>();
     props.put("connection.url", sqliteHelper.sqliteUri());
     props.put("trim.sensitive.log", "false");
@@ -112,14 +112,14 @@ public class JdbcDbWriterTest {
             "  Detail: Failing row contains (1, 2, 3, null).  Call getNextException to see other errors in the batch.",
             new int[0]);
 
-    Throwable result = writer.maybeTrim(exception);
+    Throwable result = writer.maybeSanitize(exception);
 
     assertSame(exception, result);
     assertTrue(result.getMessage().contains("VALUES"));
   }
 
   @Test
-  public void maybeTrimRedactsBatchUpdateExceptionWhenFlagEnabled() {
+  public void maybeSanitizeRedactsBatchUpdateExceptionWhenFlagEnabled() {
     Map<String, String> props = new HashMap<>();
     props.put("connection.url", sqliteHelper.sqliteUri());
     props.put("trim.sensitive.log", "true");
@@ -129,7 +129,7 @@ public class JdbcDbWriterTest {
             "  Detail: Failing row contains (1, 2, 3, null).  Call getNextException to see other errors in the batch.",
             new int[0]);
 
-    Throwable result = writer.maybeTrim(exception);
+    Throwable result = writer.maybeSanitize(exception);
 
     assertTrue(!result.getMessage().contains("VALUES"));
   }

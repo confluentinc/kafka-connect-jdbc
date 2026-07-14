@@ -87,12 +87,12 @@ public class JdbcDbWriter {
       log.trace("Committing transaction");
       connection.commit();
     } catch (SQLException | TableAlterOrCreateException e) {
-      log.error("Error during write operation. Attempting rollback.", maybeTrim(e));
+      log.error("Error during write operation. Attempting rollback.", maybeSanitize(e));
       try {
         connection.rollback();
         log.info("Successfully rolled back transaction");
       } catch (SQLException sqle) {
-        log.error("Failed to rollback transaction", maybeTrim(sqle));
+        log.error("Failed to rollback transaction", maybeSanitize(sqle));
         e.addSuppressed(sqle);
       } finally {
         throw e;
@@ -101,7 +101,7 @@ public class JdbcDbWriter {
     log.info("Completed write operation for {} records to the database", records.size());
   }
 
-  Throwable maybeTrim(Throwable t) {
+  Throwable maybeSanitize(Throwable t) {
     return (config.trimSensitiveLogsEnabled && t instanceof SQLException)
         ? LogUtil.sanitizeSensitiveData((SQLException) t) : t;
   }

@@ -511,6 +511,104 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
 
     privateMethod.setAccessible(false);
   }
+  @Test
+  public void getAllMessagesExceptionTrimmedRedactsValueAndKeepsSkeleton()
+      throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+    JdbcSinkTask task = new JdbcSinkTask();
+    SQLException exception =
+        new SQLException("Duplicate entry 'canary-secret-PII' for key 'PRIMARY'", "23000", 1);
+    Method privateMethod =
+        JdbcSinkTask.class.getDeclaredMethod("getAllMessagesException", SQLException.class);
+    privateMethod.setAccessible(true);
+    task.shouldTrimSensitiveLogs = true;
+
+    SQLException result = (SQLException) privateMethod.invoke(task, exception);
+    String all = collectChainMessages(result);
+
+    assertTrue("raw value leaked: " + all, !all.contains("canary-secret-PII"));
+    assertTrue("redaction marker missing: " + all, all.contains("<redacted>"));
+    assertTrue(all.contains("Duplicate entry"));
+
+    privateMethod.setAccessible(false);
+  }
+
+  @Test
+  public void writeFailurePathSanitizesWhenTrimEnabled() throws SQLException {
+    List<SinkRecord> records = createRecordsList(1);
+    SQLException exception =
+        new SQLException("Duplicate entry 'canary-secret-PII' for key 'PRIMARY'", "23000", 1);
+    mockWriter.write(records);
+    expectLastCall().andThrow(exception);
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(ctx);
+    expect(ctx.errantRecordReporter()).andReturn(null);
+    replayAll();
+
+    Map<String, String> props = setupBasicProps(0, 0);
+    props.put(JdbcSinkConfig.TRIM_SENSITIVE_LOG_ENABLED, "true");
+    task.start(props);
+
+    try {
+      task.put(records);
+      fail();
+    } catch (ConnectException e) {
+      assertEquals(SQLException.class, e.getCause().getClass());
+      String all = collectChainMessages((SQLException) e.getCause());
+      assertTrue("raw value leaked: " + all, !all.contains("canary-secret-PII"));
+      assertTrue("redaction marker missing: " + all, all.contains("<redacted>"));
+    }
+    verifyAll();
+  }
+
+  @Test
+  public void writeFailurePathKeepsRawWhenTrimDisabled() throws SQLException {
+    List<SinkRecord> records = createRecordsList(1);
+    SQLException exception =
+        new SQLException("Duplicate entry 'canary-secret-PII' for key 'PRIMARY'", "23000", 1);
+    mockWriter.write(records);
+    expectLastCall().andThrow(exception);
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(ctx);
+    expect(ctx.errantRecordReporter()).andReturn(null);
+    replayAll();
+
+    Map<String, String> props = setupBasicProps(0, 0);
+    props.put(JdbcSinkConfig.TRIM_SENSITIVE_LOG_ENABLED, "false");
+    task.start(props);
+
+    try {
+      task.put(records);
+      fail();
+    } catch (ConnectException e) {
+      assertEquals(SQLException.class, e.getCause().getClass());
+      String all = collectChainMessages((SQLException) e.getCause());
+      assertTrue("raw value should survive OFF path: " + all,
+          all.contains("Duplicate entry 'canary-secret-PII' for key 'PRIMARY'"));
+      assertTrue("marker unexpectedly present on OFF path: " + all, !all.contains("<redacted>"));
+    }
+    verifyAll();
+  }
+
+  private static String collectChainMessages(SQLException sqle) {
+    StringBuilder sb = new StringBuilder();
+    for (Throwable t : sqle) {
+      sb.append(t.getMessage()).append(System.lineSeparator());
+    }
+    return sb.toString();
+  }
+
   private List<SinkRecord> createRecordsList(int batchSize) {
     List<SinkRecord> records = new ArrayList<>();
     for (int i = 0; i < batchSize; i++) {

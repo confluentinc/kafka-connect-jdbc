@@ -30,6 +30,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 public class JdbcSinkConfigTest {
 
@@ -174,7 +175,7 @@ public class JdbcSinkConfigTest {
   @Test
   public void shouldDefaultTrimSensitiveLogToTrue() {
     createConfig();
-    assertEquals(true, config.trimSensitiveLogsEnabled);
+    assertTrue(config.trimSensitiveLogsEnabled);
   }
 
   protected void createConfig() {

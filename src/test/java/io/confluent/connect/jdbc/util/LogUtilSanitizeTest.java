@@ -244,9 +244,110 @@ public class LogUtilSanitizeTest {
   }
 
   @Test
-  public void testNonSqlThrowableReturnedUnchanged() {
-    Throwable t = new RuntimeException("secret-value");
-    Assert.assertSame(t, LogUtil.sanitizeSensitiveData(t));
+  public void testNonSqlCausePreservedUnchanged() {
+    // A non-SQLException cause is run through the same sanitize path, which returns it as-is.
+    Throwable cause = new RuntimeException("some-non-sql-cause");
+    SQLException e = new SQLException("Duplicate entry 'canary-uuid-PII' for key 'PRIMARY'");
+    e.initCause(cause);
+
+    SQLException sanitized = LogUtil.sanitizeSensitiveData(e);
+    assertNoLeak(sanitized.getMessage(), "canary-uuid-PII");
+    Assert.assertSame(cause, sanitized.getCause());
+  }
+
+  @Test
+  public void testCauseIsPreservedAndSanitized() {
+    // B1: getCause() must be carried onto the rebuilt exception, and the cause itself sanitized so
+    // it cannot reintroduce a raw value.
+    SQLException cause = new SQLException(
+        "Batch entry 0 UPDATE \"sch\".\"tbl\" SET \"email\" = ('canary@leak.test') "
+            + "WHERE \"id\" = ('99') was aborted: ERROR: some error", "23000", 7);
+    SQLException e = new SQLException(
+        "Duplicate entry 'canary-uuid-PII' for key 'PRIMARY'", "23001", 1);
+    e.initCause(cause);
+
+    SQLException sanitized = LogUtil.sanitizeSensitiveData(e);
+
+    Throwable sanitizedCause = sanitized.getCause();
+    Assert.assertNotNull("Cause was dropped", sanitizedCause);
+    Assert.assertTrue(sanitizedCause instanceof SQLException);
+    assertNoLeak(sanitizedCause.getMessage(), "canary@leak.test", "'99'");
+    assertKept(sanitizedCause.getMessage(), "sch", "tbl");
+    Assert.assertEquals("23000", ((SQLException) sanitizedCause).getSQLState());
+    Assert.assertEquals(7, ((SQLException) sanitizedCause).getErrorCode());
+    assertNoLeak(sanitized.getMessage(), "canary-uuid-PII");
+  }
+
+  @Test
+  public void testDeepNextExceptionChainDoesNotStackOverflow() {
+    // B1: batch failures chain one SQLException per failing row, so depth is input-influenced.
+    // A deep chain must be rebuilt iteratively without a StackOverflowError.
+    final int depth = 20000;
+    SQLException head = new SQLException(
+        "Duplicate entry 'canary-uuid-PII' for key 'PRIMARY'", "23000", 1);
+    SQLException tail = head;
+    for (int i = 1; i < depth; i++) {
+      SQLException next = new SQLException(
+          "Duplicate entry 'canary-uuid-PII' for key 'PRIMARY'", "23000", 1);
+      tail.setNextException(next);
+      tail = next;
+    }
+
+    SQLException sanitized = LogUtil.sanitizeSensitiveData(head);
+
+    int count = 0;
+    SQLException cur = sanitized;
+    while (cur != null) {
+      assertNoLeak(cur.getMessage(), "canary-uuid-PII");
+      assertKept(cur.getMessage(), "Duplicate entry");
+      count++;
+      cur = cur.getNextException();
+    }
+    Assert.assertEquals(depth, count);
+  }
+
+  @Test
+  public void testBatchUpdateNonEmptyUpdateCountsPreserved() {
+    // B4: current fixtures all use new int[0]; assert a NON-empty getUpdateCounts() survives.
+    // Statement.EXECUTE_FAILED (-3) is a legitimate per-row count that must survive round-trip.
+    int[] counts = new int[] {1, java.sql.Statement.EXECUTE_FAILED, 0, 3};
+    BatchUpdateException e = new BatchUpdateException(
+        "Batch entry 0 INSERT INTO \"sch\".\"tbl\" (\"c\") VALUES ('canary@leak.test') "
+            + "was aborted: ERROR: some error",
+        "23000", 42, counts);
+
+    SQLException sanitized = LogUtil.sanitizeSensitiveData(e);
+
+    assertNoLeak(sanitized.getMessage(), "canary@leak.test");
+    Assert.assertTrue(sanitized instanceof BatchUpdateException);
+    Assert.assertArrayEquals(counts, ((BatchUpdateException) sanitized).getUpdateCounts());
+    Assert.assertEquals("23000", sanitized.getSQLState());
+    Assert.assertEquals(42, sanitized.getErrorCode());
+  }
+
+  @Test
+  public void testSanitizeMessageIsIdempotentOnBatchFixture() {
+    // B3: a re-logged/rolled exception must not be double-mangled.
+    String raw =
+        "Batch entry 0 INSERT INTO \"nextapi_main\".\"clean\".\"clean.lognet-di.address\" "
+            + "(\"id\",\"country\") VALUES (('lognetdi:address:6d996d96'),('CN')) was aborted: "
+            + "ERROR: null value in column \"shipment_id\" violates not-null constraint\n"
+            + "  Detail: Failing row contains (1783660800.785, CN, null).  "
+            + "Call getNextException to see other errors in the batch.";
+    String once = LogUtil.sanitizeMessage(raw);
+    String twice = LogUtil.sanitizeMessage(once);
+    Assert.assertEquals(once, twice);
+  }
+
+  @Test
+  public void testSanitizeMessageIsIdempotentOnDetailFixture() {
+    String raw =
+        "ERROR: duplicate key value violates unique constraint \"pg_type_typname_nsp_index\"\n"
+            + "  Detail: Key (typname, typnamespace)=(TBAADM_PAYMENT_ORDER_HEADER_TABLE, 17320) "
+            + "already exists.";
+    String once = LogUtil.sanitizeMessage(raw);
+    String twice = LogUtil.sanitizeMessage(once);
+    Assert.assertEquals(once, twice);
   }
 
   @Test

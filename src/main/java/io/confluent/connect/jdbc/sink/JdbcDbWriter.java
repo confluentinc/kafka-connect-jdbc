@@ -103,7 +103,7 @@ public class JdbcDbWriter {
 
   Throwable maybeTrim(Throwable t) {
     return (config.trimSensitiveLogsEnabled && t instanceof SQLException)
-        ? LogUtil.trimSensitiveData((SQLException) t) : t;
+        ? LogUtil.sanitizeSensitiveData((SQLException) t) : t;
   }
 
   void closeQuietly() {

@@ -171,6 +171,12 @@ public class JdbcSinkConfigTest {
     createConfig();
   }
 
+  @Test
+  public void shouldDefaultTrimSensitiveLogToTrue() {
+    createConfig();
+    assertEquals(true, config.trimSensitiveLogsEnabled);
+  }
+
   protected void createConfig() {
     config = new JdbcSinkConfig(props);
   }

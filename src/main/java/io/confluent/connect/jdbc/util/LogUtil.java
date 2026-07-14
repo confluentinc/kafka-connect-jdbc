@@ -128,15 +128,23 @@ public class LogUtil {
   };
 
   // Value-group redaction patterns applied after the statement-trim pass; these catch unquoted
-  // numerics/uuids that the single-quoted-literal pass misses because they aren't quoted.
+  // numerics/uuids/tuples that the single-quoted-literal pass misses because they aren't quoted.
+  // A2 (finding #2): each group is anchored on the driver's REAL terminating punctuation, not the
+  // first ')', because Postgres row/key values legitimately contain ')' (e.g.
+  // "foo)bar(baz)qux", "dupcode)x") and a non-greedy-to-first-')' match would leak the tail. The
+  // middle is matched greedily on a single line ('[^\\n]*' never crosses a newline) up to the
+  // terminator.
+  //   DETAIL_FAILING_ROW terminates at ').' -> "...contains (10, null, foo)bar(baz)qux)."
+  //   DETAIL_KEY terminates at ') already exists' -> "Key (code)=(dupcode)x) already exists."
+  //     ('(code)' is the key COLUMN LIST identifier and is kept; only the '=(...)' value redacts)
+  //   DUPLICATE_KEY_VALUE_IS terminates at ').' -> "The duplicate key value is (1)."
+  // The trailing '.' is optional so a driver that omits it still redacts (fail-closed).
   private static final Pattern DETAIL_FAILING_ROW =
-      Pattern.compile("(Detail:\\s*Failing row contains \\()[^\\n]*?(\\)\\.?)");
+      Pattern.compile("(Detail:\\s*Failing row contains \\()[^\\n]*(\\)\\.?)");
   private static final Pattern DETAIL_KEY =
-      Pattern.compile("(Detail:\\s*Key\\s*\\([^)]*\\)=\\()[^\\n]*?(\\))");
+      Pattern.compile("(Detail:\\s*Key\\s*\\([^)\\n]*\\)=\\()[^\\n]*(\\) already exists)");
   private static final Pattern DUPLICATE_KEY_VALUE_IS =
-      Pattern.compile("(The duplicate key value is \\()[^\\n]*?(\\)\\.?)");
-  private static final Pattern EQUALS_PAREN =
-      Pattern.compile("(=\\s*\\()[^)]*?(\\))");
+      Pattern.compile("(The duplicate key value is \\()[^\\n]*(\\)\\.?)");
 
   // Delimiters that may legitimately precede an opening value-quote: whitespace, or one of the
   // punctuation characters that typically introduce a SQL literal (open-paren, equals, comma,
@@ -144,6 +152,25 @@ public class LogUtil {
   // "couldn't") is treated as a stray apostrophe, not the start of a quoted value, so it can't
   // shift the pairing and hide a genuine value-quote that follows it.
   private static final String OPENING_QUOTE_DELIMITER_PUNCTUATION = "(=,:";
+
+  // A1 (finding #1): single-quoted tokens that are IDENTIFIERS (key/column/constraint/object
+  // names) must be KEPT, not redacted. Drivers that single-quote identifiers (MySQL quotes BOTH
+  // values and identifiers; SQL Server quotes identifiers) always introduce them with one of these
+  // keyword phrases, so a single-quoted token is kept only when its opening quote is immediately
+  // preceded (case-insensitively, allowing the whitespace the drivers emit) by one of them:
+  //   "for key '<id>'" / "for column '<id>'" (MySQL), "constraint '<id>'" and "object '<id>'"
+  //   (SQL Server; "object" also covers "in object"). Everything else (e.g. MySQL "entry '<val>'",
+  //   "value: '<val>'") is redacted, so the fail-closed default for an unknown single-quoted token
+  //   stays REDACT.
+  private static final Pattern KEEP_IDENTIFIER_PREFIX =
+      Pattern.compile("(?:for\\s+key|for\\s+column|constraint|object)\\s+$",
+          Pattern.CASE_INSENSITIVE);
+
+  // True when the single-quoted token opening at `quoteIdx` is introduced by an identifier keyword
+  // phrase and should therefore be preserved rather than redacted.
+  private static boolean isKeptIdentifierQuote(String msg, int quoteIdx) {
+    return KEEP_IDENTIFIER_PREFIX.matcher(msg).region(0, quoteIdx).find();
+  }
 
   private static boolean isOpeningQuoteContext(String msg, int idx) {
     if (idx == 0) {
@@ -235,7 +262,6 @@ public class LogUtil {
     msg = DETAIL_FAILING_ROW.matcher(msg).replaceAll("$1" + redactedReplacement + "$2");
     msg = DETAIL_KEY.matcher(msg).replaceAll("$1" + redactedReplacement + "$2");
     msg = DUPLICATE_KEY_VALUE_IS.matcher(msg).replaceAll("$1" + redactedReplacement + "$2");
-    msg = EQUALS_PAREN.matcher(msg).replaceAll("$1" + redactedReplacement + "$2");
     return msg;
   }
 
@@ -254,7 +280,12 @@ public class LogUtil {
       if (c == '\'' && isOpeningQuoteContext(msg, i)) {
         int closeIdx = findClosingQuote(msg, i + 1);
         if (closeIdx >= 0) {
-          sb.append('\'').append(REDACTED_VALUE).append('\'');
+          if (isKeptIdentifierQuote(msg, i)) {
+            // A1: identifier token (e.g. after "for key "/"constraint "/"object ") - keep verbatim.
+            sb.append(msg, i, closeIdx + 1);
+          } else {
+            sb.append('\'').append(REDACTED_VALUE).append('\'');
+          }
           i = closeIdx + 1;
           continue;
         }

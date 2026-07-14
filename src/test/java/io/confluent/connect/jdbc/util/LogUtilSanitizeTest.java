@@ -230,6 +230,20 @@ public class LogUtilSanitizeTest {
   }
 
   @Test
+  public void testStrayApostropheBeforeSingleQuotedValueDoesNotShiftPairing() {
+    // A prose apostrophe (e.g. "couldn't") occurring before a genuinely single-quoted value
+    // must not pair with the value's opening quote and shift redaction off by one. Fail-closed:
+    // the value must still be redacted regardless of the stray apostrophe.
+    SQLException e = new SQLException(
+        "ERROR: parser couldn't handle value 'canary-secret-PII' at position 3", "42601", 0);
+
+    SQLException sanitized = LogUtil.sanitizeSensitiveData(e);
+    String out = sanitized.getMessage();
+
+    assertNoLeak(out, "canary-secret-PII");
+  }
+
+  @Test
   public void testNonSqlThrowableReturnedUnchanged() {
     Throwable t = new RuntimeException("secret-value");
     Assert.assertSame(t, LogUtil.sanitizeSensitiveData(t));

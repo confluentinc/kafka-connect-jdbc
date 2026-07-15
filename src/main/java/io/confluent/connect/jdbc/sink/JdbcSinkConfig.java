@@ -337,7 +337,7 @@ public class JdbcSinkConfig extends AbstractConfig {
       + AUTO_EVOLVE + "``).";
 
   public static final String TRIM_SENSITIVE_LOG_ENABLED = "trim.sensitive.log";
-  private static final String TRIM_SENSITIVE_LOG_ENABLED_DEFAULT = "false";
+  private static final String TRIM_SENSITIVE_LOG_ENABLED_DEFAULT = "true";
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
 

@@ -30,6 +30,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 public class JdbcSinkConfigTest {
 
@@ -169,6 +170,12 @@ public class JdbcSinkConfigTest {
     props.put(JdbcSinkConfig.CREDENTIALS_PROVIDER_CLASS_CONFIG,
         SqliteHelper.class.getName());
     createConfig();
+  }
+
+  @Test
+  public void shouldDefaultTrimSensitiveLogToTrue() {
+    createConfig();
+    assertTrue(config.trimSensitiveLogsEnabled);
   }
 
   protected void createConfig() {

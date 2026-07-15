@@ -17,130 +17,164 @@ package io.confluent.connect.jdbc.util;
 
 import java.sql.BatchUpdateException;
 import java.sql.SQLException;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.IdentityHashMap;
+import java.util.function.UnaryOperator;
 
 /**
- * A stop-gap utility class to find a tradeoff between 2 things: To have reasonably good exception/
- * error information to investigate incidents while at the same time avoid logging sensitive data.
+ * Rebuilds throwable graphs with sensitive data removed before connector code logs them.
+ *
+ * <p>Source connector redaction replaces entire messages. Sink sanitization preserves diagnostic
+ * structure and delegates message parsing to a grammar for specific pgjdbc, MySQL, and SQL Server
+ * shapes. Recognized shapes with incomplete boundaries fall closed.
  */
 public class LogUtil {
   private static final String REDACTED_VALUE = "<redacted>";
 
+  /**
+   * @deprecated Use {@link #sanitizeSensitiveData(SQLException)}.
+   */
+  @Deprecated
   public static SQLException trimSensitiveData(SQLException e) {
-    return (SQLException) trimSensitiveData((Throwable)e);
+    return sanitizeSensitiveData(e);
   }
 
+  /**
+   * @deprecated Use {@link #sanitizeSensitiveData(SQLException)} for SQL exceptions.
+   */
+  @Deprecated
   public static Throwable trimSensitiveData(Throwable t) {
-    if (!(t instanceof SQLException)) {
-      // t is not a SQLException; return as-is.
-      // This is also the recursion termination condition i.e. when t is null.
-      return t;
-    }
-
-    if (!(t instanceof BatchUpdateException)) {
-      // t is a SQLException, but not BatchUpdateException.
-      SQLException oldSqe = (SQLException)t;
-      SQLException newSqe = new SQLException(oldSqe.getLocalizedMessage());
-      newSqe.setNextException(trimSensitiveData(oldSqe.getNextException()));
-      return newSqe;
-    }
-
-    // At this point t is BatchUpdateException; return a new trimmed version of it.
-    BatchUpdateException e = (BatchUpdateException)t;
-    return new BatchUpdateException(getNonSensitiveErrorMessage(e.getLocalizedMessage()),
-        e.getUpdateCounts());
+    return t instanceof SQLException ? sanitizeSensitiveData((SQLException) t) : t;
   }
-
-  // Structured ServerErrorMessage labels — only ever appear at field boundaries, so safe to trust.
-  // Redshift's redshift-jdbc42 driver is a pgjdbc fork and emits the same shape.
-  private static final String[] STRUCTURED_END_MARKERS = {
-      "\n  Detail: ",
-      "\n  Hint: "
-  };
-
-  // pgjdbc BatchResultHandler suffix (reused verbatim by redshift-jdbc42). Free-form sentence text,
-  // so used only as a fallback when no structured label is present — a reason could plausibly
-  // contain this phrase (e.g., a trigger's RAISE EXCEPTION message), in which case earliest-wins
-  // across both tiers would truncate the reason mid-sentence.
-  private static final String BATCH_SUFFIX_FALLBACK = "  Call getNextException ";
 
   public static SQLException redactSensitiveData(SQLException e) {
     return (SQLException) redactSensitiveData((Throwable) e);
   }
 
   public static Throwable redactSensitiveData(Throwable t) {
+    // The whole message is replaced with the redaction marker; causes remain intentionally dropped.
+    return rebuildChain(t, message -> REDACTED_VALUE, false);
+  }
+
+  /**
+   * Rebuilds an exception graph with sensitive values removed from every retained message.
+   *
+   * <p>{@link BatchUpdateException} nodes remain {@code BatchUpdateException} instances and retain
+   * their update counts. Every other {@link SQLException} subtype is represented by a plain
+   * {@code SQLException}; generic subtype reconstruction is intentionally avoided because driver
+   * constructors do not share a safe contract. All SQL nodes retain their SQLState, vendor code,
+   * stack trace, next-exception edge, and sanitized cause edge.
+   *
+   * @param e the SQL exception to sanitize
+   * @return a rebuilt exception graph, or {@code null} when {@code e} is {@code null}
+   */
+  public static SQLException sanitizeSensitiveData(SQLException e) {
+    return sanitize(e);
+  }
+
+  public static SafeSqlException sanitize(SQLException e) {
+    try {
+      if (e instanceof SafeSqlException) {
+        return new SafeSqlException(((SafeSqlException) e).diagnostic());
+      }
+      SafeSqlDiagnostic.Kind kind = e instanceof java.sql.BatchUpdateException
+          ? SafeSqlDiagnostic.Kind.BATCH_UPDATE_EXCEPTION
+          : SafeSqlDiagnostic.Kind.SQL_EXCEPTION;
+      DiagnosticCategory.Classification c = DiagnosticCategory.classify(e.getSQLState());
+      return new SafeSqlException(
+          SafeSqlDiagnostic.skeleton(kind, c.category, c.canonicalSqlState));
+    } catch (RuntimeException ex) {
+      return new SafeSqlException(SafeSqlDiagnostic.skeleton(
+          SafeSqlDiagnostic.Kind.SQL_EXCEPTION, DiagnosticCategory.SQL_ERROR, null));
+    }
+  }
+
+  public static SafeSqlException sanitizeReconstructed(
+      SQLException e, String safeStatement, String vendorPrefix) {
+    try {
+      DiagnosticCategory.Classification c = DiagnosticCategory.classify(e.getSQLState());
+      String oracleTag = "ORA".equals(vendorPrefix) ? OracleErrorCode.tag(e.getErrorCode()) : null;
+      return new SafeSqlException(SafeSqlDiagnostic.reconstructed(
+          safeStatement, c.category, c.canonicalSqlState, oracleTag));
+    } catch (RuntimeException ex) {
+      return new SafeSqlException(SafeSqlDiagnostic.skeleton(
+          SafeSqlDiagnostic.Kind.SQL_EXCEPTION, DiagnosticCategory.SQL_ERROR, null));
+    }
+  }
+
+  /**
+   * Rebuilds both next-exception and cause edges without recursion. Identity tracking bounds cyclic
+   * graphs and preserves shared edges. Non-SQL roots retain the historical pass-through behavior;
+   * non-SQL causes are rebuilt as generic, fully redacted throwables.
+   */
+  private static Throwable rebuildChain(
+      Throwable t, UnaryOperator<String> transform, boolean preserveCause) {
     if (!(t instanceof SQLException)) {
       return t;
     }
 
-    if (!(t instanceof BatchUpdateException)) {
-      // t is a SQLException, but not BatchUpdateException.
-      SQLException oldSqlException = (SQLException) t;
-      SQLException newSqlException =
-          new SQLException(
-              REDACTED_VALUE, oldSqlException.getSQLState(), oldSqlException.getErrorCode());
-      newSqlException.setNextException(redactSensitiveData(oldSqlException.getNextException()));
-      newSqlException.setStackTrace(oldSqlException.getStackTrace());
-      return newSqlException;
-    }
+    IdentityHashMap<Throwable, Throwable> rebuilt = new IdentityHashMap<>();
+    Deque<Throwable> pending = new ArrayDeque<>();
+    rebuilt.put(t, rebuildNode(t, transform));
+    pending.push(t);
 
-    // At this point t is BatchUpdateException; redact its message too.
-    BatchUpdateException oldBatchUpdateException = (BatchUpdateException) t;
-    BatchUpdateException newBatchUpdateException =
-        new BatchUpdateException(
-            REDACTED_VALUE,
-            oldBatchUpdateException.getSQLState(),
-            oldBatchUpdateException.getErrorCode(),
-            oldBatchUpdateException.getUpdateCounts());
-    newBatchUpdateException.setNextException(
-        redactSensitiveData(oldBatchUpdateException.getNextException()));
-    newBatchUpdateException.setStackTrace(oldBatchUpdateException.getStackTrace());
-    return newBatchUpdateException;
-  }
+    while (!pending.isEmpty()) {
+      Throwable current = pending.pop();
+      Throwable rebuiltCurrent = rebuilt.get(current);
 
-  // This implementation assumes it to be Postgres, see toString() of ServerErrorMessage.java
-  // as well as the constructor of PSQLException.java with "boolean detail" flag in
-  // https://github.com/pgjdbc/pgjdbc/blob/master/pgjdbc/src/main/java/org/postgresql/util/
-  // Redshift's redshift-jdbc42 driver is a pgjdbc fork that emits the same message shape,
-  // including the BatchResultHandler "Call getNextException" suffix used as the Tier 2 fallback.
-  // For other JDBC Databases it would not fail but might return the same input string back!
-  private static String getNonSensitiveErrorMessage(String errMsg) {
-    final String sensitiveStartSearchText = ") VALUES (";
-    final String errorStartSearchText = ": ERROR: ";
+      if (current instanceof SQLException) {
+        SQLException next = ((SQLException) current).getNextException();
+        if (next != null) {
+          Throwable rebuiltNext = rebuilt.get(next);
+          if (rebuiltNext == null) {
+            rebuiltNext = rebuildNode(next, transform);
+            rebuilt.put(next, rebuiltNext);
+            pending.push(next);
+          }
+          ((SQLException) rebuiltCurrent).setNextException((SQLException) rebuiltNext);
+        }
+      }
 
-    if (errMsg == null) {
-      return null;
-    }
-
-    final int trimStartIdx = 0;
-    final int trimEndIdx = errMsg.indexOf(sensitiveStartSearchText);
-    if (trimEndIdx < 0) {
-      return errMsg;
-    }
-
-    String msg1 = errMsg.substring(trimStartIdx, trimEndIdx + 1);
-
-    int errorStartIdx = errMsg.indexOf(errorStartSearchText);
-    if (errorStartIdx < trimEndIdx) {
-      return msg1;
-    }
-
-    // Tier 1: structured server-side field labels. Earliest match wins between them.
-    int errorEndIdx = -1;
-    for (String marker : STRUCTURED_END_MARKERS) {
-      int idx = errMsg.indexOf(marker, errorStartIdx);
-      if (idx > 0 && (errorEndIdx < 0 || idx < errorEndIdx)) {
-        errorEndIdx = idx;
+      if (preserveCause) {
+        Throwable cause = current.getCause();
+        if (cause != null) {
+          Throwable rebuiltCause = rebuilt.get(cause);
+          if (rebuiltCause == null) {
+            rebuiltCause = rebuildNode(cause, transform);
+            rebuilt.put(cause, rebuiltCause);
+            pending.push(cause);
+          }
+          if (rebuiltCause != rebuiltCurrent) {
+            rebuiltCurrent.initCause(rebuiltCause);
+          }
+        }
       }
     }
-    // Tier 2: fall back to the BatchResultHandler suffix only if no structured marker matched.
-    if (errorEndIdx < 0) {
-      errorEndIdx = errMsg.indexOf(BATCH_SUFFIX_FALLBACK, errorStartIdx);
-    }
-    if (errorEndIdx < 0) {
-      return msg1;
+
+    return rebuilt.get(t);
+  }
+
+  private static Throwable rebuildNode(Throwable t, UnaryOperator<String> transform) {
+    if (!(t instanceof SQLException)) {
+      Throwable out = new Throwable(REDACTED_VALUE);
+      out.setStackTrace(t.getStackTrace());
+      return out;
     }
 
-    return msg1 + errMsg.substring(errorStartIdx, errorEndIdx);
+    SQLException e = (SQLException) t;
+    SQLException out;
+    if (e instanceof BatchUpdateException) {
+      BatchUpdateException b = (BatchUpdateException) e;
+      out = new BatchUpdateException(
+          transform.apply(b.getMessage()), b.getSQLState(), b.getErrorCode(),
+          b.getUpdateCounts());
+    } else {
+      out = new SQLException(
+          transform.apply(e.getMessage()), e.getSQLState(), e.getErrorCode());
+    }
+    out.setStackTrace(e.getStackTrace());
+    return out;
   }
 
   public static String maybeRedact(boolean shouldRedactSensitiveLogs, String msg) {

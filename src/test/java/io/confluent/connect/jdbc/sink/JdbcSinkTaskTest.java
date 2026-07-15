@@ -19,6 +19,7 @@ import static org.easymock.EasyMock.anyObject;
 import static org.easymock.EasyMock.expect;
 import static org.easymock.EasyMock.expectLastCall;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -49,6 +50,7 @@ import org.apache.kafka.connect.errors.RetriableException;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTaskContext;
+import org.apache.log4j.Level;
 import org.easymock.EasyMockSupport;
 import org.junit.After;
 import org.junit.Before;
@@ -477,40 +479,87 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     task.put(records);
     verifyAll();
   }
+
   @Test
-  public void testGetAllMessagesExceptionWithoutTrim() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-    JdbcSinkTask task = new JdbcSinkTask();
-    SQLException exception = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\") " +
-            "VALUES ('1','2','3',NULL) was aborted: ERROR: null value in column \"c4\" violates not-null constraint\n" +
-            "  Detail: Failing row contains (1, 2, 3, null).  Call getNextException to see other errors in the batch.",
-            new int[0]);
-    String exceptedExceptionMessage = "Exception chain:" + System.lineSeparator() + exception + System.lineSeparator();
-    Method privateMethod = JdbcSinkTask.class.getDeclaredMethod("getAllMessagesException", SQLException.class);
-    task.shouldTrimSensitiveLogs = false;
+  public void getAllMessagesExceptionBuildsExactOutput()
+      throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
+    SQLException first = new SQLException("first message", "23000", 1);
+    SQLException second = new SQLException("second message", "23001", 2);
+    first.setNextException(second);
+    Method privateMethod =
+        JdbcSinkTask.class.getDeclaredMethod("getAllMessagesException", SQLException.class);
     privateMethod.setAccessible(true);
 
-    SQLException result = (SQLException) privateMethod.invoke(task, exception);
-    assertEquals(exceptedExceptionMessage, result.getMessage());
+    SQLException result =
+        (SQLException) privateMethod.invoke(new JdbcSinkTask(), first);
 
-    privateMethod.setAccessible(false);
+    String expected = "Exception chain:" + System.lineSeparator()
+        + first + System.lineSeparator()
+        + second + System.lineSeparator();
+    assertEquals(expected, result.getMessage());
+    assertSame(first, result.getNextException());
   }
 
   @Test
-  public void testGetAllMessagesExceptionTrimmed() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-    JdbcSinkTask task = new JdbcSinkTask();
-    SQLException exception = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\") " +
-            "VALUES ('1','2','3',NULL) was aborted: ERROR: null value in column \"c4\" violates not-null constraint\n" +
-            "  Detail: Failing row contains (1, 2, 3, null).  Call getNextException to see other errors in the batch.",
-            new int[0]);
-    Method privateMethod = JdbcSinkTask.class.getDeclaredMethod("getAllMessagesException", SQLException.class);
-    privateMethod.setAccessible(true);
-    task.shouldTrimSensitiveLogs = true;
-
-    SQLException result = (SQLException) privateMethod.invoke(task, exception);
-    assertTrue(!result.getLocalizedMessage().contains("VALUES"));
-
-    privateMethod.setAccessible(false);
+  public void writeFailureLogsSanitizedMessagesWhenEnabled() throws SQLException {
+    assertWriteFailureLogs(true);
   }
+
+  @Test
+  public void writeFailureLogsRawMessagesWhenDisabled() throws SQLException {
+    assertWriteFailureLogs(false);
+  }
+
+  private void assertWriteFailureLogs(boolean sanitizeSensitiveLogs) throws SQLException {
+    List<SinkRecord> records = createRecordsList(1);
+    String canary = "canary-secret-PII";
+    SQLException exception =
+        new SQLException("Duplicate entry '" + canary + "' for key 'PRIMARY'", "23000", 1);
+    mockWriter.write(records);
+    expectLastCall().andThrow(exception);
+    mockWriter.closeQuietly();
+    expectLastCall();
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(ctx);
+    expect(ctx.errantRecordReporter()).andReturn(null);
+    ctx.timeout(0);
+    expectLastCall();
+    replayAll();
+
+    Map<String, String> props = setupBasicProps(1, 0);
+    props.put(
+        JdbcSinkConfig.TRIM_SENSITIVE_LOG_ENABLED,
+        String.valueOf(sanitizeSensitiveLogs)
+    );
+
+    String warnOutput;
+    String debugOutput;
+    LogCapture capture = new LogCapture(JdbcSinkTask.class);
+    try {
+      task.start(props);
+      try {
+        task.put(records);
+        fail();
+      } catch (RetriableException expected) {
+        assertEquals(SQLException.class, expected.getCause().getClass());
+      }
+      warnOutput = capture.output(Level.WARN, "Write of 1 records failed");
+      debugOutput = capture.output(Level.DEBUG, "Exception chain:");
+    } finally {
+      capture.close();
+    }
+
+    LogCapture.assertSensitiveValue(warnOutput, canary, sanitizeSensitiveLogs);
+    LogCapture.assertSensitiveValue(debugOutput, canary, sanitizeSensitiveLogs);
+    verifyAll();
+  }
+
   private List<SinkRecord> createRecordsList(int batchSize) {
     List<SinkRecord> records = new ArrayList<>();
     for (int i = 0; i < batchSize; i++) {

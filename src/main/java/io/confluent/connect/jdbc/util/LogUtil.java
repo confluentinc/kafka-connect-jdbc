@@ -30,7 +30,7 @@ import java.util.function.UnaryOperator;
  * shapes. Recognized shapes with incomplete boundaries fall closed.
  */
 public class LogUtil {
-  private static final String REDACTED_VALUE = SqlErrorMessageSanitizer.REDACTED_VALUE;
+  private static final String REDACTED_VALUE = "<redacted>";
 
   /**
    * @deprecated Use {@link #sanitizeSensitiveData(SQLException)}.
@@ -70,11 +70,37 @@ public class LogUtil {
    * @return a rebuilt exception graph, or {@code null} when {@code e} is {@code null}
    */
   public static SQLException sanitizeSensitiveData(SQLException e) {
-    return (SQLException) sanitizeSensitiveData((Throwable) e);
+    return sanitize(e);
   }
 
-  private static Throwable sanitizeSensitiveData(Throwable t) {
-    return rebuildChain(t, SqlErrorMessageSanitizer::sanitize, true);
+  public static SafeSqlException sanitize(SQLException e) {
+    try {
+      if (e instanceof SafeSqlException) {
+        return new SafeSqlException(((SafeSqlException) e).diagnostic());
+      }
+      SafeSqlDiagnostic.Kind kind = e instanceof java.sql.BatchUpdateException
+          ? SafeSqlDiagnostic.Kind.BATCH_UPDATE_EXCEPTION
+          : SafeSqlDiagnostic.Kind.SQL_EXCEPTION;
+      DiagnosticCategory.Classification c = DiagnosticCategory.classify(e.getSQLState());
+      return new SafeSqlException(
+          SafeSqlDiagnostic.skeleton(kind, c.category, c.canonicalSqlState));
+    } catch (RuntimeException ex) {
+      return new SafeSqlException(SafeSqlDiagnostic.skeleton(
+          SafeSqlDiagnostic.Kind.SQL_EXCEPTION, DiagnosticCategory.SQL_ERROR, null));
+    }
+  }
+
+  public static SafeSqlException sanitizeReconstructed(
+      SQLException e, String safeStatement, String vendorPrefix) {
+    try {
+      DiagnosticCategory.Classification c = DiagnosticCategory.classify(e.getSQLState());
+      String oracleTag = "ORA".equals(vendorPrefix) ? OracleErrorCode.tag(e.getErrorCode()) : null;
+      return new SafeSqlException(SafeSqlDiagnostic.reconstructed(
+          safeStatement, c.category, c.canonicalSqlState, oracleTag));
+    } catch (RuntimeException ex) {
+      return new SafeSqlException(SafeSqlDiagnostic.skeleton(
+          SafeSqlDiagnostic.Kind.SQL_EXCEPTION, DiagnosticCategory.SQL_ERROR, null));
+    }
   }
 
   /**

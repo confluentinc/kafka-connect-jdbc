@@ -47,6 +47,8 @@ import static java.util.Objects.nonNull;
 
 public class BufferedRecords {
   private static final Logger log = LoggerFactory.getLogger(BufferedRecords.class);
+  private static final Logger SENSITIVE =
+      LoggerFactory.getLogger("io.confluent.connect.jdbc.sink.Sensitive");
 
   private final TableId tableId;
   private final JdbcSinkConfig config;
@@ -328,9 +330,14 @@ public class BufferedRecords {
   }
 
   private SafeSqlException failSafely(SQLException raw, SafeSqlContext ctx) {
-    return ctx == null
+    SafeSqlException safe = ctx == null
         ? LogUtil.sanitize(raw)
         : LogUtil.sanitizeReconstructed(raw, ctx.safeStatement(), ctx.vendorPrefix());
+    if (config.sensitiveTraceEnabled && SENSITIVE.isTraceEnabled()) {
+      SENSITIVE.trace("Raw SQL failure for {}",
+          ctx == null ? "unknown statement" : ctx.qualifiedTable(), raw);
+    }
+    return safe;
   }
 
   public void close() throws SQLException {

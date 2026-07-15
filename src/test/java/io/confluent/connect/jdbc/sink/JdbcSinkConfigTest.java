@@ -29,6 +29,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
@@ -176,6 +177,16 @@ public class JdbcSinkConfigTest {
   public void shouldDefaultTrimSensitiveLogToTrue() {
     createConfig();
     assertTrue(config.trimSensitiveLogsEnabled);
+  }
+
+  @Test
+  public void shouldEnableSensitiveTraceLoggingOnlyWhenConfigured() {
+    createConfig();
+    assertFalse(config.sensitiveTraceEnabled);
+
+    props.put(JdbcSinkConfig.SENSITIVE_TRACE_LOGGING_ENABLED, "true");
+    createConfig();
+    assertTrue(config.sensitiveTraceEnabled);
   }
 
   protected void createConfig() {

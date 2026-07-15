@@ -47,9 +47,11 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.dialect.SqliteDatabaseDialect;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
+import io.confluent.connect.jdbc.util.SafeSqlException;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
@@ -455,7 +457,7 @@ public class BufferedRecordsTest {
 	    assertEquals(Collections.singletonList(recordB), buffer.flush());
   }
   
-  @Test(expected = BatchUpdateException.class)
+  @Test(expected = SafeSqlException.class)
   public void testFlushExecuteFailed() throws SQLException {
     final String url = sqliteHelper.sqliteUri();
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
@@ -501,6 +503,63 @@ public class BufferedRecordsTest {
     buffer.add(recordB);
     buffer.flush();
 
+  }
+
+  @Test
+  public void testFlushSanitizesExecuteBatchFailure() throws SQLException {
+    props.put("auto.create", false);
+    props.put("auto.evolve", false);
+    final JdbcSinkConfig config = new JdbcSinkConfig(props);
+    final String url = sqliteHelper.sqliteUri();
+    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+
+    final ColumnDefinition colDefMock = mock(ColumnDefinition.class);
+    when(colDefMock.type()).thenReturn(Types.VARCHAR);
+    final TableDefinition tabDefMock = mock(TableDefinition.class);
+    when(tabDefMock.definitionForColumn("name")).thenReturn(colDefMock);
+    when(tabDefMock.columnNames()).thenReturn(Collections.singleton("name"));
+
+    final DbStructure dbStructureMock = mock(DbStructure.class);
+    when(dbStructureMock.createOrAmendIfNecessary(
+        Matchers.any(JdbcSinkConfig.class),
+        Matchers.any(Connection.class),
+        Matchers.any(TableId.class),
+        Matchers.any(FieldsMetadata.class)
+    )).thenReturn(true);
+    when(dbStructureMock.tableDefinition(any(), any())).thenReturn(tabDefMock);
+
+    final PreparedStatement preparedStatementMock = mock(PreparedStatement.class);
+    when(preparedStatementMock.executeBatch()).thenThrow(new BatchUpdateException(
+        "Batch entry 0 ... 'canary@example.com'",
+        "23505",
+        1062,
+        new int[]{Statement.EXECUTE_FAILED}
+    ));
+    final Connection connectionMock = mock(Connection.class);
+    when(connectionMock.prepareStatement(Matchers.anyString())).thenReturn(preparedStatementMock);
+
+    final TableId tableId = new TableId(null, null, "dummy");
+    final BufferedRecords buffer = new BufferedRecords(
+        config,
+        tableId,
+        dbDialect,
+        dbStructureMock,
+        connectionMock
+    );
+    final Schema schema = SchemaBuilder.struct().field("name", Schema.STRING_SCHEMA).build();
+    final Struct value = new Struct(schema).put("name", "cuba");
+    buffer.add(new SinkRecord("dummy", 0, null, null, schema, value, 0));
+
+    SafeSqlException exception = assertThrows(SafeSqlException.class, buffer::flush);
+    assertEquals(
+        "INSERT INTO \"dummy\"(\"name\") VALUES(<redacted>): "
+            + "ERROR: unique_violation [sqlState=23505]",
+        exception.getMessage()
+    );
+    assertTrue(exception.getMessage().startsWith("INSERT INTO"));
+    assertTrue(exception.getMessage().contains("ERROR: unique_violation"));
+    assertFalse(exception.getMessage().contains("canary@example.com"));
+    assertFalse(exception.getMessage().contains("\n"));
   }
 
 

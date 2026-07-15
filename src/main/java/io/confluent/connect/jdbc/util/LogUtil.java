@@ -17,130 +17,289 @@ package io.confluent.connect.jdbc.util;
 
 import java.sql.BatchUpdateException;
 import java.sql.SQLException;
+import java.util.function.UnaryOperator;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
- * A stop-gap utility class to find a tradeoff between 2 things: To have reasonably good exception/
- * error information to investigate incidents while at the same time avoid logging sensitive data.
+ * Utility that redacts sensitive customer data (row values, literals) out of JDBC driver exception
+ * messages before they are logged, while preserving the debuggability skeleton (table/column
+ * names, error class text, SQLState, vendor code, batch update counts and the exception chain).
+ *
+ * <p>It is the durable redactor gating the JDBC sink write-failure log path. The connector config
+ * {@code trim.sensitive.log} (field {@code JdbcSinkConfig.trimSensitiveLogsEnabled}) selects the
+ * behaviour: when {@code true} (the default) failing exceptions are routed through
+ * {@link #sanitizeSensitiveData(SQLException)} so values are replaced with {@code <redacted>};
+ * when {@code false} (the operator escape hatch) the raw driver message is logged verbatim.
  */
 public class LogUtil {
   private static final String REDACTED_VALUE = "<redacted>";
-
-  public static SQLException trimSensitiveData(SQLException e) {
-    return (SQLException) trimSensitiveData((Throwable)e);
-  }
-
-  public static Throwable trimSensitiveData(Throwable t) {
-    if (!(t instanceof SQLException)) {
-      // t is not a SQLException; return as-is.
-      // This is also the recursion termination condition i.e. when t is null.
-      return t;
-    }
-
-    if (!(t instanceof BatchUpdateException)) {
-      // t is a SQLException, but not BatchUpdateException.
-      SQLException oldSqe = (SQLException)t;
-      SQLException newSqe = new SQLException(oldSqe.getLocalizedMessage());
-      newSqe.setNextException(trimSensitiveData(oldSqe.getNextException()));
-      return newSqe;
-    }
-
-    // At this point t is BatchUpdateException; return a new trimmed version of it.
-    BatchUpdateException e = (BatchUpdateException)t;
-    return new BatchUpdateException(getNonSensitiveErrorMessage(e.getLocalizedMessage()),
-        e.getUpdateCounts());
-  }
-
-  // Structured ServerErrorMessage labels — only ever appear at field boundaries, so safe to trust.
-  // Redshift's redshift-jdbc42 driver is a pgjdbc fork and emits the same shape.
-  private static final String[] STRUCTURED_END_MARKERS = {
-      "\n  Detail: ",
-      "\n  Hint: "
-  };
-
-  // pgjdbc BatchResultHandler suffix (reused verbatim by redshift-jdbc42). Free-form sentence text,
-  // so used only as a fallback when no structured label is present — a reason could plausibly
-  // contain this phrase (e.g., a trigger's RAISE EXCEPTION message), in which case earliest-wins
-  // across both tiers would truncate the reason mid-sentence.
-  private static final String BATCH_SUFFIX_FALLBACK = "  Call getNextException ";
 
   public static SQLException redactSensitiveData(SQLException e) {
     return (SQLException) redactSensitiveData((Throwable) e);
   }
 
   public static Throwable redactSensitiveData(Throwable t) {
-    if (!(t instanceof SQLException)) {
-      return t;
-    }
-
-    if (!(t instanceof BatchUpdateException)) {
-      // t is a SQLException, but not BatchUpdateException.
-      SQLException oldSqlException = (SQLException) t;
-      SQLException newSqlException =
-          new SQLException(
-              REDACTED_VALUE, oldSqlException.getSQLState(), oldSqlException.getErrorCode());
-      newSqlException.setNextException(redactSensitiveData(oldSqlException.getNextException()));
-      newSqlException.setStackTrace(oldSqlException.getStackTrace());
-      return newSqlException;
-    }
-
-    // At this point t is BatchUpdateException; redact its message too.
-    BatchUpdateException oldBatchUpdateException = (BatchUpdateException) t;
-    BatchUpdateException newBatchUpdateException =
-        new BatchUpdateException(
-            REDACTED_VALUE,
-            oldBatchUpdateException.getSQLState(),
-            oldBatchUpdateException.getErrorCode(),
-            oldBatchUpdateException.getUpdateCounts());
-    newBatchUpdateException.setNextException(
-        redactSensitiveData(oldBatchUpdateException.getNextException()));
-    newBatchUpdateException.setStackTrace(oldBatchUpdateException.getStackTrace());
-    return newBatchUpdateException;
+    // The whole message is replaced with the redaction marker; the cause is intentionally dropped
+    // (preserveCause=false) to keep this path's fully-redacting behaviour unchanged.
+    return rebuildChain(t, message -> REDACTED_VALUE, false);
   }
 
-  // This implementation assumes it to be Postgres, see toString() of ServerErrorMessage.java
-  // as well as the constructor of PSQLException.java with "boolean detail" flag in
-  // https://github.com/pgjdbc/pgjdbc/blob/master/pgjdbc/src/main/java/org/postgresql/util/
-  // Redshift's redshift-jdbc42 driver is a pgjdbc fork that emits the same message shape,
-  // including the BatchResultHandler "Call getNextException" suffix used as the Tier 2 fallback.
-  // For other JDBC Databases it would not fail but might return the same input string back!
-  private static String getNonSensitiveErrorMessage(String errMsg) {
-    final String sensitiveStartSearchText = ") VALUES (";
-    final String errorStartSearchText = ": ERROR: ";
+  public static SQLException sanitizeSensitiveData(SQLException e) {
+    return (SQLException) sanitizeSensitiveData((Throwable) e);
+  }
 
-    if (errMsg == null) {
+  private static Throwable sanitizeSensitiveData(Throwable t) {
+    // Structured redaction of each message in the chain; the cause is preserved (run through the
+    // same sanitize path) so it cannot reintroduce a raw value.
+    return rebuildChain(t, LogUtil::sanitizeMessage, true);
+  }
+
+  /**
+   * Shared skeleton for {@link #redactSensitiveData} and {@link #sanitizeSensitiveData}: walks the
+   * {@link SQLException#getNextException()} chain ITERATIVELY (batch failures chain one exception
+   * per failing row, so depth is input-influenced and a recursive walk risks StackOverflowError),
+   * rebuilding each node with {@code transform} applied to its message and preserving SQLState,
+   * vendor code, {@link BatchUpdateException} update counts, the next-exception chain and the
+   * stack trace. Non-SQLExceptions (including {@code null}) are returned as-is. When
+   * {@code preserveCause} is true the cause of each node is carried over via
+   * {@link Throwable#initCause(Throwable)} after being run back through this same rebuild (with
+   * the same transform), so a cause cannot leak a
+   * raw value either.
+   */
+  private static Throwable rebuildChain(
+      Throwable t, UnaryOperator<String> transform, boolean preserveCause) {
+    if (!(t instanceof SQLException)) {
+      // Also the termination condition when a next-exception is null.
+      return t;
+    }
+    SQLException head = null;
+    SQLException prev = null;
+    SQLException current = (SQLException) t;
+    while (current != null) {
+      SQLException rebuilt = rebuildNode(current, transform);
+      if (preserveCause) {
+        Throwable cause = current.getCause();
+        if (cause != null) {
+          rebuilt.initCause(rebuildChain(cause, transform, true));
+        }
+      }
+      if (head == null) {
+        head = rebuilt;
+      } else {
+        prev.setNextException(rebuilt);
+      }
+      prev = rebuilt;
+      current = current.getNextException();
+    }
+    return head;
+  }
+
+  // Rebuilds a single SQLException node, applying `transform` to its message and preserving the
+  // SQLState, vendor error code, (for BatchUpdateException) update counts, and stack trace.
+  private static SQLException rebuildNode(SQLException e, UnaryOperator<String> transform) {
+    SQLException out;
+    if (e instanceof BatchUpdateException) {
+      BatchUpdateException b = (BatchUpdateException) e;
+      out = new BatchUpdateException(
+          transform.apply(b.getMessage()), b.getSQLState(), b.getErrorCode(),
+          b.getUpdateCounts());
+    } else {
+      out = new SQLException(
+          transform.apply(e.getMessage()), e.getSQLState(), e.getErrorCode());
+    }
+    out.setStackTrace(e.getStackTrace());
+    return out;
+  }
+
+  // Token that begins a value region inside a "Batch entry ... was aborted" statement.
+  private static final Pattern VALUE_REGION =
+      Pattern.compile("\\s(VALUES\\s*\\(|SET\\s|WHERE\\s)", Pattern.CASE_INSENSITIVE);
+  private static final String ABORTED_MARKER = " was aborted";
+  private static final String ERROR_MARKER = ": ERROR:";
+
+  // Right-edge markers that bound the safe ERROR reason; earliest match across all of them wins.
+  private static final Pattern[] REASON_END_MARKERS = {
+      Pattern.compile("\\n\\s*Detail:"),
+      Pattern.compile("\\n\\s*Hint:"),
+      Pattern.compile("\\n\\s*Where:"),
+      Pattern.compile("\\n\\s*Position:"),
+      Pattern.compile("\\s{2}Call getNextException"),
+  };
+
+  // Value-group redaction patterns applied after the statement-trim pass; these catch unquoted
+  // numerics/uuids/tuples that the single-quoted-literal pass misses because they aren't quoted.
+  // A2 (finding #2): each group is anchored on the driver's REAL terminating punctuation, not the
+  // first ')', because Postgres row/key values legitimately contain ')' (e.g.
+  // "foo)bar(baz)qux", "dupcode)x") and a non-greedy-to-first-')' match would leak the tail. The
+  // middle is matched greedily on a single line ('[^\\n]*' never crosses a newline) up to the
+  // terminator.
+  //   DETAIL_FAILING_ROW terminates at ').' -> "...contains (10, null, foo)bar(baz)qux)."
+  //   DETAIL_KEY terminates at ') already exists' -> "Key (code)=(dupcode)x) already exists."
+  //     ('(code)' is the key COLUMN LIST identifier and is kept; only the '=(...)' value redacts)
+  //   DUPLICATE_KEY_VALUE_IS terminates at ').' -> "The duplicate key value is (1)."
+  // The trailing '.' is optional so a driver that omits it still redacts (fail-closed).
+  private static final Pattern DETAIL_FAILING_ROW =
+      Pattern.compile("(Detail:\\s*Failing row contains \\()[^\\n]*(\\)\\.?)");
+  private static final Pattern DETAIL_KEY =
+      Pattern.compile("(Detail:\\s*Key\\s*\\([^)\\n]*\\)=\\()[^\\n]*(\\) already exists)");
+  private static final Pattern DUPLICATE_KEY_VALUE_IS =
+      Pattern.compile("(The duplicate key value is \\()[^\\n]*(\\)\\.?)");
+
+  // Delimiters that may legitimately precede an opening value-quote: whitespace, or one of the
+  // punctuation characters that typically introduce a SQL literal (open-paren, equals, comma,
+  // colon). A quote preceded by anything else (e.g. a letter, as in a prose contraction like
+  // "couldn't") is treated as a stray apostrophe, not the start of a quoted value, so it can't
+  // shift the pairing and hide a genuine value-quote that follows it.
+  private static final String OPENING_QUOTE_DELIMITER_PUNCTUATION = "(=,:";
+
+  // A1 (finding #1): single-quoted tokens that are IDENTIFIERS (key/column/constraint/object
+  // names) must be KEPT, not redacted. Drivers that single-quote identifiers (MySQL quotes BOTH
+  // values and identifiers; SQL Server quotes identifiers) always introduce them with one of these
+  // keyword phrases, so a single-quoted token is kept only when its opening quote is immediately
+  // preceded (case-insensitively, allowing the whitespace the drivers emit) by one of them:
+  //   "for key '<id>'" / "for column '<id>'" (MySQL), "constraint '<id>'" and "object '<id>'"
+  //   (SQL Server; "object" also covers "in object"). Everything else (e.g. MySQL "entry '<val>'",
+  //   "value: '<val>'") is redacted, so the fail-closed default for an unknown single-quoted token
+  //   stays REDACT.
+  private static final Pattern KEEP_IDENTIFIER_PREFIX =
+      Pattern.compile("(?:for\\s+key|for\\s+column|constraint|object)\\s+$",
+          Pattern.CASE_INSENSITIVE);
+
+  // True when the single-quoted token opening at `quoteIdx` is introduced by an identifier keyword
+  // phrase and should therefore be preserved rather than redacted.
+  private static boolean isKeptIdentifierQuote(String msg, int quoteIdx) {
+    return KEEP_IDENTIFIER_PREFIX.matcher(msg).region(0, quoteIdx).find();
+  }
+
+  private static boolean isOpeningQuoteContext(String msg, int idx) {
+    if (idx == 0) {
+      return true;
+    }
+    char prev = msg.charAt(idx - 1);
+    if (Character.isWhitespace(prev)) {
+      return true;
+    }
+    return OPENING_QUOTE_DELIMITER_PUNCTUATION.indexOf(prev) >= 0;
+  }
+
+  // Scans forward from `start` (just past an opening quote) for the matching closing quote,
+  // treating a doubled '' as an escaped literal quote (not the close), mirroring the semantics
+  // of the old '(?:[^']|'')*' pattern. Returns -1 if no closing quote is found.
+  private static int findClosingQuote(String msg, int start) {
+    int n = msg.length();
+    int j = start;
+    while (j < n) {
+      char c = msg.charAt(j);
+      if (c == '\'') {
+        if (j + 1 < n && msg.charAt(j + 1) == '\'') {
+          j += 2;
+          continue;
+        }
+        return j;
+      }
+      j++;
+    }
+    return -1;
+  }
+
+  /**
+   * Package-private so it can be unit-tested directly. Three cooperating passes:
+   * (1) trim the pgjdbc/Redshift batch statement down to its safe head + bounded ERROR reason,
+   * (2) redact unquoted value groups in known positions,
+   * (3) redact single-quoted literals.
+   */
+  static String sanitizeMessage(String msg) {
+    if (msg == null) {
       return null;
     }
-
-    final int trimStartIdx = 0;
-    final int trimEndIdx = errMsg.indexOf(sensitiveStartSearchText);
-    if (trimEndIdx < 0) {
-      return errMsg;
+    String base = trimBatchStatement(msg);
+    if (base == null) {
+      base = msg;
     }
+    base = redactValueGroups(base);
+    base = redactSingleQuoted(base);
+    return base;
+  }
 
-    String msg1 = errMsg.substring(trimStartIdx, trimEndIdx + 1);
-
-    int errorStartIdx = errMsg.indexOf(errorStartSearchText);
-    if (errorStartIdx < trimEndIdx) {
-      return msg1;
+  // Only for the pgjdbc/Redshift "Batch entry N <verb> ... was aborted" shape. Returns null
+  // (no-op / fall through to raw message) if the message doesn't match that shape.
+  private static String trimBatchStatement(String msg) {
+    if (!msg.trim().startsWith("Batch entry")) {
+      return null;
     }
+    int abortedIdx = msg.indexOf(ABORTED_MARKER);
+    if (abortedIdx < 0) {
+      return null;
+    }
+    Matcher valueRegion = VALUE_REGION.matcher(msg);
+    int headEnd = (valueRegion.find() && valueRegion.start() < abortedIdx)
+        ? valueRegion.start() : abortedIdx;
+    String head = msg.substring(0, headEnd);
 
-    // Tier 1: structured server-side field labels. Earliest match wins between them.
-    int errorEndIdx = -1;
-    for (String marker : STRUCTURED_END_MARKERS) {
-      int idx = errMsg.indexOf(marker, errorStartIdx);
-      if (idx > 0 && (errorEndIdx < 0 || idx < errorEndIdx)) {
-        errorEndIdx = idx;
+    int errIdx = msg.indexOf(ERROR_MARKER, abortedIdx);
+    if (errIdx < 0) {
+      // Fail-closed: no reason marker found, keep only the statement head.
+      return head;
+    }
+    return head + boundedReason(msg, errIdx);
+  }
+
+  // Reason text starting at `start` (index of ": ERROR:"), cut at the earliest right-edge marker.
+  private static String boundedReason(String msg, int start) {
+    int end = msg.length();
+    for (Pattern pattern : REASON_END_MARKERS) {
+      Matcher m = pattern.matcher(msg);
+      if (m.find(start) && m.start() < end) {
+        end = m.start();
       }
     }
-    // Tier 2: fall back to the BatchResultHandler suffix only if no structured marker matched.
-    if (errorEndIdx < 0) {
-      errorEndIdx = errMsg.indexOf(BATCH_SUFFIX_FALLBACK, errorStartIdx);
-    }
-    if (errorEndIdx < 0) {
-      return msg1;
-    }
+    return msg.substring(start, end);
+  }
 
-    return msg1 + errMsg.substring(errorStartIdx, errorEndIdx);
+  private static String redactValueGroups(String msg) {
+    String redactedReplacement = Matcher.quoteReplacement(REDACTED_VALUE);
+    msg = DETAIL_FAILING_ROW.matcher(msg).replaceAll("$1" + redactedReplacement + "$2");
+    msg = DETAIL_KEY.matcher(msg).replaceAll("$1" + redactedReplacement + "$2");
+    msg = DUPLICATE_KEY_VALUE_IS.matcher(msg).replaceAll("$1" + redactedReplacement + "$2");
+    return msg;
+  }
+
+  // Single-quoted literal redaction; driver-agnostic. Identifiers use "" / `` / [] so are
+  // untouched by this scan. Handles doubled '' escapes inside the literal, and only pairs a
+  // quote as an "opening" quote when it sits in a position where a real SQL literal would start
+  // (see isOpeningQuoteContext) so a stray prose apostrophe (e.g. "couldn't") can't shift the
+  // pairing and leave a genuine value unredacted. Fail-closed: an opening quote with no matching
+  // close redacts through end-of-line/string rather than leaving the tail unredacted.
+  private static String redactSingleQuoted(String msg) {
+    StringBuilder sb = new StringBuilder(msg.length());
+    int n = msg.length();
+    int i = 0;
+    while (i < n) {
+      char c = msg.charAt(i);
+      if (c == '\'' && isOpeningQuoteContext(msg, i)) {
+        int closeIdx = findClosingQuote(msg, i + 1);
+        if (closeIdx >= 0) {
+          if (isKeptIdentifierQuote(msg, i)) {
+            // A1: identifier token (e.g. after "for key "/"constraint "/"object ") - keep verbatim.
+            sb.append(msg, i, closeIdx + 1);
+          } else {
+            sb.append('\'').append(REDACTED_VALUE).append('\'');
+          }
+          i = closeIdx + 1;
+          continue;
+        }
+        // Fail-closed: unmatched opening quote, redact through end-of-line/string.
+        int eol = msg.indexOf('\n', i);
+        int end = eol < 0 ? n : eol;
+        sb.append('\'').append(REDACTED_VALUE);
+        i = end;
+        continue;
+      }
+      sb.append(c);
+      i++;
+    }
+    return sb.toString();
   }
 
   public static String maybeRedact(boolean shouldRedactSensitiveLogs, String msg) {

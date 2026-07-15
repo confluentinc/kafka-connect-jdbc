@@ -97,13 +97,13 @@ public class JdbcSinkTask extends SinkTask {
         throw tace;
       }
     } catch (SQLException sqle) {
-      SQLException trimmedException = shouldTrimSensitiveLogs
-              ? LogUtil.trimSensitiveData(sqle) : sqle;
+      SQLException sanitizedException = shouldTrimSensitiveLogs
+              ? LogUtil.sanitizeSensitiveData(sqle) : sqle;
       log.warn(
           "Write of {} records failed, remainingRetries={}",
           records.size(),
           remainingRetries,
-          trimmedException
+          sanitizedException
       );
       int totalExceptions = 0;
       for (Throwable e :sqle) {
@@ -127,7 +127,7 @@ public class JdbcSinkTask extends SinkTask {
                   + "For complete details on each exception, please enable DEBUG logging.",
               totalExceptions);
           int exceptionCount = 1;
-          for (Throwable e : trimmedException) {
+          for (Throwable e : sanitizedException) {
             log.debug("Exception {}:", exceptionCount++, e);
           }
           throw new ConnectException(sqlAllMessagesException);
@@ -159,13 +159,13 @@ public class JdbcSinkTask extends SinkTask {
 
   private SQLException getAllMessagesException(SQLException sqle) {
     String sqleAllMessages = "Exception chain:" + System.lineSeparator();
-    SQLException trimmedException = shouldTrimSensitiveLogs
-            ? LogUtil.trimSensitiveData(sqle) : sqle;
-    for (Throwable e : trimmedException) {
+    SQLException sanitizedException = shouldTrimSensitiveLogs
+            ? LogUtil.sanitizeSensitiveData(sqle) : sqle;
+    for (Throwable e : sanitizedException) {
       sqleAllMessages += e + System.lineSeparator();
     }
     SQLException sqlAllMessagesException = new SQLException(sqleAllMessages);
-    sqlAllMessagesException.setNextException(trimmedException);
+    sqlAllMessagesException.setNextException(sanitizedException);
     return sqlAllMessagesException;
   }
 

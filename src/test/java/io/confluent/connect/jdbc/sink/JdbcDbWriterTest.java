@@ -64,7 +64,7 @@ import static org.mockito.Mockito.verify;
 
 public class JdbcDbWriterTest {
 
-  private static final String REDACTED = "[REDACTED]";
+  private static final String REDACTED = "<redacted>";
   private static final String POSTGRES_CANARY = "alice@example.com";
   private static final String WRITE_CANARY = "write-secret";
   private static final String ROLLBACK_CANARY = "rollback-secret";

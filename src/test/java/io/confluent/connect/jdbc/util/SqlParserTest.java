@@ -1409,7 +1409,7 @@ public class SqlParserTest {
     String sql = "SELECT * FROM users WHERE id = 12345 AND name = 'John'";
     String result = SqlParser.redactSensitiveData(sql);
     assertNotEquals("Well-parsed query should not be fully redacted",
-        "[REDACTED]", result);
+        "<redacted>", result);
     assertFalse("PII number should be redacted", result.contains("12345"));
     assertFalse("PII string should be redacted", result.contains("John"));
   }
@@ -1420,7 +1420,7 @@ public class SqlParserTest {
     String sql = "SELECT TOP 10 CAST(price AS DECIMAL(10, 2)) FROM products WHERE category = 'Electronics'";
     String result = SqlParser.redactSensitiveData(sql);
     assertNotEquals("Query with structural numbers should not be fully redacted",
-        "[REDACTED]", result);
+        "<redacted>", result);
     assertTrue("TOP should be preserved", result.contains("TOP 10"));
     assertTrue("DECIMAL params should be preserved", result.contains("10, 2"));
     assertFalse("Category value should be redacted", result.contains("Electronics"));
@@ -1432,7 +1432,7 @@ public class SqlParserTest {
     String sql = "SELECT * FROM orders WHERE customer_id = 12345 OPTIMIZE FOR 100 ROWS";
     String result = SqlParser.redactSensitiveData(sql);
     assertNotEquals("Query with OPTIMIZE FOR should not be fully redacted",
-        "[REDACTED]", result);
+        "<redacted>", result);
     assertTrue("OPTIMIZE FOR should be preserved", result.contains("OPTIMIZE FOR 100 ROWS"));
     assertFalse("Customer ID should be redacted", result.contains("12345"));
   }
@@ -3318,7 +3318,7 @@ public class SqlParserTest {
     String expected = "SELECT * FROM users WHERE name = '********' AND user_id = 0";
     String result = SqlParser.redactSensitiveData(simulatedOutput);
 
-    assertEquals("Layer 3 should trigger full redaction to [REDACTED]",
+    assertEquals("Layer 3 should trigger full redaction to <redacted>",
         expected, result);
 
     assertTrue(
@@ -3383,7 +3383,7 @@ public class SqlParserTest {
    * the regex fallback redacts all string literals and numeric literals
    * while preserving SQL keywords and identifiers.
    *
-   * This is NOT {@code [REDACTED]} — it's a best-effort regex redaction
+   * This is NOT {@code <redacted>} — it's a best-effort regex redaction
    * that still preserves query structure for debugging.
    */
   @Test
@@ -3406,20 +3406,20 @@ public class SqlParserTest {
     assertTrue("Should preserve WHERE keyword", result.contains("WHERE"));
     assertTrue("Should preserve column name", result.contains("salary"));
 
-    // The result is NOT "[REDACTED]" — it's a regex-redacted version
-    assertNotEquals("[REDACTED]", result);
+    // The result is NOT "<redacted>" — it's a regex-redacted version
+    assertNotEquals("<redacted>", result);
   }
 
   /**
    * Demonstrates Layer 4: when the SQL is so malformed that even regex
-   * fallback calls redactAllLiterals() which returns {@code [REDACTED]}
+   * fallback calls redactAllLiterals() which returns {@code <redacted>}
    * for null/empty edge cases.
    */
   @Test
   public void testLayer4FullRedactionOnRegexFailure() {
-    // redactAllLiterals returns [REDACTED] for null/empty inputs
-    assertEquals("[REDACTED]", SqlParser.redactAllLiterals(null));
-    assertEquals("[REDACTED]", SqlParser.redactAllLiterals(""));
+    // redactAllLiterals returns <redacted> for null/empty inputs
+    assertEquals("<redacted>", SqlParser.redactAllLiterals(null));
+    assertEquals("<redacted>", SqlParser.redactAllLiterals(""));
   }
 
   /**
@@ -3427,7 +3427,7 @@ public class SqlParserTest {
    * passes through Layers 1+2 cleanly without triggering Layer 3 (leak
    * detector), proving that our visitor overrides are comprehensive.
    *
-   * If this test returned {@code [REDACTED]}, it would mean our visitor
+   * If this test returned {@code <redacted>}, it would mean our visitor
    * missed an expression type — which is a bug.
    */
   @Test
@@ -3520,8 +3520,8 @@ public class SqlParserTest {
     String expected = "SELECT userid, username FROM sample_data WHERE userid IN (0, 0, 0)";
     String result = SqlParser.redactSensitiveData(sql);
 
-    // Should NOT be fully redacted to "[REDACTED]"
-    assertNotEquals("[REDACTED]", result);
+    // Should NOT be fully redacted to "<redacted>"
+    assertNotEquals("<redacted>", result);
     assertEquals(expected, result);
   }
 
@@ -3560,8 +3560,8 @@ public class SqlParserTest {
 
     String result = SqlParser.redactSensitiveData(sql);
 
-    // Should NOT be fully redacted to "[REDACTED]"
-    assertNotEquals("[REDACTED]", result);
+    // Should NOT be fully redacted to "<redacted>"
+    assertNotEquals("<redacted>", result);
 
     // Should redact scientific notation numbers
     assertFalse("Should redact 1.5E2", result.contains("1.5E2"));
@@ -3591,7 +3591,7 @@ public class SqlParserTest {
     String result = SqlParser.redactSensitiveData(sql);
 
     // Should be partially redacted (Layer 2 success), NOT fully redacted (Layer 3)
-    assertNotEquals("[REDACTED]", result);
+    assertNotEquals("<redacted>", result);
     assertEquals("SELECT value FROM scientific_data WHERE measurement = 0", result);
   }
 
@@ -3618,7 +3618,7 @@ public class SqlParserTest {
     String result = SqlParser.redactSensitiveData(sql);
 
     // With the fixed pattern, should NOT be fully redacted
-    assertNotEquals("[REDACTED]", result);
+    assertNotEquals("<redacted>", result);
 
     // Should properly redact scientific notation to 0
     assertFalse("Should redact 1.5E2", result.contains("1.5E2"));
@@ -3786,7 +3786,7 @@ public class SqlParserTest {
     String result = SqlParser.redactSensitiveData(sql);
 
     // Should NOT be fully redacted
-    assertNotEquals("[REDACTED]", result);
+    assertNotEquals("<redacted>", result);
 
     // Should redact all sensitive values
     assertFalse("Should redact hex token", result.contains("0xDEADBEEF4A3F2E1D"));
@@ -3843,12 +3843,12 @@ public class SqlParserTest {
 
     String result = SqlParser.redactSensitiveData(sql);
 
-    // Should handle dollar-quoted strings - either redacted properly or fully [REDACTED]
+    // Should handle dollar-quoted strings - either redacted properly or fully <redacted>
     assertFalse("Should not leak 'sensitive data'", result.contains("sensitive data"));
     assertFalse("Should not leak 'secret info'", result.contains("secret info"));
 
     // If not fully redacted, should contain redaction markers
-    if (!result.equals("[REDACTED]")) {
+    if (!result.equals("<redacted>")) {
       assertTrue("Should contain redacted strings",
           result.contains(SqlParser.REDACTED_STRING));
     }
@@ -3876,7 +3876,7 @@ public class SqlParserTest {
         result.contains("1234567890123456789"));
 
     // Should contain redaction markers
-    if (!result.equals("[REDACTED]")) {
+    if (!result.equals("<redacted>")) {
       assertTrue("Should contain redacted numbers", result.contains("0"));
     }
   }

@@ -23,7 +23,7 @@ import java.sql.SQLException;
  * error information to investigate incidents while at the same time avoid logging sensitive data.
  */
 public class LogUtil {
-  private static final String REDACTED_VALUE = "[REDACTED]";
+  private static final String REDACTED_VALUE = "<redacted>";
 
   public static SQLException trimSensitiveData(SQLException e) {
     return (SQLException) trimSensitiveData((Throwable)e);
@@ -50,8 +50,7 @@ public class LogUtil {
         e.getUpdateCounts());
   }
 
-  // Structured ServerErrorMessage labels only appear at field boundaries, so they are safe to
-  // trust.
+  // Structured ServerErrorMessage labels — only ever appear at field boundaries, so safe to trust.
   // Redshift's redshift-jdbc42 driver is a pgjdbc fork and emits the same shape.
   private static final String[] STRUCTURED_END_MARKERS = {
       "\n  Detail: ",

@@ -64,7 +64,7 @@ import org.junit.Test;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 
 public class JdbcSinkTaskTest extends EasyMockSupport {
-  private static final String REDACTED = "[REDACTED]";
+  private static final String REDACTED = "<redacted>";
   private static final String RETRY_CANARY = "retry-secret";
   private static final String SQL_SERVER_CANARY = "sqlserver-secret@example.com";
   private static final String MYSQL_CANARY = "mysql-secret@example.com";

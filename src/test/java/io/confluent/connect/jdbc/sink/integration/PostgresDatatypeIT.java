@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.sink.integration;
 
+import java.math.BigDecimal;
 import java.sql.Array;
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -29,6 +30,9 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import io.confluent.common.utils.IntegrationTest;
+import io.confluent.connect.jdbc.data.Json;
+import io.confluent.connect.jdbc.data.VariableScaleDecimal;
+import io.confluent.connect.jdbc.data.ZonedTimestamp;
 import io.confluent.connect.jdbc.integration.BaseConnectorIT;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 
@@ -290,6 +294,53 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
   }
 
   @Test
+  public void testWriteToTableWithComplexArrayColumns() throws Exception {
+    createTableWithComplexArrayColumns();
+    connect.configureConnector("jdbc-sink-connector", props);
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+
+    final Schema numeric = VariableScaleDecimal.optionalSchema();
+    final Schema schema = SchemaBuilder.struct().name("com.example.ComplexArrays")
+        .field("nums", SchemaBuilder.array(numeric).build())
+        .field("docs", SchemaBuilder.array(Json.optionalSchema()).build())
+        .field("tssz", SchemaBuilder.array(ZonedTimestamp.optionalSchema()).build())
+        .build();
+    final Struct struct = new Struct(schema)
+        .put("nums", Arrays.asList(
+            VariableScaleDecimal.fromLogical(numeric, new BigDecimal("1.50")),
+            VariableScaleDecimal.fromLogical(numeric, new BigDecimal("3.14159"))))
+        .put("docs", Arrays.asList("{\"k\": \"v\"}", "{\"a\": 1}"))
+        .put("tssz", Arrays.asList("2024-01-15T10:00:00Z", "2025-06-10T13:00:00Z"));
+    produceRecord(schema, struct);
+
+    waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 1, 1,
+        TimeUnit.MINUTES.toMillis(2));
+
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
+      try (Statement s = c.createStatement()) {
+        try (ResultSet rs = s.executeQuery("SELECT * FROM " + tableName)) {
+          assertTrue(rs.next());
+
+          // numeric[] via VariableScaleDecimal: per-value scale is preserved
+          Object[] nums = (Object[]) rs.getArray("nums").getArray();
+          assertEquals(0, new BigDecimal("1.50").compareTo((BigDecimal) nums[0]));
+          assertEquals(0, new BigDecimal("3.14159").compareTo((BigDecimal) nums[1]));
+
+          // jsonb[] via the Json logical type
+          Object[] docs = (Object[]) rs.getArray("docs").getArray();
+          assertTrue(docs[0].toString().contains("\"k\""));
+          assertTrue(docs[1].toString().contains("\"a\""));
+
+          // timestamptz[] via ZonedTimestamp: the absolute instant is preserved (UTC)
+          Object[] tssz = (Object[]) rs.getArray("tssz").getArray();
+          assertEquals(1705312800000L, ((java.sql.Timestamp) tssz[0]).getTime());
+          assertEquals(1749560400000L, ((java.sql.Timestamp) tssz[1]).getTime());
+        }
+      }
+    }
+  }
+
+  @Test
   public void testTableCreatedAfterManualDeletion() throws Exception {
     props.put(JdbcSinkConfig.AUTO_CREATE, "true");
     props.put(DLQ_TOPIC_NAME_CONFIG, DLQ_TOPIC_NAME);
@@ -537,6 +588,15 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
       }
     }
     LOG.info("Created table {} with UUID column", tableName);
+  }
+
+  private void createTableWithComplexArrayColumns() throws SQLException {
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
+      try (Statement s = c.createStatement()) {
+        s.execute(String.format(
+            "CREATE TABLE %s(nums numeric[], docs jsonb[], tssz timestamptz[])", tableName));
+      }
+    }
   }
 
   private void createTableWithIntArrayColumns() throws SQLException {

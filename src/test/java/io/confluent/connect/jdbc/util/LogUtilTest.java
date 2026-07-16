@@ -26,7 +26,7 @@ import java.sql.SQLException;
 import static org.junit.Assert.assertEquals;
 
 public class LogUtilTest {
-  private static final String REDACTED = "<redacted>";
+  private static final String REDACTED = "[REDACTED]";
 
   @Test
   public void testNonSqlThrowable() {

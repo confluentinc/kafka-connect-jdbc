@@ -64,18 +64,25 @@ import static org.mockito.Mockito.verify;
 
 public class JdbcDbWriterTest {
 
-  private static final String REDACTED = "<redacted>";
+  private static final String REDACTED = "[REDACTED]";
   private static final String POSTGRES_CANARY = "alice@example.com";
+  private static final String WRITE_CANARY = "write-secret";
   private static final String ROLLBACK_CANARY = "rollback-secret";
+  private static final String SENSITIVE_LOGGER_NAME =
+      "io.confluent.connect.jdbc.sink.Sensitive";
 
   private final SqliteHelper sqliteHelper = new SqliteHelper(getClass().getSimpleName());
   private final Logger writerLogger = Logger.getLogger(JdbcDbWriter.class);
+  private final Logger sensitiveLogger = Logger.getLogger(SENSITIVE_LOGGER_NAME);
 
   private JdbcDbWriter writer = null;
   private DatabaseDialect dialect;
   private Level writerLogLevel;
   private StringWriter writerLogOutput;
   private WriterAppender writerLogAppender;
+  private Level sensitiveLogLevel;
+  private StringWriter sensitiveLogOutput;
+  private WriterAppender sensitiveLogAppender;
 
   @Before
   public void setUp() throws IOException, SQLException {
@@ -85,6 +92,7 @@ public class JdbcDbWriterTest {
   @After
   public void tearDown() throws IOException, SQLException {
     stopCapturingWriterLogs();
+    stopCapturingSensitiveLogs();
     if (writer != null) {
       writer.closeQuietly();
     }
@@ -207,6 +215,27 @@ public class JdbcDbWriterTest {
   }
 
   @Test
+  public void writeLogsRawFailuresOnlyAtSensitiveTrace() throws SQLException {
+    captureWriterLogs();
+    captureSensitiveLogs();
+
+    SQLException thrown = verifyConnectionRollback(
+        false,
+        new SQLException(WRITE_CANARY, "42000", 10)
+    );
+
+    assertEquals(REDACTED, thrown.getMessage());
+    String writerLogs = capturedWriterLogs();
+    assertTrue(writerLogs.contains(REDACTED));
+    assertFalse(writerLogs.contains(WRITE_CANARY));
+    assertFalse(writerLogs.contains(ROLLBACK_CANARY));
+
+    String sensitiveLogs = capturedSensitiveLogs();
+    assertTrue(sensitiveLogs.contains(WRITE_CANARY));
+    assertTrue(sensitiveLogs.contains(ROLLBACK_CANARY));
+  }
+
+  @Test
   public void verifyConnectionRollbackFailed() throws SQLException {
     SQLException e = verifyConnectionRollback(false);
 
@@ -229,9 +258,16 @@ public class JdbcDbWriterTest {
   }
 
   private SQLException verifyConnectionRollback(boolean succeedOnRollBack) throws SQLException {
+    return verifyConnectionRollback(succeedOnRollBack, new SQLException());
+  }
+
+  private SQLException verifyConnectionRollback(
+      boolean succeedOnRollBack,
+      SQLException writeFailure
+  ) throws SQLException {
     Connection mockConnection = mock(Connection.class);
 
-    doThrow(new SQLException()).when(mockConnection).commit();
+    doThrow(writeFailure).when(mockConnection).commit();
     if (!succeedOnRollBack) {
       doThrow(new SQLException(ROLLBACK_CANARY, "08006", 17002))
           .when(mockConnection)
@@ -294,12 +330,34 @@ public class JdbcDbWriterTest {
     return writerLogOutput.toString();
   }
 
+  private void captureSensitiveLogs() {
+    sensitiveLogLevel = sensitiveLogger.getLevel();
+    sensitiveLogOutput = new StringWriter();
+    sensitiveLogAppender =
+        new WriterAppender(new PatternLayout("%m%n"), sensitiveLogOutput);
+    sensitiveLogger.setLevel(Level.TRACE);
+    sensitiveLogger.addAppender(sensitiveLogAppender);
+  }
+
+  private String capturedSensitiveLogs() {
+    return sensitiveLogOutput.toString();
+  }
+
   private void stopCapturingWriterLogs() {
     if (writerLogAppender != null) {
       writerLogger.removeAppender(writerLogAppender);
       writerLogAppender.close();
       writerLogger.setLevel(writerLogLevel);
       writerLogAppender = null;
+    }
+  }
+
+  private void stopCapturingSensitiveLogs() {
+    if (sensitiveLogAppender != null) {
+      sensitiveLogger.removeAppender(sensitiveLogAppender);
+      sensitiveLogAppender.close();
+      sensitiveLogger.setLevel(sensitiveLogLevel);
+      sensitiveLogAppender = null;
     }
   }
 

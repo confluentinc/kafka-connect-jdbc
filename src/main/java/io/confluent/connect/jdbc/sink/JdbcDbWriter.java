@@ -34,6 +34,8 @@ import org.slf4j.LoggerFactory;
 
 public class JdbcDbWriter {
   private static final Logger log = LoggerFactory.getLogger(JdbcDbWriter.class);
+  private static final Logger SENSITIVE =
+      LoggerFactory.getLogger("io.confluent.connect.jdbc.sink.Sensitive");
 
   private final JdbcSinkConfig config;
   private final DatabaseDialect dbDialect;
@@ -87,6 +89,7 @@ public class JdbcDbWriter {
       log.trace("Committing transaction");
       connection.commit();
     } catch (SQLException e) {
+      SENSITIVE.trace("Raw sink write failure (redacted at ERROR)", e);
       SQLException redactedException = LogUtil.redactSensitiveData(e);
       rollback(connection, redactedException);
       throw redactedException;
@@ -103,6 +106,7 @@ public class JdbcDbWriter {
       connection.rollback();
       log.info("Successfully rolled back transaction");
     } catch (SQLException e) {
+      SENSITIVE.trace("Raw rollback failure (redacted at ERROR)", e);
       SQLException redactedException = LogUtil.redactSensitiveData(e);
       log.error("Failed to rollback transaction", redactedException);
       writeException.addSuppressed(redactedException);

@@ -37,6 +37,9 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialect.StatementBinder;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.util.ColumnId;
+import io.confluent.connect.jdbc.util.LogUtil;
+import io.confluent.connect.jdbc.util.SafeSqlException;
+import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static java.util.Objects.isNull;
@@ -44,6 +47,8 @@ import static java.util.Objects.nonNull;
 
 public class BufferedRecords {
   private static final Logger log = LoggerFactory.getLogger(BufferedRecords.class);
+  private static final Logger SENSITIVE =
+      LoggerFactory.getLogger("io.confluent.connect.jdbc.sink.Sensitive");
 
   private final TableId tableId;
   private final JdbcSinkConfig config;
@@ -60,6 +65,8 @@ public class BufferedRecords {
   private PreparedStatement deletePreparedStatement;
   private StatementBinder updateStatementBinder;
   private StatementBinder deleteStatementBinder;
+  private SafeSqlContext updateContext;
+  private SafeSqlContext deleteContext;
   private boolean deletesInBatch = false;
 
   public BufferedRecords(
@@ -158,6 +165,7 @@ public class BufferedRecords {
             config.replaceNullWithDefault
         );
       }
+      buildSafeContexts();
     }
     
     // set deletesInBatch if schema value is not null
@@ -196,25 +204,147 @@ public class BufferedRecords {
   }
 
   private void executeUpdates() throws SQLException {
-    int[] batchStatus = updatePreparedStatement.executeBatch();
-    for (int updateCount : batchStatus) {
-      if (updateCount == Statement.EXECUTE_FAILED) {
-        throw new BatchUpdateException(
-                "Execution failed for part of the batch update", batchStatus);
+    try {
+      int[] batchStatus = updatePreparedStatement.executeBatch();
+      for (int updateCount : batchStatus) {
+        if (updateCount == Statement.EXECUTE_FAILED) {
+          throw new BatchUpdateException(
+                  "Execution failed for part of the batch update", batchStatus);
+        }
       }
+    } catch (SQLException e) {
+      throw failSafely(e, updateContext);
     }
   }
 
   private void executeDeletes() throws SQLException {
-    if (nonNull(deletePreparedStatement)) {
-      int[] batchStatus = deletePreparedStatement.executeBatch();
-      for (int updateCount : batchStatus) {
-        if (updateCount == Statement.EXECUTE_FAILED) {
-          throw new BatchUpdateException(
-                  "Execution failed for part of the batch delete", batchStatus);
+    try {
+      if (nonNull(deletePreparedStatement)) {
+        int[] batchStatus = deletePreparedStatement.executeBatch();
+        for (int updateCount : batchStatus) {
+          if (updateCount == Statement.EXECUTE_FAILED) {
+            throw new BatchUpdateException(
+                    "Execution failed for part of the batch delete", batchStatus);
+          }
+        }
+      }
+    } catch (SQLException e) {
+      throw failSafely(e, deleteContext);
+    }
+  }
+
+  // Precomputes the value-free reconstructed statements for this batch's update and delete once,
+  // from the destination table's own columns, so a later failure can be described without
+  // the driver text.
+  private void buildSafeContexts() {
+    updateContext = null;
+    deleteContext = null;
+
+    // With auto.create or auto.evolve on, a producer field can still become a real column, so the
+    // live schema is not a trustworthy identifier source yet; leave the contexts null to
+    // fall back to the skeleton.
+    if (config.autoCreate || config.autoEvolve) {
+      return;
+    }
+    TableDefinition tableDef;
+    try {
+      tableDef = dbStructure.tableDefinition(connection, tableId);
+    } catch (SQLException e) {
+      return;
+    }
+    if (tableDef == null) {
+      return;
+    }
+    java.util.Set<String> dbColumns = tableDef.columnNames();
+    String vendorPrefix =
+        dbDialect.getClass().getSimpleName().contains("Oracle") ? "ORA" : null;
+    java.util.List<ColumnId> keyCols =
+        resolveCanonical(fieldsMetadata.keyFieldNames, dbColumns);
+    java.util.List<ColumnId> nonKeyCols =
+        resolveCanonical(fieldsMetadata.nonKeyFieldNames, dbColumns);
+    if (keyCols != null && nonKeyCols != null) {
+      updateContext = SafeSqlContext.create(
+          dbDialect,
+          tableId,
+          keyCols,
+          nonKeyCols,
+          operationFor(config.insertMode),
+          vendorPrefix
+      ).orElse(null);
+    }
+    if (config.deleteEnabled && keyCols != null && !keyCols.isEmpty()) {
+      deleteContext = SafeSqlContext.create(
+          dbDialect,
+          tableId,
+          keyCols,
+          java.util.Collections.emptyList(),
+          SafeSqlContext.Operation.DELETE,
+          vendorPrefix
+      ).orElse(null);
+    }
+  }
+
+  private java.util.List<ColumnId> resolveCanonical(
+      java.util.Collection<String> fieldNames,
+      java.util.Set<String> dbColumns
+  ) {
+    java.util.List<ColumnId> resolved = new java.util.ArrayList<>();
+    for (String field : fieldNames) {
+      String canonical = canonicalColumn(field, dbColumns);
+      if (canonical == null) {
+        return null;
+      }
+      resolved.add(new ColumnId(tableId, canonical));
+    }
+    return resolved;
+  }
+
+  private static String canonicalColumn(String field, java.util.Set<String> dbColumns) {
+    if (field == null) {
+      return null;
+    }
+    String canonical = null;
+    if (dbColumns.contains(field)) {
+      canonical = field;
+    } else {
+      for (String column : dbColumns) {
+        if (column.equalsIgnoreCase(field)) {
+          if (canonical != null) {
+            return null;
+          }
+          canonical = column;
         }
       }
     }
+    if (canonical == null
+        || canonical.indexOf('?') >= 0
+        || canonical.indexOf('<') >= 0
+        || canonical.indexOf('>') >= 0) {
+      return null;
+    }
+    return canonical;
+  }
+
+  private static SafeSqlContext.Operation operationFor(JdbcSinkConfig.InsertMode mode) {
+    switch (mode) {
+      case UPSERT:
+        return SafeSqlContext.Operation.UPSERT;
+      case UPDATE:
+        return SafeSqlContext.Operation.UPDATE;
+      default:
+        return SafeSqlContext.Operation.INSERT;
+    }
+  }
+
+  private SafeSqlException failSafely(SQLException raw, SafeSqlContext ctx) {
+    SafeSqlException safe = ctx == null
+        ? LogUtil.sanitize(raw)
+        : LogUtil.sanitizeReconstructed(raw, ctx.safeStatement(), ctx.vendorPrefix());
+    if (config.sensitiveTraceEnabled && SENSITIVE.isTraceEnabled()) {
+      SENSITIVE.trace("Raw SQL failure for {}",
+          ctx == null ? "unknown statement" : ctx.qualifiedTable(), raw);
+    }
+    return safe;
   }
 
   public void close() throws SQLException {

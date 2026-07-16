@@ -40,6 +40,7 @@ import java.sql.Types;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -47,9 +48,11 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.dialect.SqliteDatabaseDialect;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
+import io.confluent.connect.jdbc.util.SafeSqlException;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
@@ -455,7 +458,7 @@ public class BufferedRecordsTest {
 	    assertEquals(Collections.singletonList(recordB), buffer.flush());
   }
   
-  @Test(expected = BatchUpdateException.class)
+  @Test(expected = SafeSqlException.class)
   public void testFlushExecuteFailed() throws SQLException {
     final String url = sqliteHelper.sqliteUri();
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
@@ -501,6 +504,63 @@ public class BufferedRecordsTest {
     buffer.add(recordB);
     buffer.flush();
 
+  }
+
+  @Test
+  public void testFlushSanitizesExecuteBatchFailure() throws SQLException {
+    props.put("auto.create", false);
+    props.put("auto.evolve", false);
+    final JdbcSinkConfig config = new JdbcSinkConfig(props);
+    final String url = sqliteHelper.sqliteUri();
+    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+
+    final ColumnDefinition colDefMock = mock(ColumnDefinition.class);
+    when(colDefMock.type()).thenReturn(Types.VARCHAR);
+    final TableDefinition tabDefMock = mock(TableDefinition.class);
+    when(tabDefMock.definitionForColumn("name")).thenReturn(colDefMock);
+    when(tabDefMock.columnNames()).thenReturn(Collections.singleton("name"));
+
+    final DbStructure dbStructureMock = mock(DbStructure.class);
+    when(dbStructureMock.createOrAmendIfNecessary(
+        Matchers.any(JdbcSinkConfig.class),
+        Matchers.any(Connection.class),
+        Matchers.any(TableId.class),
+        Matchers.any(FieldsMetadata.class)
+    )).thenReturn(true);
+    when(dbStructureMock.tableDefinition(any(), any())).thenReturn(tabDefMock);
+
+    final PreparedStatement preparedStatementMock = mock(PreparedStatement.class);
+    when(preparedStatementMock.executeBatch()).thenThrow(new BatchUpdateException(
+        "Batch entry 0 ... 'canary@example.com'",
+        "23505",
+        1062,
+        new int[]{Statement.EXECUTE_FAILED}
+    ));
+    final Connection connectionMock = mock(Connection.class);
+    when(connectionMock.prepareStatement(Matchers.anyString())).thenReturn(preparedStatementMock);
+
+    final TableId tableId = new TableId(null, null, "dummy");
+    final BufferedRecords buffer = new BufferedRecords(
+        config,
+        tableId,
+        dbDialect,
+        dbStructureMock,
+        connectionMock
+    );
+    final Schema schema = SchemaBuilder.struct().field("name", Schema.STRING_SCHEMA).build();
+    final Struct value = new Struct(schema).put("name", "cuba");
+    buffer.add(new SinkRecord("dummy", 0, null, null, schema, value, 0));
+
+    SafeSqlException exception = assertThrows(SafeSqlException.class, buffer::flush);
+    assertEquals(
+        "INSERT INTO \"dummy\"(\"name\") VALUES(<redacted>): "
+            + "ERROR: unique_violation [sqlState=23505]",
+        exception.getMessage()
+    );
+    assertTrue(exception.getMessage().startsWith("INSERT INTO"));
+    assertTrue(exception.getMessage().contains("ERROR: unique_violation"));
+    assertFalse(exception.getMessage().contains("canary@example.com"));
+    assertFalse(exception.getMessage().contains("\n"));
   }
 
 
@@ -922,5 +982,238 @@ public class BufferedRecordsTest {
 
     List<SinkRecord> flushed = buffer.add(record);
     assertEquals(Collections.emptyList(), flushed);
+  }
+
+  @Test
+  public void reconstructionContextBuiltForInsertOnExistingTable() throws SQLException {
+    props.put("auto.create", false);
+    props.put("auto.evolve", false);
+    props.put("pk.mode", "none");
+    final JdbcSinkConfig config = new JdbcSinkConfig(props);
+
+    sqliteHelper.createTable("CREATE TABLE reconInsert (name TEXT NULL)");
+
+    final String url = sqliteHelper.sqliteUri();
+    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+    final DbStructure dbStructure = new DbStructure(dbDialect);
+
+    final TableId tableId = new TableId(null, null, "reconInsert");
+    final BufferedRecords buffer = new BufferedRecords(
+        config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+
+    final Schema schema = SchemaBuilder.struct().field("name", Schema.STRING_SCHEMA).build();
+    final SinkRecord record = new SinkRecord(
+        "topic", 0, null, null, schema, new Struct(schema).put("name", "cuba"), 0);
+    assertEquals(Collections.emptyList(), buffer.add(record));
+    assertEquals(Collections.singletonList(record), buffer.flush());
+  }
+
+  @Test
+  public void reconstructionContextBuiltForUpsertWithDeleteEnabled() throws SQLException {
+    props.put("auto.create", false);
+    props.put("auto.evolve", false);
+    props.put("insert.mode", "upsert");
+    props.put("delete.enabled", true);
+    props.put("pk.mode", "record_key");
+    props.put("pk.fields", "id");
+    final JdbcSinkConfig config = new JdbcSinkConfig(props);
+
+    sqliteHelper.createTable("CREATE TABLE reconUpsert (id INTEGER PRIMARY KEY, name TEXT NULL)");
+
+    final String url = sqliteHelper.sqliteUri();
+    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+    final DbStructure dbStructure = new DbStructure(dbDialect);
+
+    final TableId tableId = new TableId(null, null, "reconUpsert");
+    final BufferedRecords buffer = new BufferedRecords(
+        config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+
+    final Schema keySchema = SchemaBuilder.struct().field("id", Schema.INT64_SCHEMA).build();
+    final Schema valueSchema = SchemaBuilder.struct().field("name", Schema.STRING_SCHEMA).build();
+    final SinkRecord record = new SinkRecord(
+        "topic", 0, keySchema, new Struct(keySchema).put("id", 1L),
+        valueSchema, new Struct(valueSchema).put("name", "cuba"), 0);
+    assertEquals(Collections.emptyList(), buffer.add(record));
+    assertEquals(Collections.singletonList(record), buffer.flush());
+  }
+
+  @Test
+  public void reconstructionContextBuiltForUpdateOnExistingTable() throws SQLException {
+    props.put("auto.create", false);
+    props.put("auto.evolve", false);
+    props.put("insert.mode", "update");
+    props.put("pk.mode", "record_key");
+    props.put("pk.fields", "id");
+    final JdbcSinkConfig config = new JdbcSinkConfig(props);
+
+    sqliteHelper.createTable("CREATE TABLE reconUpdate (id INTEGER PRIMARY KEY, name TEXT NULL)");
+
+    final String url = sqliteHelper.sqliteUri();
+    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+    final DbStructure dbStructure = new DbStructure(dbDialect);
+
+    final TableId tableId = new TableId(null, null, "reconUpdate");
+    final BufferedRecords buffer = new BufferedRecords(
+        config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+
+    final Schema keySchema = SchemaBuilder.struct().field("id", Schema.INT64_SCHEMA).build();
+    final Schema valueSchema = SchemaBuilder.struct().field("name", Schema.STRING_SCHEMA).build();
+    final SinkRecord record = new SinkRecord(
+        "topic", 0, keySchema, new Struct(keySchema).put("id", 1L),
+        valueSchema, new Struct(valueSchema).put("name", "cuba"), 0);
+    assertEquals(Collections.emptyList(), buffer.add(record));
+    assertEquals(Collections.singletonList(record), buffer.flush());
+  }
+
+  @Test
+  public void testFlushFallsBackToSkeletonWhenFieldUnresolved() throws SQLException {
+    props.put("auto.create", false);
+    props.put("auto.evolve", false);
+    final JdbcSinkConfig config = new JdbcSinkConfig(props);
+    final String url = sqliteHelper.sqliteUri();
+    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+
+    final ColumnDefinition colDefMock = mock(ColumnDefinition.class);
+    when(colDefMock.type()).thenReturn(Types.VARCHAR);
+    final TableDefinition tabDefMock = mock(TableDefinition.class);
+    when(tabDefMock.definitionForColumn("name")).thenReturn(colDefMock);
+    // The live table exposes no column matching the record field, so the statement
+    // cannot be reconstructed and the failure must fall back to the skeleton.
+    when(tabDefMock.columnNames()).thenReturn(Collections.singleton("unrelated"));
+
+    final DbStructure dbStructureMock = mock(DbStructure.class);
+    when(dbStructureMock.createOrAmendIfNecessary(
+        Matchers.any(JdbcSinkConfig.class),
+        Matchers.any(Connection.class),
+        Matchers.any(TableId.class),
+        Matchers.any(FieldsMetadata.class)
+    )).thenReturn(true);
+    when(dbStructureMock.tableDefinition(any(), any())).thenReturn(tabDefMock);
+
+    final PreparedStatement preparedStatementMock = mock(PreparedStatement.class);
+    when(preparedStatementMock.executeBatch()).thenThrow(new BatchUpdateException(
+        "Batch entry 0 ... 'canary@example.com'",
+        "23505",
+        1062,
+        new int[]{Statement.EXECUTE_FAILED}
+    ));
+    final Connection connectionMock = mock(Connection.class);
+    when(connectionMock.prepareStatement(Matchers.anyString())).thenReturn(preparedStatementMock);
+
+    final TableId tableId = new TableId(null, null, "dummy");
+    final BufferedRecords buffer = new BufferedRecords(
+        config, tableId, dbDialect, dbStructureMock, connectionMock);
+    final Schema schema = SchemaBuilder.struct().field("name", Schema.STRING_SCHEMA).build();
+    buffer.add(new SinkRecord("dummy", 0, null, null, schema,
+        new Struct(schema).put("name", "cuba"), 0));
+
+    SafeSqlException exception = assertThrows(SafeSqlException.class, buffer::flush);
+    assertTrue(exception.getMessage().startsWith("<redacted>"));
+    assertFalse(exception.getMessage().startsWith("INSERT"));
+    assertFalse(exception.getMessage().contains("canary@example.com"));
+  }
+
+  @Test
+  public void testFlushSanitizesDeleteBatchFailure() throws SQLException {
+    props.put("auto.create", false);
+    props.put("auto.evolve", false);
+    props.put("insert.mode", "upsert");
+    props.put("delete.enabled", true);
+    props.put("pk.mode", "record_key");
+    props.put("pk.fields", "id");
+    final JdbcSinkConfig config = new JdbcSinkConfig(props);
+    final String url = sqliteHelper.sqliteUri();
+    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+
+    final ColumnDefinition idColDef = mock(ColumnDefinition.class);
+    when(idColDef.type()).thenReturn(Types.INTEGER);
+    final ColumnDefinition nameColDef = mock(ColumnDefinition.class);
+    when(nameColDef.type()).thenReturn(Types.VARCHAR);
+    final TableDefinition tabDefMock = mock(TableDefinition.class);
+    when(tabDefMock.definitionForColumn("id")).thenReturn(idColDef);
+    when(tabDefMock.definitionForColumn("name")).thenReturn(nameColDef);
+    when(tabDefMock.columnNames()).thenReturn(new HashSet<>(Arrays.asList("id", "name")));
+
+    final DbStructure dbStructureMock = mock(DbStructure.class);
+    when(dbStructureMock.createOrAmendIfNecessary(
+        Matchers.any(JdbcSinkConfig.class),
+        Matchers.any(Connection.class),
+        Matchers.any(TableId.class),
+        Matchers.any(FieldsMetadata.class)
+    )).thenReturn(true);
+    when(dbStructureMock.tableDefinition(any(), any())).thenReturn(tabDefMock);
+
+    // The update batch succeeds; the delete batch reports a failed row, so the delete
+    // path must reconstruct a value-free DELETE statement rather than leak the key value.
+    final PreparedStatement updateStmt = mock(PreparedStatement.class);
+    when(updateStmt.executeBatch()).thenReturn(new int[]{1});
+    final PreparedStatement deleteStmt = mock(PreparedStatement.class);
+    when(deleteStmt.executeBatch()).thenReturn(new int[]{Statement.EXECUTE_FAILED});
+    final Connection connectionMock = mock(Connection.class);
+    when(connectionMock.prepareStatement(Matchers.anyString()))
+        .thenReturn(updateStmt, deleteStmt);
+
+    final TableId tableId = new TableId(null, null, "dummy");
+    final BufferedRecords buffer = new BufferedRecords(
+        config, tableId, dbDialect, dbStructureMock, connectionMock);
+
+    final Schema keySchema = SchemaBuilder.struct().field("id", Schema.INT64_SCHEMA).build();
+    final Schema valueSchema = SchemaBuilder.struct().field("name", Schema.STRING_SCHEMA).build();
+    buffer.add(new SinkRecord("dummy", 0, keySchema, new Struct(keySchema).put("id", 1234L),
+        valueSchema, new Struct(valueSchema).put("name", "cuba"), 0));
+    buffer.add(new SinkRecord("dummy", 0, keySchema, new Struct(keySchema).put("id", 1234L),
+        null, null, 1));
+
+    SafeSqlException exception = assertThrows(SafeSqlException.class, buffer::flush);
+    assertTrue(exception.getMessage().startsWith("DELETE FROM"));
+    assertFalse(exception.getMessage().contains("1234"));
+  }
+
+  @Test
+  public void testFlushReconstructsUsingCaseInsensitiveColumnMatch() throws SQLException {
+    props.put("auto.create", false);
+    props.put("auto.evolve", false);
+    final JdbcSinkConfig config = new JdbcSinkConfig(props);
+    final String url = sqliteHelper.sqliteUri();
+    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+
+    final ColumnDefinition colDefMock = mock(ColumnDefinition.class);
+    when(colDefMock.type()).thenReturn(Types.VARCHAR);
+    final TableDefinition tabDefMock = mock(TableDefinition.class);
+    when(tabDefMock.definitionForColumn("name")).thenReturn(colDefMock);
+    // The record field "name" differs in case from the live column "NAME"; the
+    // reconstruction resolves it case-insensitively to the canonical column.
+    when(tabDefMock.columnNames()).thenReturn(Collections.singleton("NAME"));
+
+    final DbStructure dbStructureMock = mock(DbStructure.class);
+    when(dbStructureMock.createOrAmendIfNecessary(
+        Matchers.any(JdbcSinkConfig.class),
+        Matchers.any(Connection.class),
+        Matchers.any(TableId.class),
+        Matchers.any(FieldsMetadata.class)
+    )).thenReturn(true);
+    when(dbStructureMock.tableDefinition(any(), any())).thenReturn(tabDefMock);
+
+    final PreparedStatement preparedStatementMock = mock(PreparedStatement.class);
+    when(preparedStatementMock.executeBatch()).thenThrow(new BatchUpdateException(
+        "Batch entry 0 ... 'canary@example.com'",
+        "23505",
+        1062,
+        new int[]{Statement.EXECUTE_FAILED}
+    ));
+    final Connection connectionMock = mock(Connection.class);
+    when(connectionMock.prepareStatement(Matchers.anyString())).thenReturn(preparedStatementMock);
+
+    final TableId tableId = new TableId(null, null, "dummy");
+    final BufferedRecords buffer = new BufferedRecords(
+        config, tableId, dbDialect, dbStructureMock, connectionMock);
+    final Schema schema = SchemaBuilder.struct().field("name", Schema.STRING_SCHEMA).build();
+    buffer.add(new SinkRecord("dummy", 0, null, null, schema,
+        new Struct(schema).put("name", "cuba"), 0));
+
+    SafeSqlException exception = assertThrows(SafeSqlException.class, buffer::flush);
+    assertTrue(exception.getMessage().startsWith("INSERT INTO \"dummy\"(\"NAME\")"));
+    assertTrue(exception.getMessage().contains("ERROR: unique_violation"));
+    assertFalse(exception.getMessage().contains("canary@example.com"));
   }
 }

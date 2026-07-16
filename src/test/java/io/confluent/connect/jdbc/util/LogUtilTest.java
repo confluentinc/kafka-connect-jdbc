@@ -16,9 +16,7 @@
 package io.confluent.connect.jdbc.util;
 
 import org.junit.Assert;
-import org.junit.Ignore;
 import org.junit.Test;
-import org.postgresql.util.PSQLException;
 
 import java.sql.BatchUpdateException;
 import java.sql.SQLException;
@@ -27,109 +25,6 @@ import static org.junit.Assert.assertEquals;
 
 public class LogUtilTest {
   private static final String REDACTED = "<redacted>";
-
-  @Test
-  public void testNonSqlThrowable() {
-    Throwable t = new Throwable("t");
-    assertEquals(t, LogUtil.trimSensitiveData(t));
-  }
-
-  @Test
-  public void testSqlExceptionNoNested() {
-    SQLException e = new SQLException("e");
-    SQLException trimmed = LogUtil.trimSensitiveData(e);
-    assertEqualsSQLException(e, trimmed);
-  }
-
-  @Test
-  public void testSqlExceptionOneLevelNestedNonBatchUpdate() {
-    SQLException e1 = new SQLException("e1");
-    SQLException e2 = new SQLException("e2");
-    e1.setNextException(e2);
-
-    SQLException trimmed = LogUtil.trimSensitiveData(e1);
-    assertEqualsSQLException(e1, trimmed);
-  }
-
-  @Test
-  public void testSqlExceptionTwoLevelNestedNonBatchUpdate() {
-    SQLException e1 = new SQLException("e1");
-    SQLException e2 = new SQLException("e2");
-    SQLException e3 = new SQLException("e3");
-    e1.setNextException(e2);
-    e2.setNextException(e3);
-
-    SQLException trimmed = LogUtil.trimSensitiveData(e1);
-    assertEqualsSQLException(e1, trimmed);
-  }
-
-  @Test
-  public void testFirstLevelBatchUpdateNoSensitive() {
-    BatchUpdateException e1 = new BatchUpdateException("Hello World", new int[0]);
-    SQLException trimmed = LogUtil.trimSensitiveData(e1);
-    assertEqualsSQLException(e1, trimmed);
-  }
-
-  @Test
-  public void testFirstLevelBatchUpdateSensitive() {
-    BatchUpdateException e1 = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\") " +
-            "VALUES ('1','2','3',NULL) was aborted: ERROR: null value in column \"c4\" violates not-null constraint\n" +
-            "  Detail: Failing row contains (1, 2, 3, null).  Call getNextException to see other errors in the batch.",
-            new int[0]);
-
-    BatchUpdateException expectedTrimmed = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\"): " +
-            "ERROR: null value in column \"c4\" violates not-null constraint",
-            new int[0]);
-
-    SQLException actualTrimmed = LogUtil.trimSensitiveData(e1);
-    assertEqualsSQLException(expectedTrimmed, actualTrimmed);
-  }
-
-  @Test
-  public void testSecondLevelNestedBatchUpdateNoSensitive() {
-    SQLException e1 = new SQLException("e1");
-    BatchUpdateException e2 = new BatchUpdateException("Hello World", new int[0]);
-    e1.setNextException(e2);
-
-    SQLException trimmed = LogUtil.trimSensitiveData(e1);
-    assertEqualsSQLException(e1, trimmed);
-  }
-
-  @Test
-  public void testSecondLevelNestedBatchUpdateSensitive() {
-    SQLException e1 = new SQLException("e1");
-    BatchUpdateException e2 = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\") " +
-            "VALUES ('1','2','3',NULL) was aborted: ERROR: null value in column \"c4\" violates not-null constraint\n" +
-            "  Detail: Failing row contains (1, 2, 3, null).  Call getNextException to see other errors in the batch.",
-            new int[0]);
-    e1.setNextException(e2);
-
-    SQLException expectedTrimmed = new SQLException("e1");
-    BatchUpdateException e3 = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\"): " +
-            "ERROR: null value in column \"c4\" violates not-null constraint",
-            new int[0]);
-    expectedTrimmed.setNextException(e3);
-
-    SQLException actualTrimmed = LogUtil.trimSensitiveData(e1);
-    assertEqualsSQLException(expectedTrimmed, actualTrimmed);
-  }
-
-  @Test
-  public void testSecondLevelNestedBatchUpdateSensitiveNoError() {
-    SQLException e1 = new SQLException("e1");
-    BatchUpdateException e2 = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\") " +
-            "VALUES ('1','2','3',NULL) was aborted.",
-            new int[0]);
-    e1.setNextException(e2);
-
-    SQLException expectedTrimmed = new SQLException("e1");
-    BatchUpdateException e3 = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\")",
-            new int[0]);
-    expectedTrimmed.setNextException(e3);
-
-    SQLException actualTrimmed = LogUtil.trimSensitiveData(e1);
-    assertEqualsSQLException(expectedTrimmed, actualTrimmed);
-  }
 
   @Test
   public void testSensitiveLogWithTrimEnabled() {
@@ -149,6 +44,27 @@ public class LogUtilTest {
   public void testRedactSensitiveDataWithNonSqlThrowable() {
     Throwable t = new RuntimeException("secret");
     Assert.assertSame(t, LogUtil.redactSensitiveData(t));
+  }
+
+  @Test
+  public void testDeprecatedTrimSensitiveDataSqlExceptionSanitizes() {
+    SQLException sanitized =
+        LogUtil.trimSensitiveData(new SQLException("secret value", "23505", 7));
+    Assert.assertFalse(sanitized.getMessage().contains("secret value"));
+  }
+
+  @Test
+  public void testDeprecatedTrimSensitiveDataThrowableSqlBranchSanitizes() {
+    Throwable sanitized =
+        LogUtil.trimSensitiveData((Throwable) new SQLException("secret value", "23505", 7));
+    Assert.assertTrue(sanitized instanceof SQLException);
+    Assert.assertFalse(sanitized.getMessage().contains("secret value"));
+  }
+
+  @Test
+  public void testDeprecatedTrimSensitiveDataThrowableNonSqlPassesThrough() {
+    Throwable t = new RuntimeException("secret");
+    Assert.assertSame(t, LogUtil.trimSensitiveData(t));
   }
 
   @Test
@@ -185,159 +101,6 @@ public class LogUtilTest {
         expected.getUpdateCounts(), ((BatchUpdateException) actual).getUpdateCounts());
 
     assertEqualsSQLException(expected, actual);
-  }
-
-  @Test
-  public void testSecondLevelNestedBatchUpdateSensitiveNoDetails() {
-    SQLException e1 = new SQLException("e1");
-    BatchUpdateException e2 = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\") " +
-            "VALUES ('1','2','3',NULL) was aborted: ERROR: null value in column \"c4\" violates not-null constraint.",
-            new int[0]);
-    e1.setNextException(e2);
-
-    SQLException expectedTrimmed = new SQLException("e1");
-    BatchUpdateException e3 = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\")",
-            new int[0]);
-    expectedTrimmed.setNextException(e3);
-
-    SQLException actualTrimmed = LogUtil.trimSensitiveData(e1);
-    assertEqualsSQLException(expectedTrimmed, actualTrimmed);
-  }
-
-  @Test
-  public void testBatchExceptionWithChild() {
-    SQLException e1 = new SQLException("e1");
-    BatchUpdateException e2 = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\") " +
-        "VALUES ('1','2','3',NULL) was aborted: ERROR: null value in column \"c4\" violates not-null constraint.",
-        new int[0]);
-    SQLException p1 = new SQLException("ERROR: null value in column \"c4\" violates "
-        + "not-null constraint\n Detail: Failing row contains ('1','2','3',NULL).");
-
-    e2.setNextException(p1);
-    e1.setNextException(e2);
-
-    SQLException expectedTrimmed = new SQLException("e1");
-    BatchUpdateException e3 = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\")",
-        new int[0]);
-    expectedTrimmed.setNextException(e3);
-
-    SQLException actualTrimmed = LogUtil.trimSensitiveData(e1);
-    assertEqualsSQLException(expectedTrimmed, actualTrimmed);
-  }
-
-  // Redshift's redshift-jdbc42 driver emits this message shape for multi-row
-  // `INSERT INTO ... VALUES (...), (...)` failures (the form JDBC sink connectors batch into for
-  // throughput). The server omits the DETAIL block for many error classes (e.g., string truncation),
-  // so the trailing "  Call getNextException ..." text is the only stable right-edge marker.
-  @Test
-  public void testRedshiftMultiRowBatchUpdateSensitive() {
-    BatchUpdateException e1 = new BatchUpdateException(
-        "Batch entry 0 /* -partner Confluent Redshift Connector */ INSERT INTO "
-            + "\"db\".\"public\".\"t\" (\"id\",\"name\") VALUES (('1'::int4),('ok')),"
-            + "(('2'::int4),('secret-payload-customer-PII')) was aborted: "
-            + "ERROR: value too long for type character varying(5)"
-            + "  Call getNextException to see other errors in the batch.",
-        new int[0]);
-
-    BatchUpdateException expectedTrimmed = new BatchUpdateException(
-        "Batch entry 0 /* -partner Confluent Redshift Connector */ INSERT INTO "
-            + "\"db\".\"public\".\"t\" (\"id\",\"name\"): "
-            + "ERROR: value too long for type character varying(5)",
-        new int[0]);
-
-    SQLException actualTrimmed = LogUtil.trimSensitiveData(e1);
-    assertNoSensitiveLeak(actualTrimmed, "secret-payload-customer-PII");
-    assertEqualsSQLException(expectedTrimmed, actualTrimmed);
-  }
-
-  // Postgres can return HINT without DETAIL for some error classes (e.g., undefined function with
-  // a suggested replacement). The HINT marker should bound the safe error segment.
-  @Test
-  public void testBatchUpdateSensitiveHintOnly() {
-    BatchUpdateException e1 = new BatchUpdateException(
-        "Batch entry 0 INSERT INTO \"t\" (\"c\") VALUES ('secret') was aborted: "
-            + "ERROR: function lower(integer) does not exist\n"
-            + "  Hint: No function matches the given name and argument types.",
-        new int[0]);
-
-    BatchUpdateException expectedTrimmed = new BatchUpdateException(
-        "Batch entry 0 INSERT INTO \"t\" (\"c\"): "
-            + "ERROR: function lower(integer) does not exist",
-        new int[0]);
-
-    SQLException actualTrimmed = LogUtil.trimSensitiveData(e1);
-    assertNoSensitiveLeak(actualTrimmed, "secret");
-    assertEqualsSQLException(expectedTrimmed, actualTrimmed);
-  }
-
-  // When more than one structured marker is present, the earliest one (closest to ": ERROR: ")
-  // wins. Here DETAIL precedes HINT so the segment stops at DETAIL; the HINT block is dropped
-  // along with anything that might follow (preserves the existing conservative behavior).
-  @Test
-  public void testBatchUpdateSensitiveDetailBeforeHint() {
-    BatchUpdateException e1 = new BatchUpdateException(
-        "Batch entry 0 INSERT INTO \"t\" (\"c\") VALUES ('secret') was aborted: "
-            + "ERROR: null value in column \"c\" violates not-null constraint\n"
-            + "  Detail: Failing row contains ('secret').\n"
-            + "  Hint: ignore",
-        new int[0]);
-
-    BatchUpdateException expectedTrimmed = new BatchUpdateException(
-        "Batch entry 0 INSERT INTO \"t\" (\"c\"): "
-            + "ERROR: null value in column \"c\" violates not-null constraint",
-        new int[0]);
-
-    SQLException actualTrimmed = LogUtil.trimSensitiveData(e1);
-    assertNoSensitiveLeak(actualTrimmed, "secret");
-    assertEqualsSQLException(expectedTrimmed, actualTrimmed);
-  }
-
-  // pgjdbc shape with both a structured DETAIL marker and the BatchResultHandler suffix present.
-  // Locks the Tier 1 (structured) vs Tier 2 (suffix) precedence: DETAIL must be chosen, never the
-  // suffix, regardless of which appears earlier in the string.
-  @Test
-  public void testBatchUpdateSensitiveDetailBeatsGetNextException() {
-    BatchUpdateException e1 = new BatchUpdateException(
-        "Batch entry 0 INSERT INTO \"t\" (\"c\") VALUES ('x'),('toolong') was aborted: "
-            + "ERROR: value too long for type character varying(5)\n"
-            + "  Detail: Failing row contains (toolong).  Call getNextException to see "
-            + "other errors in the batch.",
-        new int[0]);
-
-    BatchUpdateException expectedTrimmed = new BatchUpdateException(
-        "Batch entry 0 INSERT INTO \"t\" (\"c\"): "
-            + "ERROR: value too long for type character varying(5)",
-        new int[0]);
-
-    SQLException actualTrimmed = LogUtil.trimSensitiveData(e1);
-    assertNoSensitiveLeak(actualTrimmed, "toolong");
-    assertEqualsSQLException(expectedTrimmed, actualTrimmed);
-  }
-
-  // When no marker matches at all, fall back to the prefix-only result (conservative).
-  @Test
-  public void testBatchUpdateSensitiveNoKnownMarker() {
-    BatchUpdateException e1 = new BatchUpdateException(
-        "Batch entry 0 INSERT INTO \"t\" (\"c\") VALUES ('secret') was aborted: "
-            + "ERROR: some new format we have not seen before",
-        new int[0]);
-
-    BatchUpdateException expectedTrimmed = new BatchUpdateException(
-        "Batch entry 0 INSERT INTO \"t\" (\"c\")",
-        new int[0]);
-
-    SQLException actualTrimmed = LogUtil.trimSensitiveData(e1);
-    assertNoSensitiveLeak(actualTrimmed, "secret");
-    assertEqualsSQLException(expectedTrimmed, actualTrimmed);
-  }
-
-  // Fails with a readable message if row data leaked through. Run before the strict equality
-  // check so a regression in the trim logic produces "Row data leaked: ..." instead of an opaque
-  // string diff.
-  private static void assertNoSensitiveLeak(SQLException trimmed, String sensitiveSubstring) {
-    String msg = trimmed.getMessage();
-    Assert.assertFalse("Row data leaked: " + msg, msg.contains(sensitiveSubstring));
-    Assert.assertFalse("VALUES clause leaked: " + msg, msg.contains("VALUES"));
   }
 
   private static void assertEqualsSQLException(SQLException expected, SQLException actual) {

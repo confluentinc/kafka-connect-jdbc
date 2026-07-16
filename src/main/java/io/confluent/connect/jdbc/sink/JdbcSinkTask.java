@@ -44,7 +44,7 @@ public class JdbcSinkTask extends SinkTask {
   JdbcDbWriter writer;
   int remainingRetries;
 
-  boolean shouldTrimSensitiveLogs;
+  boolean shouldSanitizeSensitiveLogs;
 
   @Override
   public void start(final Map<String, String> props) {
@@ -52,7 +52,7 @@ public class JdbcSinkTask extends SinkTask {
     config = new JdbcSinkConfig(props);
     initWriter();
     remainingRetries = config.maxRetries;
-    shouldTrimSensitiveLogs = config.trimSensitiveLogsEnabled;
+    shouldSanitizeSensitiveLogs = config.trimSensitiveLogsEnabled;
     try {
       reporter = context.errantRecordReporter();
     } catch (NoSuchMethodError | NoClassDefFoundError e) {
@@ -97,26 +97,25 @@ public class JdbcSinkTask extends SinkTask {
         throw tace;
       }
     } catch (SQLException sqle) {
-      SQLException trimmedException = shouldTrimSensitiveLogs
-              ? LogUtil.trimSensitiveData(sqle) : sqle;
+      SQLException sanitizedException = sanitize(sqle);
       log.warn(
           "Write of {} records failed, remainingRetries={}",
           records.size(),
           remainingRetries,
-          trimmedException
+          sanitizedException
       );
       int totalExceptions = 0;
-      for (Throwable e :sqle) {
+      for (Throwable exception : sqle) {
         totalExceptions++;
       }
-      SQLException sqlAllMessagesException = getAllMessagesException(sqle);
+      SQLException allMessagesException = getAllMessagesException(sanitizedException);
       if (remainingRetries > 0) {
         writer.closeQuietly();
         initWriter();
         remainingRetries--;
         context.timeout(config.retryBackoffMs);
-        log.debug(sqlAllMessagesException.toString());
-        throw new RetriableException(sqlAllMessagesException);
+        log.debug(allMessagesException.toString());
+        throw new RetriableException(allMessagesException);
       } else {
         if (reporter != null) {
           unrollAndRetry(records);
@@ -127,10 +126,10 @@ public class JdbcSinkTask extends SinkTask {
                   + "For complete details on each exception, please enable DEBUG logging.",
               totalExceptions);
           int exceptionCount = 1;
-          for (Throwable e : trimmedException) {
-            log.debug("Exception {}:", exceptionCount++, e);
+          for (Throwable exception : sanitizedException) {
+            log.debug("Exception {}:", exceptionCount++, exception);
           }
-          throw new ConnectException(sqlAllMessagesException);
+          throw new ConnectException(allMessagesException);
         }
       }
     }
@@ -149,29 +148,34 @@ public class JdbcSinkTask extends SinkTask {
         reporter.report(record, tace);
         writer.closeQuietly();
       } catch (SQLException sqle) {
-        SQLException sqlAllMessagesException = getAllMessagesException(sqle);
-        log.debug(sqlAllMessagesException.toString());
-        reporter.report(record, sqlAllMessagesException);
+        SQLException sanitizedException = sanitize(sqle);
+        SQLException allMessagesException = getAllMessagesException(sanitizedException);
+        log.debug(allMessagesException.toString());
+        reporter.report(record, allMessagesException);
         writer.closeQuietly();
       }
     }
   }
 
-  private SQLException getAllMessagesException(SQLException sqle) {
-    String sqleAllMessages = "Exception chain:" + System.lineSeparator();
-    SQLException trimmedException = shouldTrimSensitiveLogs
-            ? LogUtil.trimSensitiveData(sqle) : sqle;
-    for (Throwable e : trimmedException) {
-      sqleAllMessages += e + System.lineSeparator();
+  private SQLException sanitize(SQLException exception) {
+    return shouldSanitizeSensitiveLogs
+        ? LogUtil.sanitizeSensitiveData(exception)
+        : exception;
+  }
+
+  private SQLException getAllMessagesException(SQLException exception) {
+    StringBuilder allMessages = new StringBuilder("Exception chain:")
+        .append(System.lineSeparator());
+    for (Throwable current : exception) {
+      allMessages.append(current).append(System.lineSeparator());
     }
-    SQLException sqlAllMessagesException = new SQLException(sqleAllMessages);
-    sqlAllMessagesException.setNextException(trimmedException);
-    return sqlAllMessagesException;
+    SQLException allMessagesException = new SQLException(allMessages.toString());
+    allMessagesException.setNextException(exception);
+    return allMessagesException;
   }
 
   @Override
   public void flush(Map<TopicPartition, OffsetAndMetadata> map) {
-    // Not necessary
   }
 
   public void stop() {

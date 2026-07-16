@@ -1608,6 +1608,10 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     return Arrays.asList(MODE_INCREMENTING, MODE_TIMESTAMP_INCREMENTING).contains(mode);
   }
 
+  public boolean sqlComplexTypesEnabled() {
+    return getBoolean(SQL_COMPLEX_TYPES_ENABLE_CONFIG);
+  }
+
   // Helper methods for configuration access
 
   /**

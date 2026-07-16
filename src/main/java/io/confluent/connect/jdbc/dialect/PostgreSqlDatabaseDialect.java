@@ -381,7 +381,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       return ((JdbcSinkConfig) config).sqlComplexTypesEnable;
     }
     if (config instanceof JdbcSourceConnectorConfig) {
-      return config.getBoolean(JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG);
+      return ((JdbcSourceConnectorConfig) config).sqlComplexTypesEnabled();
     }
     return false;
   }

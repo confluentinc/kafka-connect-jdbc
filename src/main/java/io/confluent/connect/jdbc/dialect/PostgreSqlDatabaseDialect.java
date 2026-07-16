@@ -485,10 +485,12 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * Read a {@code timestamptz[]} array into ISO-8601 UTC strings ({@code ZonedTimestamp}), decoding
-   * each element via the element {@link ResultSet} with a UTC Calendar.
+   * Read a {@code timestamptz[]} array into ISO-8601 strings ({@code ZonedTimestamp}), decoding
+   * each element via the element {@link ResultSet} using the configured {@code db.timezone}
+   * (mirrors the scalar timestamptz path). timestamptz is an absolute instant, so the rendered
+   * value is the same instant regardless of the calendar zone.
    */
-  private static List<Object> readZonedTimestampArray(ResultSet rs, int col)
+  private List<Object> readZonedTimestampArray(ResultSet rs, int col)
       throws SQLException {
     Array arr = rs.getArray(col);
     if (arr == null) {
@@ -500,12 +502,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         log.warn(MULTI_DIMENSIONAL_ARRAY_WARNING, col);
         return null;
       }
-      Calendar utc =
-          DateTimeUtils.getZoneIdCalendar(ZoneOffset.UTC);
+      Calendar cal = DateTimeUtils.getZoneIdCalendar(zoneId());
       try (ResultSet elementRs = arr.getResultSet()) {
         List<Object> out = new ArrayList<>();
         while (elementRs.next()) {
-          java.sql.Timestamp ts = elementRs.getTimestamp(2, utc);
+          java.sql.Timestamp ts = elementRs.getTimestamp(2, cal);
           out.add(elementRs.wasNull()
               ? null
               : ZonedTimestamp.toIsoString(ts));
@@ -518,10 +519,12 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * Read a temporal array into Connect Date/Time/Timestamp values, decoding each element in UTC via
-   * the element {@link ResultSet} ({@code getArray()} would parse in the JVM zone).
+   * Read a temporal array into Connect Date/Time/Timestamp values, decoding each element via the
+   * element {@link ResultSet}. Mirrors the scalar path: {@code date} is decoded in UTC while
+   * {@code time}/{@code timestamp} honor the configured {@code db.timezone}
+   * ({@code getArray()} would otherwise parse in the JVM default zone).
    */
-  private static List<Object> readTemporalArray(ResultSet rs, int col, String elementName)
+  private List<Object> readTemporalArray(ResultSet rs, int col, String elementName)
       throws SQLException {
     Array arr = rs.getArray(col);
     if (arr == null) {
@@ -533,18 +536,18 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         log.warn(MULTI_DIMENSIONAL_ARRAY_WARNING, col);
         return null;
       }
-      Calendar utc =
-          DateTimeUtils.getZoneIdCalendar(ZoneOffset.UTC);
+      Calendar dateCal = DateTimeUtils.getZoneIdCalendar(ZoneOffset.UTC);
+      Calendar timeCal = DateTimeUtils.getZoneIdCalendar(zoneId());
       try (ResultSet elementRs = arr.getResultSet()) {
         List<Object> out = new ArrayList<>();
         while (elementRs.next()) {
           Object converted;
           if (Date.LOGICAL_NAME.equals(elementName)) {
-            converted = elementRs.getDate(2, utc);
+            converted = elementRs.getDate(2, dateCal);
           } else if (Time.LOGICAL_NAME.equals(elementName)) {
-            converted = elementRs.getTime(2, utc);
+            converted = elementRs.getTime(2, timeCal);
           } else {
-            converted = elementRs.getTimestamp(2, utc);
+            converted = elementRs.getTimestamp(2, timeCal);
           }
           out.add(elementRs.wasNull() ? null : converted);
         }

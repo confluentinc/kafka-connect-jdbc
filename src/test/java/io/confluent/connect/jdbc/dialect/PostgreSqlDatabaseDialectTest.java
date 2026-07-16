@@ -53,9 +53,11 @@ import java.sql.Statement;
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.TimeZone;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -978,7 +980,59 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     assertEquals("{\"k\":1}", json);
   }
 
+  @Test
+  public void temporalArrayReadHonorsConfiguredDbTimezone() throws Exception {
+    // timestamp[] elements must be decoded with the configured db.timezone, matching the scalar
+    // (non-array) timestamp path, rather than a hard-coded UTC calendar.
+    TimeZone tz = TimeZone.getTimeZone("America/New_York");
+    ResultSet elementRs = captureTemporalArrayRead("_timestamp", tz);
+    ArgumentCaptor<Calendar> cal = ArgumentCaptor.forClass(Calendar.class);
+    verify(elementRs).getTimestamp(eq(2), cal.capture());
+    assertEquals(tz, cal.getValue().getTimeZone());
+  }
+
+  @Test
+  public void zonedTimestampArrayReadHonorsConfiguredDbTimezone() throws Exception {
+    // timestamptz[] elements are likewise decoded with the configured db.timezone (mirrors scalar).
+    TimeZone tz = TimeZone.getTimeZone("America/New_York");
+    ResultSet elementRs = captureTemporalArrayRead("_timestamptz", tz);
+    ArgumentCaptor<Calendar> cal = ArgumentCaptor.forClass(Calendar.class);
+    verify(elementRs).getTimestamp(eq(2), cal.capture());
+    assertEquals(tz, cal.getValue().getTimeZone());
+  }
+
   // ----- complex-type test helpers -----
+
+  /**
+   * Drive the array column converter for a single-element temporal array with the given
+   * {@code db.timezone}, wiring a mock element {@link ResultSet}. Returns that element ResultSet so
+   * the caller can verify the Calendar (time zone) used to decode the element.
+   */
+  private ResultSet captureTemporalArrayRead(String pgArrayType, TimeZone tz)
+      throws SQLException, java.io.IOException {
+    PostgreSqlDatabaseDialect dialect = complexTypesDialect(
+        JdbcSourceConnectorConfig.DB_TIMEZONE_CONFIG, tz.getID());
+    ColumnDefinition column = column(Types.ARRAY, pgArrayType);
+    ColumnMapping mapping = new ColumnMapping(
+        column, 1, new Field("col", 0, arraySchema(Schema.OPTIONAL_INT64_SCHEMA)));
+    DatabaseDialect.ColumnConverter converter =
+        dialect.columnConverterFor(mapping, column, 1, true);
+    assertNotNull(converter);
+
+    ResultSet resultSet = mock(ResultSet.class);
+    Array array = mock(Array.class);
+    ResultSet elementRs = mock(ResultSet.class);
+    when(resultSet.getArray(1)).thenReturn(array);
+    when(array.getArray()).thenReturn(new Object[]{new java.sql.Timestamp(0L)});
+    when(array.getResultSet()).thenReturn(elementRs);
+    when(elementRs.next()).thenReturn(true, false);
+    when(elementRs.getTimestamp(eq(2), any(Calendar.class)))
+        .thenReturn(new java.sql.Timestamp(0L));
+    when(elementRs.wasNull()).thenReturn(false);
+
+    converter.convert(resultSet);
+    return elementRs;
+  }
 
   private PostgreSqlDatabaseDialect complexTypesDialect(String... extraProps) {
     String[] props = new String[extraProps.length + 2];

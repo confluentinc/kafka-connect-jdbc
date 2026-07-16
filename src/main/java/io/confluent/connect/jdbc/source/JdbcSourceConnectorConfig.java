@@ -1612,6 +1612,10 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     return JSON_HANDLING_MODE_STRING.equalsIgnoreCase(getString(JSON_HANDLING_MODE_CONFIG));
   }
 
+  public boolean sqlComplexTypesEnabled() {
+    return getBoolean(SQL_COMPLEX_TYPES_ENABLE_CONFIG);
+  }
+
   // Helper methods for configuration access
 
   /**

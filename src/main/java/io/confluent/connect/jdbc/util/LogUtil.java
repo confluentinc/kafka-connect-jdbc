@@ -25,9 +25,12 @@ import java.util.function.UnaryOperator;
 /**
  * Rebuilds throwable graphs with sensitive data removed before connector code logs them.
  *
- * <p>Source connector redaction replaces entire messages. Sink sanitization preserves diagnostic
- * structure and delegates message parsing to a grammar for specific pgjdbc, MySQL, and SQL Server
- * shapes. Recognized shapes with incomplete boundaries fall closed.
+ * <p>Source connector redaction replaces entire messages. Sink sanitization never reads or parses
+ * the driver's message for content: it discards the message and emits a self-safe exception whose
+ * text is either a fixed skeleton or a statement reconstructed from trusted structured inputs (the
+ * dialect SQL builder invoked with the destination table's canonical columns, plus a category and
+ * SQLState classified from the exception). Any failure inside the sanitizer falls closed to the
+ * skeleton.
  */
 public class LogUtil {
   private static final String REDACTED_VALUE = "<redacted>";

@@ -233,9 +233,14 @@ public class BufferedRecords {
     }
   }
 
+  // Precomputes the value-free reconstructed statements for this batch's update and delete once,
+  // from the destination table's own columns, so a later failure can be described without the driver text.
   private void buildSafeContexts() {
     updateContext = null;
     deleteContext = null;
+
+    // With auto.create or auto.evolve on, a producer field can still become a real column, so the
+    // live schema is not a trustworthy identifier source yet; leave the contexts null to fall back to the skeleton.
     if (config.autoCreate || config.autoEvolve) {
       return;
     }

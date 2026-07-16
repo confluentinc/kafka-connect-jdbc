@@ -17,6 +17,12 @@ package io.confluent.connect.jdbc.util;
 
 import java.sql.SQLException;
 
+/**
+ * A final SQLException whose message, SQLState, and toString come only from an immutable
+ * SafeSqlDiagnostic, never the driver's text. It neutralizes the cause, the next-exception edge, and
+ * the stack trace, and reports vendor code zero, so logging it or handing it to the framework cannot
+ * surface a raw driver message. A fresh instance is minted from the diagnostic before each handoff.
+ */
 public final class SafeSqlException extends SQLException {
 
   private static final long serialVersionUID = 1L;

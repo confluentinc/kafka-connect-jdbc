@@ -337,7 +337,9 @@ public class JdbcSinkConfig extends AbstractConfig {
       + AUTO_EVOLVE + "``).";
 
   public static final String TRIM_SENSITIVE_LOG_ENABLED = "trim.sensitive.log";
-  private static final String TRIM_SENSITIVE_LOG_ENABLED_DEFAULT = "false";
+  private static final String TRIM_SENSITIVE_LOG_ENABLED_DEFAULT = "true";
+  public static final String SENSITIVE_TRACE_LOGGING_ENABLED = "sensitive.trace.logging.enabled";
+  private static final String SENSITIVE_TRACE_LOGGING_ENABLED_DEFAULT = "false";
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
 
@@ -705,6 +707,12 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Type.BOOLEAN,
             TRIM_SENSITIVE_LOG_ENABLED_DEFAULT,
             ConfigDef.Importance.LOW
+        )
+        .defineInternal(
+            SENSITIVE_TRACE_LOGGING_ENABLED,
+            ConfigDef.Type.BOOLEAN,
+            SENSITIVE_TRACE_LOGGING_ENABLED_DEFAULT,
+            ConfigDef.Importance.LOW
         );
 
   public final String connectorName;
@@ -735,6 +743,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final boolean useHoldlockInMerge;
 
   public final boolean trimSensitiveLogsEnabled;
+  public final boolean sensitiveTraceEnabled;
   public final DateCalendarSystem dateCalendarSystem;
 
   public JdbcSinkConfig(Map<?, ?> props) {
@@ -770,6 +779,7 @@ public class JdbcSinkConfig extends AbstractConfig {
         TimestampPrecisionMode.valueOf(getString(TIMESTAMP_PRECISION_MODE_CONFIG).toUpperCase());
     useHoldlockInMerge = getBoolean(MSSQL_USE_MERGE_HOLDLOCK);
     trimSensitiveLogsEnabled = getBoolean(TRIM_SENSITIVE_LOG_ENABLED);
+    sensitiveTraceEnabled = getBoolean(SENSITIVE_TRACE_LOGGING_ENABLED);
     dateCalendarSystem = DateCalendarSystem.fromConfigValue(getString(DATE_CALENDAR_SYSTEM_CONFIG));
     if (deleteEnabled && pkMode != PrimaryKeyMode.RECORD_KEY) {
       throw new ConfigException(

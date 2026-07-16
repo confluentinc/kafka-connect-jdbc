@@ -24,6 +24,7 @@ import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.apache.log4j.Level;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -102,7 +103,7 @@ public class JdbcDbWriterTest {
   }
 
   @Test
-  public void maybeTrimReturnsExceptionAsIsWhenFlagDisabled() {
+  public void maybeSanitizeReturnsExceptionAsIsWhenFlagDisabled() {
     Map<String, String> props = new HashMap<>();
     props.put("connection.url", sqliteHelper.sqliteUri());
     props.put("trim.sensitive.log", "false");
@@ -112,14 +113,14 @@ public class JdbcDbWriterTest {
             "  Detail: Failing row contains (1, 2, 3, null).  Call getNextException to see other errors in the batch.",
             new int[0]);
 
-    Throwable result = writer.maybeTrim(exception);
+    Throwable result = writer.maybeSanitize(exception);
 
     assertSame(exception, result);
     assertTrue(result.getMessage().contains("VALUES"));
   }
 
   @Test
-  public void maybeTrimRedactsBatchUpdateExceptionWhenFlagEnabled() {
+  public void maybeSanitizeRedactsBatchUpdateExceptionWhenFlagEnabled() {
     Map<String, String> props = new HashMap<>();
     props.put("connection.url", sqliteHelper.sqliteUri());
     props.put("trim.sensitive.log", "true");
@@ -129,9 +130,57 @@ public class JdbcDbWriterTest {
             "  Detail: Failing row contains (1, 2, 3, null).  Call getNextException to see other errors in the batch.",
             new int[0]);
 
-    Throwable result = writer.maybeTrim(exception);
+    Throwable result = writer.maybeSanitize(exception);
 
     assertTrue(!result.getMessage().contains("VALUES"));
+  }
+
+  @Test
+  public void writeErrorsAreSanitizedInLogsWhenEnabled() throws SQLException {
+    assertWriteErrorLogs(true);
+  }
+
+  @Test
+  public void writeErrorsRemainRawInLogsWhenDisabled() throws SQLException {
+    assertWriteErrorLogs(false);
+  }
+
+  private void assertWriteErrorLogs(boolean sanitizeSensitiveLogs) throws SQLException {
+    String writeCanary = "write-canary-value";
+    String rollbackCanary = "rollback-canary-value";
+    SQLException writeFailure = new SQLException(
+        "Duplicate entry '" + writeCanary + "' for key 'PRIMARY'",
+        "23000",
+        1062
+    );
+    SQLException rollbackFailure = new SQLException(
+        "Duplicate entry '" + rollbackCanary + "' for key 'PRIMARY'",
+        "23000",
+        1062
+    );
+    Connection mockConnection = mock(Connection.class);
+    doThrow(writeFailure).when(mockConnection).commit();
+    doThrow(rollbackFailure).when(mockConnection).rollback();
+    JdbcDbWriter writer =
+        newWriterForCommitFailure(mockConnection, sanitizeSensitiveLogs);
+
+    String writeOutput;
+    String rollbackOutput;
+    LogCapture capture = new LogCapture(JdbcDbWriter.class);
+    try {
+      SQLException thrown = assertThrows(
+          SQLException.class,
+          () -> writer.write(Collections.singleton(commitFailureRecord()))
+      );
+      assertSame(writeFailure, thrown);
+      writeOutput = capture.output(Level.ERROR, "Error during write operation");
+      rollbackOutput = capture.output(Level.ERROR, "Failed to rollback transaction");
+    } finally {
+      capture.close();
+    }
+
+    LogCapture.assertSensitiveValue(writeOutput, writeCanary, sanitizeSensitiveLogs);
+    LogCapture.assertSensitiveValue(rollbackOutput, rollbackCanary, sanitizeSensitiveLogs);
   }
 
   @Test
@@ -159,6 +208,21 @@ public class JdbcDbWriterTest {
       doThrow(new MockRollbackException()).when(mockConnection).rollback();
     }
 
+    JdbcDbWriter writer = newWriterForCommitFailure(mockConnection, true);
+
+    SQLException e = assertThrows(
+        SQLException.class,
+        () -> writer.write(Collections.singleton(commitFailureRecord()))
+    );
+
+    verify(mockConnection, times(1)).rollback();
+    return e;
+  }
+
+  private JdbcDbWriter newWriterForCommitFailure(
+      Connection mockConnection,
+      boolean sanitizeSensitiveLogs
+  ) throws SQLException {
     Map<String, String> props = new HashMap<>();
     props.put("connection.url", sqliteHelper.sqliteUri());
     props.put("auto.create", "true");
@@ -166,6 +230,10 @@ public class JdbcDbWriterTest {
     props.put("insert.mode", "upsert");
     props.put("pk.mode", "record_key");
     props.put("pk.fields", "id"); // assigned name for the primitive key
+    props.put(
+        JdbcSinkConfig.TRIM_SENSITIVE_LOG_ENABLED,
+        String.valueOf(sanitizeSensitiveLogs)
+    );
 
     JdbcDbWriter writer = newWriterWithMockConnection(props, mockConnection);
 
@@ -176,8 +244,11 @@ public class JdbcDbWriterTest {
         .thenReturn(mock(PreparedStatementBinder.class));
     when(mockStatement.executeBatch()).thenReturn(new int[3]);
 
-    Schema keySchema = Schema.INT64_SCHEMA;
+    return writer;
+  }
 
+  private SinkRecord commitFailureRecord() {
+    Schema keySchema = Schema.INT64_SCHEMA;
     Schema valueSchema1 = SchemaBuilder.struct()
         .field("author", Schema.STRING_SCHEMA)
         .field("title", Schema.STRING_SCHEMA)
@@ -187,20 +258,15 @@ public class JdbcDbWriterTest {
         .put("author", "Tom Robbins")
         .put("title", "Villa Incognito");
 
-    SQLException e = assertThrows(
-        SQLException.class,
-        () ->
-            writer.write(Collections.singleton(new SinkRecord(
-                "books", 0,
-                keySchema,
-                1L,
-                valueSchema1,
-                valueStruct1,
-                0)
-            )));
-
-    verify(mockConnection, times(1)).rollback();
-    return e;
+    return new SinkRecord(
+        "books",
+        0,
+        keySchema,
+        1L,
+        valueSchema1,
+        valueStruct1,
+        0
+    );
   }
 
   @Test

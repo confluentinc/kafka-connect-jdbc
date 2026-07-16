@@ -47,6 +47,27 @@ public class LogUtilTest {
   }
 
   @Test
+  public void testDeprecatedTrimSensitiveDataSqlExceptionSanitizes() {
+    SQLException sanitized =
+        LogUtil.trimSensitiveData(new SQLException("secret value", "23505", 7));
+    Assert.assertFalse(sanitized.getMessage().contains("secret value"));
+  }
+
+  @Test
+  public void testDeprecatedTrimSensitiveDataThrowableSqlBranchSanitizes() {
+    Throwable sanitized =
+        LogUtil.trimSensitiveData((Throwable) new SQLException("secret value", "23505", 7));
+    Assert.assertTrue(sanitized instanceof SQLException);
+    Assert.assertFalse(sanitized.getMessage().contains("secret value"));
+  }
+
+  @Test
+  public void testDeprecatedTrimSensitiveDataThrowableNonSqlPassesThrough() {
+    Throwable t = new RuntimeException("secret");
+    Assert.assertSame(t, LogUtil.trimSensitiveData(t));
+  }
+
+  @Test
   public void testRedactSensitiveDataWithSqlExceptionChain() {
     SQLException e1 = new SQLException("sensitive-message-e1", "42000", 10);
     SQLException e2 = new SQLException("sensitive-message-e2", "42001", 20);

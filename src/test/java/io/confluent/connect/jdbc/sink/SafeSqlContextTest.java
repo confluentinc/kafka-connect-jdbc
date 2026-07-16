@@ -21,6 +21,7 @@ import static org.easymock.EasyMock.expect;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -102,6 +103,110 @@ public class SafeSqlContextTest extends EasyMockSupport {
         keyColumns,
         nonKeyColumns,
         SafeSqlContext.Operation.DELETE,
+        null
+    ).isPresent());
+    verifyAll();
+  }
+
+  @Test
+  public void shouldRedactUpsertStatementGeneratedFromStructuredInputs() {
+    TableId tableId = new TableId(null, null, "t");
+    Collection<ColumnId> keyColumns =
+        Collections.singletonList(new ColumnId(tableId, "id"));
+    Collection<ColumnId> nonKeyColumns =
+        Collections.singletonList(new ColumnId(tableId, "email"));
+    DatabaseDialect dialect = createMock(DatabaseDialect.class);
+    expect(dialect.buildUpsertQueryStatement(eq(tableId), anyObject(), anyObject()))
+        .andReturn("INSERT INTO \"t\" (\"id\", \"email\") VALUES (?, ?)");
+    replayAll();
+
+    SafeSqlContext context = SafeSqlContext.create(
+        dialect,
+        tableId,
+        keyColumns,
+        nonKeyColumns,
+        SafeSqlContext.Operation.UPSERT,
+        null
+    ).get();
+
+    assertEquals(
+        "INSERT INTO \"t\" (\"id\", \"email\") VALUES (<redacted>)",
+        context.safeStatement()
+    );
+    verifyAll();
+  }
+
+  @Test
+  public void shouldRedactUpdateStatementGeneratedFromStructuredInputs() {
+    TableId tableId = new TableId(null, null, "t");
+    Collection<ColumnId> keyColumns =
+        Collections.singletonList(new ColumnId(tableId, "id"));
+    Collection<ColumnId> nonKeyColumns =
+        Collections.singletonList(new ColumnId(tableId, "email"));
+    DatabaseDialect dialect = createMock(DatabaseDialect.class);
+    expect(dialect.buildUpdateStatement(eq(tableId), anyObject(), anyObject()))
+        .andReturn("UPDATE \"t\" SET \"email\" = ? WHERE \"id\" = ?");
+    replayAll();
+
+    SafeSqlContext context = SafeSqlContext.create(
+        dialect,
+        tableId,
+        keyColumns,
+        nonKeyColumns,
+        SafeSqlContext.Operation.UPDATE,
+        null
+    ).get();
+
+    assertEquals(
+        "UPDATE \"t\" SET \"email\" = <redacted> WHERE \"id\" = <redacted>",
+        context.safeStatement()
+    );
+    verifyAll();
+  }
+
+  @Test
+  public void shouldRedactDeleteStatementAndExposeQualifiedTableAndVendorPrefix() {
+    TableId tableId = new TableId(null, null, "t");
+    Collection<ColumnId> keyColumns =
+        Collections.singletonList(new ColumnId(tableId, "id"));
+    Collection<ColumnId> nonKeyColumns = Collections.emptyList();
+    DatabaseDialect dialect = createMock(DatabaseDialect.class);
+    expect(dialect.buildDeleteStatement(eq(tableId), anyObject()))
+        .andReturn("DELETE FROM \"t\" WHERE \"id\" = ?");
+    replayAll();
+
+    SafeSqlContext context = SafeSqlContext.create(
+        dialect,
+        tableId,
+        keyColumns,
+        nonKeyColumns,
+        SafeSqlContext.Operation.DELETE,
+        "ORA"
+    ).get();
+
+    assertEquals("DELETE FROM \"t\" WHERE \"id\" = <redacted>", context.safeStatement());
+    assertEquals("ORA", context.vendorPrefix());
+    assertTrue(context.qualifiedTable().contains("t"));
+    verifyAll();
+  }
+
+  @Test
+  public void shouldReturnEmptyWhenDialectReturnsNullStatement() {
+    TableId tableId = new TableId(null, null, "t");
+    Collection<ColumnId> keyColumns =
+        Collections.singletonList(new ColumnId(tableId, "id"));
+    Collection<ColumnId> nonKeyColumns = Collections.emptyList();
+    DatabaseDialect dialect = createMock(DatabaseDialect.class);
+    expect(dialect.buildInsertStatement(eq(tableId), anyObject(), anyObject()))
+        .andReturn(null);
+    replayAll();
+
+    assertFalse(SafeSqlContext.create(
+        dialect,
+        tableId,
+        keyColumns,
+        nonKeyColumns,
+        SafeSqlContext.Operation.INSERT,
         null
     ).isPresent());
     verifyAll();

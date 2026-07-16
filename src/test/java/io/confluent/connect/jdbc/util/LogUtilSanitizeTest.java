@@ -66,6 +66,14 @@ public class LogUtilSanitizeTest {
       @Override public String getSQLState() { throw new OutOfMemoryError(); } };
     LogUtil.sanitize(fatal);
   }
+  @Test public void reconstructedFailsClosedOnRuntime() {
+    SQLException weird = new SQLException("raw sensitive") {
+      @Override public String getSQLState() { throw new RuntimeException(); } };
+    SafeSqlException out = LogUtil.sanitizeReconstructed(
+        weird, "INSERT INTO \"t\" (\"c\") VALUES (<redacted>)", null);
+    Assert.assertEquals("<redacted> [type=SQLException, category=sql_error]", out.getMessage());
+    Assert.assertFalse(out.getMessage().contains("raw sensitive"));
+  }
   private static SQLException sqlEx(String msg, String state, int code) {
     return new SQLException(msg, state, code);
   }

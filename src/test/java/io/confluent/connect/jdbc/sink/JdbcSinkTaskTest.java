@@ -16,20 +16,22 @@
 package io.confluent.connect.jdbc.sink;
 
 import static org.easymock.EasyMock.anyObject;
+import static org.easymock.EasyMock.capture;
 import static org.easymock.EasyMock.expect;
 import static org.easymock.EasyMock.expectLastCall;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.sql.BatchUpdateException;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -49,6 +51,11 @@ import org.apache.kafka.connect.errors.RetriableException;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTaskContext;
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
+import org.apache.log4j.PatternLayout;
+import org.apache.log4j.WriterAppender;
+import org.easymock.Capture;
 import org.easymock.EasyMockSupport;
 import org.junit.After;
 import org.junit.Before;
@@ -57,9 +64,19 @@ import org.junit.Test;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 
 public class JdbcSinkTaskTest extends EasyMockSupport {
+  private static final String REDACTED = "<redacted>";
+  private static final String RETRY_CANARY = "retry-secret";
+  private static final String SQL_SERVER_CANARY = "sqlserver-secret@example.com";
+  private static final String MYSQL_CANARY = "mysql-secret@example.com";
+
   private final SqliteHelper sqliteHelper = new SqliteHelper(getClass().getSimpleName());
   private final JdbcDbWriter mockWriter = createMock(JdbcDbWriter.class);
   private final SinkTaskContext ctx = createMock(SinkTaskContext.class);
+  private final Logger taskLogger = Logger.getLogger(JdbcSinkTask.class);
+
+  private Level taskLogLevel;
+  private StringWriter taskLogOutput;
+  private WriterAppender taskLogAppender;
 
   private static final Schema SCHEMA = SchemaBuilder.struct().name("com.example.Person")
       .field("firstName", Schema.STRING_SCHEMA)
@@ -90,6 +107,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
 
   @After
   public void tearDown() throws IOException, SQLException {
+    stopCapturingTaskLogs();
     sqliteHelper.tearDown();
   }
 
@@ -234,9 +252,9 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     List<SinkRecord> records = createRecordsList(1);
 
     mockWriter.write(records);
-    SQLException chainedException = new SQLException("cause 1");
-    chainedException.setNextException(new SQLException("cause 2"));
-    chainedException.setNextException(new SQLException("cause 3"));
+    SQLException chainedException = new SQLException(RETRY_CANARY + "-1", "42000", 10);
+    chainedException.setNextException(new SQLException(RETRY_CANARY + "-2", "42001", 20));
+    chainedException.setNextException(new SQLException(RETRY_CANARY + "-3", "42002", 30));
     expectLastCall().andThrow(chainedException).times(1 + maxRetries);
 
     ctx.timeout(retryBackoffMs);
@@ -258,59 +276,32 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     Map<String, String> props = setupBasicProps(maxRetries, retryBackoffMs);
     task.start(props);
 
-    try {
-      task.put(records);
-      fail();
-    } catch (RetriableException expected) {
-      assertEquals(SQLException.class, expected.getCause().getClass());
-      int i = 0;
-      for (Throwable t : (SQLException) expected.getCause()) {
-        ++i;
-        StringWriter sw = new StringWriter();
-        t.printStackTrace(new PrintWriter(sw));
-        System.out.println("Chained exception " + i + ": " + sw);
-      }
-    }
+    RetriableException firstRetry =
+        assertThrows(RetriableException.class, () -> task.put(records));
+    assertTaskExceptionRedacted(firstRetry, RETRY_CANARY, "42000", 10);
 
-    try {
-      task.put(records);
-      fail();
-    } catch (RetriableException expected) {
-      assertEquals(SQLException.class, expected.getCause().getClass());
-      int i = 0;
-      for (Throwable t : (SQLException) expected.getCause()) {
-        ++i;
-        StringWriter sw = new StringWriter();
-        t.printStackTrace(new PrintWriter(sw));
-        System.out.println("Chained exception " + i + ": " + sw);
-      }
-    }
+    RetriableException secondRetry =
+        assertThrows(RetriableException.class, () -> task.put(records));
+    assertTaskExceptionRedacted(secondRetry, RETRY_CANARY, "42000", 10);
 
-    try {
-      task.put(records);
-      fail();
-    } catch (RetriableException e) {
-      fail("Non-retriable exception expected");
-    } catch (ConnectException expected) {
-      assertEquals(SQLException.class, expected.getCause().getClass());
-      int i = 0;
-      for (Throwable t : (SQLException) expected.getCause()) {
-        ++i;
-        StringWriter sw = new StringWriter();
-        t.printStackTrace(new PrintWriter(sw));
-        System.out.println("Chained exception " + i + ": " + sw);
-      }
-    }
+    ConnectException exhausted =
+        assertThrows(ConnectException.class, () -> task.put(records));
+    assertFalse(exhausted instanceof RetriableException);
+    assertTaskExceptionRedacted(exhausted, RETRY_CANARY, "42000", 10);
 
     verifyAll();
   }
 
   @Test
-  public void errorReporting() throws SQLException {
+  public void errorReportingRedactsPlainSqlException() throws SQLException {
     List<SinkRecord> records = createRecordsList(1);
 
     mockWriter.write(records);
-    SQLException exception = new SQLException("cause 1");
+    SQLException exception = new SQLException(
+        "Duplicate entry '" + MYSQL_CANARY + "' for key 'email'",
+        "23000",
+        1062
+    );
     expectLastCall().andThrow(exception);
     mockWriter.closeQuietly();
     expectLastCall();
@@ -325,15 +316,30 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     };
     task.initialize(ctx);
     ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
+    Capture<Throwable> reportedException = Capture.newInstance();
     expect(ctx.errantRecordReporter()).andReturn(reporter);
-    expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null));
+    expect(reporter.report(anyObject(), capture(reportedException)))
+        .andReturn(CompletableFuture.completedFuture(null));
     mockWriter.closeQuietly();
     expectLastCall();
     replayAll();
 
     Map<String, String> props = setupBasicProps(0, 0);
     task.start(props);
+    captureTaskLogs();
     task.put(records);
+
+    assertTrue(reportedException.hasCaptured());
+    assertTrue(reportedException.getValue() instanceof SQLException);
+    assertRedactedSqlException(
+        (SQLException) reportedException.getValue(),
+        MYSQL_CANARY,
+        "23000",
+        1062
+    );
+    String logs = capturedTaskLogs();
+    assertTrue(logs.contains(REDACTED));
+    assertFalse(logs.contains(MYSQL_CANARY));
     verifyAll();
   }
 
@@ -477,40 +483,111 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     task.put(records);
     verifyAll();
   }
-  @Test
-  public void testGetAllMessagesExceptionWithoutTrim() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-    JdbcSinkTask task = new JdbcSinkTask();
-    SQLException exception = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\") " +
-            "VALUES ('1','2','3',NULL) was aborted: ERROR: null value in column \"c4\" violates not-null constraint\n" +
-            "  Detail: Failing row contains (1, 2, 3, null).  Call getNextException to see other errors in the batch.",
-            new int[0]);
-    String exceptedExceptionMessage = "Exception chain:" + System.lineSeparator() + exception + System.lineSeparator();
-    Method privateMethod = JdbcSinkTask.class.getDeclaredMethod("getAllMessagesException", SQLException.class);
-    task.shouldTrimSensitiveLogs = false;
-    privateMethod.setAccessible(true);
-
-    SQLException result = (SQLException) privateMethod.invoke(task, exception);
-    assertEquals(exceptedExceptionMessage, result.getMessage());
-
-    privateMethod.setAccessible(false);
-  }
 
   @Test
-  public void testGetAllMessagesExceptionTrimmed() throws NoSuchMethodException, InvocationTargetException, IllegalAccessException {
-    JdbcSinkTask task = new JdbcSinkTask();
-    SQLException exception = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\") " +
-            "VALUES ('1','2','3',NULL) was aborted: ERROR: null value in column \"c4\" violates not-null constraint\n" +
-            "  Detail: Failing row contains (1, 2, 3, null).  Call getNextException to see other errors in the batch.",
-            new int[0]);
-    Method privateMethod = JdbcSinkTask.class.getDeclaredMethod("getAllMessagesException", SQLException.class);
-    privateMethod.setAccessible(true);
-    task.shouldTrimSensitiveLogs = true;
+  public void putRedactsNonPostgresBatchExceptionBeforeThrowingAndLogging()
+      throws SQLException {
+    List<SinkRecord> records = createRecordsList(1);
+    BatchUpdateException exception = new BatchUpdateException(
+        "Violation of UNIQUE KEY constraint 'UQ_email'. Cannot insert duplicate key in object "
+            + "'dbo.orders'. The duplicate key value is (" + SQL_SERVER_CANARY + ").",
+        "23000",
+        2627,
+        new int[]{Statement.EXECUTE_FAILED}
+    );
 
-    SQLException result = (SQLException) privateMethod.invoke(task, exception);
-    assertTrue(!result.getLocalizedMessage().contains("VALUES"));
+    mockWriter.write(records);
+    expectLastCall().andThrow(exception);
 
-    privateMethod.setAccessible(false);
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(ctx);
+    expect(ctx.errantRecordReporter()).andReturn(null);
+    replayAll();
+
+    Map<String, String> props = setupBasicProps(0, 0);
+    task.start(props);
+    captureTaskLogs();
+    ConnectException thrown =
+        assertThrows(ConnectException.class, () -> task.put(records));
+
+    SQLException redacted = assertTaskExceptionRedacted(
+        thrown,
+        SQL_SERVER_CANARY,
+        "23000",
+        2627
+    );
+    assertTrue(redacted instanceof BatchUpdateException);
+    assertArrayEquals(
+        exception.getUpdateCounts(),
+        ((BatchUpdateException) redacted).getUpdateCounts()
+    );
+    assertArrayEquals(exception.getStackTrace(), redacted.getStackTrace());
+    String logs = capturedTaskLogs();
+    assertTrue(logs.contains(REDACTED));
+    assertFalse(logs.contains(SQL_SERVER_CANARY));
+    verifyAll();
   }
+
+  private SQLException assertTaskExceptionRedacted(
+      Throwable taskException,
+      String sensitiveValue,
+      String sqlState,
+      int errorCode
+  ) {
+    assertTrue(taskException.getCause() instanceof SQLException);
+    return assertRedactedSqlException(
+        (SQLException) taskException.getCause(),
+        sensitiveValue,
+        sqlState,
+        errorCode
+    );
+  }
+
+  private SQLException assertRedactedSqlException(
+      SQLException allMessagesException,
+      String sensitiveValue,
+      String sqlState,
+      int errorCode
+  ) {
+    assertTrue(allMessagesException.getMessage().contains(REDACTED));
+    assertFalse(allMessagesException.getMessage().contains(sensitiveValue));
+    SQLException redactedException = allMessagesException.getNextException();
+    assertNotNull(redactedException);
+    assertEquals(sqlState, redactedException.getSQLState());
+    assertEquals(errorCode, redactedException.getErrorCode());
+    for (Throwable current : redactedException) {
+      assertEquals(REDACTED, current.getMessage());
+      assertFalse(current.getMessage().contains(sensitiveValue));
+    }
+    return redactedException;
+  }
+
+  private void captureTaskLogs() {
+    taskLogLevel = taskLogger.getLevel();
+    taskLogOutput = new StringWriter();
+    taskLogAppender = new WriterAppender(new PatternLayout("%m%n"), taskLogOutput);
+    taskLogger.setLevel(Level.DEBUG);
+    taskLogger.addAppender(taskLogAppender);
+  }
+
+  private String capturedTaskLogs() {
+    return taskLogOutput.toString();
+  }
+
+  private void stopCapturingTaskLogs() {
+    if (taskLogAppender != null) {
+      taskLogger.removeAppender(taskLogAppender);
+      taskLogAppender.close();
+      taskLogger.setLevel(taskLogLevel);
+      taskLogAppender = null;
+    }
+  }
+
   private List<SinkRecord> createRecordsList(int batchSize) {
     List<SinkRecord> records = new ArrayList<>();
     for (int i = 0; i < batchSize; i++) {
@@ -524,6 +601,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     props.put(JdbcSinkConfig.CONNECTION_URL, "stub");
     props.put(JdbcSinkConfig.MAX_RETRIES, String.valueOf(maxRetries));
     props.put(JdbcSinkConfig.RETRY_BACKOFF_MS, String.valueOf(retryBackoffMs));
+    props.put(JdbcSinkConfig.TRIM_SENSITIVE_LOG_ENABLED, "false");
     return props;
   }
 }

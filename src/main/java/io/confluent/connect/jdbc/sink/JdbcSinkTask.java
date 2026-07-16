@@ -44,15 +44,12 @@ public class JdbcSinkTask extends SinkTask {
   JdbcDbWriter writer;
   int remainingRetries;
 
-  boolean shouldTrimSensitiveLogs;
-
   @Override
   public void start(final Map<String, String> props) {
     log.info("Starting JDBC Sink task");
     config = new JdbcSinkConfig(props);
     initWriter();
     remainingRetries = config.maxRetries;
-    shouldTrimSensitiveLogs = config.trimSensitiveLogsEnabled;
     try {
       reporter = context.errantRecordReporter();
     } catch (NoSuchMethodError | NoClassDefFoundError e) {
@@ -97,13 +94,12 @@ public class JdbcSinkTask extends SinkTask {
         throw tace;
       }
     } catch (SQLException sqle) {
-      SQLException trimmedException = shouldTrimSensitiveLogs
-              ? LogUtil.trimSensitiveData(sqle) : sqle;
+      SQLException redactedException = LogUtil.redactSensitiveData(sqle);
       log.warn(
           "Write of {} records failed, remainingRetries={}",
           records.size(),
           remainingRetries,
-          trimmedException
+          redactedException
       );
       int totalExceptions = 0;
       for (Throwable e :sqle) {
@@ -127,7 +123,7 @@ public class JdbcSinkTask extends SinkTask {
                   + "For complete details on each exception, please enable DEBUG logging.",
               totalExceptions);
           int exceptionCount = 1;
-          for (Throwable e : trimmedException) {
+          for (Throwable e : redactedException) {
             log.debug("Exception {}:", exceptionCount++, e);
           }
           throw new ConnectException(sqlAllMessagesException);
@@ -159,13 +155,12 @@ public class JdbcSinkTask extends SinkTask {
 
   private SQLException getAllMessagesException(SQLException sqle) {
     String sqleAllMessages = "Exception chain:" + System.lineSeparator();
-    SQLException trimmedException = shouldTrimSensitiveLogs
-            ? LogUtil.trimSensitiveData(sqle) : sqle;
-    for (Throwable e : trimmedException) {
+    SQLException redactedException = LogUtil.redactSensitiveData(sqle);
+    for (Throwable e : redactedException) {
       sqleAllMessages += e + System.lineSeparator();
     }
     SQLException sqlAllMessagesException = new SQLException(sqleAllMessages);
-    sqlAllMessagesException.setNextException(trimmedException);
+    sqlAllMessagesException.setNextException(redactedException);
     return sqlAllMessagesException;
   }
 

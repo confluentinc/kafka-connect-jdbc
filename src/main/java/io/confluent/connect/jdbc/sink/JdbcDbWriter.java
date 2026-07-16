@@ -86,24 +86,27 @@ public class JdbcDbWriter {
       }
       log.trace("Committing transaction");
       connection.commit();
-    } catch (SQLException | TableAlterOrCreateException e) {
-      log.error("Error during write operation. Attempting rollback.", maybeTrim(e));
-      try {
-        connection.rollback();
-        log.info("Successfully rolled back transaction");
-      } catch (SQLException sqle) {
-        log.error("Failed to rollback transaction", maybeTrim(sqle));
-        e.addSuppressed(sqle);
-      } finally {
-        throw e;
-      }
+    } catch (SQLException e) {
+      SQLException redactedException = LogUtil.redactSensitiveData(e);
+      rollback(connection, redactedException);
+      throw redactedException;
+    } catch (TableAlterOrCreateException e) {
+      rollback(connection, e);
+      throw e;
     }
     log.info("Completed write operation for {} records to the database", records.size());
   }
 
-  Throwable maybeTrim(Throwable t) {
-    return (config.trimSensitiveLogsEnabled && t instanceof SQLException)
-        ? LogUtil.trimSensitiveData((SQLException) t) : t;
+  private void rollback(Connection connection, Throwable writeException) {
+    log.error("Error during write operation. Attempting rollback.", writeException);
+    try {
+      connection.rollback();
+      log.info("Successfully rolled back transaction");
+    } catch (SQLException e) {
+      SQLException redactedException = LogUtil.redactSensitiveData(e);
+      log.error("Failed to rollback transaction", redactedException);
+      writeException.addSuppressed(redactedException);
+    }
   }
 
   void closeQuietly() {

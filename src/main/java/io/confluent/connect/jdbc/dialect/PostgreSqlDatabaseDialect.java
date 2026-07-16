@@ -394,11 +394,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * connector exposes this.
    */
   private boolean jsonAsString() {
-    if (config instanceof JdbcSourceConnectorConfig) {
-      return JdbcSourceConnectorConfig.JSON_HANDLING_MODE_STRING
-          .equalsIgnoreCase(config.getString(JdbcSourceConnectorConfig.JSON_HANDLING_MODE_CONFIG));
-    }
-    return false;
+    return ((JdbcSourceConnectorConfig) config).jsonHandlingModeIsString();
   }
 
   /**

@@ -79,7 +79,7 @@ public class SqlParser {
 
   public static final String REDACTED_STRING = "'********'";
   public static final String REDACTED_NUMBER = "0";
-  private static final String REDACTED_VALUE = "<redacted>";
+  private static final String REDACTED_VALUE = "[REDACTED]";
 
   // Matches single-quoted SQL string literals (handles '' and \' escaping)
   static final Pattern STRING_LITERAL_PATTERN =

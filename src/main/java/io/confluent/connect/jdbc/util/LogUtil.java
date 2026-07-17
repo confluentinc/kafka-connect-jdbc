@@ -23,6 +23,8 @@ import java.sql.SQLException;
  * error information to investigate incidents while at the same time avoid logging sensitive data.
  */
 public class LogUtil {
+  private static final String REDACTED_VALUE = "<redacted>";
+
   public static SQLException trimSensitiveData(SQLException e) {
     return (SQLException) trimSensitiveData((Throwable)e);
   }
@@ -60,6 +62,40 @@ public class LogUtil {
   // contain this phrase (e.g., a trigger's RAISE EXCEPTION message), in which case earliest-wins
   // across both tiers would truncate the reason mid-sentence.
   private static final String BATCH_SUFFIX_FALLBACK = "  Call getNextException ";
+
+  public static SQLException redactSensitiveData(SQLException e) {
+    return (SQLException) redactSensitiveData((Throwable) e);
+  }
+
+  public static Throwable redactSensitiveData(Throwable t) {
+    if (!(t instanceof SQLException)) {
+      return t;
+    }
+
+    if (!(t instanceof BatchUpdateException)) {
+      // t is a SQLException, but not BatchUpdateException.
+      SQLException oldSqlException = (SQLException) t;
+      SQLException newSqlException =
+          new SQLException(
+              REDACTED_VALUE, oldSqlException.getSQLState(), oldSqlException.getErrorCode());
+      newSqlException.setNextException(redactSensitiveData(oldSqlException.getNextException()));
+      newSqlException.setStackTrace(oldSqlException.getStackTrace());
+      return newSqlException;
+    }
+
+    // At this point t is BatchUpdateException; redact its message too.
+    BatchUpdateException oldBatchUpdateException = (BatchUpdateException) t;
+    BatchUpdateException newBatchUpdateException =
+        new BatchUpdateException(
+            REDACTED_VALUE,
+            oldBatchUpdateException.getSQLState(),
+            oldBatchUpdateException.getErrorCode(),
+            oldBatchUpdateException.getUpdateCounts());
+    newBatchUpdateException.setNextException(
+        redactSensitiveData(oldBatchUpdateException.getNextException()));
+    newBatchUpdateException.setStackTrace(oldBatchUpdateException.getStackTrace());
+    return newBatchUpdateException;
+  }
 
   // This implementation assumes it to be Postgres, see toString() of ServerErrorMessage.java
   // as well as the constructor of PSQLException.java with "boolean detail" flag in
@@ -105,5 +141,12 @@ public class LogUtil {
     }
 
     return msg1 + errMsg.substring(errorStartIdx, errorEndIdx);
+  }
+
+  public static String maybeRedact(boolean shouldRedactSensitiveLogs, String msg) {
+    if (shouldRedactSensitiveLogs) {
+      return REDACTED_VALUE;
+    }
+    return String.valueOf(msg);
   }
 }

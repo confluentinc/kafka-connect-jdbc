@@ -29,12 +29,14 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.io.StringWriter;
 import java.math.BigDecimal;
 import java.sql.BatchUpdateException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -45,6 +47,10 @@ import io.confluent.connect.jdbc.dialect.SqliteDatabaseDialect;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
+import org.apache.log4j.PatternLayout;
+import org.apache.log4j.WriterAppender;
 
 import static junit.framework.TestCase.assertTrue;
 import static org.junit.Assert.*;
@@ -58,10 +64,25 @@ import static org.mockito.Mockito.verify;
 
 public class JdbcDbWriterTest {
 
+  private static final String REDACTED = "<redacted>";
+  private static final String POSTGRES_CANARY = "alice@example.com";
+  private static final String WRITE_CANARY = "write-secret";
+  private static final String ROLLBACK_CANARY = "rollback-secret";
+  private static final String SENSITIVE_LOGGER_NAME =
+      "io.confluent.connect.jdbc.sink.Sensitive";
+
   private final SqliteHelper sqliteHelper = new SqliteHelper(getClass().getSimpleName());
+  private final Logger writerLogger = Logger.getLogger(JdbcDbWriter.class);
+  private final Logger sensitiveLogger = Logger.getLogger(SENSITIVE_LOGGER_NAME);
 
   private JdbcDbWriter writer = null;
   private DatabaseDialect dialect;
+  private Level writerLogLevel;
+  private StringWriter writerLogOutput;
+  private WriterAppender writerLogAppender;
+  private Level sensitiveLogLevel;
+  private StringWriter sensitiveLogOutput;
+  private WriterAppender sensitiveLogAppender;
 
   @Before
   public void setUp() throws IOException, SQLException {
@@ -70,8 +91,11 @@ public class JdbcDbWriterTest {
 
   @After
   public void tearDown() throws IOException, SQLException {
-    if (writer != null)
+    stopCapturingWriterLogs();
+    stopCapturingSensitiveLogs();
+    if (writer != null) {
       writer.closeQuietly();
+    }
     sqliteHelper.tearDown();
   }
 
@@ -95,43 +119,120 @@ public class JdbcDbWriterTest {
     };
   }
 
-  private class MockRollbackException extends SQLException {
-    public MockRollbackException() {
-      super();
-    }
-  }
-
   @Test
-  public void maybeTrimReturnsExceptionAsIsWhenFlagDisabled() {
+  public void writeRedactsBatchUpdateExceptionBeforeThrowingAndLogging() throws SQLException {
+    String driverMessage =
+        "Batch entry 0 INSERT INTO orders(email) VALUES ('" + POSTGRES_CANARY + "') "
+            + "was aborted: ERROR: duplicate key value violates unique constraint\n"
+            + "  Detail: Key (email)=(" + POSTGRES_CANARY + ") already exists.";
+    BatchUpdateException writeFailure = new BatchUpdateException(
+        driverMessage,
+        "23505",
+        7,
+        new int[]{Statement.EXECUTE_FAILED}
+    );
+    writeFailure.setNextException(
+        new SQLException(
+            "ERROR: duplicate key value. Detail: Key (email)=("
+                + POSTGRES_CANARY
+                + ") already exists.",
+            "23505",
+            7
+        )
+    );
+    SQLException rollbackFailure = new SQLException(
+        "Rollback failed for " + ROLLBACK_CANARY,
+        "08006",
+        17002
+    );
+    Connection mockConnection = mock(Connection.class);
+    doThrow(rollbackFailure).when(mockConnection).rollback();
+
     Map<String, String> props = new HashMap<>();
-    props.put("connection.url", sqliteHelper.sqliteUri());
+    props.put("connection.url", "stub");
+    props.put("auto.create", "true");
+    props.put("auto.evolve", "true");
+    props.put("insert.mode", "upsert");
+    props.put("pk.mode", "record_key");
+    props.put("pk.fields", "id");
     props.put("trim.sensitive.log", "false");
-    JdbcDbWriter writer = newWriter(props);
-    BatchUpdateException exception = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\") " +
-            "VALUES ('1','2','3',NULL) was aborted: ERROR: null value in column \"c4\" violates not-null constraint\n" +
-            "  Detail: Failing row contains (1, 2, 3, null).  Call getNextException to see other errors in the batch.",
-            new int[0]);
+    JdbcDbWriter testWriter = newWriterWithMockConnection(props, mockConnection);
+    PreparedStatement mockStatement = mock(PreparedStatement.class);
+    when(dialect.parseTableIdentifier(any())).thenReturn(mock(TableId.class));
+    when(dialect.createPreparedStatement(any(), any())).thenReturn(mockStatement);
+    when(dialect.statementBinder(any(), any(), any(), any(), any(), any(), eq(true)))
+        .thenReturn(mock(PreparedStatementBinder.class));
+    when(mockStatement.executeBatch()).thenThrow(writeFailure);
 
-    Throwable result = writer.maybeTrim(exception);
+    Schema keySchema = Schema.INT64_SCHEMA;
+    Schema valueSchema = SchemaBuilder.struct()
+        .field("author", Schema.STRING_SCHEMA)
+        .field("title", Schema.STRING_SCHEMA)
+        .build();
+    Struct value = new Struct(valueSchema)
+        .put("author", "Tom Robbins")
+        .put("title", "Villa Incognito");
+    SinkRecord record = new SinkRecord(
+        "books",
+        0,
+        keySchema,
+        1L,
+        valueSchema,
+        value,
+        0
+    );
 
-    assertSame(exception, result);
-    assertTrue(result.getMessage().contains("VALUES"));
+    captureWriterLogs();
+    SQLException thrown = assertThrows(
+        SQLException.class,
+        () -> testWriter.write(Collections.singleton(record))
+    );
+
+    verify(mockConnection, times(1)).rollback();
+    assertNotSame(writeFailure, thrown);
+    assertTrue(thrown instanceof BatchUpdateException);
+    assertEquals(REDACTED, thrown.getMessage());
+    assertEquals("23505", thrown.getSQLState());
+    assertEquals(7, thrown.getErrorCode());
+    assertArrayEquals(
+        writeFailure.getUpdateCounts(),
+        ((BatchUpdateException) thrown).getUpdateCounts()
+    );
+    assertArrayEquals(writeFailure.getStackTrace(), thrown.getStackTrace());
+    assertEquals(REDACTED, thrown.getNextException().getMessage());
+    assertEquals("23505", thrown.getNextException().getSQLState());
+    assertEquals(7, thrown.getNextException().getErrorCode());
+    assertEquals(1, thrown.getSuppressed().length);
+    SQLException suppressed = (SQLException) thrown.getSuppressed()[0];
+    assertEquals(REDACTED, suppressed.getMessage());
+    assertEquals("08006", suppressed.getSQLState());
+    assertEquals(17002, suppressed.getErrorCode());
+
+    String logs = capturedWriterLogs();
+    assertTrue(logs.contains(REDACTED));
+    assertFalse(logs.contains(POSTGRES_CANARY));
+    assertFalse(logs.contains(ROLLBACK_CANARY));
   }
 
   @Test
-  public void maybeTrimRedactsBatchUpdateExceptionWhenFlagEnabled() {
-    Map<String, String> props = new HashMap<>();
-    props.put("connection.url", sqliteHelper.sqliteUri());
-    props.put("trim.sensitive.log", "true");
-    JdbcDbWriter writer = newWriter(props);
-    BatchUpdateException exception = new BatchUpdateException("Batch entry 0 INSERT INTO \"abc\" (\"c1\",\"c2\",\"c3\",\"c4\") " +
-            "VALUES ('1','2','3',NULL) was aborted: ERROR: null value in column \"c4\" violates not-null constraint\n" +
-            "  Detail: Failing row contains (1, 2, 3, null).  Call getNextException to see other errors in the batch.",
-            new int[0]);
+  public void writeLogsRawFailuresOnlyAtSensitiveTrace() throws SQLException {
+    captureWriterLogs();
+    captureSensitiveLogs();
 
-    Throwable result = writer.maybeTrim(exception);
+    SQLException thrown = verifyConnectionRollback(
+        false,
+        new SQLException(WRITE_CANARY, "42000", 10)
+    );
 
-    assertTrue(!result.getMessage().contains("VALUES"));
+    assertEquals(REDACTED, thrown.getMessage());
+    String writerLogs = capturedWriterLogs();
+    assertTrue(writerLogs.contains(REDACTED));
+    assertFalse(writerLogs.contains(WRITE_CANARY));
+    assertFalse(writerLogs.contains(ROLLBACK_CANARY));
+
+    String sensitiveLogs = capturedSensitiveLogs();
+    assertTrue(sensitiveLogs.contains(WRITE_CANARY));
+    assertTrue(sensitiveLogs.contains(ROLLBACK_CANARY));
   }
 
   @Test
@@ -140,7 +241,12 @@ public class JdbcDbWriterTest {
 
     Throwable[] suppressed = e.getSuppressed();
     assertEquals(suppressed.length, 1);
-    assertTrue(suppressed[0] instanceof MockRollbackException);
+    assertTrue(suppressed[0] instanceof SQLException);
+    SQLException rollbackException = (SQLException) suppressed[0];
+    assertEquals(REDACTED, rollbackException.getMessage());
+    assertEquals("08006", rollbackException.getSQLState());
+    assertEquals(17002, rollbackException.getErrorCode());
+    assertFalse(rollbackException.getMessage().contains(ROLLBACK_CANARY));
   }
 
   @Test
@@ -152,11 +258,20 @@ public class JdbcDbWriterTest {
   }
 
   private SQLException verifyConnectionRollback(boolean succeedOnRollBack) throws SQLException {
+    return verifyConnectionRollback(succeedOnRollBack, new SQLException());
+  }
+
+  private SQLException verifyConnectionRollback(
+      boolean succeedOnRollBack,
+      SQLException writeFailure
+  ) throws SQLException {
     Connection mockConnection = mock(Connection.class);
 
-    doThrow(new SQLException()).when(mockConnection).commit();
+    doThrow(writeFailure).when(mockConnection).commit();
     if (!succeedOnRollBack) {
-      doThrow(new MockRollbackException()).when(mockConnection).rollback();
+      doThrow(new SQLException(ROLLBACK_CANARY, "08006", 17002))
+          .when(mockConnection)
+          .rollback();
     }
 
     Map<String, String> props = new HashMap<>();
@@ -201,6 +316,49 @@ public class JdbcDbWriterTest {
 
     verify(mockConnection, times(1)).rollback();
     return e;
+  }
+
+  private void captureWriterLogs() {
+    writerLogLevel = writerLogger.getLevel();
+    writerLogOutput = new StringWriter();
+    writerLogAppender = new WriterAppender(new PatternLayout("%m%n"), writerLogOutput);
+    writerLogger.setLevel(Level.ERROR);
+    writerLogger.addAppender(writerLogAppender);
+  }
+
+  private String capturedWriterLogs() {
+    return writerLogOutput.toString();
+  }
+
+  private void captureSensitiveLogs() {
+    sensitiveLogLevel = sensitiveLogger.getLevel();
+    sensitiveLogOutput = new StringWriter();
+    sensitiveLogAppender =
+        new WriterAppender(new PatternLayout("%m%n"), sensitiveLogOutput);
+    sensitiveLogger.setLevel(Level.TRACE);
+    sensitiveLogger.addAppender(sensitiveLogAppender);
+  }
+
+  private String capturedSensitiveLogs() {
+    return sensitiveLogOutput.toString();
+  }
+
+  private void stopCapturingWriterLogs() {
+    if (writerLogAppender != null) {
+      writerLogger.removeAppender(writerLogAppender);
+      writerLogAppender.close();
+      writerLogger.setLevel(writerLogLevel);
+      writerLogAppender = null;
+    }
+  }
+
+  private void stopCapturingSensitiveLogs() {
+    if (sensitiveLogAppender != null) {
+      sensitiveLogger.removeAppender(sensitiveLogAppender);
+      sensitiveLogAppender.close();
+      sensitiveLogger.setLevel(sensitiveLogLevel);
+      sensitiveLogAppender = null;
+    }
   }
 
   @Test

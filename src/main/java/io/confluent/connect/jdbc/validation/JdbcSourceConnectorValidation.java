@@ -19,6 +19,7 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIsolationMode;
+import io.confluent.connect.jdbc.util.SqlParser;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigValue;
 import org.slf4j.Logger;
@@ -90,6 +91,7 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
           && validateLegacyNewConfigCompatibility()
           && validateQueryConfigs()
           && validateQueryModeIncrementingColumnRequired()
+          && validateQueryAllowsAppendedCriteria()
           && validateConnection(CONNECTION_URL_CONFIG)
           && validateQuerySemantics();
 
@@ -395,6 +397,47 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
       return false;
     }
 
+    return true;
+  }
+
+  /**
+   * Reject a custom query whose outermost SELECT already carries clauses that collide with the
+   * {@code WHERE}/{@code ORDER BY} the connector appends in the incremental query modes
+   * ({@code incrementing}, {@code timestamp}, {@code timestamp+incrementing}).
+   *
+   * <p>In those modes the connector concatenates its own {@code WHERE ... ORDER BY ... ASC} onto
+   * the end of the query. If the outermost SELECT already has a top-level {@code WHERE},
+   * {@code ORDER BY}, {@code GROUP BY}, {@code HAVING}, {@code LIMIT}/{@code OFFSET}/{@code FETCH},
+   * or is a set operation, the appended criteria yields invalid SQL and the task fails at runtime.
+   * Fail fast here instead. Clauses nested inside a {@code FROM} sub-select are allowed (the
+   * documented {@code SELECT * FROM (<your query>) sub} pattern). {@code bulk} mode is exempt
+   * because it never appends a criteria.
+   */
+  private boolean validateQueryAllowsAppendedCriteria() {
+    if (!config.getQuery().isPresent()) {
+      return true;
+    }
+    // Only incremental modes append a WHERE/ORDER BY to the query; bulk does not.
+    if (!config.modeUsesIncrementingColumn() && !config.modeUsesTimestampColumn()) {
+      return true;
+    }
+    if (SqlParser.outerSelectHasTailClauses(config.getQuery().get())) {
+      String configKey = config.isQueryMasked()
+          ? JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG
+          : JdbcSourceConnectorConfig.QUERY_CONFIG;
+      String msg = String.format(
+          "When using mode '%s', '%s' or '%s' with a custom query, the connector appends its own "
+          + "WHERE and ORDER BY clause, so the query's outermost SELECT must not contain a "
+          + "top-level WHERE, ORDER BY, GROUP BY, HAVING, LIMIT/OFFSET/FETCH, or a set operation "
+          + "(UNION/INTERSECT/EXCEPT). Move such clauses into a sub-select, e.g. "
+          + "'SELECT * FROM (<your query>) sub'.",
+          JdbcSourceConnectorConfig.MODE_INCREMENTING,
+          JdbcSourceConnectorConfig.MODE_TIMESTAMP,
+          JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING);
+      addConfigError(configKey, msg);
+      log.error(msg);
+      return false;
+    }
     return true;
   }
 

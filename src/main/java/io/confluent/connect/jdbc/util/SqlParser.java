@@ -59,6 +59,10 @@ import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.select.OrderByElement;
+import net.sf.jsqlparser.statement.select.ParenthesedSelect;
+import net.sf.jsqlparser.statement.select.PlainSelect;
+import net.sf.jsqlparser.statement.select.Select;
+import net.sf.jsqlparser.statement.select.SetOperationList;
 import net.sf.jsqlparser.util.deparser.ExpressionDeParser;
 import net.sf.jsqlparser.util.deparser.SelectDeParser;
 import net.sf.jsqlparser.util.deparser.StatementDeParser;
@@ -174,6 +178,79 @@ public class SqlParser {
           + "falling back to regex redaction", e);
       return redactAllLiterals(sql);
     }
+  }
+
+  /**
+   * Returns {@code true} if the <em>outermost</em> SELECT of {@code sql} carries a clause that
+   * would collide with the {@code WHERE}/{@code ORDER BY} the connector appends in the incremental
+   * query modes ({@code incrementing}, {@code timestamp}, {@code timestamp+incrementing}).
+   *
+   * <p>The connector builds the incremental statement by concatenating its own
+   * {@code WHERE ... ORDER BY ... ASC} onto the end of the user's query. That is only valid when
+   * the outermost SELECT is "bare"; a top-level {@code WHERE}, {@code ORDER BY}, {@code GROUP BY},
+   * {@code HAVING}, {@code LIMIT}/{@code OFFSET}/{@code FETCH}, or a set operation
+   * ({@code UNION}/{@code INTERSECT}/{@code EXCEPT}) produces invalid SQL once the criteria is
+   * appended.
+   *
+   * <p>Only the outermost SELECT is inspected. Clauses nested inside a sub-select in the
+   * {@code FROM} are intentionally allowed — that is the documented "wrap your query in a
+   * subselect" pattern (e.g. {@code SELECT * FROM (<your query with WHERE/ORDER BY>) sub}).
+   *
+   * <p>Fails open: returns {@code false} when the SQL is empty, cannot be parsed, or is not a
+   * plain {@code SELECT}, so exotic or dialect-specific queries are never wrongly rejected.
+   *
+   * @param sql the user-provided query; may be null
+   * @return {@code true} if the outermost SELECT has a clause that blocks appending the criteria
+   */
+  public static boolean outerSelectHasTailClauses(String sql) {
+    if (sql == null || sql.trim().isEmpty()) {
+      return false;
+    }
+    final Statement statement;
+    try {
+      statement = CCJSqlParserUtil.parse(sql);
+    } catch (JSQLParserException e) {
+      log.debug("Could not parse query to check for appendable criteria; skipping check", e);
+      return false;
+    }
+    if (statement instanceof Select) {
+      return selectHasTailClauses((Select) statement);
+    }
+    return false;
+  }
+
+  /**
+   * Dispatch on the concrete outermost {@link Select} type (jsqlparser 4.9 has no SelectBody).
+   */
+  private static boolean selectHasTailClauses(Select select) {
+    // Top-level UNION / INTERSECT / EXCEPT — a trailing WHERE/ORDER BY cannot be appended cleanly.
+    if (select instanceof SetOperationList) {
+      return true;
+    }
+    if (select instanceof ParenthesedSelect) {
+      return selectHasTailClauses(((ParenthesedSelect) select).getSelect());
+    }
+    if (select instanceof PlainSelect) {
+      return plainSelectHasTailClauses((PlainSelect) select);
+    }
+    return false;
+  }
+
+  /** True if the given top-level plain SELECT has a clause that blocks appending the criteria. */
+  private static boolean plainSelectHasTailClauses(PlainSelect ps) {
+    if (ps.getWhere() != null) {
+      return true;
+    }
+    if (ps.getOrderByElements() != null && !ps.getOrderByElements().isEmpty()) {
+      return true;
+    }
+    if (ps.getGroupBy() != null) {
+      return true;
+    }
+    if (ps.getHaving() != null) {
+      return true;
+    }
+    return ps.getLimit() != null || ps.getOffset() != null || ps.getFetch() != null;
   }
 
   /** Redacts dollar-quoted and single-quoted string literals using regex. */

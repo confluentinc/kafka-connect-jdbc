@@ -191,7 +191,7 @@ public class JdbcDbWriterTest {
     verify(mockConnection, times(1)).rollback();
     assertNotSame(writeFailure, thrown);
     assertTrue(thrown instanceof BatchUpdateException);
-    assertEquals(REDACTED, thrown.getMessage());
+    assertTrue(thrown.getMessage().startsWith(REDACTED));
     assertEquals("23505", thrown.getSQLState());
     assertEquals(7, thrown.getErrorCode());
     assertArrayEquals(
@@ -199,12 +199,12 @@ public class JdbcDbWriterTest {
         ((BatchUpdateException) thrown).getUpdateCounts()
     );
     assertArrayEquals(writeFailure.getStackTrace(), thrown.getStackTrace());
-    assertEquals(REDACTED, thrown.getNextException().getMessage());
+    assertTrue(thrown.getNextException().getMessage().startsWith(REDACTED));
     assertEquals("23505", thrown.getNextException().getSQLState());
     assertEquals(7, thrown.getNextException().getErrorCode());
     assertEquals(1, thrown.getSuppressed().length);
     SQLException suppressed = (SQLException) thrown.getSuppressed()[0];
-    assertEquals(REDACTED, suppressed.getMessage());
+    assertTrue(suppressed.getMessage().startsWith(REDACTED));
     assertEquals("08006", suppressed.getSQLState());
     assertEquals(17002, suppressed.getErrorCode());
 
@@ -224,7 +224,7 @@ public class JdbcDbWriterTest {
         new SQLException(WRITE_CANARY, "42000", 10)
     );
 
-    assertEquals(REDACTED, thrown.getMessage());
+    assertTrue(thrown.getMessage().startsWith(REDACTED));
     String writerLogs = capturedWriterLogs();
     assertTrue(writerLogs.contains(REDACTED));
     assertFalse(writerLogs.contains(WRITE_CANARY));
@@ -243,7 +243,7 @@ public class JdbcDbWriterTest {
     assertEquals(suppressed.length, 1);
     assertTrue(suppressed[0] instanceof SQLException);
     SQLException rollbackException = (SQLException) suppressed[0];
-    assertEquals(REDACTED, rollbackException.getMessage());
+    assertTrue(rollbackException.getMessage().startsWith(REDACTED));
     assertEquals("08006", rollbackException.getSQLState());
     assertEquals(17002, rollbackException.getErrorCode());
     assertFalse(rollbackException.getMessage().contains(ROLLBACK_CANARY));

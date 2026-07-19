@@ -20,13 +20,17 @@ import org.junit.Ignore;
 import org.junit.Test;
 import org.postgresql.util.PSQLException;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.sql.BatchUpdateException;
 import java.sql.SQLException;
+import java.sql.Statement;
 
 import static org.junit.Assert.assertEquals;
 
 public class LogUtilTest {
   private static final String REDACTED = "<redacted>";
+  private static final String LEAK = "LEAK_CANARY_PII_9000";
 
   @Test
   public void testNonSqlThrowable() {
@@ -157,34 +161,278 @@ public class LogUtilTest {
     SQLException e2 = new SQLException("sensitive-message-e2", "42001", 20);
     e1.setNextException(e2);
 
-    SQLException expected = new SQLException(REDACTED, "42000", 10);
-    SQLException expectedChild = new SQLException(REDACTED, "42001", 20);
-    expected.setNextException(expectedChild);
-
     SQLException redacted = LogUtil.redactSensitiveData(e1);
+    assertRedactedMetadata(redacted, SQLException.class, "42000", 10);
 
-    assertEqualsSQLException(expected, redacted);
+    SQLException redactedChild = redacted.getNextException();
+    Assert.assertNotNull(redactedChild);
+    assertRedactedMetadata(redactedChild, SQLException.class, "42001", 20);
+    Assert.assertNull(redactedChild.getNextException());
+    Assert.assertArrayEquals(e1.getStackTrace(), redacted.getStackTrace());
+    Assert.assertArrayEquals(e2.getStackTrace(), redactedChild.getStackTrace());
   }
 
   @Test
   public void testRedactSensitiveDataWithBatchUpdateException() {
+    int[] updateCounts = {1, Statement.EXECUTE_FAILED, 1};
     BatchUpdateException e1 =
-        new BatchUpdateException("sensitive message-e1", "42002", 30, new int[0]);
+        new BatchUpdateException("sensitive message-e1", "42002", 30, updateCounts);
 
     SQLException e2 = new SQLException("sensitive message-e2", "42003", 40);
     e1.setNextException(e2);
 
-    BatchUpdateException expected =
-        new BatchUpdateException(REDACTED, "42002", 30, new int[0]);
-    SQLException expectedChild = new SQLException(REDACTED, "42003", 40);
-    expected.setNextException(expectedChild);
-
     SQLException actual = LogUtil.redactSensitiveData(e1);
     Assert.assertTrue(actual instanceof BatchUpdateException);
-    Assert.assertArrayEquals(
-        expected.getUpdateCounts(), ((BatchUpdateException) actual).getUpdateCounts());
+    assertRedactedMetadata(actual, BatchUpdateException.class, "42002", 30);
+    Assert.assertTrue(actual.getMessage().contains("updateCountLength=3"));
+    Assert.assertTrue(actual.getMessage().contains("firstExecuteFailedIndex=1"));
+    Assert.assertArrayEquals(updateCounts, ((BatchUpdateException) actual).getUpdateCounts());
 
-    assertEqualsSQLException(expected, actual);
+    SQLException redactedChild = actual.getNextException();
+    Assert.assertNotNull(redactedChild);
+    assertRedactedMetadata(redactedChild, SQLException.class, "42003", 40);
+    Assert.assertNull(redactedChild.getNextException());
+  }
+
+  @Test
+  public void testRedactSensitiveDataDoesNotLeakOriginalMessages() {
+    String rowValue = "customer@example.com";
+    String valuesClause = "VALUES ('" + rowValue + "', '123-45-6789')";
+    String plainMessage = "Driver rejected " + LEAK + " " + valuesClause;
+    SQLException plain = new SQLException(plainMessage, "23505", 7);
+
+    SQLException redactedPlain = LogUtil.redactSensitiveData(plain);
+    assertRedactedChainDoesNotContain(
+        redactedPlain, plainMessage, LEAK, valuesClause, rowValue, "123-45-6789");
+
+    String batchMessage = "Batch failed " + LEAK + " " + valuesClause;
+    String childMessage = "Child failed " + LEAK + " " + valuesClause;
+    BatchUpdateException batch = new BatchUpdateException(
+        batchMessage,
+        "23505",
+        8,
+        new int[] {1, Statement.EXECUTE_FAILED}
+    );
+    batch.setNextException(new SQLException(childMessage, "22001", 9));
+
+    SQLException redactedBatch = LogUtil.redactSensitiveData(batch);
+    assertRedactedChainDoesNotContain(
+        redactedBatch,
+        batchMessage,
+        childMessage,
+        LEAK,
+        valuesClause,
+        rowValue,
+        "123-45-6789"
+    );
+  }
+
+  @Test
+  public void testRedactSensitiveDataDoesNotTrustRawRedactedPrefix() {
+    SQLException original =
+        new SQLException(REDACTED + " customer=" + LEAK, "23505", 0);
+
+    SQLException redacted = LogUtil.redactSensitiveData(original);
+
+    String message = redacted.getMessage();
+    Assert.assertFalse(message, message.contains(LEAK));
+    Assert.assertTrue(message, message.startsWith(REDACTED + " ["));
+    Assert.assertTrue(message, message.contains("SQLState=23505"));
+  }
+
+  @Test
+  public void testRedactSensitiveDataDoesNotTrustRawRedactedPrefixInChain() {
+    SQLException original = new SQLException("top", "42000", 1);
+    original.setNextException(
+        new SQLException(REDACTED + " " + LEAK, "23505", 2));
+
+    SQLException redacted = LogUtil.redactSensitiveData(original);
+
+    SQLException redactedChild = redacted.getNextException();
+    Assert.assertNotNull(redactedChild);
+    Assert.assertFalse(
+        redactedChild.getMessage(), redactedChild.getMessage().contains(LEAK));
+
+    StringWriter stackTrace = new StringWriter();
+    PrintWriter stackTraceWriter = new PrintWriter(stackTrace);
+    redacted.printStackTrace(stackTraceWriter);
+    stackTraceWriter.flush();
+    Assert.assertFalse(stackTrace.toString(), stackTrace.toString().contains(LEAK));
+  }
+
+  @Test
+  public void testRedactSensitiveDataRejectsMalformedSqlStateInMessage() {
+    SQLException original = new SQLException("raw " + LEAK, LEAK, 0);
+
+    SQLException redacted = LogUtil.redactSensitiveData(original);
+
+    String message = redacted.getMessage();
+    Assert.assertTrue(message, message.contains("SQLState=<invalid>"));
+    Assert.assertFalse(message, message.contains(LEAK));
+  }
+
+  @Test
+  public void testRedactSensitiveDataWithNullMessage() {
+    SQLException original = new SQLException((String) null, "23505", 0);
+
+    SQLException redacted = LogUtil.redactSensitiveData(original);
+
+    Assert.assertTrue(
+        redacted.getMessage(), redacted.getMessage().startsWith(REDACTED + " ["));
+  }
+
+  @Test
+  public void testRedactSensitiveDataWithNullSqlState() {
+    SQLException original = new SQLException("raw", null, 0);
+
+    SQLException redacted = LogUtil.redactSensitiveData(original);
+
+    Assert.assertTrue(
+        redacted.getMessage(), redacted.getMessage().contains("SQLState=null"));
+  }
+
+  @Test
+  public void testRedactSensitiveDataWithEmptyUpdateCounts() {
+    BatchUpdateException original =
+        new BatchUpdateException("raw", "23505", 0, new int[0]);
+
+    SQLException redacted = LogUtil.redactSensitiveData(original);
+
+    Assert.assertTrue(
+        redacted.getMessage(),
+        redacted.getMessage()
+            .contains("updateCountLength=0; firstExecuteFailedIndex=-1")
+    );
+  }
+
+  @Test
+  public void testRedactSensitiveDataWithStopOnFailureUpdateCounts() {
+    BatchUpdateException original =
+        new BatchUpdateException("raw", "23505", 0, new int[] {1, 1});
+
+    SQLException redacted = LogUtil.redactSensitiveData(original);
+
+    Assert.assertTrue(
+        redacted.getMessage(),
+        redacted.getMessage()
+            .contains("updateCountLength=2; firstExecuteFailedIndex=-1")
+    );
+  }
+
+  @Test
+  public void testRedactSensitiveDataNonBatchMessageGrammar() {
+    SQLException original = new SQLException("raw", "23505", 7);
+
+    SQLException redacted = LogUtil.redactSensitiveData(original);
+
+    Assert.assertEquals(
+        "<redacted> [class=java.sql.SQLException; SQLState=23505; errorCode=7]",
+        redacted.getMessage()
+    );
+  }
+
+  @Test
+  public void testRedactSensitiveDataBatchMessageGrammar() {
+    BatchUpdateException original =
+        new BatchUpdateException(
+            "raw",
+            "23505",
+            7,
+            new int[] {1, Statement.EXECUTE_FAILED, 1}
+        );
+
+    SQLException redacted = LogUtil.redactSensitiveData(original);
+
+    Assert.assertEquals(
+        "<redacted> [class=java.sql.BatchUpdateException; SQLState=23505; errorCode=7; "
+            + "updateCountLength=3; firstExecuteFailedIndex=1]",
+        redacted.getMessage()
+    );
+  }
+
+  @Test
+  public void testRedactSensitiveDataIdentityIdempotencyForChain() {
+    SQLException original = new SQLException("root raw", "42000", 1);
+    original.setNextException(
+        new BatchUpdateException(
+            "child raw",
+            "23505",
+            2,
+            new int[] {Statement.EXECUTE_FAILED}
+        )
+    );
+
+    SQLException redactedOnce = LogUtil.redactSensitiveData(original);
+    SQLException redactedChildOnce = redactedOnce.getNextException();
+    SQLException redactedTwice = LogUtil.redactSensitiveData(redactedOnce);
+    SQLException redactedChildTwice = LogUtil.redactSensitiveData(redactedChildOnce);
+
+    Assert.assertSame(redactedOnce, redactedTwice);
+    Assert.assertSame(redactedChildOnce, redactedChildTwice);
+    assertEquals(redactedOnce.getMessage(), redactedTwice.getMessage());
+    assertEquals(redactedChildOnce.getMessage(), redactedTwice.getNextException().getMessage());
+  }
+
+  @Test
+  public void testRedactSensitiveDataIncludesDiagnosticMetadata() {
+    SQLException original =
+        new DiagnosticSQLException("sensitive driver message", "22001", 1234);
+
+    SQLException redacted = LogUtil.redactSensitiveData(original);
+
+    assertRedactedMetadata(redacted, DiagnosticSQLException.class, "22001", 1234);
+  }
+
+  @Test
+  public void testRedactSensitiveDataIncludesBatchSummary() {
+    int[] updateCounts = {1, Statement.EXECUTE_FAILED, 1};
+    BatchUpdateException original =
+        new BatchUpdateException("sensitive batch message", "23505", 17, updateCounts);
+
+    BatchUpdateException redacted =
+        (BatchUpdateException) LogUtil.redactSensitiveData(original);
+
+    Assert.assertTrue(redacted.getMessage().contains("updateCountLength=3"));
+    Assert.assertTrue(redacted.getMessage().contains("firstExecuteFailedIndex=1"));
+    Assert.assertArrayEquals(updateCounts, redacted.getUpdateCounts());
+  }
+
+  @Test
+  public void testRedactSensitiveDataIsIdempotent() {
+    SQLException original =
+        new DiagnosticSQLException("sensitive driver message", "22001", 1234);
+
+    SQLException redactedOnce = LogUtil.redactSensitiveData(original);
+    SQLException redactedTwice = LogUtil.redactSensitiveData(redactedOnce);
+
+    assertEquals(redactedOnce.getMessage(), redactedTwice.getMessage());
+    Assert.assertTrue(
+        redactedTwice.getMessage().contains("class=" + DiagnosticSQLException.class.getName()));
+    Assert.assertFalse(
+        redactedTwice.getMessage().substring(REDACTED.length()).contains(REDACTED));
+  }
+
+  @Test
+  public void testRedactSensitiveDataPreservesExceptionChain() {
+    SQLException first = new SQLException("first sensitive message", "42000", 10);
+    BatchUpdateException second = new BatchUpdateException(
+        "second sensitive message",
+        "42001",
+        20,
+        new int[] {Statement.EXECUTE_FAILED}
+    );
+    SQLException third = new SQLException("third sensitive message", "42002", 30);
+    first.setNextException(second);
+    second.setNextException(third);
+
+    SQLException redacted = LogUtil.redactSensitiveData(first);
+
+    Assert.assertEquals(3, exceptionChainDepth(redacted));
+    assertRedactedMetadata(redacted, SQLException.class, "42000", 10);
+    assertRedactedMetadata(
+        redacted.getNextException(), BatchUpdateException.class, "42001", 20);
+    assertRedactedMetadata(
+        redacted.getNextException().getNextException(), SQLException.class, "42002", 30);
   }
 
   @Test
@@ -340,6 +588,55 @@ public class LogUtilTest {
     Assert.assertFalse("VALUES clause leaked: " + msg, msg.contains("VALUES"));
   }
 
+  private static void assertRedactedMetadata(
+      SQLException redacted,
+      Class<? extends SQLException> originalClass,
+      String sqlState,
+      int errorCode
+  ) {
+    String message = redacted.getMessage();
+    Assert.assertTrue(message, message.startsWith(REDACTED));
+    Assert.assertTrue(message, message.contains("class=" + originalClass.getName()));
+    Assert.assertTrue(message, message.contains("SQLState=" + sqlState));
+    Assert.assertTrue(message, message.contains("errorCode=" + errorCode));
+    Assert.assertEquals(sqlState, redacted.getSQLState());
+    Assert.assertEquals(errorCode, redacted.getErrorCode());
+  }
+
+  private static void assertRedactedChainDoesNotContain(
+      SQLException redacted,
+      String... sensitiveValues
+  ) {
+    StringWriter stackTrace = new StringWriter();
+    PrintWriter stackTraceWriter = new PrintWriter(stackTrace);
+    for (SQLException current = redacted; current != null; current = current.getNextException()) {
+      String message = current.getMessage();
+      Assert.assertTrue(message, message.startsWith(REDACTED));
+      for (String sensitiveValue : sensitiveValues) {
+        Assert.assertFalse(
+            "Sensitive data leaked from redacted message: " + message,
+            message.contains(sensitiveValue)
+        );
+      }
+      current.printStackTrace(stackTraceWriter);
+    }
+    stackTraceWriter.flush();
+    for (String sensitiveValue : sensitiveValues) {
+      Assert.assertFalse(
+          "Sensitive data leaked from redacted stack trace: " + stackTrace,
+          stackTrace.toString().contains(sensitiveValue)
+      );
+    }
+  }
+
+  private static int exceptionChainDepth(SQLException exception) {
+    int depth = 0;
+    for (SQLException current = exception; current != null; current = current.getNextException()) {
+      depth++;
+    }
+    return depth;
+  }
+
   private static void assertEqualsSQLException(SQLException expected, SQLException actual) {
     if (expected == actual) {
       return;
@@ -356,5 +653,13 @@ public class LogUtilTest {
     Assert.assertEquals(msg1, msg2);
 
     assertEqualsSQLException(expected.getNextException(), actual.getNextException());
+  }
+
+  private static class DiagnosticSQLException extends SQLException {
+    private static final long serialVersionUID = 1L;
+
+    DiagnosticSQLException(String reason, String sqlState, int vendorCode) {
+      super(reason, sqlState, vendorCode);
+    }
   }
 }

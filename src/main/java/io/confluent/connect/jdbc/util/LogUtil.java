@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.util;
 
 import java.sql.BatchUpdateException;
 import java.sql.SQLException;
+import java.sql.Statement;
 
 /**
  * A stop-gap utility class to find a tradeoff between 2 things: To have reasonably good exception/
@@ -73,28 +74,62 @@ public class LogUtil {
     }
 
     if (!(t instanceof BatchUpdateException)) {
-      // t is a SQLException, but not BatchUpdateException.
       SQLException oldSqlException = (SQLException) t;
       SQLException newSqlException =
           new SQLException(
-              REDACTED_VALUE, oldSqlException.getSQLState(), oldSqlException.getErrorCode());
-      newSqlException.setNextException(redactSensitiveData(oldSqlException.getNextException()));
+              buildRedactedMessage(oldSqlException, null),
+              oldSqlException.getSQLState(),
+              oldSqlException.getErrorCode());
+      newSqlException.setNextException(
+          (SQLException) redactSensitiveData(oldSqlException.getNextException()));
       newSqlException.setStackTrace(oldSqlException.getStackTrace());
       return newSqlException;
     }
 
-    // At this point t is BatchUpdateException; redact its message too.
     BatchUpdateException oldBatchUpdateException = (BatchUpdateException) t;
+    int[] updateCounts = oldBatchUpdateException.getUpdateCounts();
     BatchUpdateException newBatchUpdateException =
         new BatchUpdateException(
-            REDACTED_VALUE,
+            buildRedactedMessage(oldBatchUpdateException, updateCounts),
             oldBatchUpdateException.getSQLState(),
             oldBatchUpdateException.getErrorCode(),
-            oldBatchUpdateException.getUpdateCounts());
+            updateCounts);
     newBatchUpdateException.setNextException(
-        redactSensitiveData(oldBatchUpdateException.getNextException()));
+        (SQLException) redactSensitiveData(oldBatchUpdateException.getNextException()));
     newBatchUpdateException.setStackTrace(oldBatchUpdateException.getStackTrace());
     return newBatchUpdateException;
+  }
+
+  /**
+   * Builds a privacy-safe redacted message that keeps ONLY non-sensitive diagnostic metadata:
+   * the original exception class, SQLState, errorCode, and (for a batch) the batch size and the
+   * index of the first failed statement. Never includes the original driver message text.
+   *
+   * <p>Idempotent: if the message is already redacted (starts with {@code <redacted>}) it is
+   * returned unchanged, so re-redacting an already-redacted exception preserves the original
+   * class captured on the first pass.
+   */
+  private static String buildRedactedMessage(SQLException e, int[] updateCounts) {
+    String existing = e.getMessage();
+    if (existing != null && existing.startsWith(REDACTED_VALUE)) {
+      return existing;
+    }
+    StringBuilder sb = new StringBuilder(REDACTED_VALUE)
+        .append(" [class=").append(e.getClass().getName())
+        .append("; SQLState=").append(e.getSQLState())
+        .append("; errorCode=").append(e.getErrorCode());
+    if (updateCounts != null) {
+      int firstFailedIndex = -1;
+      for (int i = 0; i < updateCounts.length; i++) {
+        if (updateCounts[i] == Statement.EXECUTE_FAILED) {
+          firstFailedIndex = i;
+          break;
+        }
+      }
+      sb.append("; batchSize=").append(updateCounts.length)
+        .append("; firstFailedIndex=").append(firstFailedIndex);
+    }
+    return sb.append("]").toString();
   }
 
   // This implementation assumes it to be Postgres, see toString() of ServerErrorMessage.java

@@ -561,7 +561,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     assertEquals(sqlState, redactedException.getSQLState());
     assertEquals(errorCode, redactedException.getErrorCode());
     for (Throwable current : redactedException) {
-      assertEquals(REDACTED, current.getMessage());
+      assertTrue(current.getMessage().startsWith(REDACTED));
       assertFalse(current.getMessage().contains(sensitiveValue));
     }
     return redactedException;

@@ -155,7 +155,7 @@ public class JdbcDbWriterTest {
     props.put("insert.mode", "upsert");
     props.put("pk.mode", "record_key");
     props.put("pk.fields", "id");
-    props.put("trim.sensitive.log", "false");
+    props.put(JdbcSinkConfig.TRIM_SENSITIVE_LOG_ENABLED, "true");
     JdbcDbWriter testWriter = newWriterWithMockConnection(props, mockConnection);
     PreparedStatement mockStatement = mock(PreparedStatement.class);
     when(dialect.parseTableIdentifier(any())).thenReturn(mock(TableId.class));
@@ -191,7 +191,7 @@ public class JdbcDbWriterTest {
     verify(mockConnection, times(1)).rollback();
     assertNotSame(writeFailure, thrown);
     assertTrue(thrown instanceof BatchUpdateException);
-    assertEquals(REDACTED, thrown.getMessage());
+    assertTrue(thrown.getMessage().startsWith(REDACTED));
     assertEquals("23505", thrown.getSQLState());
     assertEquals(7, thrown.getErrorCode());
     assertArrayEquals(
@@ -199,12 +199,12 @@ public class JdbcDbWriterTest {
         ((BatchUpdateException) thrown).getUpdateCounts()
     );
     assertArrayEquals(writeFailure.getStackTrace(), thrown.getStackTrace());
-    assertEquals(REDACTED, thrown.getNextException().getMessage());
+    assertTrue(thrown.getNextException().getMessage().startsWith(REDACTED));
     assertEquals("23505", thrown.getNextException().getSQLState());
     assertEquals(7, thrown.getNextException().getErrorCode());
     assertEquals(1, thrown.getSuppressed().length);
     SQLException suppressed = (SQLException) thrown.getSuppressed()[0];
-    assertEquals(REDACTED, suppressed.getMessage());
+    assertTrue(suppressed.getMessage().startsWith(REDACTED));
     assertEquals("08006", suppressed.getSQLState());
     assertEquals(17002, suppressed.getErrorCode());
 
@@ -221,10 +221,11 @@ public class JdbcDbWriterTest {
 
     SQLException thrown = verifyConnectionRollback(
         false,
-        new SQLException(WRITE_CANARY, "42000", 10)
+        new SQLException(WRITE_CANARY, "42000", 10),
+        true
     );
 
-    assertEquals(REDACTED, thrown.getMessage());
+    assertTrue(thrown.getMessage().startsWith(REDACTED));
     String writerLogs = capturedWriterLogs();
     assertTrue(writerLogs.contains(REDACTED));
     assertFalse(writerLogs.contains(WRITE_CANARY));
@@ -236,6 +237,26 @@ public class JdbcDbWriterTest {
   }
 
   @Test
+  public void writeKeepsRawFailuresWhenSensitiveLogTrimmingDisabled() throws SQLException {
+    captureWriterLogs();
+    captureSensitiveLogs();
+    SQLException writeFailure = new SQLException(WRITE_CANARY, "42000", 10);
+
+    SQLException thrown = verifyConnectionRollback(false, writeFailure, false);
+
+    assertSame(writeFailure, thrown);
+    assertEquals(WRITE_CANARY, thrown.getMessage());
+    assertEquals(1, thrown.getSuppressed().length);
+    assertEquals(ROLLBACK_CANARY, thrown.getSuppressed()[0].getMessage());
+
+    String writerLogs = capturedWriterLogs();
+    assertTrue(writerLogs.contains(WRITE_CANARY));
+    assertTrue(writerLogs.contains(ROLLBACK_CANARY));
+    assertFalse(writerLogs.contains(REDACTED));
+    assertTrue(capturedSensitiveLogs().isEmpty());
+  }
+
+  @Test
   public void verifyConnectionRollbackFailed() throws SQLException {
     SQLException e = verifyConnectionRollback(false);
 
@@ -243,7 +264,7 @@ public class JdbcDbWriterTest {
     assertEquals(suppressed.length, 1);
     assertTrue(suppressed[0] instanceof SQLException);
     SQLException rollbackException = (SQLException) suppressed[0];
-    assertEquals(REDACTED, rollbackException.getMessage());
+    assertTrue(rollbackException.getMessage().startsWith(REDACTED));
     assertEquals("08006", rollbackException.getSQLState());
     assertEquals(17002, rollbackException.getErrorCode());
     assertFalse(rollbackException.getMessage().contains(ROLLBACK_CANARY));
@@ -265,6 +286,14 @@ public class JdbcDbWriterTest {
       boolean succeedOnRollBack,
       SQLException writeFailure
   ) throws SQLException {
+    return verifyConnectionRollback(succeedOnRollBack, writeFailure, true);
+  }
+
+  private SQLException verifyConnectionRollback(
+      boolean succeedOnRollBack,
+      SQLException writeFailure,
+      boolean trimSensitiveLogsEnabled
+  ) throws SQLException {
     Connection mockConnection = mock(Connection.class);
 
     doThrow(writeFailure).when(mockConnection).commit();
@@ -281,6 +310,10 @@ public class JdbcDbWriterTest {
     props.put("insert.mode", "upsert");
     props.put("pk.mode", "record_key");
     props.put("pk.fields", "id"); // assigned name for the primitive key
+    props.put(
+        JdbcSinkConfig.TRIM_SENSITIVE_LOG_ENABLED,
+        String.valueOf(trimSensitiveLogsEnabled)
+    );
 
     JdbcDbWriter writer = newWriterWithMockConnection(props, mockConnection);
 

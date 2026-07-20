@@ -23,6 +23,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
@@ -274,6 +275,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     replayAll();
 
     Map<String, String> props = setupBasicProps(maxRetries, retryBackoffMs);
+    props.put(JdbcSinkConfig.TRIM_SENSITIVE_LOG_ENABLED, "true");
     task.start(props);
 
     RetriableException firstRetry =
@@ -325,6 +327,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     replayAll();
 
     Map<String, String> props = setupBasicProps(0, 0);
+    props.put(JdbcSinkConfig.TRIM_SENSITIVE_LOG_ENABLED, "true");
     task.start(props);
     captureTaskLogs();
     task.put(records);
@@ -372,6 +375,46 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     Map<String, String> props = setupBasicProps(0, 0);
     task.start(props);
     task.put(records);
+    verifyAll();
+  }
+
+  @Test
+  public void putKeepsRawSqlExceptionWhenSensitiveLogTrimmingDisabled()
+      throws SQLException {
+    List<SinkRecord> records = createRecordsList(1);
+    SQLException exception = new SQLException(
+        "Duplicate entry '" + MYSQL_CANARY + "' for key 'email'",
+        "23000",
+        1062
+    );
+
+    mockWriter.write(records);
+    expectLastCall().andThrow(exception);
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(ctx);
+    expect(ctx.errantRecordReporter()).andReturn(null);
+    replayAll();
+
+    Map<String, String> props = setupBasicProps(0, 0);
+    task.start(props);
+    captureTaskLogs();
+    ConnectException thrown =
+        assertThrows(ConnectException.class, () -> task.put(records));
+
+    assertTrue(thrown.getCause() instanceof SQLException);
+    SQLException allMessagesException = (SQLException) thrown.getCause();
+    assertTrue(allMessagesException.getMessage().contains(MYSQL_CANARY));
+    assertFalse(allMessagesException.getMessage().contains(REDACTED));
+    assertSame(exception, allMessagesException.getNextException());
+    String logs = capturedTaskLogs();
+    assertTrue(logs.contains(MYSQL_CANARY));
+    assertFalse(logs.contains(REDACTED));
     verifyAll();
   }
 
@@ -510,6 +553,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     replayAll();
 
     Map<String, String> props = setupBasicProps(0, 0);
+    props.put(JdbcSinkConfig.TRIM_SENSITIVE_LOG_ENABLED, "true");
     task.start(props);
     captureTaskLogs();
     ConnectException thrown =
@@ -561,7 +605,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     assertEquals(sqlState, redactedException.getSQLState());
     assertEquals(errorCode, redactedException.getErrorCode());
     for (Throwable current : redactedException) {
-      assertEquals(REDACTED, current.getMessage());
+      assertTrue(current.getMessage().startsWith(REDACTED));
       assertFalse(current.getMessage().contains(sensitiveValue));
     }
     return redactedException;

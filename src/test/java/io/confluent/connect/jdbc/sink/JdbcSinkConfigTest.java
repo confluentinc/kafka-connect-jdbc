@@ -27,6 +27,8 @@ import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class JdbcSinkConfigTest {
 
@@ -61,6 +63,19 @@ public class JdbcSinkConfigTest {
   public void shouldCreateConfigWithMinimalConfigs() {
     createConfig();
     assertTableTypes(TableType.TABLE);
+  }
+
+  @Test
+  public void shouldDisableSensitiveLogTrimmingByDefault() {
+    createConfig();
+    assertFalse(config.trimSensitiveLogsEnabled);
+  }
+
+  @Test
+  public void shouldEnableSensitiveLogTrimming() {
+    props.put(JdbcSinkConfig.TRIM_SENSITIVE_LOG_ENABLED, "true");
+    createConfig();
+    assertTrue(config.trimSensitiveLogsEnabled);
   }
 
   @Test

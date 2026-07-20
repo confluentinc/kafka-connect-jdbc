@@ -94,18 +94,18 @@ public class JdbcSinkTask extends SinkTask {
         throw tace;
       }
     } catch (SQLException sqle) {
-      SQLException redactedException = LogUtil.redactSensitiveData(sqle);
+      SQLException loggedException = redactSensitiveDataIfEnabled(sqle);
       log.warn(
           "Write of {} records failed, remainingRetries={}",
           records.size(),
           remainingRetries,
-          redactedException
+          loggedException
       );
       int totalExceptions = 0;
       for (Throwable e :sqle) {
         totalExceptions++;
       }
-      SQLException sqlAllMessagesException = getAllMessagesException(sqle);
+      SQLException sqlAllMessagesException = getAllMessagesException(loggedException);
       if (remainingRetries > 0) {
         writer.closeQuietly();
         initWriter();
@@ -123,7 +123,7 @@ public class JdbcSinkTask extends SinkTask {
                   + "For complete details on each exception, please enable DEBUG logging.",
               totalExceptions);
           int exceptionCount = 1;
-          for (Throwable e : redactedException) {
+          for (Throwable e : loggedException) {
             log.debug("Exception {}:", exceptionCount++, e);
           }
           throw new ConnectException(sqlAllMessagesException);
@@ -145,7 +145,8 @@ public class JdbcSinkTask extends SinkTask {
         reporter.report(record, tace);
         writer.closeQuietly();
       } catch (SQLException sqle) {
-        SQLException sqlAllMessagesException = getAllMessagesException(sqle);
+        SQLException sqlAllMessagesException =
+            getAllMessagesException(redactSensitiveDataIfEnabled(sqle));
         log.debug(sqlAllMessagesException.toString());
         reporter.report(record, sqlAllMessagesException);
         writer.closeQuietly();
@@ -155,13 +156,18 @@ public class JdbcSinkTask extends SinkTask {
 
   private SQLException getAllMessagesException(SQLException sqle) {
     String sqleAllMessages = "Exception chain:" + System.lineSeparator();
-    SQLException redactedException = LogUtil.redactSensitiveData(sqle);
-    for (Throwable e : redactedException) {
+    for (Throwable e : sqle) {
       sqleAllMessages += e + System.lineSeparator();
     }
     SQLException sqlAllMessagesException = new SQLException(sqleAllMessages);
-    sqlAllMessagesException.setNextException(redactedException);
+    sqlAllMessagesException.setNextException(sqle);
     return sqlAllMessagesException;
+  }
+
+  private SQLException redactSensitiveDataIfEnabled(SQLException exception) {
+    return config.trimSensitiveLogsEnabled
+        ? LogUtil.redactSensitiveData(exception)
+        : exception;
   }
 
   @Override

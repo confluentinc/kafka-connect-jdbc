@@ -89,10 +89,10 @@ public class JdbcDbWriter {
       log.trace("Committing transaction");
       connection.commit();
     } catch (SQLException e) {
-      SENSITIVE.trace("Raw sink write failure (redacted at ERROR)", e);
-      SQLException redactedException = LogUtil.redactSensitiveData(e);
-      rollback(connection, redactedException);
-      throw redactedException;
+      SQLException writeException =
+          redactSensitiveDataIfEnabled("Raw sink write failure (redacted at ERROR)", e);
+      rollback(connection, writeException);
+      throw writeException;
     } catch (TableAlterOrCreateException e) {
       rollback(connection, e);
       throw e;
@@ -106,11 +106,19 @@ public class JdbcDbWriter {
       connection.rollback();
       log.info("Successfully rolled back transaction");
     } catch (SQLException e) {
-      SENSITIVE.trace("Raw rollback failure (redacted at ERROR)", e);
-      SQLException redactedException = LogUtil.redactSensitiveData(e);
-      log.error("Failed to rollback transaction", redactedException);
-      writeException.addSuppressed(redactedException);
+      SQLException rollbackException =
+          redactSensitiveDataIfEnabled("Raw rollback failure (redacted at ERROR)", e);
+      log.error("Failed to rollback transaction", rollbackException);
+      writeException.addSuppressed(rollbackException);
     }
+  }
+
+  private SQLException redactSensitiveDataIfEnabled(String traceMessage, SQLException exception) {
+    if (!config.trimSensitiveLogsEnabled) {
+      return exception;
+    }
+    SENSITIVE.trace(traceMessage, exception);
+    return LogUtil.redactSensitiveData(exception);
   }
 
   void closeQuietly() {

@@ -9,10 +9,12 @@ import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -318,6 +320,8 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
     final RecordDestination<RecordT> cancellableDestination =
         this.withAdditionalRunningCondition(stillRun::get);
 
+    Map<String, String> callerMdc = MDC.getCopyOfContextMap();
+
     // Submit the function and use the cancellable destination
     Supplier<T> supplier = createLoggingSupplier(
         operationName,
@@ -325,7 +329,10 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
         cancellableDestination,
         generatorProcessor
     );
-    return CompletableFuture.supplyAsync(supplier, executor);
+    return CompletableFuture.supplyAsync(
+        withMdcContext(supplier, callerMdc),
+        executor
+    );
   }
 
   @Override
@@ -478,6 +485,29 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
           throw e;
         } finally {
           log.debug("{}Stopped {}", context.prefix(), operationName);
+        }
+      }
+    };
+  }
+
+  private <T> Supplier<T> withMdcContext(
+      Supplier<T> supplier,
+      Map<String, String> callerMdc
+  ) {
+    return () -> {
+      Map<String, String> previousMdc = MDC.getCopyOfContextMap();
+      try {
+        if (callerMdc != null) {
+          MDC.setContextMap(callerMdc);
+        } else {
+          MDC.clear();
+        }
+        return supplier.get();
+      } finally {
+        if (previousMdc != null) {
+          MDC.setContextMap(previousMdc);
+        } else {
+          MDC.clear();
         }
       }
     };

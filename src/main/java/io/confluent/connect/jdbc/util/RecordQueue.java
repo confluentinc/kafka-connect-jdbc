@@ -9,6 +9,7 @@ import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -29,8 +30,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.IntFunction;
 import java.util.function.Supplier;
-
-import org.slf4j.MDC;
 
 /**
  * A concurrent and blocking queue for source records, with the ability to asynchronously execute
@@ -328,10 +327,12 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
         operationName,
         logContext,
         cancellableDestination,
-        generatorProcessor,
-        callerMdc
+        generatorProcessor
     );
-    return CompletableFuture.supplyAsync(supplier, executor);
+    return CompletableFuture.supplyAsync(
+        withMdcContext(supplier, callerMdc),
+        executor
+    );
   }
 
   @Override
@@ -471,13 +472,9 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
       String operationName,
       String logContext,
       RecordDestination<RecordT> destination,
-      Function<RecordDestination<RecordT>, T> generatorProcessor,
-      Map<String, String> callerMdc
+      Function<RecordDestination<RecordT>, T> generatorProcessor
   ) {
     return () -> {
-      if (callerMdc != null) {
-        MDC.setContextMap(callerMdc);
-      }
       try (ConnectLogContext context = new ConnectLogContext(logContext)) {
         try {
           log.debug("{}Starting {}", context.prefix(), operationName);
@@ -489,8 +486,29 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
         } finally {
           log.debug("{}Stopped {}", context.prefix(), operationName);
         }
+      }
+    };
+  }
+
+  private <T> Supplier<T> withMdcContext(
+      Supplier<T> supplier,
+      Map<String, String> callerMdc
+  ) {
+    return () -> {
+      Map<String, String> previousMdc = MDC.getCopyOfContextMap();
+      try {
+        if (callerMdc != null) {
+          MDC.setContextMap(callerMdc);
+        } else {
+          MDC.clear();
+        }
+        return supplier.get();
       } finally {
-        MDC.clear();
+        if (previousMdc != null) {
+          MDC.setContextMap(previousMdc);
+        } else {
+          MDC.clear();
+        }
       }
     };
   }

@@ -324,9 +324,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       }
       case Types.OTHER: {
         if (isJsonType(columnDefn)) {
-          if (complexTypesEnabled() && !jsonAsString()) {
-            return rs -> JsonConverter.jsonStringToMap(rs.getString(col));
-          }
           return rs -> rs.getString(col);
         }
 
@@ -387,37 +384,20 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * Whether PostgreSQL json/jsonb columns should be emitted as a logical JSON STRING (mode
-   * {@code string}) rather than a Connect Map (mode {@code map}, the default). Only the source
-   * connector exposes this.
-   */
-  private boolean jsonAsString() {
-    return ((JdbcSourceConnectorConfig) config).jsonHandlingModeIsString();
-  }
-
-  /**
    * Build the Connect schema for a PostgreSQL json/jsonb column. When complex types are disabled
-   * the column stays a plain STRING. When enabled it is a logical JSON STRING (mode
-   * {@code string}) or a Map&lt;String,String&gt; (mode {@code map}, the default).
+   * the column stays a plain STRING; when enabled it is a logical JSON STRING (raw text, aligned
+   * with Debezium's {@code io.debezium.data.Json}).
    */
   private Schema jsonSchema(ColumnDefinition columnDefn) {
     boolean optional = columnDefn.isOptional();
     if (!complexTypesEnabled()) {
       return optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA;
     }
-    if (jsonAsString()) {
-      SchemaBuilder jsonBuilder = Json.builder();
-      if (optional) {
-        jsonBuilder.optional();
-      }
-      return jsonBuilder.build();
-    }
-    SchemaBuilder mapBuilder = SchemaBuilder.map(
-        Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA);
+    SchemaBuilder jsonBuilder = Json.builder();
     if (optional) {
-      mapBuilder.optional();
+      jsonBuilder.optional();
     }
-    return mapBuilder.build();
+    return jsonBuilder.build();
   }
 
   @Override

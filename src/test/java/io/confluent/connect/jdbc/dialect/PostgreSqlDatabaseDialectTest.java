@@ -791,17 +791,11 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   // ========== Complex SQL types (sql.complex.types.enable) ==========
 
   @Test
-  public void jsonHandlingModeShouldSelectSourceSchema() {
-    // Default is "string": a logical JSON STRING tagged with the Json logical name.
-    Schema stringMode = sourceFieldSchema(complexTypesDialect(), Types.OTHER, "jsonb");
-    assertEquals(Type.STRING, stringMode.type());
-    assertEquals(Json.LOGICAL_NAME, stringMode.name());
-
-    // "map": a shallow Map<String,String>.
-    PostgreSqlDatabaseDialect mapDialect = complexTypesDialect(
-        JdbcSourceConnectorConfig.JSON_HANDLING_MODE_CONFIG,
-        JdbcSourceConnectorConfig.JSON_HANDLING_MODE_MAP);
-    assertEquals(Type.MAP, sourceFieldSchema(mapDialect, Types.OTHER, "json").type());
+  public void jsonColumnMapsToLogicalJsonStringSchema() {
+    // json/jsonb map to a logical JSON STRING tagged with the Json logical name.
+    Schema jsonSchema = sourceFieldSchema(complexTypesDialect(), Types.OTHER, "jsonb");
+    assertEquals(Type.STRING, jsonSchema.type());
+    assertEquals(Json.LOGICAL_NAME, jsonSchema.name());
   }
 
   @Test
@@ -812,7 +806,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
   @Test
   public void shouldBindStructValueAsJsonStringForJsonbColumn() throws Exception {
-    // STRUCT/MAP (json/hstore map mode) serialize to JSON, bind as String, cast ::jsonb on the sink.
+    // STRUCT/MAP (hstore map mode) serialize to JSON, bind as String, cast ::jsonb on the sink.
     PreparedStatement statement = mock(PreparedStatement.class);
     ColumnDefinition colDef = mock(ColumnDefinition.class);
     Schema schema = SchemaBuilder.struct().field("a", Schema.INT32_SCHEMA).optional().build();

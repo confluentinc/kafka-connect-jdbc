@@ -17,7 +17,6 @@ package io.confluent.connect.jdbc.dialect;
 
 import io.confluent.connect.jdbc.data.Json;
 import io.confluent.connect.jdbc.data.VariableScaleDecimal;
-import io.confluent.connect.jdbc.data.ZonedTimestamp;
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
@@ -54,8 +53,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -101,7 +98,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   static final String DATE_TYPE_NAME = "date";
   static final String TIME_TYPE_NAME = "time";
   static final String TIMESTAMP_TYPE_NAME = "timestamp";
-  static final String TIMESTAMPTZ_TYPE_NAME = "timestamptz";
 
   private static final String MULTI_DIMENSIONAL_ARRAY_WARNING =
       "Skipping unsupported multi-dimensional array at column index {}; only single-dimension "
@@ -429,10 +425,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       case "time":
         return Time.builder().optional().build();
       case "timestamp":
-        return Timestamp.builder().optional().build();
       case "timestamptz":
-        // ZonedTimestamp STRING (built-in Timestamp drops the zone); round-trips to timestamptz[].
-        return ZonedTimestamp.optionalSchema();
+        // Precision-aware timestamp schema, honoring timestamp.precision.mode. timestamptz drops
+        // the zone and is stored as a plain timestamp, matching the scalar timestamp/timestamptz.
+        return timestampGranularity().schemaFunction.apply(true);
       default:
         return null;
     }
@@ -463,7 +459,33 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     if (elementSchema == null) {
       return null;
     }
-    return rs -> readArray(rs, col, elementSchema);
+    final String temporalKind = temporalElementKind(columnDefn);
+    return rs -> readArray(rs, col, elementSchema, temporalKind);
+  }
+
+  /**
+   * Canonical temporal kind (a Date/Time/Timestamp logical name) for a PostgreSQL array element, or
+   * null if the element is not temporal. {@code timestamptz} collapses to {@code Timestamp} so the
+   * zone is dropped, matching the scalar timestamp/timestamptz handling. Routing on the PostgreSQL
+   * type (not the Connect schema name) keeps working under precision modes where the timestamp
+   * element schema is an unnamed INT64/STRING.
+   */
+  private static String temporalElementKind(ColumnDefinition columnDefn) {
+    String base = arrayElementBaseType(columnDefn);
+    if (base == null) {
+      return null;
+    }
+    switch (base) {
+      case "date":
+        return Date.LOGICAL_NAME;
+      case "time":
+        return Time.LOGICAL_NAME;
+      case "timestamp":
+      case "timestamptz":
+        return Timestamp.LOGICAL_NAME;
+      default:
+        return null;
+    }
   }
 
   /**
@@ -472,7 +494,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * lives here. Temporal elements are decoded via the element {@link ResultSet} so each can honor
    * the configured {@code db.timezone}; all other elements come straight from {@code getArray()}.
    */
-  private List<Object> readArray(ResultSet rs, int col, Schema elementSchema)
+  private List<Object> readArray(ResultSet rs, int col, Schema elementSchema, String temporalKind)
       throws SQLException {
     Array arr = rs.getArray(col);
     if (arr == null) {
@@ -484,8 +506,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         log.warn(MULTI_DIMENSIONAL_ARRAY_WARNING, col);
         return null;
       }
-      if (isTemporalElement(elementSchema.name())) {
-        return readTemporalElements(arr, elementSchema.name());
+      if (temporalKind != null) {
+        return readTemporalElements(arr, temporalKind);
       }
       if (raw == null) {
         return null;
@@ -527,52 +549,50 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   /**
    * Read temporal elements via the array's element {@link ResultSet} so each value can be decoded
    * with an explicit calendar ({@code getArray()} would parse in the JVM default zone). Mirrors the
-   * scalar path: {@code date} is decoded in UTC while {@code time}/{@code timestamp}/
-   * {@code timestamptz} honor the configured {@code db.timezone}.
+   * scalar path: {@code date} uses the date time zone (UTC on the source) while
+   * {@code time}/{@code timestamp} honor {@code db.timezone}.
    */
-  private List<Object> readTemporalElements(Array arr, String elementName) throws SQLException {
-    Calendar dateCal = DateTimeUtils.getZoneIdCalendar(ZoneOffset.UTC);
+  private List<Object> readTemporalElements(Array arr, String elementKind) throws SQLException {
+    Calendar dateCal = DateTimeUtils.getZoneIdCalendar(dateTimeZoneId());
     Calendar timeCal = DateTimeUtils.getZoneIdCalendar(zoneId());
     try (ResultSet elementRs = arr.getResultSet()) {
       List<Object> out = new ArrayList<>();
       while (elementRs.next()) {
-        Object value = decodeTemporalElement(elementRs, elementName, dateCal, timeCal);
-        out.add(elementRs.wasNull() ? null : value);
+        // Element value is column 2 of the array's ResultSet (column 1 is the index).
+        out.add(decodeTemporalElement(elementRs, elementKind, dateCal, timeCal));
       }
       return out;
     }
   }
 
   /**
-   * Whether the array element is one of the temporal logical types, which are decoded via the
-   * element {@link ResultSet} rather than {@code getArray()}.
+   * Decode a single temporal array element, mirroring the scalar read path in
+   * {@link GenericDatabaseDialect}: apply the {@code date.calendar.system} and, for timestamps,
+   * the configured {@code timestamp.precision.mode}.
    */
-  private static boolean isTemporalElement(String elementName) {
-    return Date.LOGICAL_NAME.equals(elementName)
-        || Time.LOGICAL_NAME.equals(elementName)
-        || Timestamp.LOGICAL_NAME.equals(elementName)
-        || ZonedTimestamp.LOGICAL_NAME.equals(elementName);
-  }
-
-  /**
-   * Decode a single temporal element from the array's element {@link ResultSet} (value in column 2,
-   * index in column 1). timestamptz is rendered to an ISO-8601 {@code ZonedTimestamp} string; the
-   * other temporals return their Connect logical Date/Time/Timestamp value.
-   */
-  private static Object decodeTemporalElement(
-      ResultSet elementRs, String elementName, Calendar dateCal, Calendar timeCal)
+  private Object decodeTemporalElement(
+      ResultSet elementRs, String elementKind, Calendar dateCal, Calendar timeCal)
       throws SQLException {
-    if (Date.LOGICAL_NAME.equals(elementName)) {
-      return elementRs.getDate(2, dateCal);
+    if (Date.LOGICAL_NAME.equals(elementKind)) {
+      java.sql.Date date = elementRs.getDate(2, dateCal);
+      if (elementRs.wasNull()) {
+        return null;
+      }
+      return dateCalendarSystem().isModern()
+          ? DateTimeUtils.convertToModernDate(date, dateTimeZoneId()) : date;
     }
-    if (Time.LOGICAL_NAME.equals(elementName)) {
-      return elementRs.getTime(2, timeCal);
+    if (Time.LOGICAL_NAME.equals(elementKind)) {
+      java.sql.Time time = elementRs.getTime(2, timeCal);
+      return elementRs.wasNull() ? null : time;
     }
     java.sql.Timestamp ts = elementRs.getTimestamp(2, timeCal);
-    if (ZonedTimestamp.LOGICAL_NAME.equals(elementName)) {
-      return ts == null ? null : ZonedTimestamp.toIsoString(ts);
+    if (elementRs.wasNull()) {
+      return null;
     }
-    return ts;
+    if (dateCalendarSystem().isModern()) {
+      ts = DateTimeUtils.convertToModernTimestamp(ts, zoneId());
+    }
+    return timestampGranularity().fromTimestamp.apply(ts, zoneId());
   }
 
   /**
@@ -639,9 +659,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           return "TIME";
         case Timestamp.LOGICAL_NAME:
           return "TIMESTAMP";
-        case ZonedTimestamp.LOGICAL_NAME:
-          // Native TIMESTAMP WITH TIME ZONE (and TIMESTAMP WITH TIME ZONE[] as an array element).
-          return "TIMESTAMP WITH TIME ZONE";
         case Json.LOGICAL_NAME:
           // Logical JSON STRING -> native JSONB; text binds via the existing ::jsonb cast.
           return JSONB_TYPE_NAME.toUpperCase();
@@ -919,7 +936,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * Dispatch is by logical type name first, then STRUCT/MAP -> jsonb kept last, since some logical
    * types (e.g. VariableScaleDecimal) are themselves STRUCTs.
    */
-  private static ArrayElementBinding arrayElementBinding(Schema elementSchema) {
+  private ArrayElementBinding arrayElementBinding(Schema elementSchema) {
     if (elementSchema == null) {
       return null;
     }
@@ -929,9 +946,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         case Json.LOGICAL_NAME:
           // Raw JSON text -> jsonb[].
           return new ArrayElementBinding(JSONB_TYPE_NAME, Collection::toArray);
-        case ZonedTimestamp.LOGICAL_NAME:
-          // ISO-8601 offset strings -> timestamptz[].
-          return new ArrayElementBinding(TIMESTAMPTZ_TYPE_NAME, Collection::toArray);
         case VariableScaleDecimal.LOGICAL_NAME:
           // {scale,value} structs -> exact BigDecimal[] -> numeric[].
           return new ArrayElementBinding(
@@ -1010,28 +1024,33 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * Render each temporal element (a {@code java.util.Date} carrying a logical Date/Time/Timestamp)
-   * as a UTC text literal for binding into a native date[]/time[]/timestamp[] column. Formatting in
-   * UTC keeps the value timezone-safe irrespective of the JVM default zone. Nulls are preserved.
+   * Render each temporal element as a text literal for binding into a native
+   * date[]/time[]/timestamp[] column, mirroring the scalar sink path: {@code date} uses the date
+   * time zone while {@code time}/{@code timestamp} use {@code db.timezone}, with the calendar
+   * system applied. Nulls are preserved.
    */
-  private static Object[] temporalArrayFor(String elementName, Collection<?> valueCollection) {
-    DateTimeFormatter fmt = temporalFormatter(elementName);
+  private Object[] temporalArrayFor(String elementName, Collection<?> valueCollection) {
     return valueCollection.stream()
-        .map(o -> o == null ? null
-            : fmt.format(((java.util.Date) o).toInstant().atZone(ZoneOffset.UTC)))
+        .map(o -> o == null ? null : formatTemporalElement(elementName, (java.util.Date) o))
         .toArray(String[]::new);
   }
 
   /**
-   * Return the UTC text format for a temporal logical element name (date, time, or timestamp).
+   * Format one temporal element via {@link DateTimeUtils}, applying {@code date.calendar.system}
+   * and the appropriate zone, mirroring the scalar bind in {@link GenericDatabaseDialect}.
    */
-  private static DateTimeFormatter temporalFormatter(String elementName) {
+  private String formatTemporalElement(String elementName, java.util.Date value) {
     if (Date.LOGICAL_NAME.equals(elementName)) {
-      return DateTimeFormatter.ofPattern("yyyy-MM-dd");
-    } else if (Time.LOGICAL_NAME.equals(elementName)) {
-      return DateTimeFormatter.ofPattern("HH:mm:ss.SSS");
+      java.util.Date date = dateCalendarSystem().isModern()
+          ? DateTimeUtils.convertToLegacyDate(value, dateTimeZoneId()) : value;
+      return DateTimeUtils.formatDate(date, dateTimeZoneId());
     }
-    return DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
+    if (Time.LOGICAL_NAME.equals(elementName)) {
+      return DateTimeUtils.formatTime(value, zoneId());
+    }
+    java.util.Date ts = dateCalendarSystem().isModern()
+        ? DateTimeUtils.convertToLegacyTimestamp(value, zoneId()) : value;
+    return DateTimeUtils.formatTimestamp(ts, zoneId());
   }
 
   /**

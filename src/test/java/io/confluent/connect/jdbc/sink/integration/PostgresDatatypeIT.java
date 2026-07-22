@@ -32,7 +32,6 @@ import java.util.concurrent.TimeUnit;
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.jdbc.data.Json;
 import io.confluent.connect.jdbc.data.VariableScaleDecimal;
-import io.confluent.connect.jdbc.data.ZonedTimestamp;
 import io.confluent.connect.jdbc.integration.BaseConnectorIT;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 
@@ -303,14 +302,12 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     final Schema schema = SchemaBuilder.struct().name("com.example.ComplexArrays")
         .field("nums", SchemaBuilder.array(numeric).build())
         .field("docs", SchemaBuilder.array(Json.optionalSchema()).build())
-        .field("tssz", SchemaBuilder.array(ZonedTimestamp.optionalSchema()).build())
         .build();
     final Struct struct = new Struct(schema)
         .put("nums", Arrays.asList(
             VariableScaleDecimal.fromLogical(numeric, new BigDecimal("1.50")),
             VariableScaleDecimal.fromLogical(numeric, new BigDecimal("3.14159"))))
-        .put("docs", Arrays.asList("{\"k\": \"v\"}", "{\"a\": 1}"))
-        .put("tssz", Arrays.asList("2024-01-15T10:00:00Z", "2025-06-10T13:00:00Z"));
+        .put("docs", Arrays.asList("{\"k\": \"v\"}", "{\"a\": 1}"));
     produceRecord(schema, struct);
 
     waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 1, 1,
@@ -330,11 +327,6 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
           Object[] docs = (Object[]) rs.getArray("docs").getArray();
           assertTrue(docs[0].toString().contains("\"k\""));
           assertTrue(docs[1].toString().contains("\"a\""));
-
-          // timestamptz[] via ZonedTimestamp: the absolute instant is preserved (UTC)
-          Object[] tssz = (Object[]) rs.getArray("tssz").getArray();
-          assertEquals(1705312800000L, ((java.sql.Timestamp) tssz[0]).getTime());
-          assertEquals(1749560400000L, ((java.sql.Timestamp) tssz[1]).getTime());
         }
       }
     }
@@ -594,7 +586,7 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
       try (Statement s = c.createStatement()) {
         s.execute(String.format(
-            "CREATE TABLE %s(nums numeric[], docs jsonb[], tssz timestamptz[])", tableName));
+            "CREATE TABLE %s(nums numeric[], docs jsonb[])", tableName));
       }
     }
   }

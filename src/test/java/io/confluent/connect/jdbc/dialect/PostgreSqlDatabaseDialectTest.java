@@ -17,7 +17,6 @@ package io.confluent.connect.jdbc.dialect;
 
 import io.confluent.connect.jdbc.data.Json;
 import io.confluent.connect.jdbc.data.VariableScaleDecimal;
-import io.confluent.connect.jdbc.data.ZonedTimestamp;
 import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
@@ -819,8 +818,22 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     assertArrayElement("_date", Type.INT32, Date.LOGICAL_NAME);
     assertArrayElement("_time", Type.INT32, Time.LOGICAL_NAME);
     assertArrayElement("_timestamp", Type.INT64, Timestamp.LOGICAL_NAME);
-    // timestamptz carries the zone via the ZonedTimestamp logical STRING (not built-in Timestamp).
-    assertArrayElement("_timestamptz", Type.STRING, ZonedTimestamp.LOGICAL_NAME);
+    // timestamptz drops the zone and maps to the same timestamp schema as scalar timestamptz.
+    assertArrayElement("_timestamptz", Type.INT64, Timestamp.LOGICAL_NAME);
+  }
+
+  @Test
+  public void timestampArraysHonorPrecisionMode() {
+    // The element schema follows timestamp.granularity, exactly like scalar timestamp/timestamptz:
+    // connect_logical -> Timestamp logical, micros_long -> a plain INT64.
+    PostgreSqlDatabaseDialect micros = complexTypesDialect(
+        JdbcSourceConnectorConfig.TIMESTAMP_GRANULARITY_CONFIG, "micros_long");
+    Schema tsElement = sourceFieldSchema(micros, Types.ARRAY, "_timestamp").valueSchema();
+    Schema tsTzElement = sourceFieldSchema(micros, Types.ARRAY, "_timestamptz").valueSchema();
+    assertEquals(Type.INT64, tsElement.type());
+    assertNull(tsElement.name());
+    assertEquals(Type.INT64, tsTzElement.type());
+    assertNull(tsTzElement.name());
   }
 
   @Test
@@ -876,8 +889,6 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     verifyDataTypeMapping("DATE[]", arraySchema(Date.builder().optional().build()));
     verifyDataTypeMapping("TIME[]", arraySchema(Time.builder().optional().build()));
     verifyDataTypeMapping("TIMESTAMP[]", arraySchema(Timestamp.builder().optional().build()));
-    verifyDataTypeMapping("TIMESTAMP WITH TIME ZONE[]",
-        arraySchema(ZonedTimestamp.optionalSchema()));
   }
 
   @Test
@@ -944,16 +955,6 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
-  public void shouldBindZonedTimestampArrayAsNativeTimestamptzArray() throws Exception {
-    // ZonedTimestamp elements are ISO-8601 offset strings; they bind straight into timestamptz[].
-    verifyArrayBind(
-        ZonedTimestamp.optionalSchema(),
-        Collections.singletonList("2025-06-10T13:00:00Z"),
-        "timestamptz",
-        new Object[]{"2025-06-10T13:00:00Z"});
-  }
-
-  @Test
   public void shouldSkipMultiDimensionalArraysWithoutFailing() throws Exception {
     DatabaseDialect.ColumnConverter converter = arrayColumnConverter("_int4");
 
@@ -992,8 +993,8 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
-  public void zonedTimestampArrayReadHonorsConfiguredDbTimezone() throws Exception {
-    // timestamptz[] elements are likewise decoded with the configured db.timezone (mirrors scalar).
+  public void timestamptzArrayReadHonorsConfiguredDbTimezone() throws Exception {
+    // timestamptz[] drops the zone and is decoded like timestamp[], honoring db.timezone (scalar).
     TimeZone tz = TimeZone.getTimeZone("America/New_York");
     ResultSet elementRs = captureTemporalArrayRead("_timestamptz", tz);
     ArgumentCaptor<Calendar> cal = ArgumentCaptor.forClass(Calendar.class);

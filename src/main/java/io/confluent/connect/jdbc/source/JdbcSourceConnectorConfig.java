@@ -169,6 +169,29 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final String NUMERIC_MAPPING_DISPLAY = "Map Numeric Values, Integral "
       + "or Decimal, By Precision and Scale";
 
+  public static final String SQL_COMPLEX_TYPES_ENABLE_CONFIG = "sql.complex.types.enable";
+  public static final boolean SQL_COMPLEX_TYPES_ENABLE_DEFAULT = false;
+  private static final String SQL_COMPLEX_TYPES_ENABLE_DOC =
+      "When enabled, the source connector maps native complex PostgreSQL column types "
+      + "(json/jsonb, hstore, and native arrays) to complex-aware Connect representations "
+      + "instead of plain STRING: json/jsonb become a logical JSON STRING, hstore becomes a "
+      + "logical JSON STRING or a Connect Map per hstore.handling.mode, and arrays become a "
+      + "Connect ARRAY of the mapped element type. When disabled (the default), json/jsonb "
+      + "and hstore are emitted as STRING and array columns are skipped, preserving "
+      + "backwards compatibility with existing pipelines.";
+  private static final String SQL_COMPLEX_TYPES_ENABLE_DISPLAY = "Enable SQL Complex Types";
+
+  public static final String HSTORE_HANDLING_MODE_CONFIG = "hstore.handling.mode";
+  public static final String HSTORE_HANDLING_MODE_MAP = "map";
+  public static final String HSTORE_HANDLING_MODE_JSON = "json";
+  public static final String HSTORE_HANDLING_MODE_DEFAULT = HSTORE_HANDLING_MODE_MAP;
+  private static final String HSTORE_HANDLING_MODE_DOC =
+      "Controls how PostgreSQL ``hstore`` columns are represented when "
+      + "``sql.complex.types.enable`` is true. ``map`` (the default) emits a Connect "
+      + "Map<String,String>. ``json`` emits the hstore as a JSON-object STRING. Has no effect "
+      + "unless ``sql.complex.types.enable`` is true.";
+  private static final String HSTORE_HANDLING_MODE_DISPLAY = "HStore Handling Mode";
+
   private static final EnumRecommender NUMERIC_MAPPING_RECOMMENDER =
       EnumRecommender.in(NumericMapping.values());
 
@@ -854,7 +877,29 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         DATABASE_GROUP,
         ++orderInGroup,
         Width.MEDIUM,
-        DATE_CALENDAR_SYSTEM_DISPLAY);
+        DATE_CALENDAR_SYSTEM_DISPLAY
+    ).define(
+        SQL_COMPLEX_TYPES_ENABLE_CONFIG,
+        Type.BOOLEAN,
+        SQL_COMPLEX_TYPES_ENABLE_DEFAULT,
+        Importance.LOW,
+        SQL_COMPLEX_TYPES_ENABLE_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        SQL_COMPLEX_TYPES_ENABLE_DISPLAY
+    ).define(
+        HSTORE_HANDLING_MODE_CONFIG,
+        Type.STRING,
+        HSTORE_HANDLING_MODE_DEFAULT,
+        ConfigDef.ValidString.in(HSTORE_HANDLING_MODE_MAP, HSTORE_HANDLING_MODE_JSON),
+        Importance.LOW,
+        HSTORE_HANDLING_MODE_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        HSTORE_HANDLING_MODE_DISPLAY
+    );
   }
 
   private static final void addModeOptions(ConfigDef config) {
@@ -1537,6 +1582,10 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public boolean modeUsesIncrementingColumn() {
     String mode = getString(MODE_CONFIG);
     return Arrays.asList(MODE_INCREMENTING, MODE_TIMESTAMP_INCREMENTING).contains(mode);
+  }
+
+  public boolean sqlComplexTypesEnabled() {
+    return getBoolean(SQL_COMPLEX_TYPES_ENABLE_CONFIG);
   }
 
   // Helper methods for configuration access

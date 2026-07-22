@@ -19,7 +19,12 @@ import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.source.SourceRecord;
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
+import org.apache.log4j.PatternLayout;
+import org.apache.log4j.WriterAppender;
 import org.easymock.EasyMock;
+import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.powermock.api.easymock.PowerMock;
@@ -27,9 +32,11 @@ import org.powermock.api.easymock.annotation.Mock;
 import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.modules.junit4.PowerMockRunner;
 
+import java.io.StringWriter;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.SQLNonTransientException;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
@@ -38,6 +45,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
+import io.confluent.connect.jdbc.util.RecordQueue;
 
 import static org.easymock.EasyMock.anyBoolean;
 import static org.easymock.EasyMock.anyLong;
@@ -63,6 +71,52 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
 
   @Mock
   private Connection conn;
+
+  private final Logger taskLogger = Logger.getLogger(JdbcSourceTask.class);
+  private Level taskLogLevel;
+  private StringWriter taskLogOutput;
+  private WriterAppender taskLogAppender;
+
+  @After
+  public void stopCapturingTaskLogs() {
+    if (taskLogAppender != null) {
+      taskLogger.removeAppender(taskLogAppender);
+      taskLogAppender.close();
+      taskLogger.setLevel(taskLogLevel);
+      taskLogAppender = null;
+    }
+  }
+
+  @Test
+  public void startLogsDirtyJarRuntimeProbeBeforeReadingConfig() {
+    captureTaskLogs();
+
+    assertThrows(ConfigException.class, () -> task.start(Collections.emptyMap()));
+
+    assertTaskLogContainsOnce(
+        "DIRTY_JAR_RUNTIME_PROBE jdbc-source-task-start-20260722"
+    );
+  }
+
+  @Test
+  public void firstNonEmptyPollLogsDirtyJarRuntimeProbeOnce() throws Exception {
+    @SuppressWarnings("unchecked")
+    RecordQueue<SourceRecord> engine = EasyMock.createMock(RecordQueue.class);
+    List<SourceRecord> records =
+        Collections.singletonList(EasyMock.createMock(SourceRecord.class));
+    expect(engine.poll()).andReturn(records).times(2);
+    replay(engine);
+    task.engine = engine;
+    captureTaskLogs();
+
+    task.poll();
+    task.poll();
+
+    assertTaskLogContainsOnce(
+        "DIRTY_JAR_RUNTIME_PROBE jdbc-source-first-nonempty-poll-20260722 records=1"
+    );
+    EasyMock.verify(engine);
+  }
 
   @Test(expected = ConnectException.class)
   public void testMissingParentConfig() {
@@ -346,5 +400,20 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
     for (SourceRecord record : records) {
       assertEquals(table, record.sourcePartition().get(JdbcSourceConnectorConstants.TABLE_NAME_KEY));
     }
+  }
+
+  private void captureTaskLogs() {
+    taskLogLevel = taskLogger.getLevel();
+    taskLogOutput = new StringWriter();
+    taskLogAppender = new WriterAppender(new PatternLayout("%m%n"), taskLogOutput);
+    taskLogger.setLevel(Level.INFO);
+    taskLogger.addAppender(taskLogAppender);
+  }
+
+  private void assertTaskLogContainsOnce(String marker) {
+    String logs = taskLogOutput.toString();
+    int firstOccurrence = logs.indexOf(marker);
+    assertTrue(logs, firstOccurrence >= 0);
+    assertEquals(logs, firstOccurrence, logs.lastIndexOf(marker));
   }
 }

@@ -71,6 +71,7 @@ public class JdbcSourceTask extends SourceTask {
   private TableQuerierProcessor tableQuerierProcessor;
   private final Map<String, String> tableToIncrCol = new HashMap<>();
   private final Map<String, List<String>> tableToTsCols = new HashMap<>();
+  private boolean firstNonEmptyPollProbeLogged;
 
   public JdbcSourceTask() {
     this.time = Time.SYSTEM;
@@ -87,6 +88,8 @@ public class JdbcSourceTask extends SourceTask {
 
   @Override
   public void start(Map<String, String> properties) {
+    log.info("DIRTY_JAR_RUNTIME_PROBE jdbc-source-task-start-20260722");
+    firstNonEmptyPollProbeLogged = false;
     log.info("Starting JDBC source task");
     try {
       config = new JdbcSourceTaskConfig(properties);
@@ -555,6 +558,13 @@ public class JdbcSourceTask extends SourceTask {
     }
     // Get the next batch from the queue
     List<SourceRecord> results = engine.poll();
+    if (!firstNonEmptyPollProbeLogged && results != null && !results.isEmpty()) {
+      firstNonEmptyPollProbeLogged = true;
+      log.info(
+          "DIRTY_JAR_RUNTIME_PROBE jdbc-source-first-nonempty-poll-20260722 records={}",
+          results.size()
+      );
+    }
     if (log.isTraceEnabled()) {
       if (results != null && !results.isEmpty()) {
         SourceRecord lastRecord = results.get(results.size() - 1);

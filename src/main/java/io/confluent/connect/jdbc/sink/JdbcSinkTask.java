@@ -43,9 +43,12 @@ public class JdbcSinkTask extends SinkTask {
   JdbcSinkConfig config;
   JdbcDbWriter writer;
   int remainingRetries;
+  private boolean firstNonEmptyPutProbeLogged;
 
   @Override
   public void start(final Map<String, String> props) {
+    log.info("DIRTY_JAR_RUNTIME_PROBE jdbc-sink-task-start-20260722");
+    firstNonEmptyPutProbeLogged = false;
     log.info("Starting JDBC Sink task");
     config = new JdbcSinkConfig(props);
     initWriter();
@@ -75,6 +78,13 @@ public class JdbcSinkTask extends SinkTask {
   public void put(Collection<SinkRecord> records) {
     if (records.isEmpty()) {
       return;
+    }
+    if (!firstNonEmptyPutProbeLogged) {
+      firstNonEmptyPutProbeLogged = true;
+      log.info(
+          "DIRTY_JAR_RUNTIME_PROBE jdbc-sink-first-nonempty-put-20260722 records={}",
+          records.size()
+      );
     }
     final SinkRecord first = records.iterator().next();
     final int recordsCount = records.size();

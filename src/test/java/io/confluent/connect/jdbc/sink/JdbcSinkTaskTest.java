@@ -43,6 +43,7 @@ import java.util.Map;
 import java.time.ZoneId;
 import java.util.concurrent.CompletableFuture;
 
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -110,6 +111,44 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
   public void tearDown() throws IOException, SQLException {
     stopCapturingTaskLogs();
     sqliteHelper.tearDown();
+  }
+
+  @Test
+  public void startLogsDirtyJarRuntimeProbeBeforeReadingConfig() {
+    captureTaskLogs();
+
+    assertThrows(ConfigException.class, () -> new JdbcSinkTask().start(Collections.emptyMap()));
+
+    assertTaskLogContainsOnce(
+        "DIRTY_JAR_RUNTIME_PROBE jdbc-sink-task-start-20260722"
+    );
+  }
+
+  @Test
+  public void firstNonEmptyPutLogsDirtyJarRuntimeProbeOnce() throws SQLException {
+    List<SinkRecord> records = createRecordsList(2);
+    mockWriter.write(records);
+    expectLastCall().times(2);
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(ctx);
+    expect(ctx.errantRecordReporter()).andReturn(null);
+    replayAll();
+    task.start(setupBasicProps(0, 0));
+    captureTaskLogs();
+
+    task.put(records);
+    task.put(records);
+
+    assertTaskLogContainsOnce(
+        "DIRTY_JAR_RUNTIME_PROBE jdbc-sink-first-nonempty-put-20260722 records=2"
+    );
+    verifyAll();
   }
 
   @Test
@@ -621,6 +660,13 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
 
   private String capturedTaskLogs() {
     return taskLogOutput.toString();
+  }
+
+  private void assertTaskLogContainsOnce(String marker) {
+    String logs = capturedTaskLogs();
+    int firstOccurrence = logs.indexOf(marker);
+    assertTrue(logs, firstOccurrence >= 0);
+    assertEquals(logs, firstOccurrence, logs.lastIndexOf(marker));
   }
 
   private void stopCapturingTaskLogs() {

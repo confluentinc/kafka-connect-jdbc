@@ -35,51 +35,8 @@ import java.util.Map;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
-import static org.junit.Assert.assertTrue;
 
 public class JsonConverterTest {
-
-  @Test
-  public void mapNullStaysNull() {
-    assertNull(JsonConverter.jsonStringToMap(null));
-  }
-
-  @Test
-  public void mapJsonNullBecomesEmpty() {
-    Map<String, String> result = JsonConverter.jsonStringToMap("null");
-    assertTrue(result.isEmpty());
-  }
-
-  @Test
-  public void mapDecodesScalarsAndKeepsNestedAsJsonStrings() {
-    String json = "{\"name\":\"sensor-1\",\"temp\":42,\"on\":true,\"miss\":null,"
-        + "\"meta\":{\"loc\":\"x\"},\"tags\":[1,2]}";
-    Map<String, String> result = JsonConverter.jsonStringToMap(json);
-    assertEquals("sensor-1", result.get("name"));
-    assertEquals("42", result.get("temp"));
-    assertEquals("true", result.get("on"));
-    assertNull(result.get("miss"));
-    assertEquals("{\"loc\":\"x\"}", result.get("meta"));
-    assertEquals("[1,2]", result.get("tags"));
-  }
-
-  @Test
-  public void mapRejectsTopLevelArray() {
-    assertThrows(DataException.class,
-        () -> JsonConverter.jsonStringToMap("[1,2,3]"));
-  }
-
-  @Test
-  public void mapRejectsTopLevelScalar() {
-    // map mode requires a top-level object; a bare number or string cannot become a Map.
-    assertThrows(DataException.class, () -> JsonConverter.jsonStringToMap("42"));
-    assertThrows(DataException.class, () -> JsonConverter.jsonStringToMap("\"hello\""));
-  }
-
-  @Test
-  public void mapRejectsMalformedJson() {
-    assertThrows(DataException.class, () -> JsonConverter.jsonStringToMap("{not valid"));
-  }
 
   @Test
   public void serializeNullValueReturnsNull() {

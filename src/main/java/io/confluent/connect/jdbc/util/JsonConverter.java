@@ -35,15 +35,12 @@ import org.apache.kafka.connect.errors.DataException;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.util.Base64;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Bridges JDBC JSON/JSONB columns and Kafka Connect schema-bearing values: parses a JSON document
- * into a {@code Map<String,String>} for the source path, and serializes a Connect
- * Struct/Map/List/primitive back into a JSON string for the sink path.
+ * Serializes a Connect Struct/Map/List/primitive value into a JSON string for JDBC JSON/JSONB
+ * (and {@code jsonb[]}) sink columns.
  */
 public final class JsonConverter {
 
@@ -53,49 +50,6 @@ public final class JsonConverter {
       .setNodeFactory(JsonNodeFactory.withExactBigDecimals(true));
 
   private JsonConverter() {
-  }
-
-  /**
-   * Parse a top-level JSON object into a {@code Map<String,String>}: scalars as decoded text,
-   * nested objects/arrays as raw JSON text. Null input gives null; a JSON null document gives an
-   * empty map.
-   *
-   * @throws DataException if the input is unparseable or not a top-level JSON object
-   */
-  public static Map<String, String> jsonStringToMap(String json) {
-    if (json == null) {
-      return null;
-    }
-    final JsonNode root;
-    try {
-      root = MAPPER.readTree(json);
-    } catch (JsonProcessingException e) {
-      throw new DataException("Failed to parse JSON content into Connect Map", e);
-    }
-    if (root == null || root.isNull()) {
-      return new LinkedHashMap<>();
-    }
-    if (!root.isObject()) {
-      throw new DataException("Expected a top-level JSON object but found " + root.getNodeType());
-    }
-    Map<String, String> out = new LinkedHashMap<>();
-    Iterator<Map.Entry<String, JsonNode>> fields = root.fields();
-    while (fields.hasNext()) {
-      Map.Entry<String, JsonNode> entry = fields.next();
-      out.put(entry.getKey(), nodeToJsonString(entry.getValue()));
-    }
-    return out;
-  }
-
-  /** Render a field value: scalar as text, object/array as raw JSON, JSON null as null. */
-  private static String nodeToJsonString(JsonNode node) {
-    if (node == null || node.isNull()) {
-      return null;
-    }
-    if (node.isValueNode()) {
-      return node.asText();
-    }
-    return writeAsString(node, "Failed to encode JSON node");
   }
 
   /**

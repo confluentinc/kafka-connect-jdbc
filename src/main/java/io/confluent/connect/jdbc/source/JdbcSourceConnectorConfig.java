@@ -174,8 +174,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final String SQL_COMPLEX_TYPES_ENABLE_DOC =
       "When enabled, the source connector maps native complex PostgreSQL column types "
       + "(json/jsonb, hstore, and native arrays) to complex-aware Connect representations "
-      + "instead of plain STRING: json/jsonb and hstore become a logical JSON STRING or a "
-      + "Connect Map per json.handling.mode / hstore.handling.mode, and arrays become a "
+      + "instead of plain STRING: json/jsonb become a logical JSON STRING, hstore becomes a "
+      + "logical JSON STRING or a Connect Map per hstore.handling.mode, and arrays become a "
       + "Connect ARRAY of the mapped element type. When disabled (the default), json/jsonb "
       + "and hstore are emitted as STRING and array columns are skipped, preserving "
       + "backwards compatibility with existing pipelines.";
@@ -191,20 +191,6 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
       + "Map<String,String>. ``json`` emits the hstore as a JSON-object STRING. Has no effect "
       + "unless ``sql.complex.types.enable`` is true.";
   private static final String HSTORE_HANDLING_MODE_DISPLAY = "HStore Handling Mode";
-
-  public static final String JSON_HANDLING_MODE_CONFIG = "json.handling.mode";
-  public static final String JSON_HANDLING_MODE_MAP = "map";
-  public static final String JSON_HANDLING_MODE_STRING = "string";
-  public static final String JSON_HANDLING_MODE_DEFAULT = JSON_HANDLING_MODE_STRING;
-  private static final String JSON_HANDLING_MODE_DOC =
-      "Controls how PostgreSQL ``json``/``jsonb`` columns are represented when "
-      + "``sql.complex.types.enable`` is true. ``string`` (the default) emits the document as a "
-      + "logical JSON STRING (raw text, lossless, tagged "
-      + "``io.confluent.connect.jdbc.data.Json``). ``map`` emits a Connect Map<String,String> with "
-      + "top-level object fields projected as entries; this mode requires the top-level value to "
-      + "be a JSON object (top-level arrays or scalars fail the task), so use ``string`` for "
-      + "arbitrary JSON documents. Has no effect unless ``sql.complex.types.enable`` is true.";
-  private static final String JSON_HANDLING_MODE_DISPLAY = "JSON Handling Mode";
 
   private static final EnumRecommender NUMERIC_MAPPING_RECOMMENDER =
       EnumRecommender.in(NumericMapping.values());
@@ -913,17 +899,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.SHORT,
         HSTORE_HANDLING_MODE_DISPLAY
-    ).define(
-        JSON_HANDLING_MODE_CONFIG,
-        Type.STRING,
-        JSON_HANDLING_MODE_DEFAULT,
-        ConfigDef.ValidString.in(JSON_HANDLING_MODE_MAP, JSON_HANDLING_MODE_STRING),
-        Importance.LOW,
-        JSON_HANDLING_MODE_DOC,
-        DATABASE_GROUP,
-        ++orderInGroup,
-        Width.SHORT,
-        JSON_HANDLING_MODE_DISPLAY);
+    );
   }
 
   private static final void addModeOptions(ConfigDef config) {

@@ -16,6 +16,7 @@
 package io.confluent.connect.jdbc.source;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.dialect.PostgreSqlDatabaseDialect;
 import io.confluent.connect.jdbc.source.TableQuerier.QueryMode;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
@@ -23,7 +24,10 @@ import io.confluent.connect.jdbc.util.SqlParser;
 import io.confluent.connect.jdbc.util.TableId;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -31,7 +35,9 @@ import org.mockito.Matchers;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -60,6 +66,15 @@ public class TableQuerierTest {
       .thenReturn(new TimestampIncrementingCriteria(new ColumnId(new TableId(null,null,TABLE_NAME),INCREMENTING_COLUMN_NAME), null,null));
 	    
     connectionMock = mock(Connection.class);	  
+  }
+
+  private DatabaseDialect postgresDialect(String quoteSqlIdentifiers) {
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost/test");
+    props.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
+    props.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, "test-");
+    props.put(JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_CONFIG, quoteSqlIdentifiers);
+    return new PostgreSqlDatabaseDialect(new JdbcSourceConnectorConfig(props));
   }
   
   @Test
@@ -152,6 +167,48 @@ public class TableQuerierTest {
     querier.createPreparedStatement(connectionMock);
 
     verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM name"));
+  }
+
+  @Test
+  public void testBulkTableQuerierQuotesMixedCaseTableWhenSourceIdentifierQuotingIsAlways()
+      throws SQLException {
+    DatabaseDialect dialect = spy(postgresDialect("always"));
+    doReturn(new TableId(null, null, "MixedCase")).when(dialect).parseTableIdentifier("MixedCase");
+    PreparedStatement preparedStatementMock = mock(PreparedStatement.class);
+    when(connectionMock.prepareStatement(Matchers.anyString())).thenReturn(preparedStatementMock);
+    BulkTableQuerier querier = new BulkTableQuerier(
+        dialect,
+        QueryMode.TABLE,
+        "MixedCase",
+        null,
+        "",
+        false
+    );
+
+    querier.createPreparedStatement(connectionMock);
+
+    verify(connectionMock).prepareStatement("SELECT * FROM \"MixedCase\"");
+  }
+
+  @Test
+  public void testBulkTableQuerierLeavesMixedCaseTableUnquotedWhenSourceIdentifierQuotingIsNever()
+      throws SQLException {
+    DatabaseDialect dialect = spy(postgresDialect("never"));
+    doReturn(new TableId(null, null, "MixedCase")).when(dialect).parseTableIdentifier("MixedCase");
+    PreparedStatement preparedStatementMock = mock(PreparedStatement.class);
+    when(connectionMock.prepareStatement(Matchers.anyString())).thenReturn(preparedStatementMock);
+    BulkTableQuerier querier = new BulkTableQuerier(
+        dialect,
+        QueryMode.TABLE,
+        "MixedCase",
+        null,
+        "",
+        false
+    );
+
+    querier.createPreparedStatement(connectionMock);
+
+    verify(connectionMock).prepareStatement("SELECT * FROM MixedCase");
   }
 
   @Test

@@ -9,13 +9,15 @@
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- * WARRANTIES OF ANY KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations under the License.
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
+ * License for the specific language governing permissions and limitations under
+ * the License.
  */
 
 package io.confluent.connect.jdbc.source;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.dialect.PostgreSqlDatabaseDialect;
 import io.confluent.connect.jdbc.source.TableQuerier.QueryMode;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
@@ -23,7 +25,10 @@ import io.confluent.connect.jdbc.util.SqlParser;
 import io.confluent.connect.jdbc.util.TableId;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.HashMap;
+import java.util.Map;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -36,122 +41,174 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class TableQuerierTest {  
+public class TableQuerierTest {
   private static final String TABLE_NAME = "name";
   private static final String INCREMENTING_COLUMN_NAME = "column";
-  private static final String SUFFIX = "/* SUFFIX */";   
-  private static final Long TIMESTAMP_DELAY = 0l;
+  private static final String SUFFIX = "/* SUFFIX */";
+  private static final Long TIMESTAMP_DELAY = 0L;
   private static final String QUERY = "SELECT * FROM name";
 
   DatabaseDialect databaseDialectMock;
-
-  
   Connection connectionMock;
-  
+
   @Before
-  public void init()
-  {
+  public void init() {
     databaseDialectMock = mock(DatabaseDialect.class);
     when(databaseDialectMock.parseTableIdentifier(Matchers.anyString()))
-      .thenReturn(new TableId(null,null,TABLE_NAME));	  
+        .thenReturn(new TableId(null, null, TABLE_NAME));
     when(databaseDialectMock.expressionBuilder())
-      .thenReturn(ExpressionBuilder.create());
+        .thenReturn(ExpressionBuilder.create());
     when(databaseDialectMock.criteriaFor(Matchers.any(ColumnId.class), Matchers.anyListOf(ColumnId.class)))
-      .thenReturn(new TimestampIncrementingCriteria(new ColumnId(new TableId(null,null,TABLE_NAME),INCREMENTING_COLUMN_NAME), null,null));
-	    
-    connectionMock = mock(Connection.class);	  
+        .thenReturn(new TimestampIncrementingCriteria(
+            new ColumnId(new TableId(null, null, TABLE_NAME), INCREMENTING_COLUMN_NAME),
+            null,
+            null));
+
+    connectionMock = mock(Connection.class);
   }
-  
+
+  private DatabaseDialect postgresDialect(String quoteSqlIdentifiers) {
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, "jdbc:postgresql://localhost/test");
+    props.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
+    props.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, "test-");
+    props.put(JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_CONFIG, quoteSqlIdentifiers);
+    return new PostgreSqlDatabaseDialect(new JdbcSourceConnectorConfig(props));
+  }
+
   @Test
   public void testTimestampIncrementingTableQuerierInTableModeWithSuffix() throws SQLException {
     TimestampIncrementingTableQuerier querier = new TimestampIncrementingTableQuerier(
-                                                    databaseDialectMock,
-                                                    QueryMode.TABLE, 
-                                                    TABLE_NAME, 
-                                                    null, 
-                                                    null,
-                                                    INCREMENTING_COLUMN_NAME, 
-                                                    null,
-                                                    TIMESTAMP_DELAY,
-                                                    null,
-                                                    SUFFIX,
-                                                    JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL,
-                                                    false
-                                                );
-      
+        databaseDialectMock,
+        QueryMode.TABLE,
+        TABLE_NAME,
+        null,
+        null,
+        INCREMENTING_COLUMN_NAME,
+        null,
+        TIMESTAMP_DELAY,
+        null,
+        SUFFIX,
+        JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL,
+        false);
+
     querier.createPreparedStatement(connectionMock);
 
-    verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM \"name\" WHERE \"name\".\"column\" > ? ORDER BY \"name\".\"column\" ASC /* SUFFIX */"));
+    verify(databaseDialectMock, times(1)).createPreparedStatement(
+        Matchers.any(),
+        Matchers.eq("SELECT * FROM \"name\" WHERE \"name\".\"column\" > ? ORDER BY \"name\".\"column\" ASC /* SUFFIX */"));
   }
 
   @Test
-  public void testTimestampIncrementingTableQuerierInQueryModeWithSuffix() throws SQLException {	    
+  public void testTimestampIncrementingTableQuerierInQueryModeWithSuffix() throws SQLException {
     TimestampIncrementingTableQuerier querier = new TimestampIncrementingTableQuerier(
-                                                    databaseDialectMock,
-                                                    QueryMode.QUERY, 
-                                                    QUERY, 
-                                                    null, 
-                                                    null, 
-                                                    INCREMENTING_COLUMN_NAME, 
-                                                    null, 
-                                                    TIMESTAMP_DELAY, 
-                                                    null, 
-                                                    SUFFIX,
-                                                    JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL,
-                                                    false
-                                                );
-      
+        databaseDialectMock,
+        QueryMode.QUERY,
+        QUERY,
+        null,
+        null,
+        INCREMENTING_COLUMN_NAME,
+        null,
+        TIMESTAMP_DELAY,
+        null,
+        SUFFIX,
+        JdbcSourceConnectorConfig.TimestampGranularity.CONNECT_LOGICAL,
+        false);
+
     querier.createPreparedStatement(connectionMock);
 
-    verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM name WHERE \"name\".\"column\" > ? ORDER BY \"name\".\"column\" ASC /* SUFFIX */"));
+    verify(databaseDialectMock, times(1)).createPreparedStatement(
+        Matchers.any(),
+        Matchers.eq("SELECT * FROM name WHERE \"name\".\"column\" > ? ORDER BY \"name\".\"column\" ASC /* SUFFIX */"));
   }
-  
+
   @Test
-  public void testBulkTableQuerierInTableModeWithSuffix() throws SQLException {	    
+  public void testBulkTableQuerierInTableModeWithSuffix() throws SQLException {
     BulkTableQuerier querier = new BulkTableQuerier(
-                                   databaseDialectMock,
-                                   QueryMode.TABLE, 
-                                   TABLE_NAME, 
-                                   null, 
-                                   SUFFIX,
-                                   false
-                               );
-      
+        databaseDialectMock,
+        QueryMode.TABLE,
+        TABLE_NAME,
+        null,
+        SUFFIX,
+        false);
+
     querier.createPreparedStatement(connectionMock);
 
-    verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM \"name\" /* SUFFIX */"));
+    verify(databaseDialectMock, times(1)).createPreparedStatement(
+        Matchers.any(),
+        Matchers.eq("SELECT * FROM \"name\" /* SUFFIX */"));
   }
 
   @Test
   public void testBulkTableQuerierInQueryModeWithSuffix() throws SQLException {
-	BulkTableQuerier querier = new BulkTableQuerier(
-                                   databaseDialectMock, 
-                                   QueryMode.QUERY,
-                                   QUERY, 
-                                   null, 
-                                   SUFFIX,
-                                   false
-                               );
-      
+    BulkTableQuerier querier = new BulkTableQuerier(
+        databaseDialectMock,
+        QueryMode.QUERY,
+        QUERY,
+        null,
+        SUFFIX,
+        false);
+
     querier.createPreparedStatement(connectionMock);
 
-    verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM name /* SUFFIX */"));
+    verify(databaseDialectMock, times(1)).createPreparedStatement(
+        Matchers.any(),
+        Matchers.eq("SELECT * FROM name /* SUFFIX */"));
   }
 
   @Test
   public void testBulkTableQuerierInQueryModeWithoutSuffix() throws SQLException {
     BulkTableQuerier querier = new BulkTableQuerier(
-                                   databaseDialectMock, 
-                                   QueryMode.QUERY, 
-                                   QUERY, 
-                                   null, 
-                                   "", /* default value */
-                                   false
-                               );
-      
+        databaseDialectMock,
+        QueryMode.QUERY,
+        QUERY,
+        null,
+        "",
+        false);
+
     querier.createPreparedStatement(connectionMock);
 
-    verify(databaseDialectMock, times(1)).createPreparedStatement(Matchers.any(),Matchers.eq("SELECT * FROM name"));
+    verify(databaseDialectMock, times(1)).createPreparedStatement(
+        Matchers.any(),
+        Matchers.eq("SELECT * FROM name"));
+  }
+
+  @Test
+  public void testBulkTableQuerierQuotesMixedCaseTableWhenSourceIdentifierQuotingIsAlways()
+      throws SQLException {
+    DatabaseDialect dialect = postgresDialect("always");
+    PreparedStatement preparedStatementMock = mock(PreparedStatement.class);
+    when(connectionMock.prepareStatement(Matchers.anyString())).thenReturn(preparedStatementMock);
+    BulkTableQuerier querier = new BulkTableQuerier(
+        dialect,
+        QueryMode.TABLE,
+        "MixedCase",
+        null,
+        "",
+        false);
+
+    querier.createPreparedStatement(connectionMock);
+
+    verify(connectionMock).prepareStatement("SELECT * FROM \"MixedCase\"");
+  }
+
+  @Test
+  public void testBulkTableQuerierLeavesMixedCaseTableUnquotedWhenSourceIdentifierQuotingIsNever()
+      throws SQLException {
+    DatabaseDialect dialect = postgresDialect("never");
+    PreparedStatement preparedStatementMock = mock(PreparedStatement.class);
+    when(connectionMock.prepareStatement(Matchers.anyString())).thenReturn(preparedStatementMock);
+    BulkTableQuerier querier = new BulkTableQuerier(
+        dialect,
+        QueryMode.TABLE,
+        "MixedCase",
+        null,
+        "",
+        false);
+
+    querier.createPreparedStatement(connectionMock);
+
+    verify(connectionMock).prepareStatement("SELECT * FROM mixedcase");
   }
 
   @Test
@@ -163,8 +220,7 @@ public class TableQuerierTest {
         query,
         null,
         "",
-        true
-    );
+        true);
 
     String result = querier.getRedactedQueryString();
     String expected = "SELECT * FROM users WHERE id = 0 AND name = " + SqlParser.REDACTED_STRING;
@@ -181,8 +237,7 @@ public class TableQuerierTest {
         query,
         null,
         "",
-        false
-    );
+        false);
 
     assertNull(querier.getRedactedQueryString());
   }

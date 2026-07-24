@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.integration;
 
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.connect.runtime.rest.entities.ConnectorStateInfo;
 import org.junit.After;
@@ -28,6 +29,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.testcontainers.containers.PostgreSQLContainer;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -37,7 +39,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static org.apache.kafka.test.TestUtils.waitForCondition;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
 
 /**
  * Covers {@code schema.pattern} and the duplicate-unqualified-name hazard together, using the same
@@ -145,9 +147,13 @@ public class PostgresSchemaPatternIT extends BaseConnectorIT {
     connect.configureConnector(CONNECTOR_NAME, props);
     waitForConnectorToStart(CONNECTOR_NAME, 1);
 
-    ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(2, CONSUME_TIMEOUT_MS, TOPIC);
-    assertTrue("Should stream app1's two rows once schema.pattern narrows discovery",
-        records.count() >= 2);
+    // Bulk mode re-emits the result set every poll, so inspect two polls' worth of app1 records.
+    ConsumerRecords<byte[], byte[]> records = connect.kafka().consume(4, CONSUME_TIMEOUT_MS, TOPIC);
+    for (ConsumerRecord<byte[], byte[]> record : records.records(TOPIC)) {
+      String value = new String(record.value(), StandardCharsets.UTF_8);
+      assertFalse("schema.pattern=app1 must exclude app2 rows; got " + value,
+          value.contains("a2_"));
+    }
   }
 
   private void assertFailsWith(String connectorName, String errorSubstring)

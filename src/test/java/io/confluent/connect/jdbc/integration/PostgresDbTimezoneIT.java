@@ -90,7 +90,7 @@ public class PostgresDbTimezoneIT extends BaseConnectorIT {
       .withPassword("test123");
 
   private static Connection connection;
-  private static String jdbcUrlWithUtcSession;
+  private static String jdbcUrl;
   private static TimeZone originalDefaultTimeZone;
   private static final List<Driver> deregisteredPostgresDrivers = new ArrayList<>();
   private static Driver utcSessionDriver;
@@ -98,42 +98,30 @@ public class PostgresDbTimezoneIT extends BaseConnectorIT {
   private Map<String, String> props;
 
   @BeforeClass
-  public static void setupClass() throws SQLException {
+  public static void setupClass() throws Exception {
     originalDefaultTimeZone = TimeZone.getDefault();
     TimeZone.setDefault(TimeZone.getTimeZone(JVM_TIMEZONE));
+    jdbcUrl = postgres.getJdbcUrl();
 
-    jdbcUrlWithUtcSession = jdbcUrlWithSessionTimezone(postgres.getJdbcUrl(), POSTGRES_SESSION_TIMEZONE);
-    deregisterRegisteredPostgresDrivers();
-    utcSessionDriver = new UtcSessionPostgresDriver();
-    DriverManager.registerDriver(utcSessionDriver);
-    connection = DriverManager.getConnection(
-        jdbcUrlWithUtcSession,
-        postgres.getUsername(),
-        postgres.getPassword());
+    try {
+      deregisterRegisteredPostgresDrivers();
+      utcSessionDriver = new UtcSessionPostgresDriver();
+      DriverManager.registerDriver(utcSessionDriver);
+      connection = DriverManager.getConnection(
+          jdbcUrl,
+          postgres.getUsername(),
+          postgres.getPassword());
 
-    assertSetupConnectionUsesUtcSession();
+      assertSetupConnectionUsesUtcSession();
+      assertJvmDefaultTimezone();
+    } catch (Exception | Error e) {
+      cleanupAfterSetupFailure(e);
+    }
   }
 
   @AfterClass
   public static void teardownClass() throws SQLException {
-    try {
-      if (connection != null && !connection.isClosed()) {
-        connection.close();
-      }
-    } finally {
-      try {
-        if (utcSessionDriver != null) {
-          DriverManager.deregisterDriver(utcSessionDriver);
-        }
-        for (Driver driver : deregisteredPostgresDrivers) {
-          DriverManager.registerDriver(driver);
-        }
-      } finally {
-        if (originalDefaultTimeZone != null) {
-          TimeZone.setDefault(originalDefaultTimeZone);
-        }
-      }
-    }
+    cleanupClassState(null);
   }
 
   @Before
@@ -152,7 +140,7 @@ public class PostgresDbTimezoneIT extends BaseConnectorIT {
     props.put(ConnectorConfig.NAME_CONFIG, CONNECTOR_NAME);
     props.put(ConnectorConfig.CONNECTOR_CLASS_CONFIG, JdbcSourceConnector.class.getName());
     props.put(ConnectorConfig.TASKS_MAX_CONFIG, "1");
-    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, jdbcUrlWithUtcSession);
+    props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, jdbcUrl);
     props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, postgres.getUsername());
     props.put(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, postgres.getPassword());
     props.put(JdbcSourceConnectorConfig.DIALECT_NAME_CONFIG, "PostgreSqlDatabaseDialect");
@@ -241,12 +229,6 @@ public class PostgresDbTimezoneIT extends BaseConnectorIT {
     }
   }
 
-  private static String jdbcUrlWithSessionTimezone(String baseJdbcUrl, String sessionTimezone) {
-    String separator = baseJdbcUrl.contains("?") ? "&" : "?";
-    return baseJdbcUrl + separator + "options=-c%20TimeZone="
-        + sessionTimezone.replace("/", "%2F");
-  }
-
   private void insertRow(int id, String name, String timestampText) throws SQLException {
     try (PreparedStatement stmt = connection.prepareStatement(
         "INSERT INTO " + QUALIFIED_TABLE_NAME + " (id, name, updated_at) "
@@ -294,12 +276,23 @@ public class PostgresDbTimezoneIT extends BaseConnectorIT {
         return null;
       }
 
-      TimeZone previous = TimeZone.getDefault();
+      Connection connection = delegate.connect(url, info);
+      if (connection == null) {
+        return null;
+      }
+
       try {
-        TimeZone.setDefault(TimeZone.getTimeZone(POSTGRES_SESSION_TIMEZONE));
-        return delegate.connect(url, info);
-      } finally {
-        TimeZone.setDefault(previous);
+        try (Statement statement = connection.createStatement()) {
+          statement.execute("SET TIME ZONE 'UTC'");
+        }
+        return connection;
+      } catch (SQLException e) {
+        try {
+          connection.close();
+        } catch (SQLException closeFailure) {
+          e.addSuppressed(closeFailure);
+        }
+        throw e;
       }
     }
 
@@ -332,5 +325,108 @@ public class PostgresDbTimezoneIT extends BaseConnectorIT {
     public Logger getParentLogger() throws SQLFeatureNotSupportedException {
       return delegate.getParentLogger();
     }
+  }
+
+  private static void cleanupAfterSetupFailure(Throwable failure) throws Exception {
+    cleanupClassState(failure);
+    if (failure instanceof Exception) {
+      throw (Exception) failure;
+    }
+    throw (Error) failure;
+  }
+
+  private static void cleanupClassState(Throwable failure) throws SQLException {
+    SQLException cleanupFailure = null;
+
+    cleanupFailure = closeConnection(cleanupFailure);
+    cleanupFailure = deregisterUtcSessionDriver(cleanupFailure);
+    cleanupFailure = reregisterPostgresDrivers(cleanupFailure);
+
+    if (originalDefaultTimeZone != null) {
+      TimeZone.setDefault(originalDefaultTimeZone);
+      originalDefaultTimeZone = null;
+    }
+
+    if (failure != null) {
+      if (cleanupFailure != null) {
+        failure.addSuppressed(cleanupFailure);
+      }
+      return;
+    }
+
+    if (cleanupFailure != null) {
+      throw cleanupFailure;
+    }
+  }
+
+  private static SQLException closeConnection(SQLException cleanupFailure) {
+    if (connection == null) {
+      return cleanupFailure;
+    }
+
+    try {
+      if (!connection.isClosed()) {
+        connection.close();
+      }
+    } catch (SQLException e) {
+      cleanupFailure = appendCleanupFailure(cleanupFailure, e);
+    } finally {
+      connection = null;
+    }
+
+    return cleanupFailure;
+  }
+
+  private static SQLException deregisterUtcSessionDriver(SQLException cleanupFailure) {
+    if (utcSessionDriver == null) {
+      return cleanupFailure;
+    }
+
+    try {
+      if (isDriverRegistered(utcSessionDriver)) {
+        DriverManager.deregisterDriver(utcSessionDriver);
+      }
+    } catch (SQLException e) {
+      cleanupFailure = appendCleanupFailure(cleanupFailure, e);
+    } finally {
+      utcSessionDriver = null;
+    }
+
+    return cleanupFailure;
+  }
+
+  private static SQLException reregisterPostgresDrivers(SQLException cleanupFailure) {
+    for (Driver driver : deregisteredPostgresDrivers) {
+      try {
+        if (!isDriverRegistered(driver)) {
+          DriverManager.registerDriver(driver);
+        }
+      } catch (SQLException e) {
+        cleanupFailure = appendCleanupFailure(cleanupFailure, e);
+      }
+    }
+    deregisteredPostgresDrivers.clear();
+    return cleanupFailure;
+  }
+
+  private static SQLException appendCleanupFailure(
+      SQLException cleanupFailure,
+      SQLException newFailure
+  ) {
+    if (cleanupFailure == null) {
+      return newFailure;
+    }
+    cleanupFailure.addSuppressed(newFailure);
+    return cleanupFailure;
+  }
+
+  private static boolean isDriverRegistered(Driver target) {
+    Enumeration<Driver> drivers = DriverManager.getDrivers();
+    while (drivers.hasMoreElements()) {
+      if (drivers.nextElement() == target) {
+        return true;
+      }
+    }
+    return false;
   }
 }

@@ -60,14 +60,10 @@ public final class JsonConverter {
     if (value == null) {
       return null;
     }
-    return writeAsString(toJsonNode(schema, value), "Failed to serialize Connect value to JSON");
-  }
-
-  private static String writeAsString(JsonNode node, String errorMessage) {
     try {
-      return MAPPER.writeValueAsString(node);
+      return MAPPER.writeValueAsString(toJsonNode(schema, value));
     } catch (JsonProcessingException e) {
-      throw new DataException(errorMessage, e);
+      throw new DataException("Failed to serialize Connect value to JSON", e);
     }
   }
 
@@ -79,7 +75,21 @@ public final class JsonConverter {
     if (logical != null) {
       return logical;
     }
-    return schema != null ? schemaTypeToJsonNode(schema, value) : inferToJsonNode(value);
+    // Dispatch on the runtime type; the (nullable) schema is threaded through so a nested MAP or
+    // ARRAY value picks up its element schema.
+    if (value instanceof Struct) {
+      return structToJsonNode((Struct) value);
+    }
+    if (value instanceof Map) {
+      return mapToJsonNode(schema, (Map<?, ?>) value);
+    }
+    if (value instanceof List) {
+      return listToJsonNode(schema, (List<?>) value);
+    }
+    if (value instanceof byte[] || value instanceof ByteBuffer) {
+      return MAPPER.valueToTree(bytesToBase64(value));
+    }
+    return MAPPER.valueToTree(value);
   }
 
   private static JsonNode logicalToJsonNode(Schema schema, Object value) {
@@ -97,37 +107,6 @@ public final class JsonConverter {
       default:
         return null;
     }
-  }
-
-  private static JsonNode schemaTypeToJsonNode(Schema schema, Object value) {
-    switch (schema.type()) {
-      case STRUCT:
-        return structToJsonNode((Struct) value);
-      case MAP:
-        return mapToJsonNode(schema, (Map<?, ?>) value);
-      case ARRAY:
-        return listToJsonNode(schema, (List<?>) value);
-      case BYTES:
-        return MAPPER.valueToTree(bytesToBase64(value));
-      default:
-        return MAPPER.valueToTree(value);
-    }
-  }
-
-  private static JsonNode inferToJsonNode(Object value) {
-    if (value instanceof Struct) {
-      return structToJsonNode((Struct) value);
-    }
-    if (value instanceof Map) {
-      return mapToJsonNode(null, (Map<?, ?>) value);
-    }
-    if (value instanceof List) {
-      return listToJsonNode(null, (List<?>) value);
-    }
-    if (value instanceof byte[] || value instanceof ByteBuffer) {
-      return MAPPER.valueToTree(bytesToBase64(value));
-    }
-    return MAPPER.valueToTree(value);
   }
 
   private static JsonNode structToJsonNode(Struct struct) {

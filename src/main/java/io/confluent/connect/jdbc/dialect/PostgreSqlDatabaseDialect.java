@@ -274,10 +274,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         // Some of these types will have fixed size, but we drop this from the schema conversion
         // since only fixed byte arrays can have a fixed size
         if (isJsonType(columnDefn)) {
-          builder.field(
-              fieldName,
-              columnDefn.isOptional() ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA
-          );
+          builder.field(fieldName, jsonSchema(columnDefn));
           return fieldName;
         }
 
@@ -384,6 +381,23 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       return ((JdbcSourceConnectorConfig) config).sqlComplexTypesEnabled();
     }
     return false;
+  }
+
+  /**
+   * Build the Connect schema for a PostgreSQL json/jsonb column. When complex types are disabled
+   * the column stays a plain STRING; when enabled it is a logical JSON STRING (raw text, aligned
+   * with Debezium's {@code io.debezium.data.Json}).
+   */
+  private Schema jsonSchema(ColumnDefinition columnDefn) {
+    boolean optional = columnDefn.isOptional();
+    if (!complexTypesEnabled()) {
+      return optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA;
+    }
+    SchemaBuilder jsonBuilder = Json.builder();
+    if (optional) {
+      jsonBuilder.optional();
+    }
+    return jsonBuilder.build();
   }
 
   @Override

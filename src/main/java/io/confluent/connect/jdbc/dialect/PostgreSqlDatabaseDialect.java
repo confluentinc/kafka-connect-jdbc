@@ -411,12 +411,12 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   /**
    * Whether PostgreSQL hstore columns should be emitted as a JSON-object STRING (mode
    * {@code json}) rather than a Connect Map (mode {@code map}, the default). Only the source
-   * connector exposes this; the sink path always uses the Map representation.
+   * connector exposes this; on the sink the resulting value lands in a native JSONB (map mode) or
+   * TEXT (json mode) column.
    */
   private boolean hstoreAsJson() {
     if (config instanceof JdbcSourceConnectorConfig) {
-      return JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_JSON.equalsIgnoreCase(
-          config.getString(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG));
+      return ((JdbcSourceConnectorConfig) config).hstoreHandlingModeIsJson();
     }
     return false;
   }

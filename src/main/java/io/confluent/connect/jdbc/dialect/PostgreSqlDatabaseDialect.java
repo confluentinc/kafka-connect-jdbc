@@ -502,15 +502,15 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     }
     try {
       Object raw = arr.getArray();
+      if (raw == null) {
+        return null;
+      }
       if (raw instanceof Object[] && isMultiDimensional((Object[]) raw)) {
         log.warn(MULTI_DIMENSIONAL_ARRAY_WARNING, col);
         return null;
       }
       if (temporalKind != null) {
         return readTemporalElements(arr, temporalKind);
-      }
-      if (raw == null) {
-        return null;
       }
       return readMappedElements((Object[]) raw, elementSchema);
     } finally {

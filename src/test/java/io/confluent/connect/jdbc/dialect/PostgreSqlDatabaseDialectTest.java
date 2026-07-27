@@ -36,6 +36,7 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.connect.errors.DataException;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -62,8 +63,10 @@ import java.util.concurrent.ThreadLocalRandom;
 
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.junit.Assert.assertTrue;
@@ -943,8 +946,8 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
-  public void shouldBindTemporalArraysAsNativeArraysInUtc() throws Exception {
-    // epoch 0 == 1970-01-01T00:00:00Z; each element is rendered as a UTC text literal.
+  public void shouldBindTemporalArraysAsNativeArrays() throws Exception {
+    // epoch 0 == 1970-01-01T00:00:00Z, rendered here with the default db.timezone of UTC.
     java.util.Date epoch = new java.util.Date(0L);
     verifyArrayBind(Date.builder().optional().build(),
         Collections.singletonList(epoch), "date", new Object[]{"1970-01-01"});
@@ -952,6 +955,38 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         Collections.singletonList(epoch), "time", new Object[]{"00:00:00.000"});
     verifyArrayBind(Timestamp.builder().optional().build(),
         Collections.singletonList(epoch), "timestamp", new Object[]{"1970-01-01 00:00:00.000"});
+  }
+
+  @Test
+  public void temporalArrayBindHonorsConfiguredDbTimezone() throws Exception {
+    // Mirrors the scalar sink path: time/timestamp render in db.timezone, date in the date zone
+    // (UTC on the source side). epoch 0 in America/New_York is 1969-12-31 19:00:00.
+    PostgreSqlDatabaseDialect dialect = complexTypesDialect(
+        JdbcSourceConnectorConfig.DB_TIMEZONE_CONFIG, "America/New_York");
+    java.util.Date epoch = new java.util.Date(0L);
+    verifyArrayBind(dialect, Timestamp.builder().optional().build(),
+        Collections.singletonList(epoch), "timestamp",
+        new Object[]{"1969-12-31 19:00:00.000"});
+    verifyArrayBind(dialect, Time.builder().optional().build(),
+        Collections.singletonList(epoch), "time", new Object[]{"19:00:00.000"});
+    verifyArrayBind(dialect, Date.builder().optional().build(),
+        Collections.singletonList(epoch), "date", new Object[]{"1970-01-01"});
+  }
+
+  @Test
+  public void temporalArrayBindHonorsCalendarSystem() throws Exception {
+    // The two calendar systems only diverge before the 1582 Gregorian cutover.
+    java.util.Date ancient = java.sql.Timestamp.valueOf("1500-01-01 00:00:00");
+    assertNotEquals(
+        "date.calendar.system must change how a pre-1582 timestamp is rendered",
+        bindTemporalArrayLiteral(complexTypesDialect(), ancient),
+        bindTemporalArrayLiteral(prolepticGregorianDialect(), ancient));
+
+    // A modern timestamp is rendered identically under both calendar systems.
+    java.util.Date epoch = new java.util.Date(0L);
+    assertEquals(
+        bindTemporalArrayLiteral(complexTypesDialect(), epoch),
+        bindTemporalArrayLiteral(prolepticGregorianDialect(), epoch));
   }
 
   @Test
@@ -1002,7 +1037,73 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     assertEquals(tz, cal.getValue().getTimeZone());
   }
 
+  @Test
+  public void dateAndTimeArrayReadsFollowTheScalarZonePrecedence() throws Exception {
+    // date is decoded with the date time zone (UTC on the source), time with db.timezone.
+    TimeZone tz = TimeZone.getTimeZone("America/New_York");
+
+    ResultSet dateRs = captureTemporalArrayRead("_date", tz);
+    ArgumentCaptor<Calendar> dateCal = ArgumentCaptor.forClass(Calendar.class);
+    verify(dateRs).getDate(eq(2), dateCal.capture());
+    assertEquals(TimeZone.getTimeZone("UTC"), dateCal.getValue().getTimeZone());
+
+    ResultSet timeRs = captureTemporalArrayRead("_time", tz);
+    ArgumentCaptor<Calendar> timeCal = ArgumentCaptor.forClass(Calendar.class);
+    verify(timeRs).getTime(eq(2), timeCal.capture());
+    assertEquals(tz, timeCal.getValue().getTimeZone());
+  }
+
+  @Test
+  public void timestampArrayReadHonorsCalendarSystem() throws Exception {
+    // A pre-1582 timestamp is shifted by the proleptic Gregorian conversion.
+    java.sql.Timestamp ancient = java.sql.Timestamp.valueOf("1500-01-01 00:00:00");
+    assertNotEquals(
+        "date.calendar.system must change how a pre-1582 timestamp is decoded",
+        readSingleTimestampElement(complexTypesDialect(), ancient),
+        readSingleTimestampElement(prolepticGregorianDialect(), ancient));
+
+    // A modern timestamp decodes identically under both calendar systems.
+    java.sql.Timestamp epoch = new java.sql.Timestamp(0L);
+    assertEquals(
+        readSingleTimestampElement(complexTypesDialect(), epoch),
+        readSingleTimestampElement(prolepticGregorianDialect(), epoch));
+  }
+
+  @Test
+  public void timestampArrayReadHonorsPrecisionModeValue() throws Exception {
+    // micros_long emits epoch microseconds instead of a Connect Timestamp: 1000 ms -> 1_000_000 us.
+    Object value = readSingleTimestampElement(
+        complexTypesDialect(JdbcSourceConnectorConfig.TIMESTAMP_GRANULARITY_CONFIG, "micros_long"),
+        new java.sql.Timestamp(1000L));
+    assertEquals(1_000_000L, value);
+  }
+
+  @Test
+  public void shouldReturnNullWhenArrayHasNoContents() throws Exception {
+    // getArray() returning null short circuits before any element decoding.
+    ResultSet resultSet = mock(ResultSet.class);
+    Array array = mock(Array.class);
+    when(resultSet.getArray(1)).thenReturn(array);
+    when(array.getArray()).thenReturn(null);
+
+    assertNull(arrayColumnConverter("_int4").convert(resultSet));
+  }
+
+  @Test
+  public void shouldRejectUnsupportedArrayValueType() {
+    // A Connect ARRAY value must be a Collection or a Java array; anything else is a DataException.
+    Schema schema = SchemaBuilder.array(Schema.OPTIONAL_INT32_SCHEMA).optional().build();
+    ColumnDefinition colDef = mock(ColumnDefinition.class);
+    assertThrows(DataException.class, () -> complexTypesDialect().bindField(
+        mock(PreparedStatement.class), 1, schema, "not-an-array", colDef, "field"));
+  }
+
   // ----- complex-type test helpers -----
+
+  private PostgreSqlDatabaseDialect prolepticGregorianDialect() {
+    return complexTypesDialect(
+        JdbcSourceConnectorConfig.DATE_CALENDAR_SYSTEM_CONFIG, "PROLEPTIC_GREGORIAN");
+  }
 
   /**
    * Drive the array column converter for a single-element temporal array with the given
@@ -1029,10 +1130,59 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     when(elementRs.next()).thenReturn(true, false);
     when(elementRs.getTimestamp(eq(2), any(Calendar.class)))
         .thenReturn(new java.sql.Timestamp(0L));
+    when(elementRs.getDate(eq(2), any(Calendar.class))).thenReturn(new java.sql.Date(0L));
+    when(elementRs.getTime(eq(2), any(Calendar.class))).thenReturn(new java.sql.Time(0L));
     when(elementRs.wasNull()).thenReturn(false);
 
     converter.convert(resultSet);
     return elementRs;
+  }
+
+  /**
+   * Bind a single-element {@code timestamp[]} with the given dialect and return the rendered text
+   * literal, so tests can assert the zone and calendar system applied on the sink path.
+   */
+  private String bindTemporalArrayLiteral(PostgreSqlDatabaseDialect dialect, java.util.Date value)
+      throws SQLException {
+    PreparedStatement statement = mock(PreparedStatement.class);
+    Connection connection = mock(Connection.class);
+    ColumnDefinition colDef = mock(ColumnDefinition.class);
+    when(colDef.type()).thenReturn(Types.ARRAY);
+    when(statement.getConnection()).thenReturn(connection);
+    when(connection.createArrayOf(eq("timestamp"), any())).thenReturn(mock(Array.class));
+
+    Schema schema = SchemaBuilder.array(Timestamp.builder().optional().build()).optional().build();
+    dialect.bindField(statement, 1, schema, Collections.singletonList(value), colDef, "field");
+
+    ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
+    verify(connection).createArrayOf(eq("timestamp"), captor.capture());
+    return (String) captor.getValue()[0];
+  }
+
+  /**
+   * Read a single-element {@code timestamp[]} with the given dialect and return the decoded Connect
+   * value, so tests can assert the calendar system and precision mode applied on the source path.
+   */
+  private Object readSingleTimestampElement(
+      PostgreSqlDatabaseDialect dialect, java.sql.Timestamp value) throws Exception {
+    ColumnDefinition column = column(Types.ARRAY, "_timestamp");
+    ColumnMapping mapping = new ColumnMapping(
+        column, 1, new Field("col", 0, arraySchema(Schema.OPTIONAL_INT64_SCHEMA)));
+    DatabaseDialect.ColumnConverter converter =
+        dialect.columnConverterFor(mapping, column, 1, true);
+    assertNotNull(converter);
+
+    ResultSet resultSet = mock(ResultSet.class);
+    Array array = mock(Array.class);
+    ResultSet elementRs = mock(ResultSet.class);
+    when(resultSet.getArray(1)).thenReturn(array);
+    when(array.getArray()).thenReturn(new Object[]{value});
+    when(array.getResultSet()).thenReturn(elementRs);
+    when(elementRs.next()).thenReturn(true, false);
+    when(elementRs.getTimestamp(eq(2), any(Calendar.class))).thenReturn(value);
+    when(elementRs.wasNull()).thenReturn(false);
+
+    return ((List<?>) converter.convert(resultSet)).get(0);
   }
 
   private PostgreSqlDatabaseDialect complexTypesDialect(String... extraProps) {
@@ -1100,6 +1250,16 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
       String expectedPgType,
       Object[] expectedElements
   ) throws SQLException {
+    verifyArrayBind(complexTypesDialect(), elementSchema, value, expectedPgType, expectedElements);
+  }
+
+  private void verifyArrayBind(
+      PostgreSqlDatabaseDialect dialect,
+      Schema elementSchema,
+      List<?> value,
+      String expectedPgType,
+      Object[] expectedElements
+  ) throws SQLException {
     PreparedStatement statement = mock(PreparedStatement.class);
     Connection connection = mock(Connection.class);
     Array boundArray = mock(Array.class);
@@ -1109,7 +1269,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     when(connection.createArrayOf(eq(expectedPgType), any())).thenReturn(boundArray);
 
     Schema arraySchema = SchemaBuilder.array(elementSchema).optional().build();
-    complexTypesDialect().bindField(statement, 7, arraySchema, value, colDef, "field");
+    dialect.bindField(statement, 7, arraySchema, value, colDef, "field");
 
     ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
     verify(connection).createArrayOf(eq(expectedPgType), captor.capture());

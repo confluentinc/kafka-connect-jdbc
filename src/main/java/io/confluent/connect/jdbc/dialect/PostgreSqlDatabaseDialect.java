@@ -98,6 +98,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   static final String DATE_TYPE_NAME = "date";
   static final String TIME_TYPE_NAME = "time";
   static final String TIMESTAMP_TYPE_NAME = "timestamp";
+  static final String TIMESTAMPTZ_TYPE_NAME = "timestamptz";
 
   private static final String MULTI_DIMENSIONAL_ARRAY_WARNING =
       "Skipping unsupported multi-dimensional array at column index {}; only single-dimension "
@@ -459,33 +460,21 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     if (elementSchema == null) {
       return null;
     }
-    final String temporalKind = temporalElementKind(columnDefn);
-    return rs -> readArray(rs, col, elementSchema, temporalKind);
+    final String elementType = arrayElementBaseType(columnDefn);
+    return rs -> readArray(rs, col, elementSchema, elementType);
   }
 
   /**
-   * Canonical temporal kind (a Date/Time/Timestamp logical name) for a PostgreSQL array element, or
-   * null if the element is not temporal. {@code timestamptz} collapses to {@code Timestamp} so the
-   * zone is dropped, matching the scalar timestamp/timestamptz handling. Routing on the PostgreSQL
-   * type (not the Connect schema name) keeps working under precision modes where the timestamp
-   * element schema is an unnamed INT64/STRING.
+   * Whether a PostgreSQL array element type is temporal, and therefore decoded through the array's
+   * element {@link ResultSet} so an explicit calendar can be applied. Routing on the PostgreSQL
+   * type (rather than the Connect schema name) keeps working under the precision modes where the
+   * timestamp element schema is an unnamed INT64/STRING.
    */
-  private static String temporalElementKind(ColumnDefinition columnDefn) {
-    String base = arrayElementBaseType(columnDefn);
-    if (base == null) {
-      return null;
-    }
-    switch (base) {
-      case "date":
-        return Date.LOGICAL_NAME;
-      case "time":
-        return Time.LOGICAL_NAME;
-      case "timestamp":
-      case "timestamptz":
-        return Timestamp.LOGICAL_NAME;
-      default:
-        return null;
-    }
+  private static boolean isTemporalElementType(String elementType) {
+    return DATE_TYPE_NAME.equals(elementType)
+        || TIME_TYPE_NAME.equals(elementType)
+        || TIMESTAMP_TYPE_NAME.equals(elementType)
+        || TIMESTAMPTZ_TYPE_NAME.equals(elementType);
   }
 
   /**
@@ -494,7 +483,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * lives here. Temporal elements are decoded via the element {@link ResultSet} so each can honor
    * the configured {@code db.timezone}; all other elements come straight from {@code getArray()}.
    */
-  private List<Object> readArray(ResultSet rs, int col, Schema elementSchema, String temporalKind)
+  private List<Object> readArray(ResultSet rs, int col, Schema elementSchema, String elementType)
       throws SQLException {
     Array arr = rs.getArray(col);
     if (arr == null) {
@@ -509,8 +498,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         log.warn(MULTI_DIMENSIONAL_ARRAY_WARNING, col);
         return null;
       }
-      if (temporalKind != null) {
-        return readTemporalElements(arr, temporalKind);
+      if (isTemporalElementType(elementType)) {
+        return readTemporalElements(arr, elementType);
       }
       return readMappedElements((Object[]) raw, elementSchema);
     } finally {
@@ -552,14 +541,14 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * scalar path: {@code date} uses the date time zone (UTC on the source) while
    * {@code time}/{@code timestamp} honor {@code db.timezone}.
    */
-  private List<Object> readTemporalElements(Array arr, String elementKind) throws SQLException {
+  private List<Object> readTemporalElements(Array arr, String elementType) throws SQLException {
     Calendar dateCal = DateTimeUtils.getZoneIdCalendar(dateTimeZoneId());
     Calendar timeCal = DateTimeUtils.getZoneIdCalendar(zoneId());
     try (ResultSet elementRs = arr.getResultSet()) {
       List<Object> out = new ArrayList<>();
       while (elementRs.next()) {
         // Element value is column 2 of the array's ResultSet (column 1 is the index).
-        out.add(decodeTemporalElement(elementRs, elementKind, dateCal, timeCal));
+        out.add(decodeTemporalElement(elementRs, elementType, dateCal, timeCal));
       }
       return out;
     }
@@ -571,9 +560,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * the configured {@code timestamp.precision.mode}.
    */
   private Object decodeTemporalElement(
-      ResultSet elementRs, String elementKind, Calendar dateCal, Calendar timeCal)
+      ResultSet elementRs, String elementType, Calendar dateCal, Calendar timeCal)
       throws SQLException {
-    if (Date.LOGICAL_NAME.equals(elementKind)) {
+    if (DATE_TYPE_NAME.equals(elementType)) {
       java.sql.Date date = elementRs.getDate(2, dateCal);
       if (elementRs.wasNull()) {
         return null;
@@ -581,7 +570,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       return dateCalendarSystem().isModern()
           ? DateTimeUtils.convertToModernDate(date, dateTimeZoneId()) : date;
     }
-    if (Time.LOGICAL_NAME.equals(elementKind)) {
+    if (TIME_TYPE_NAME.equals(elementType)) {
       java.sql.Time time = elementRs.getTime(2, timeCal);
       return elementRs.wasNull() ? null : time;
     }
@@ -614,8 +603,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     if (type != Schema.Type.STRUCT && type != Schema.Type.MAP) {
       return false;
     }
-    return config instanceof JdbcSinkConfig
-        && ((JdbcSinkConfig) config).sqlComplexTypesEnable;
+    return complexTypesEnabled();
   }
 
   private boolean maybeBindJson(

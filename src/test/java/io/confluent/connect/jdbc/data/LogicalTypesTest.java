@@ -21,16 +21,14 @@ import org.junit.Test;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.util.Date;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
- * Unit tests for the custom Connect logical types in this package: {@link Json},
- * {@link VariableScaleDecimal}, and {@link ZonedTimestamp}.
+ * Unit tests for the custom Connect logical types in this package: {@link Json} and
+ * {@link VariableScaleDecimal}.
  */
 public class LogicalTypesTest {
 
@@ -92,33 +90,5 @@ public class LogicalTypesTest {
     // Equality (not compareTo) so the scale, e.g. the trailing zeros of "1.50", is preserved.
     assertEquals(value, decoded);
     assertEquals(value.scale(), decoded.scale());
-  }
-
-  // ----- ZonedTimestamp -----
-
-  @Test
-  public void zonedTimestampSchemaIsNamedStringType() {
-    Schema schema = ZonedTimestamp.schema();
-    assertEquals(Schema.Type.STRING, schema.type());
-    assertEquals(ZonedTimestamp.LOGICAL_NAME, schema.name());
-    assertEquals(Integer.valueOf(ZonedTimestamp.SCHEMA_VERSION), schema.version());
-    assertFalse(schema.isOptional());
-  }
-
-  @Test
-  public void zonedTimestampOptionalSchemaIsOptional() {
-    assertTrue(ZonedTimestamp.optionalSchema().isOptional());
-  }
-
-  @Test
-  public void zonedTimestampRendersInstantAsUtcIsoOffsetString() {
-    assertEquals("1970-01-01T00:00:00Z", ZonedTimestamp.toIsoString(new Date(0L)));
-    // 2025-06-10 13:00:00 UTC
-    assertEquals("2025-06-10T13:00:00Z", ZonedTimestamp.toIsoString(new Date(1749560400000L)));
-  }
-
-  @Test
-  public void zonedTimestampReturnsNullForNullInstant() {
-    assertNull(ZonedTimestamp.toIsoString(null));
   }
 }

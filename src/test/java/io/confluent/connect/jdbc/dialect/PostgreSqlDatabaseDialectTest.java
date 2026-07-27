@@ -15,6 +15,10 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import io.confluent.connect.jdbc.source.ColumnMapping;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.QuoteMethod;
@@ -25,6 +29,7 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder;
 
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -44,6 +49,7 @@ import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -51,6 +57,8 @@ import java.util.concurrent.ThreadLocalRandom;
 
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
@@ -781,7 +789,108 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
 
-  // validateQuery behaviour is inherited from GenericDatabaseDialect and exercised in
-  // GenericDatabaseDialectTest; no PostgreSQL-specific override exists to test here.
+  // validateQuery is inherited from GenericDatabaseDialect; tested in GenericDatabaseDialectTest.
+
+  // ========== Complex SQL types (sql.complex.types.enable) ==========
+
+  @Test
+  public void hstoreHandlingModeShouldSelectSourceSchema() {
+    // Default is "map": a Map<String,String>.
+    assertEquals(Type.MAP,
+        sourceFieldSchema(complexTypesDialect(), Types.OTHER, "hstore").type());
+
+    // "json": a plain (untagged) STRING, which the sink lands in a TEXT column.
+    PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG,
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_JSON);
+    Schema jsonMode = sourceFieldSchema(jsonDialect, Types.OTHER, "hstore");
+    assertEquals(Type.STRING, jsonMode.type());
+    assertNull(jsonMode.name());
+  }
+
+  @Test
+  public void hstoreJsonModeShouldConvertValueToJsonObjectString() throws Exception {
+    // In json mode the driver's hstore Map is serialized to a JSON-object STRING on the topic.
+    PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG,
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_JSON);
+    Map<String, String> hstore = new LinkedHashMap<>();
+    hstore.put("env", "prod");
+    hstore.put("region", "us-west-2");
+
+    assertEquals("{\"env\":\"prod\",\"region\":\"us-west-2\"}",
+        hstoreConverter(jsonDialect).convert(hstoreResultSet(hstore)));
+  }
+
+  @Test
+  public void hstoreMapModeShouldPassThroughDriverMap() throws Exception {
+    // In map mode (the default) the driver's Map is emitted as-is for the Connect MAP schema.
+    Map<String, String> hstore = Collections.singletonMap("env", "prod");
+    assertEquals(hstore,
+        hstoreConverter(complexTypesDialect()).convert(hstoreResultSet(hstore)));
+  }
+
+  @Test
+  public void hstoreShouldMapToSinkSqlTypesPerMode() {
+    // map mode -> a Connect MAP, which the sink writes into a native JSONB column.
+    assertEquals("JSONB", sinkDialect().getSqlType(sinkField(
+        SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA).optional().build())));
+
+    // json mode -> a plain STRING, which the sink writes into a TEXT column (not JSONB), since
+    // hstore is a non-core extension that may not exist on the destination.
+    assertEquals("TEXT", sinkDialect().getSqlType(sinkField(Schema.OPTIONAL_STRING_SCHEMA)));
+  }
+
+  // ----- complex-type test helpers -----
+
+  private PostgreSqlDatabaseDialect sinkDialect() {
+    return new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+  }
+
+  private static SinkRecordField sinkField(Schema schema) {
+    return new SinkRecordField(schema, "col", false);
+  }
+
+  /** Column converter for an {@code hstore} column, as produced by the source path. */
+  private DatabaseDialect.ColumnConverter hstoreConverter(PostgreSqlDatabaseDialect dialect) {
+    ColumnDefinition column = column(Types.OTHER, "hstore");
+    DatabaseDialect.ColumnConverter converter = dialect.columnConverterFor(
+        new ColumnMapping(column, 1, new Field("col", 0, Schema.OPTIONAL_STRING_SCHEMA)),
+        column, 1, true);
+    assertNotNull(converter);
+    return converter;
+  }
+
+  /** A ResultSet whose column 1 returns the given hstore map, as pgjdbc does. */
+  private static ResultSet hstoreResultSet(Map<String, String> value) throws SQLException {
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getObject(1)).thenReturn(value);
+    return resultSet;
+  }
+
+  private PostgreSqlDatabaseDialect complexTypesDialect(String... extraProps) {
+    String[] props = new String[extraProps.length + 2];
+    props[0] = JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG;
+    props[1] = "true";
+    System.arraycopy(extraProps, 0, props, 2, extraProps.length);
+    return new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something", props));
+  }
+
+  private Schema sourceFieldSchema(
+      PostgreSqlDatabaseDialect dialect, int jdbcType, String typeName) {
+    ColumnDefinition column = column(jdbcType, typeName);
+    SchemaBuilder builder = SchemaBuilder.struct();
+    String fieldName = dialect.addFieldToSchema(column, builder);
+    return fieldName == null ? null : builder.build().field(fieldName).schema();
+  }
+
+  private ColumnDefinition column(int jdbcType, String typeName) {
+    return new ColumnDefinition(
+        new ColumnId(new TableId(null, null, "t"), "col"),
+        jdbcType, typeName, Object.class.getName(),
+        ColumnDefinition.Nullability.NULL, ColumnDefinition.Mutability.UNKNOWN,
+        0, 0, false, 1, false, false, false, false, false);
+  }
 
 }

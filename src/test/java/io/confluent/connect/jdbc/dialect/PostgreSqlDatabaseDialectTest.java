@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.dialect;
 
 import io.confluent.connect.jdbc.data.Json;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
@@ -28,6 +29,7 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder;
 
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -796,6 +798,19 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     Schema jsonSchema = sourceFieldSchema(complexTypesDialect(), Types.OTHER, "jsonb");
     assertEquals(Type.STRING, jsonSchema.type());
     assertEquals(Json.LOGICAL_NAME, jsonSchema.name());
+  }
+
+  @Test
+  public void jsonColumnValueShouldStayRawJsonText() throws Exception {
+    // The value is the document's raw text (lossless), not a re-serialized/projected form.
+    ColumnDefinition column = column(Types.OTHER, "jsonb");
+    DatabaseDialect.ColumnConverter converter = complexTypesDialect().columnConverterFor(
+        new ColumnMapping(column, 1, new Field("col", 0, Json.optionalSchema())),
+        column, 1, true);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getString(1)).thenReturn("{\"b\":2,\"a\":[1,null]}");
+
+    assertEquals("{\"b\":2,\"a\":[1,null]}", converter.convert(resultSet));
   }
 
   @Test

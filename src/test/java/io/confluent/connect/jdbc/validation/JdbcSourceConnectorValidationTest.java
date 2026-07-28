@@ -1067,67 +1067,34 @@ public class JdbcSourceConnectorValidationTest {
     assertNoErrors();
   }
 
-  // ========== Query Appended-Criteria (WHERE/ORDER BY) Tests ==========
-  // In incremental modes the connector appends its own WHERE ... ORDER BY ... to the query, so a
-  // custom query whose outermost SELECT already has a top-level WHERE/ORDER BY/GROUP BY/HAVING/
-  // LIMIT or a set operation would produce invalid SQL. These must be rejected; sub-select-wrapped
-  // clauses (the documented pattern) and bulk mode must be allowed.
+  // ========== Query Appended-Criteria (WHERE/ORDER BY) Shadow-Mode Tests ==========
+  // The appended-criteria check is log-only for now, so it must never add a config error —
+  // including for queries it flags. See logQueryAppendedCriteriaCompatibility.
 
   @Test
-  public void validate_withQueryIncrementingModeAndTopLevelOrderBy_setsError() {
+  public void validate_withQueryIncrementingModeAndTopLevelOrderBy_noErrors() {
     props.put(MODE_CONFIG, MODE_INCREMENTING);
     props.put(QUERY_CONFIG, "SELECT * FROM sample_data ORDER BY id");
     props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");
 
     validate();
 
-    assertErrors(1);
-    assertErrors(QUERY_CONFIG, 1);
-    assertErrorMatches(QUERY_CONFIG, ".*appends its own WHERE and ORDER BY.*");
+    assertNoErrors();
   }
 
   @Test
-  public void validate_withQueryTimestampModeAndTopLevelWhere_setsError() {
+  public void validate_withQueryMaskedTimestampModeAndTopLevelWhere_noErrors() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP);
-    props.put(QUERY_CONFIG, "SELECT * FROM sample_data WHERE active = true");
+    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM sample_data WHERE active = true");
     props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts");
 
     validate();
 
-    assertErrors(1);
-    assertErrors(QUERY_CONFIG, 1);
-    assertErrorMatches(QUERY_CONFIG, ".*must not contain a top-level WHERE.*");
-  }
-
-  @Test
-  public void validate_withQueryTimestampIncrementingModeAndSetOperation_setsError() {
-    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
-    props.put(QUERY_CONFIG, "SELECT id, ts FROM a UNION SELECT id, ts FROM b");
-    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");
-    props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts");
-
-    validate();
-
-    assertErrors(1);
-    assertErrors(QUERY_CONFIG, 1);
-  }
-
-  @Test
-  public void validate_withQueryMaskedIncrementingModeAndTopLevelOrderBy_setsErrorOnMasked() {
-    props.put(MODE_CONFIG, MODE_INCREMENTING);
-    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM sample_data ORDER BY id");
-    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");
-
-    validate();
-
-    assertErrors(1);
-    assertErrors(QUERY_MASKED_CONFIG, 1);
+    assertNoErrors();
   }
 
   @Test
   public void validate_withQueryIncrementingModeAndSubselectPattern_noErrors() {
-    // Documented supported pattern: clauses live inside the FROM sub-select; the outer SELECT is
-    // bare, so the connector can append its criteria.
     props.put(MODE_CONFIG, MODE_INCREMENTING);
     props.put(QUERY_CONFIG,
         "SELECT * FROM (SELECT id, ts FROM sample_data WHERE active = true ORDER BY ts) sub");
@@ -1138,27 +1105,6 @@ public class JdbcSourceConnectorValidationTest {
     assertNoErrors();
   }
 
-  @Test
-  public void validate_withQueryBulkModeAndTopLevelOrderBy_noErrors() {
-    // Bulk mode never appends a criteria, so clauses in the query are fine.
-    props.put(MODE_CONFIG, MODE_BULK);
-    props.put(QUERY_CONFIG, "SELECT * FROM sample_data ORDER BY id");
-
-    validate();
-
-    assertNoErrors();
-  }
-
-  @Test
-  public void validate_withQueryIncrementingModePlainSelect_noErrors() {
-    props.put(MODE_CONFIG, MODE_INCREMENTING);
-    props.put(QUERY_CONFIG, "SELECT id, name FROM sample_data");
-    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");
-
-    validate();
-
-    assertNoErrors();
-  }
 
   // ========== Semantic Query Validation Tests ==========
 

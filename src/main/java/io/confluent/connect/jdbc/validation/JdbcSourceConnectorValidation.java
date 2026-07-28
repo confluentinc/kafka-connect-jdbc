@@ -87,11 +87,13 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
         config = new JdbcSourceConnectorConfig(connectorConfigs);
       }
 
+      // Log-only, kept outside the && chain so it can neither fail nor be short-circuited away.
+      logQueryAppendedCriteriaCompatibility();
+
       boolean validationResult = validateMultiConfigs()
           && validateLegacyNewConfigCompatibility()
           && validateQueryConfigs()
           && validateQueryModeIncrementingColumnRequired()
-          && validateQueryAllowsAppendedCriteria()
           && validateConnection(CONNECTION_URL_CONFIG)
           && validateQuerySemantics();
 
@@ -401,44 +403,34 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
   }
 
   /**
-   * Reject a custom query whose outermost SELECT already carries clauses that collide with the
-   * {@code WHERE}/{@code ORDER BY} the connector appends in the incremental query modes
-   * ({@code incrementing}, {@code timestamp}, {@code timestamp+incrementing}).
-   *
-   * <p>In those modes the connector concatenates its own {@code WHERE ... ORDER BY ... ASC} onto
-   * the end of the query. If the outermost SELECT already has a top-level {@code WHERE},
-   * {@code ORDER BY}, {@code GROUP BY}, {@code HAVING}, {@code LIMIT}/{@code OFFSET}/{@code FETCH},
-   * or is a set operation, the appended criteria yields invalid SQL and the task fails at runtime.
-   * Fail fast here instead. Clauses nested inside a {@code FROM} sub-select are allowed (the
-   * documented {@code SELECT * FROM (<your query>) sub} pattern). {@code bulk} mode is exempt
-   * because it never appends a criteria.
+   * Shadow mode: log, but do not reject, a custom query whose outermost SELECT already has a
+   * clause that collides with the {@code WHERE}/{@code ORDER BY} the connector appends in the
+   * incremental modes. Such a query already fails at runtime; logging first lets the fleet-wide
+   * blast radius be measured before this is made an enforcing validation. {@code bulk} is exempt
+   * (it never appends a criteria). The query is never logged — it may contain customer data.
+   * Never throws, so it cannot alter {@link #validate()}.
    */
-  private boolean validateQueryAllowsAppendedCriteria() {
-    if (!config.getQuery().isPresent()) {
-      return true;
+  private void logQueryAppendedCriteriaCompatibility() {
+    try {
+      Optional<String> query = config.getQuery();
+      boolean incremental =
+          config.modeUsesIncrementingColumn() || config.modeUsesTimestampColumn();
+      if (!query.isPresent() || !incremental
+          || !SqlParser.outerSelectHasTailClauses(query.get())) {
+        return;
+      }
+      log.info("[query-appended-criteria-shadow] VALIDATION FAILED for '{}' in mode '{}': the "
+          + "query's outermost SELECT has a top-level WHERE, ORDER BY, GROUP BY, HAVING, "
+          + "LIMIT/OFFSET/FETCH, or is a set operation (UNION/INTERSECT/EXCEPT), which collides "
+          + "with the WHERE and ORDER BY the connector appends to it. This check is log-only for "
+          + "now, so the connector has NOT been rejected.",
+          config.isQueryMasked()
+              ? JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG
+              : JdbcSourceConnectorConfig.QUERY_CONFIG,
+          config.getString(JdbcSourceConnectorConfig.MODE_CONFIG));
+    } catch (Exception e) {
+      log.debug("[query-appended-criteria-shadow] check failed to run");
     }
-    // Only incremental modes append a WHERE/ORDER BY to the query; bulk does not.
-    if (!config.modeUsesIncrementingColumn() && !config.modeUsesTimestampColumn()) {
-      return true;
-    }
-    if (SqlParser.outerSelectHasTailClauses(config.getQuery().get())) {
-      String configKey = config.isQueryMasked()
-          ? JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG
-          : JdbcSourceConnectorConfig.QUERY_CONFIG;
-      String msg = String.format(
-          "When using mode '%s', '%s' or '%s' with a custom query, the connector appends its own "
-          + "WHERE and ORDER BY clause, so the query's outermost SELECT must not contain a "
-          + "top-level WHERE, ORDER BY, GROUP BY, HAVING, LIMIT/OFFSET/FETCH, or a set operation "
-          + "(UNION/INTERSECT/EXCEPT). Move such clauses into a sub-select, e.g. "
-          + "'SELECT * FROM (<your query>) sub'.",
-          JdbcSourceConnectorConfig.MODE_INCREMENTING,
-          JdbcSourceConnectorConfig.MODE_TIMESTAMP,
-          JdbcSourceConnectorConfig.MODE_TIMESTAMP_INCREMENTING);
-      addConfigError(configKey, msg);
-      log.error(msg);
-      return false;
-    }
-    return true;
   }
 
   /**

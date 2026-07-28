@@ -1067,6 +1067,45 @@ public class JdbcSourceConnectorValidationTest {
     assertNoErrors();
   }
 
+  // ========== Query Appended-Criteria (WHERE/ORDER BY) Shadow-Mode Tests ==========
+  // The appended-criteria check is log-only for now, so it must never add a config error —
+  // including for queries it flags. See logQueryAppendedCriteriaCompatibility.
+
+  @Test
+  public void validate_withQueryIncrementingModeAndTopLevelOrderBy_noErrors() {
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT * FROM sample_data ORDER BY id");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");
+
+    validate();
+
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_withQueryMaskedTimestampModeAndTopLevelWhere_noErrors() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP);
+    props.put(QUERY_MASKED_CONFIG, "SELECT * FROM sample_data WHERE active = true");
+    props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts");
+
+    validate();
+
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_withQueryIncrementingModeAndSubselectPattern_noErrors() {
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(QUERY_CONFIG,
+        "SELECT * FROM (SELECT id, ts FROM sample_data WHERE active = true ORDER BY ts) sub");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");
+
+    validate();
+
+    assertNoErrors();
+  }
+
+
   // ========== Semantic Query Validation Tests ==========
 
   @Test

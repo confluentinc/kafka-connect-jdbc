@@ -36,6 +36,7 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -826,16 +827,14 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
-  public void timestampArraysHonorPrecisionMode() {
-    // The element schema follows timestamp.granularity, exactly like scalar timestamp/timestamptz:
-    // connect_logical -> Timestamp logical, micros_long -> a plain INT64.
-    PostgreSqlDatabaseDialect micros = complexTypesDialect(
-        JdbcSourceConnectorConfig.TIMESTAMP_GRANULARITY_CONFIG, "micros_long");
-    Schema tsElement = sourceFieldSchema(micros, Types.ARRAY, "_timestamp").valueSchema();
-    Schema tsTzElement = sourceFieldSchema(micros, Types.ARRAY, "_timestamptz").valueSchema();
-    assertEquals(Type.INT64, tsElement.type());
+  public void timestampArraysHonorTimestampGranularity() {
+    PostgreSqlDatabaseDialect microsString = complexTypesDialect(
+        JdbcSourceConnectorConfig.TIMESTAMP_GRANULARITY_CONFIG, "micros_string");
+    Schema tsElement = sourceFieldSchema(microsString, Types.ARRAY, "_timestamp").valueSchema();
+    Schema tsTzElement = sourceFieldSchema(microsString, Types.ARRAY, "_timestamptz").valueSchema();
+    assertEquals(Type.STRING, tsElement.type());
     assertNull(tsElement.name());
-    assertEquals(Type.INT64, tsTzElement.type());
+    assertEquals(Type.STRING, tsTzElement.type());
     assertNull(tsTzElement.name());
   }
 
@@ -958,6 +957,40 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
+  public void arrayBindPreservesNullElements() throws Exception {
+    Schema numeric = VariableScaleDecimal.optionalSchema();
+    verifyArrayBind(numeric,
+        Arrays.asList(VariableScaleDecimal.fromLogical(numeric, new BigDecimal("1.50")), null),
+        "numeric", new Object[]{new BigDecimal("1.50"), null});
+    verifyArrayBind(Json.optionalSchema(),
+        Arrays.asList("{\"k\":1}", null), "jsonb", new Object[]{"{\"k\":1}", null});
+    verifyArrayBind(Timestamp.builder().optional().build(),
+        Arrays.asList(new java.util.Date(0L), null), "timestamp",
+        new Object[]{"1970-01-01 00:00:00.000", null});
+  }
+
+  @Test
+  public void shouldNotBindStructArrayWhenComplexTypesDisabled() {
+    Schema element = SchemaBuilder.struct().optional().field("a", Schema.INT32_SCHEMA).build();
+    Schema schema = SchemaBuilder.array(element).optional().build();
+
+    assertThrows(ConnectException.class, () -> dialect.bindField(mock(PreparedStatement.class), 1,
+        schema, Collections.singletonList(new Struct(element).put("a", 1)),
+        mock(ColumnDefinition.class), "field"));
+  }
+
+  @Test
+  public void shouldBindPrimitiveArrayWhenComplexTypesDisabled() throws Exception {
+    PreparedStatement statement = mock(PreparedStatement.class);
+    Schema schema = SchemaBuilder.array(Schema.OPTIONAL_INT32_SCHEMA).optional().build();
+
+    dialect.bindField(statement, 1, schema, Arrays.asList(1, 2),
+        mock(ColumnDefinition.class), "field");
+
+    verify(statement).setObject(eq(1), any(Integer[].class), eq(Types.ARRAY));
+  }
+
+  @Test
   public void temporalArrayBindHonorsConfiguredDbTimezone() throws Exception {
     // Mirrors the scalar sink path: time/timestamp render in db.timezone, date in the date zone
     // (UTC on the source side). epoch 0 in America/New_York is 1969-12-31 19:00:00.
@@ -1014,6 +1047,22 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     Object json = ((List<?>) arrayColumnConverter("_jsonb")
         .convert(arrayResultSet(new Object[]{"{\"k\":1}"}))).get(0);
     assertEquals("{\"k\":1}", json);
+  }
+
+  @Test
+  public void arrayReadPreservesNullElements() throws Exception {
+    List<?> numeric = (List<?>) arrayColumnConverter("_numeric")
+        .convert(arrayResultSet(new Object[]{new BigDecimal("1.5"), null}));
+    assertEquals(2, numeric.size());
+    assertNull(numeric.get(1));
+
+    assertEquals(Arrays.asList("{\"k\":1}", null), arrayColumnConverter("_jsonb")
+        .convert(arrayResultSet(new Object[]{"{\"k\":1}", null})));
+
+    List<?> temporal = (List<?>) arrayColumnConverter("_timestamp")
+        .convert(temporalArrayResultSetWithNullElement());
+    assertEquals(2, temporal.size());
+    assertNull(temporal.get(1));
   }
 
   @Test
@@ -1087,6 +1136,12 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     when(array.getArray()).thenReturn(null);
 
     assertNull(arrayColumnConverter("_int4").convert(resultSet));
+  }
+
+  @Test
+  public void shouldReturnEmptyListWhenArrayHasNoElements() throws Exception {
+    assertEquals(Collections.emptyList(),
+        arrayColumnConverter("_int4").convert(arrayResultSet(new Object[0])));
   }
 
   @Test
@@ -1241,6 +1296,17 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     Array array = mock(Array.class);
     when(resultSet.getArray(1)).thenReturn(array);
     when(array.getArray()).thenReturn(elements);
+    return resultSet;
+  }
+
+  private static ResultSet temporalArrayResultSetWithNullElement() throws SQLException {
+    java.sql.Timestamp epoch = new java.sql.Timestamp(0L);
+    ResultSet resultSet = arrayResultSet(new Object[]{epoch, null});
+    ResultSet elementRs = mock(ResultSet.class);
+    when(resultSet.getArray(1).getResultSet()).thenReturn(elementRs);
+    when(elementRs.next()).thenReturn(true, true, false);
+    when(elementRs.getTimestamp(eq(2), any(Calendar.class))).thenReturn(epoch);
+    when(elementRs.wasNull()).thenReturn(false, true);
     return resultSet;
   }
 

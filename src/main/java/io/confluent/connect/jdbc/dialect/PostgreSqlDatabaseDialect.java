@@ -95,6 +95,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   static final String JSONB_TYPE_NAME = "jsonb";
   static final String UUID_TYPE_NAME = "uuid";
   static final String NUMERIC_TYPE_NAME = "numeric";
+  static final String DECIMAL_TYPE_NAME = "decimal";
   static final String DATE_TYPE_NAME = "date";
   static final String TIME_TYPE_NAME = "time";
   static final String TIMESTAMP_TYPE_NAME = "timestamp";
@@ -365,9 +366,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         break;
       }
       case Types.ARRAY: {
-        ColumnConverter arrayConverter = arrayColumnConverter(columnDefn, col);
-        if (arrayConverter != null) {
-          return arrayConverter;
+        if (complexTypesEnabled()) {
+          ColumnConverter arrayConverter = arrayColumnConverter(columnDefn, col);
+          if (arrayConverter != null) {
+            return arrayConverter;
+          }
         }
         break;
       }
@@ -427,7 +430,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         return Time.builder().optional().build();
       case "timestamp":
       case "timestamptz":
-        // Precision-aware timestamp schema, honoring timestamp.precision.mode. timestamptz drops
+        // Precision-aware timestamp schema, honoring timestamp.granularity. timestamptz drops
         // the zone and is stored as a plain timestamp, matching the scalar timestamp/timestamptz.
         return timestampGranularity().schemaFunction.apply(true);
       default:
@@ -448,20 +451,16 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * Select the value converter for a PostgreSQL array column. Returns null when the feature is
-   * disabled or the element type is not supported; otherwise {@link #readArray} handles element
-   * decoding based on the schema resolved by {@link #arrayElementSchemaFor}.
+   * Select the value converter for a PostgreSQL array column. Returns null when the element type is
+   * not supported by {@link #arrayElementSchemaFor}; otherwise {@link #readArray} decodes the
+   * elements.
    */
   private ColumnConverter arrayColumnConverter(ColumnDefinition columnDefn, int col) {
-    if (!complexTypesEnabled()) {
-      return null;
-    }
-    final Schema elementSchema = arrayElementSchemaFor(columnDefn);
-    if (elementSchema == null) {
+    if (arrayElementSchemaFor(columnDefn) == null) {
       return null;
     }
     final String elementType = arrayElementBaseType(columnDefn);
-    return rs -> readArray(rs, col, elementSchema, elementType);
+    return rs -> readArray(rs, col, elementType);
   }
 
   /**
@@ -483,7 +482,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * lives here. Temporal elements are decoded via the element {@link ResultSet} so each can honor
    * the configured {@code db.timezone}; all other elements come straight from {@code getArray()}.
    */
-  private List<Object> readArray(ResultSet rs, int col, Schema elementSchema, String elementType)
+  private List<Object> readArray(ResultSet rs, int col, String elementType)
       throws SQLException {
     Array arr = rs.getArray(col);
     if (arr == null) {
@@ -501,7 +500,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       if (isTemporalElementType(elementType)) {
         return readTemporalElements(arr, elementType);
       }
-      return readMappedElements((Object[]) raw, elementSchema);
+      return readMappedElements((Object[]) raw, elementType);
     } finally {
       arr.free();
     }
@@ -511,10 +510,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * Map elements the driver already returns as the target Java type into a Connect list (nulls
    * preserved). Used for primitive, Json and VariableScaleDecimal elements.
    */
-  private static List<Object> readMappedElements(Object[] elements, Schema elementSchema) {
+  private static List<Object> readMappedElements(Object[] elements, String elementType) {
     List<Object> out = new ArrayList<>(elements.length);
     for (Object element : elements) {
-      out.add(element == null ? null : mapArrayElement(elementSchema, element));
+      out.add(element == null ? null : mapArrayElement(elementType, element));
     }
     return out;
   }
@@ -523,16 +522,19 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * Convert a single non-temporal array element to its Connect value: VariableScaleDecimal structs
    * from the element BigDecimal, Json from the raw JSON text, and primitives passed through as-is.
    */
-  private static Object mapArrayElement(Schema elementSchema, Object element) {
-    String elementName = elementSchema.name();
-    if (VariableScaleDecimal.LOGICAL_NAME.equals(elementName)) {
-      return VariableScaleDecimal.fromLogical(elementSchema, (BigDecimal) element);
+  private static Object mapArrayElement(String elementType, Object element) {
+    switch (elementType) {
+      case NUMERIC_TYPE_NAME:
+      case DECIMAL_TYPE_NAME:
+        return VariableScaleDecimal.fromLogical(
+            VariableScaleDecimal.optionalSchema(), (BigDecimal) element);
+      case JSON_TYPE_NAME:
+      case JSONB_TYPE_NAME:
+        // Raw JSON text; toString() covers both String and PGobject.
+        return element.toString();
+      default:
+        return element;
     }
-    if (Json.LOGICAL_NAME.equals(elementName)) {
-      // Raw JSON text; toString() covers both String and PGobject.
-      return element.toString();
-    }
-    return element;
   }
 
   /**
@@ -557,7 +559,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   /**
    * Decode a single temporal array element, mirroring the scalar read path in
    * {@link GenericDatabaseDialect}: apply the {@code date.calendar.system} and, for timestamps,
-   * the configured {@code timestamp.precision.mode}.
+   * the configured {@code timestamp.granularity}.
    */
   private Object decodeTemporalElement(
       ResultSet elementRs, String elementType, Calendar dateCal, Calendar timeCal)
@@ -873,17 +875,18 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * Bind a Connect ARRAY value to a native PostgreSQL array parameter. Element types with a
-   * dedicated PostgreSQL array type (json, timestamptz, numeric, the temporals, and STRUCT/MAP as
-   * jsonb) are resolved by {@link #arrayElementBinding(Schema)} and bound via
-   * {@code createArrayOf}; any other (primitive) element type falls back to
+   * Bind a Connect ARRAY value to a native PostgreSQL array parameter. When complex types are
+   * enabled, element types with a dedicated PostgreSQL array type (json, numeric, the temporals,
+   * and STRUCT/MAP as jsonb) are resolved by {@link #arrayElementBinding(Schema)} and bound via
+   * {@code createArrayOf}; any other (primitive) element type falls back to the pre-existing
    * {@link #maybeBindPrimitiveArray}. Returns false if the element type is not handled here.
    */
   private boolean bindArray(PreparedStatement statement, int index, Schema schema, Object value)
       throws SQLException {
     Collection<?> values = arrayValueCollection(value);
     Schema elementSchema = schema.valueSchema();
-    ArrayElementBinding binding = arrayElementBinding(elementSchema);
+    ArrayElementBinding binding =
+        complexTypesEnabled() ? arrayElementBinding(elementSchema) : null;
     if (binding == null) {
       return maybeBindPrimitiveArray(statement, index, elementSchema, values);
     }

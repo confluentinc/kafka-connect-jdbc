@@ -295,6 +295,7 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
   @Test
   public void testWriteToTableWithComplexArrayColumns() throws Exception {
     createTableWithComplexArrayColumns();
+    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
     connect.configureConnector("jdbc-sink-connector", props);
     waitForConnectorToStart("jdbc-sink-connector", 1);
 

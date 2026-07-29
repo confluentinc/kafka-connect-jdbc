@@ -795,7 +795,11 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   @Test
   public void jsonColumnMapsToLogicalJsonStringSchema() {
     // json/jsonb map to a logical JSON STRING tagged with the Json logical name.
-    Schema jsonSchema = sourceFieldSchema(complexTypesDialect(), Types.OTHER, "jsonb");
+    SchemaBuilder builder = SchemaBuilder.struct();
+    String fieldName =
+        complexTypesDialect().addFieldToSchema(column(Types.OTHER, "jsonb"), builder);
+    Schema jsonSchema = builder.build().field(fieldName).schema();
+
     assertEquals(Type.STRING, jsonSchema.type());
     assertEquals(Json.LOGICAL_NAME, jsonSchema.name());
   }
@@ -834,25 +838,14 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
   // ----- complex-type test helpers -----
 
-  private PostgreSqlDatabaseDialect complexTypesDialect(String... extraProps) {
-    String[] props = new String[extraProps.length + 2];
-    props[0] = JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG;
-    props[1] = "true";
-    System.arraycopy(extraProps, 0, props, 2, extraProps.length);
-    return new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something", props));
+  private PostgreSqlDatabaseDialect complexTypesDialect() {
+    return new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something",
+        JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true"));
   }
 
   private PostgreSqlDatabaseDialect sinkDialect() {
     return new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
         "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
-  }
-
-  private Schema sourceFieldSchema(
-      PostgreSqlDatabaseDialect dialect, int jdbcType, String typeName) {
-    ColumnDefinition column = column(jdbcType, typeName);
-    SchemaBuilder builder = SchemaBuilder.struct();
-    String fieldName = dialect.addFieldToSchema(column, builder);
-    return fieldName == null ? null : builder.build().field(fieldName).schema();
   }
 
   private ColumnDefinition column(int jdbcType, String typeName) {

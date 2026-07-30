@@ -15,6 +15,10 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.data.Json;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.source.ColumnMapping;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.QuoteMethod;
@@ -25,6 +29,7 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder;
 
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -55,6 +60,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDatabaseDialect> {
@@ -781,7 +787,73 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
 
-  // validateQuery behaviour is inherited from GenericDatabaseDialect and exercised in
-  // GenericDatabaseDialectTest; no PostgreSQL-specific override exists to test here.
+  // validateQuery is inherited from GenericDatabaseDialect; tested in GenericDatabaseDialectTest.
+
+  // ========== Complex SQL types (sql.complex.types.enable) ==========
+
+  @Test
+  public void jsonColumnMapsToLogicalJsonStringSchema() {
+    // json/jsonb map to a logical JSON STRING tagged with the Json logical name.
+    SchemaBuilder builder = SchemaBuilder.struct();
+    String fieldName =
+        complexTypesDialect().addFieldToSchema(column(Types.OTHER, "jsonb"), builder);
+    Schema jsonSchema = builder.build().field(fieldName).schema();
+
+    assertEquals(Type.STRING, jsonSchema.type());
+    assertEquals(Json.LOGICAL_NAME, jsonSchema.name());
+  }
+
+  @Test
+  public void jsonColumnValueShouldStayRawJsonText() throws Exception {
+    // The value is the document's raw text (lossless), not a re-serialized/projected form.
+    ColumnDefinition column = column(Types.OTHER, "jsonb");
+    DatabaseDialect.ColumnConverter converter = complexTypesDialect().columnConverterFor(
+        new ColumnMapping(column, 1, new Field("col", 0, Json.optionalSchema())),
+        column, 1, true);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getString(1)).thenReturn("{\"b\":2,\"a\":[1,null]}");
+
+    assertEquals("{\"b\":2,\"a\":[1,null]}", converter.convert(resultSet));
+  }
+
+  @Test
+  public void shouldMapComplexTypesToSqlTypes() {
+    // Scalar logical JSON STRING -> native JSONB.
+    verifyDataTypeMapping("JSONB", Json.schema());
+  }
+
+  @Test
+  public void shouldBindMapValueAsJsonStringForJsonbColumn() throws Exception {
+    // MAP<STRING,STRING> (hstore map mode) serializes to JSON, binds as String, cast ::jsonb.
+    PreparedStatement statement = mock(PreparedStatement.class);
+    ColumnDefinition colDef = mock(ColumnDefinition.class);
+    Schema schema = SchemaBuilder.map(
+        Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA).optional().build();
+
+    sinkDialect().bindField(
+        statement, 3, schema, Collections.singletonMap("env", "prod"), colDef, "field");
+
+    verify(statement).setString(3, "{\"env\":\"prod\"}");
+  }
+
+  // ----- complex-type test helpers -----
+
+  private PostgreSqlDatabaseDialect complexTypesDialect() {
+    return new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something",
+        JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true"));
+  }
+
+  private PostgreSqlDatabaseDialect sinkDialect() {
+    return new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+  }
+
+  private ColumnDefinition column(int jdbcType, String typeName) {
+    return new ColumnDefinition(
+        new ColumnId(new TableId(null, null, "t"), "col"),
+        jdbcType, typeName, Object.class.getName(),
+        ColumnDefinition.Nullability.NULL, ColumnDefinition.Mutability.UNKNOWN,
+        0, 0, false, 1, false, false, false, false, false);
+  }
 
 }

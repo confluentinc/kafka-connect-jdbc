@@ -88,6 +88,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   static final String UUID_TYPE_NAME = "uuid";
   static final String HSTORE_TYPE_NAME = "hstore";
 
+  private static final String HSTORE_UNEXPECTED_VALUE_WARNING =
+      "Unexpected value for hstore column {}: class={}. The hstore type must be visible on "
+          + "the connection's search_path for the driver to return a map; emitting null";
+
   /**
    * Define the PG datatypes that require casting upon insert/update statements.
    */
@@ -339,13 +343,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         if (complexTypesEnabled() && isHstoreType(columnDefn)) {
           if (hstoreAsJson()) {
             return rs -> {
-              Object value = rs.getObject(col);
-              return value == null
-                  ? null
-                  : JsonConverter.connectValueToJson(value);
+              Object value = hstoreValue(columnDefn, rs.getObject(col));
+              return value == null ? null : JsonConverter.connectValueToJson(value);
             };
           }
-          return rs -> rs.getObject(col);
+          return rs -> hstoreValue(columnDefn, rs.getObject(col));
         }
 
         if (UUID.class.getName().equals(columnDefn.classNameForType())) {
@@ -368,6 +370,29 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
   protected boolean isHstoreType(ColumnDefinition columnDefn) {
     return HSTORE_TYPE_NAME.equalsIgnoreCase(columnDefn.typeName());
+  }
+
+  /**
+   * The driver's value for an hstore column, as the map both handling modes require. pgjdbc returns
+   * a {@code Map} only while the hstore type is visible on the connection's {@code search_path};
+   * otherwise it reports the type as {@code "schema"."hstore"} and returns raw text, which
+   * {@link #isHstoreType(ColumnDefinition)} already declines so the column is skipped before
+   * reaching here.
+   *
+   * <p>Anything else follows Debezium's {@code JdbcValueConverters.handleUnknownData}: a nullable
+   * column degrades to null with a warning, while a NOT NULL column fails, since null would breach
+   * its schema anyway. The value itself is never logged, in case it is sensitive.
+   */
+  private Object hstoreValue(ColumnDefinition columnDefn, Object value) {
+    if (value == null || value instanceof Map) {
+      return value;
+    }
+    if (columnDefn.isOptional()) {
+      log.warn(HSTORE_UNEXPECTED_VALUE_WARNING, columnDefn.id(), value.getClass().getName());
+      return null;
+    }
+    throw new DataException("Unexpected value for hstore column " + columnDefn.id()
+        + ": class=" + value.getClass().getName());
   }
 
   /**
@@ -419,10 +444,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * Whether PostgreSQL hstore columns should be emitted as a JSON-object STRING (mode
+   * Whether PostgreSQL hstore columns should be emitted as a logical JSON STRING (mode
    * {@code json}) rather than a Connect Map (mode {@code map}, the default). Only the source
-   * connector exposes this; on the sink the resulting value lands in a native JSONB (map mode) or
-   * TEXT (json mode) column.
+   * connector exposes this; either shape lands in a native JSONB column on the sink.
    */
   private boolean hstoreAsJson() {
     if (config instanceof JdbcSourceConnectorConfig) {
@@ -433,16 +457,22 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
   /**
    * Build the Connect schema for a PostgreSQL hstore column, honoring
-   * {@code hstore.handling.mode}: a JSON-object STRING when {@code json}, otherwise a
-   * Map&lt;String,String&gt;.
+   * {@code hstore.handling.mode}: a {@link Json} STRING when {@code json}, otherwise a
+   * Map&lt;String,String&gt; whose values are optional so a SQL NULL can be carried.
+   *
+   * <p>Both shapes are recognized by {@link #getSqlType(SinkRecordField)} and provisioned as a
+   * native {@code jsonb} column, so the mode changes only the on-topic representation. Tagging the
+   * json-mode STRING is what makes that possible, and mirrors Debezium, whose
+   * {@code PostgresValueConverter.hstoreSchema()} returns {@code Json.builder()} for the same mode.
    */
   private Schema hstoreSchema(ColumnDefinition columnDefn) {
+    boolean optional = columnDefn.isOptional();
     if (hstoreAsJson()) {
-      return columnDefn.isOptional() ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA;
+      return optional ? Json.optionalSchema() : Json.schema();
     }
     SchemaBuilder mapBuilder = SchemaBuilder.map(
         Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA);
-    if (columnDefn.isOptional()) {
+    if (optional) {
       mapBuilder.optional();
     }
     return mapBuilder.build();

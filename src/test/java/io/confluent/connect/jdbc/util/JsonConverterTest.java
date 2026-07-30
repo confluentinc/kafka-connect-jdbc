@@ -19,7 +19,6 @@ import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
-import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.DataException;
@@ -44,17 +43,6 @@ public class JsonConverterTest {
   }
 
   @Test
-  public void serializeStruct() {
-    Schema schema = SchemaBuilder.struct()
-        .field("id", Schema.INT32_SCHEMA)
-        .field("name", Schema.STRING_SCHEMA)
-        .build();
-    Struct struct = new Struct(schema).put("id", 7).put("name", "alice");
-    String json = JsonConverter.connectValueToJson(schema, struct);
-    assertEquals("{\"id\":7,\"name\":\"alice\"}", json);
-  }
-
-  @Test
   public void serializeMap() {
     Schema schema = SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.INT32_SCHEMA).build();
     Map<String, Integer> input = new LinkedHashMap<>();
@@ -69,27 +57,6 @@ public class JsonConverterTest {
     Schema schema = SchemaBuilder.array(Schema.INT32_SCHEMA).build();
     String json = JsonConverter.connectValueToJson(schema, Arrays.asList(1, 2, 3));
     assertEquals("[1,2,3]", json);
-  }
-
-  @Test
-  public void serializeNestedStructWithMapAndArray() {
-    Schema inner = SchemaBuilder.struct()
-        .field("loc", Schema.STRING_SCHEMA)
-        .build();
-    Schema schema = SchemaBuilder.struct()
-        .field("inner", inner)
-        .field("tags", SchemaBuilder.array(Schema.STRING_SCHEMA).build())
-        .field("attrs", SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.INT32_SCHEMA).build())
-        .build();
-    Map<String, Integer> attrs = new LinkedHashMap<>();
-    attrs.put("temp", 42);
-    Struct struct = new Struct(schema)
-        .put("inner", new Struct(inner).put("loc", "lab"))
-        .put("tags", Arrays.asList("a", "b"))
-        .put("attrs", attrs);
-    String json = JsonConverter.connectValueToJson(schema, struct);
-    assertEquals("{\"inner\":{\"loc\":\"lab\"},\"tags\":[\"a\",\"b\"],\"attrs\":{\"temp\":42}}",
-        json);
   }
 
   @Test

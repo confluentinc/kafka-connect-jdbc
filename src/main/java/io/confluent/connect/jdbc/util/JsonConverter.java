@@ -25,9 +25,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
-import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.DataException;
@@ -39,7 +37,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Serializes a Connect Struct/Map/List/primitive value into a JSON string for JDBC JSON/JSONB
+ * Serializes a Connect Map/List/primitive value into a JSON string for JDBC JSON/JSONB
  * (and {@code jsonb[]}) sink columns.
  */
 public final class JsonConverter {
@@ -53,7 +51,7 @@ public final class JsonConverter {
   }
 
   /**
-   * Serialize a Connect value (Struct/Map/List/primitive/logical type) into a JSON string for a
+   * Serialize a Connect value (Map/List/primitive/logical type) into a JSON string for a
    * JSON/JSONB column. Uses the schema to honor logical types when present, else infers from value.
    */
   public static String connectValueToJson(Schema schema, Object value) {
@@ -77,9 +75,6 @@ public final class JsonConverter {
     }
     // Dispatch on the runtime type; the (nullable) schema is threaded through so a nested MAP or
     // ARRAY value picks up its element schema.
-    if (value instanceof Struct) {
-      return structToJsonNode((Struct) value);
-    }
     if (value instanceof Map) {
       return mapToJsonNode(schema, (Map<?, ?>) value);
     }
@@ -107,14 +102,6 @@ public final class JsonConverter {
       default:
         return null;
     }
-  }
-
-  private static JsonNode structToJsonNode(Struct struct) {
-    ObjectNode obj = MAPPER.createObjectNode();
-    for (Field field : struct.schema().fields()) {
-      obj.set(field.name(), toJsonNode(field.schema(), struct.get(field)));
-    }
-    return obj;
   }
 
   private static JsonNode mapToJsonNode(Schema schema, Map<?, ?> map) {

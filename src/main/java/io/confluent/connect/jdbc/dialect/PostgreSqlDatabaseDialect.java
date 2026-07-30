@@ -101,9 +101,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   static final String TIMESTAMP_TYPE_NAME = "timestamp";
   static final String TIMESTAMPTZ_TYPE_NAME = "timestamptz";
 
-  private static final String MULTI_DIMENSIONAL_ARRAY_WARNING =
-      "Skipping unsupported multi-dimensional array at column index {}; only single-dimension "
-          + "arrays are supported";
+  private static final String MULTI_DIMENSIONAL_ARRAY_MESSAGE =
+      "Skipping unsupported multi-dimensional array in column {}; only single-dimension arrays are "
+          + "supported";
 
   /**
    * Define the PG datatypes that require casting upon insert/update statements.
@@ -460,7 +460,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       return null;
     }
     final String elementType = arrayElementBaseType(columnDefn);
-    return rs -> readArray(rs, col, elementType);
+    final ColumnId columnId = columnDefn.id();
+    return rs -> readArray(rs, col, columnId, elementType);
   }
 
   /**
@@ -482,7 +483,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * lives here. Temporal elements are decoded via the element {@link ResultSet} so each can honor
    * the configured {@code db.timezone}; all other elements come straight from {@code getArray()}.
    */
-  private List<Object> readArray(ResultSet rs, int col, String elementType)
+  private List<Object> readArray(ResultSet rs, int col, ColumnId columnId, String elementType)
       throws SQLException {
     Array arr = rs.getArray(col);
     if (arr == null) {
@@ -494,7 +495,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         return null;
       }
       if (raw instanceof Object[] && isMultiDimensional((Object[]) raw)) {
-        log.warn(MULTI_DIMENSIONAL_ARRAY_WARNING, col);
+        log.debug(MULTI_DIMENSIONAL_ARRAY_MESSAGE, columnId);
         return null;
       }
       if (isTemporalElementType(elementType)) {
@@ -589,7 +590,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   /**
    * Whether the elements are themselves arrays — a multi-dimensional column like {@code int[][]}.
    * Postgres allows these, but JDBC reports the same type name as 1-D, so they are only
-   * detectable from values; with no 1-D Connect ARRAY schema, callers skip them (null + warning).
+   * detectable from values; with no 1-D Connect ARRAY schema, callers skip them, returning null.
    */
   private static boolean isMultiDimensional(Object[] elements) {
     for (Object element : elements) {

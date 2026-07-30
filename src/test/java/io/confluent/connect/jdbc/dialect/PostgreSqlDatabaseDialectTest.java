@@ -902,35 +902,6 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         new Object[]{"{\"k\":\"v\"}", "{\"a\":1}"});
   }
 
-  @Test
-  public void shouldBindStructArrayAsNativeJsonbArray() throws Exception {
-    // ARRAY<STRUCT> -> jsonb[]; each element is serialized to its JSON text (schema field order).
-    Schema element = SchemaBuilder.struct().optional()
-        .field("a", Schema.INT32_SCHEMA)
-        .field("b", Schema.STRING_SCHEMA)
-        .build();
-    verifyArrayBind(
-        element,
-        Arrays.asList(
-            new Struct(element).put("a", 1).put("b", "x"),
-            new Struct(element).put("a", 2).put("b", "y")),
-        "jsonb",
-        new Object[]{"{\"a\":1,\"b\":\"x\"}", "{\"a\":2,\"b\":\"y\"}"});
-  }
-
-  @Test
-  public void shouldBindMapArrayAsNativeJsonbArray() throws Exception {
-    // ARRAY<MAP> -> jsonb[]; each element is serialized to its JSON object text.
-    Schema element = SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.STRING_SCHEMA)
-        .optional().build();
-    verifyArrayBind(
-        element,
-        Arrays.asList(
-            Collections.singletonMap("k1", "v1"),
-            Collections.singletonMap("k2", "v2")),
-        "jsonb",
-        new Object[]{"{\"k1\":\"v1\"}", "{\"k2\":\"v2\"}"});
-  }
 
   @Test
   public void shouldBindNumericArrayAsNativeNumericArray() throws Exception {
@@ -970,13 +941,15 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
-  public void shouldNotBindStructArrayWhenComplexTypesDisabled() {
+  public void shouldNotBindStructArray() {
     Schema element = SchemaBuilder.struct().optional().field("a", Schema.INT32_SCHEMA).build();
     Schema schema = SchemaBuilder.array(element).optional().build();
+    List<?> value = Collections.singletonList(new Struct(element).put("a", 1));
 
     assertThrows(ConnectException.class, () -> dialect.bindField(mock(PreparedStatement.class), 1,
-        schema, Collections.singletonList(new Struct(element).put("a", 1)),
-        mock(ColumnDefinition.class), "field"));
+        schema, value, mock(ColumnDefinition.class), "field"));
+    assertThrows(ConnectException.class, () -> complexTypesDialect().bindField(
+        mock(PreparedStatement.class), 1, schema, value, mock(ColumnDefinition.class), "field"));
   }
 
   @Test

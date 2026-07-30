@@ -876,8 +876,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
   /**
    * Bind a Connect ARRAY value to a native PostgreSQL array parameter. When complex types are
-   * enabled, element types with a dedicated PostgreSQL array type (json, numeric, the temporals,
-   * and STRUCT/MAP as jsonb) are resolved by {@link #arrayElementBinding(Schema)} and bound via
+   * enabled, element types with a dedicated PostgreSQL array type (json, numeric and the
+   * temporals) are resolved by {@link #arrayElementBinding(Schema)} and bound via
    * {@code createArrayOf}; any other (primitive) element type falls back to the pre-existing
    * {@link #maybeBindPrimitiveArray}. Returns false if the element type is not handled here.
    */
@@ -954,12 +954,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           break;
       }
     }
-    Schema.Type type = elementSchema.type();
-    if (type == Schema.Type.STRUCT || type == Schema.Type.MAP) {
-      // STRUCT/MAP elements serialize to JSON text -> jsonb[] (symmetric with getSqlType).
-      return new ArrayElementBinding(
-          JSONB_TYPE_NAME, values -> jsonbArrayFor(elementSchema, values));
-    }
     return null;
   }
 
@@ -1002,16 +996,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
             : VariableScaleDecimal.toLogical(
                 (Struct) o))
         .toArray(BigDecimal[]::new);
-  }
-
-  /**
-   * Serialize each STRUCT/MAP element to its JSON text for binding into a native {@code jsonb[]}
-   * column. Null elements are preserved as SQL NULL.
-   */
-  private static Object[] jsonbArrayFor(Schema elementSchema, Collection<?> valueCollection) {
-    return valueCollection.stream()
-        .map(o -> o == null ? null : JsonConverter.connectValueToJson(elementSchema, o))
-        .toArray();
   }
 
   /**

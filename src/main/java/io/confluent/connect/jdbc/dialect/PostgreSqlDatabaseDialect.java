@@ -15,16 +15,19 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.data.Json;
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.JdbcCredentials;
+import io.confluent.connect.jdbc.util.JsonConverter;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
@@ -345,6 +348,54 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return JSON_TYPE_NAME.equalsIgnoreCase(typeName) || JSONB_TYPE_NAME.equalsIgnoreCase(typeName);
   }
 
+  /**
+   * Whether the schema is a {@code MAP<STRING, STRING>}, the only Connect container mapped to a
+   * native {@code jsonb} column. That is the shape a PostgreSQL {@code hstore} column takes on the
+   * topic; STRUCT values and other map shapes are not supported.
+   */
+  private static boolean isStringToStringMap(Schema schema) {
+    return schema.type() == Schema.Type.MAP
+        && schema.keySchema().type() == Schema.Type.STRING
+        && schema.valueSchema().type() == Schema.Type.STRING;
+  }
+
+  private boolean isJsonBindCandidate(Schema schema) {
+    if (!isStringToStringMap(schema)) {
+      return false;
+    }
+    return config instanceof JdbcSinkConfig
+        && ((JdbcSinkConfig) config).sqlComplexTypesEnable;
+  }
+
+  private boolean maybeBindJson(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
+      Object value
+  ) throws SQLException {
+    if (!isJsonBindCandidate(schema)) {
+      return false;
+    }
+    String json = JsonConverter.connectValueToJson(value);
+    if (json == null) {
+      statement.setNull(index, Types.OTHER);
+    } else {
+      // Bind as text; the ::jsonb cast (see valueTypeCast) parses it into jsonb server-side.
+      statement.setString(index, json);
+    }
+    return true;
+  }
+
+  private boolean complexTypesEnabled() {
+    if (config instanceof JdbcSinkConfig) {
+      return ((JdbcSinkConfig) config).sqlComplexTypesEnable;
+    }
+    if (config instanceof JdbcSourceConnectorConfig) {
+      return ((JdbcSourceConnectorConfig) config).sqlComplexTypesEnabled();
+    }
+    return false;
+  }
+
   @Override
   protected String getSqlType(SinkRecordField field) {
     if (field.schemaName() != null) {
@@ -357,6 +408,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           return "TIME";
         case Timestamp.LOGICAL_NAME:
           return "TIMESTAMP";
+        case Json.LOGICAL_NAME:
+          // Logical JSON STRING -> native JSONB; text binds via the existing ::jsonb cast.
+          return JSONB_TYPE_NAME.toUpperCase();
         default:
           // fall through to normal types
       }
@@ -394,6 +448,13 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
             field.isPrimaryKey()
         );
         return getSqlType(childField) + "[]";
+      case MAP:
+        if (isStringToStringMap(field.schema())
+            && config instanceof JdbcSinkConfig
+            && ((JdbcSinkConfig) config).sqlComplexTypesEnable) {
+          return JSONB_TYPE_NAME.toUpperCase();
+        }
+        return super.getSqlType(field);
       default:
         return super.getSqlType(field);
     }
@@ -560,6 +621,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       Object value,
       String fieldName
   ) throws SQLException {
+    if (maybeBindJson(statement, index, schema, value)) {
+      return true;
+    }
     switch (schema.type()) {
       case ARRAY: {
         Class<?> valueClass = value.getClass();

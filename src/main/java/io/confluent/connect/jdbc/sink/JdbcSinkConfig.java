@@ -238,6 +238,16 @@ public class JdbcSinkConfig extends AbstractConfig {
       + "    Field(s) from the record value are used, which must be a struct.";
   private static final String PK_MODE_DISPLAY = "Primary Key Mode";
 
+  public static final String SQL_COMPLEX_TYPES_ENABLE = "sql.complex.types.enable";
+  private static final boolean SQL_COMPLEX_TYPES_ENABLE_DEFAULT = false;
+  private static final String SQL_COMPLEX_TYPES_ENABLE_DOC =
+      "When enabled, the connector maps Connect Schema STRUCT, MAP, and ARRAY value-fields to the "
+      + "most appropriate native complex column type per dialect (e.g. JSONB on PostgreSQL, JSON "
+      + "on MySQL) and serializes the corresponding values into that column on writes. When "
+      + "disabled (the default), STRUCT/MAP/ARRAY fields fall back to the dialect's pre-existing "
+      + "behavior to preserve backwards compatibility.";
+  private static final String SQL_COMPLEX_TYPES_ENABLE_DISPLAY = "Enable SQL Complex Types";
+
   public static final String FIELDS_WHITELIST = "fields.whitelist";
   private static final String FIELDS_WHITELIST_DEFAULT = "";
   private static final String FIELDS_WHITELIST_DOC =
@@ -559,6 +569,16 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Width.LONG,
             FIELDS_WHITELIST_DISPLAY
         ).define(
+            SQL_COMPLEX_TYPES_ENABLE,
+            ConfigDef.Type.BOOLEAN,
+            SQL_COMPLEX_TYPES_ENABLE_DEFAULT,
+            ConfigDef.Importance.LOW,
+            SQL_COMPLEX_TYPES_ENABLE_DOC,
+            DATAMAPPING_GROUP,
+            5,
+            ConfigDef.Width.SHORT,
+            SQL_COMPLEX_TYPES_ENABLE_DISPLAY
+        ).define(
           DB_TIMEZONE_CONFIG,
           ConfigDef.Type.STRING,
           DB_TIMEZONE_DEFAULT,
@@ -726,6 +746,7 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final List<String> pkFields;
   public final Set<String> fieldsWhitelist;
   public final String stringOutputValueColumnName;
+  public final boolean sqlComplexTypesEnable;
   public final Set<String> timestampFieldsList;
   public final String dialectName;
   public final ZoneId zoneId;
@@ -760,6 +781,7 @@ public class JdbcSinkConfig extends AbstractConfig {
     dialectName = getString(DIALECT_NAME_CONFIG);
     fieldsWhitelist = new HashSet<>(getList(FIELDS_WHITELIST));
     stringOutputValueColumnName = getString(STRING_OUTPUT_VALUE_COLUMN_NAME);
+    sqlComplexTypesEnable = getBoolean(SQL_COMPLEX_TYPES_ENABLE);
     String dbTimeZone = getString(DB_TIMEZONE_CONFIG);
     zoneId = ZoneId.of(dbTimeZone);
     DateTimezone dateTimezoneConfig =

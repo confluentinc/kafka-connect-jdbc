@@ -15,6 +15,11 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.data.Json;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import io.confluent.connect.jdbc.source.ColumnMapping;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.QuoteMethod;
@@ -25,11 +30,14 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder;
 
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.errors.DataException;
 import org.junit.Test;
 
 import java.sql.Connection;
@@ -44,6 +52,7 @@ import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -51,10 +60,14 @@ import java.util.concurrent.ThreadLocalRandom;
 
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDatabaseDialect> {
@@ -309,14 +322,18 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     builder.withColumn("columnA").type(VARCHAR_TYPE, JDBCType.VARCHAR, Integer.class);
     builder.withColumn("uuidColumn").type("uuid", JDBCType.OTHER, UUID.class);
     builder.withColumn("dateColumn").type("date", JDBCType.DATE, java.sql.Date.class);
+    builder.withColumn("jsonbColumn").type("jsonb", JDBCType.OTHER, String.class);
     TableDefinition tableDefn = builder.build();
     ColumnId uuidColumn = tableDefn.definitionForColumn("uuidColumn").id();
     ColumnId dateColumn = tableDefn.definitionForColumn("dateColumn").id();
+    ColumnId jsonbColumn = tableDefn.definitionForColumn("jsonbColumn").id();
     assertEquals("", dialect.valueTypeCast(tableDefn, columnPK1));
     assertEquals("", dialect.valueTypeCast(tableDefn, columnPK2));
     assertEquals("", dialect.valueTypeCast(tableDefn, columnA));
     assertEquals("::uuid", dialect.valueTypeCast(tableDefn, uuidColumn));
     assertEquals("", dialect.valueTypeCast(tableDefn, dateColumn));
+    // The cast that turns the bound JSON text into jsonb server-side.
+    assertEquals("::jsonb", dialect.valueTypeCast(tableDefn, jsonbColumn));
   }
 
   @Test
@@ -781,7 +798,251 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
 
-  // validateQuery behaviour is inherited from GenericDatabaseDialect and exercised in
-  // GenericDatabaseDialectTest; no PostgreSQL-specific override exists to test here.
+  // validateQuery is inherited from GenericDatabaseDialect; tested in GenericDatabaseDialectTest.
+
+  // ========== Complex SQL types (sql.complex.types.enable) ==========
+
+  @Test
+  public void hstoreHandlingModeShouldSelectSourceSchema() {
+    // Default is "map": a Map<String,String>.
+    assertEquals(Type.MAP,
+        sourceFieldSchema(complexTypesDialect(), Types.OTHER, "hstore").type());
+
+    // "json": a STRING tagged as the Json logical type, which the sink lands in JSONB.
+    PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG,
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_JSON);
+    Schema jsonMode = sourceFieldSchema(jsonDialect, Types.OTHER, "hstore");
+    assertEquals(Type.STRING, jsonMode.type());
+    assertEquals(Json.LOGICAL_NAME, jsonMode.name());
+  }
+
+  @Test
+  public void hstoreJsonModeShouldConvertValueToJsonObjectString() throws Exception {
+    // In json mode the driver's hstore Map is serialized to a JSON-object STRING on the topic.
+    PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG,
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_JSON);
+    Map<String, String> hstore = new LinkedHashMap<>();
+    hstore.put("env", "prod");
+    hstore.put("region", "us-west-2");
+
+    assertEquals("{\"env\":\"prod\",\"region\":\"us-west-2\"}",
+        hstoreConverter(jsonDialect).convert(hstoreResultSet(hstore)));
+  }
+
+  @Test
+  public void hstoreMapModeShouldPassThroughDriverMap() throws Exception {
+    // In map mode (the default) the driver's Map is emitted as-is for the Connect MAP schema.
+    Map<String, String> hstore = Collections.singletonMap("env", "prod");
+    assertEquals(hstore,
+        hstoreConverter(complexTypesDialect()).convert(hstoreResultSet(hstore)));
+  }
+
+  @Test
+  public void hstoreSourceSchemaShouldMapToSinkSqlTypePerMode() {
+    // Starts from the schema the source path actually produces for an hstore column, so this
+    // exercises hstoreSchema() rather than re-asserting generic MAP/STRING behaviour.
+    Schema mapMode = sourceFieldSchema(complexTypesDialect(), Types.OTHER, "hstore");
+    assertEquals("JSONB", sinkDialect().getSqlType(sinkField(mapMode)));
+
+    PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG,
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_JSON);
+    Schema jsonMode = sourceFieldSchema(jsonDialect, Types.OTHER, "hstore");
+    assertEquals("JSONB", sinkDialect().getSqlType(sinkField(jsonMode)));
+  }
+
+  @Test
+  public void shouldBindStringMapAsJsonTextForJsonbColumn() throws SQLException {
+    // The value half of MAP -> JSONB: the map is serialized and bound as text, which the ::jsonb
+    // cast then parses server-side. Only the DDL half was covered before.
+    Map<String, String> value = new LinkedHashMap<>();
+    value.put("env", "prod");
+    value.put("absent", null);
+    Schema schema = SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA)
+        .optional().build();
+
+    PreparedStatement statement = mock(PreparedStatement.class);
+    sinkDialect().bindField(statement, 1, schema, value);
+    verify(statement).setString(1, "{\"env\":\"prod\",\"absent\":null}");
+
+    // A null map never reaches maybeBindJson: bindFieldInternal short-circuits nulls before
+    // maybeBindPrimitive, so the generic null path binds it.
+    PreparedStatement nullStatement = mock(PreparedStatement.class);
+    sinkDialect().bindField(nullStatement, 1, schema, null);
+    verify(nullStatement).setObject(1, null);
+  }
+
+  @Test
+  public void shouldBindJsonStringAsTextForJsonbColumn() throws SQLException {
+    // The bind half for json mode: a Json-tagged STRING is not a string-to-string map, so
+    // maybeBindJson declines and it binds as text — the ::jsonb cast parses it server-side.
+    PreparedStatement statement = mock(PreparedStatement.class);
+    sinkDialect().bindField(statement, 1, Json.optionalSchema(), "{\"env\":\"prod\"}");
+    verify(statement).setString(1, "{\"env\":\"prod\"}");
+  }
+
+  @Test
+  public void shouldNotBindStringMapWhenComplexTypesDisabled() {
+    Schema schema = SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA)
+        .optional().build();
+    PostgreSqlDatabaseDialect disabled = new PostgreSqlDatabaseDialect(
+        sinkConfigWithUrl("jdbc:postgresql://something"));
+
+    assertThrows(ConnectException.class, () -> disabled.bindField(
+        mock(PreparedStatement.class), 1, schema, Collections.singletonMap("env", "prod")));
+  }
+
+  @Test
+  public void shouldDropHstoreWhenComplexTypesDisabled() {
+    // The default is false, so hstore keeps today's drop-with-WARN behaviour and produces no field.
+    PostgreSqlDatabaseDialect disabled =
+        new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something"));
+    assertNull(sourceFieldSchema(disabled, Types.OTHER, "hstore"));
+  }
+
+  @Test
+  public void hstoreValueThatIsNotAMapShouldFollowColumnNullability() throws Exception {
+    // pgjdbc returns raw hstore text rather than a Map when the type is not visible on the
+    // connection's search_path. Follows Debezium's handleUnknownData: a nullable column degrades
+    // to null, a NOT NULL column fails because null would breach its schema anyway.
+    ResultSet rawText = hstoreResultSet("\"env\"=>\"prod\"");
+
+    PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG,
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_JSON);
+
+    for (PostgreSqlDatabaseDialect dialect : Arrays.asList(complexTypesDialect(), jsonDialect)) {
+      assertNull(hstoreConverter(dialect, ColumnDefinition.Nullability.NULL).convert(rawText));
+
+      DataException e = assertThrows(DataException.class, () ->
+          hstoreConverter(dialect, ColumnDefinition.Nullability.NOT_NULL).convert(rawText));
+      assertTrue(e.getMessage().contains("hstore"));
+    }
+  }
+
+  @Test
+  public void hstoreShouldConvertNullColumnToNullInBothModes() throws Exception {
+    PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG,
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_JSON);
+
+    for (PostgreSqlDatabaseDialect dialect : Arrays.asList(complexTypesDialect(), jsonDialect)) {
+      assertNull(hstoreConverter(dialect).convert(hstoreResultSet(null)));
+    }
+  }
+
+  @Test
+  public void shouldRejectMapShapesOtherThanStringToString() {
+    // Only MAP<STRING,STRING> — the shape hstore produces — maps to JSONB. Every other map shape
+    // must fall through to the generic dialect and fail rather than silently become jsonb.
+    List<Schema> unsupported = Arrays.asList(
+        SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.INT32_SCHEMA).optional().build(),
+        SchemaBuilder.map(Schema.INT32_SCHEMA, Schema.STRING_SCHEMA).optional().build(),
+        SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.OPTIONAL_BYTES_SCHEMA).optional().build(),
+        SchemaBuilder.map(Schema.STRING_SCHEMA,
+            SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.STRING_SCHEMA).build()).build(),
+        SchemaBuilder.map(Schema.STRING_SCHEMA,
+            SchemaBuilder.array(Schema.STRING_SCHEMA).build()).build());
+
+    for (Schema schema : unsupported) {
+      assertThrows("expected " + schema.valueSchema().type() + " map value to be rejected",
+          ConnectException.class, () -> sinkDialect().getSqlType(sinkField(schema)));
+    }
+  }
+
+  @Test
+  public void shouldNotBindMapShapesOtherThanStringToString() throws SQLException {
+    // The bind half of the same restriction, with complex types enabled.
+    Schema intValued = SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.INT32_SCHEMA)
+        .optional().build();
+    assertThrows(ConnectException.class, () -> sinkDialect().bindField(
+        mock(PreparedStatement.class), 1, intValued, Collections.singletonMap("n", 1)));
+
+    Schema intKeyed = SchemaBuilder.map(Schema.INT32_SCHEMA, Schema.STRING_SCHEMA)
+        .optional().build();
+    assertThrows(ConnectException.class, () -> sinkDialect().bindField(
+        mock(PreparedStatement.class), 1, intKeyed, Collections.singletonMap(1, "v")));
+  }
+
+  @Test
+  public void shouldNotTreatOtherOtherTypesAsHstore() {
+    // A different Types.OTHER type must not be captured by the hstore branch just because the
+    // flag is on.
+    PostgreSqlDatabaseDialect dialect = complexTypesDialect();
+    assertNull(sourceFieldSchema(dialect, Types.OTHER, "citext"));
+    assertNull(sourceFieldSchema(dialect, Types.OTHER, "hstore_extra"));
+    assertNull(sourceFieldSchema(dialect, Types.OTHER, "\"ext\".\"hstore\""));
+  }
+
+  @Test
+  public void shouldMatchHstoreTypeNameCaseInsensitively() {
+    // The driver's reported type name casing must not decide whether the feature works.
+    assertEquals(Type.MAP,
+        sourceFieldSchema(complexTypesDialect(), Types.OTHER, "HSTORE").type());
+  }
+
+  // ----- complex-type test helpers -----
+
+  private PostgreSqlDatabaseDialect sinkDialect() {
+    return new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+  }
+
+  private static SinkRecordField sinkField(Schema schema) {
+    return new SinkRecordField(schema, "col", false);
+  }
+
+  /** Column converter for an {@code hstore} column, as produced by the source path. */
+  private DatabaseDialect.ColumnConverter hstoreConverter(PostgreSqlDatabaseDialect dialect) {
+    return hstoreConverter(dialect, ColumnDefinition.Nullability.NULL);
+  }
+
+  private DatabaseDialect.ColumnConverter hstoreConverter(
+      PostgreSqlDatabaseDialect dialect, ColumnDefinition.Nullability nullability) {
+    ColumnDefinition column = column(Types.OTHER, "hstore", nullability);
+    DatabaseDialect.ColumnConverter converter = dialect.columnConverterFor(
+        new ColumnMapping(column, 1, new Field("col", 0, Schema.OPTIONAL_STRING_SCHEMA)),
+        column, 1, true);
+    assertNotNull(converter);
+    return converter;
+  }
+
+  /** A ResultSet whose column 1 returns the given hstore value, as pgjdbc does. */
+  private static ResultSet hstoreResultSet(Object value) throws SQLException {
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getObject(1)).thenReturn(value);
+    return resultSet;
+  }
+
+  private PostgreSqlDatabaseDialect complexTypesDialect(String... extraProps) {
+    String[] props = new String[extraProps.length + 2];
+    props[0] = JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG;
+    props[1] = "true";
+    System.arraycopy(extraProps, 0, props, 2, extraProps.length);
+    return new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something", props));
+  }
+
+  private Schema sourceFieldSchema(
+      PostgreSqlDatabaseDialect dialect, int jdbcType, String typeName) {
+    ColumnDefinition column = column(jdbcType, typeName);
+    SchemaBuilder builder = SchemaBuilder.struct();
+    String fieldName = dialect.addFieldToSchema(column, builder);
+    return fieldName == null ? null : builder.build().field(fieldName).schema();
+  }
+
+  private ColumnDefinition column(int jdbcType, String typeName) {
+    return column(jdbcType, typeName, ColumnDefinition.Nullability.NULL);
+  }
+
+  private ColumnDefinition column(
+      int jdbcType, String typeName, ColumnDefinition.Nullability nullability) {
+    return new ColumnDefinition(
+        new ColumnId(new TableId(null, null, "t"), "col"),
+        jdbcType, typeName, Object.class.getName(),
+        nullability, ColumnDefinition.Mutability.UNKNOWN,
+        0, 0, false, 1, false, false, false, false, false);
+  }
 
 }

@@ -355,6 +355,62 @@ public class JdbcSourceConnectorConfigTest {
   }
 
   @Test(expected = ConfigException.class)
+  public void testInvalidHstoreHandlingModeThrowsException() {
+    Map<String, String> props = createMinimalConfig();
+    props.put(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "not-a-mode");
+
+    new JdbcSourceConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void testEmptyHstoreHandlingModeThrowsException() {
+    Map<String, String> props = createMinimalConfig();
+    props.put(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "");
+
+    new JdbcSourceConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void testHstoreHandlingModeIsCaseSensitive() {
+    // ConfigDef.ValidString.in is case-sensitive, so an upper-case mode is rejected at validation
+    // even though hstoreHandlingModeIsJson() compares case-insensitively.
+    Map<String, String> props = createMinimalConfig();
+    props.put(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "JSON");
+
+    new JdbcSourceConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void testNonBooleanComplexTypesEnableThrowsException() {
+    Map<String, String> props = createMinimalConfig();
+    props.put(JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "not-a-boolean");
+
+    new JdbcSourceConnectorConfig(props);
+  }
+
+  @Test
+  public void testComplexTypesEnableDefaultsToFalse() {
+    assertFalse(new JdbcSourceConnectorConfig(createMinimalConfig()).sqlComplexTypesEnabled());
+
+    Map<String, String> props = createMinimalConfig();
+    props.put(JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "TRUE");
+    assertTrue(new JdbcSourceConnectorConfig(props).sqlComplexTypesEnabled());
+  }
+
+  @Test
+  public void testHstoreHandlingModeDefaultsToMapAndAcceptsJson() {
+    JdbcSourceConnectorConfig defaults = new JdbcSourceConnectorConfig(createMinimalConfig());
+    assertEquals(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_MAP,
+        defaults.getString(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG));
+    assertFalse(defaults.hstoreHandlingModeIsJson());
+
+    Map<String, String> props = createMinimalConfig();
+    props.put(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG,
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_JSON);
+    assertTrue(new JdbcSourceConnectorConfig(props).hstoreHandlingModeIsJson());
+  }
+
+  @Test(expected = ConfigException.class)
   public void testInvalidRegexInIncludeListThrowsException() {
     Map<String, String> props = createMinimalConfig();
     props.put(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG, "[invalid-regex");

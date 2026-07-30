@@ -15,139 +15,66 @@
 
 package io.confluent.connect.jdbc.util;
 
-import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
-import org.apache.kafka.connect.data.Date;
-import org.apache.kafka.connect.data.Decimal;
-import org.apache.kafka.connect.data.Field;
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.Struct;
-import org.apache.kafka.connect.data.Time;
-import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.DataException;
 
-import java.math.BigDecimal;
-import java.nio.ByteBuffer;
-import java.util.Base64;
-import java.util.List;
 import java.util.Map;
 
 /**
- * Serializes a Connect Struct/Map/List/primitive value into a JSON string for JDBC JSON/JSONB
- * (and {@code jsonb[]}) sink columns.
+ * Serializes a Connect {@code MAP<STRING, STRING>} into a JSON object string for a JDBC
+ * JSON/JSONB column. That is the only complex shape the connector maps to {@code jsonb}: it is
+ * what a PostgreSQL {@code hstore} column becomes on the topic, either as a Connect map on the
+ * sink or as a JSON string on the source.
  */
 public final class JsonConverter {
 
-  // Plain decimal notation (1500 not 1.5E+3) and exact scale (1.50 stays 1.50).
-  private static final ObjectMapper MAPPER = new ObjectMapper()
-      .configure(JsonGenerator.Feature.WRITE_BIGDECIMAL_AS_PLAIN, true)
-      .setNodeFactory(JsonNodeFactory.withExactBigDecimals(true));
+  private static final JsonNodeFactory JSON_NODE_FACTORY = JsonNodeFactory.instance;
+
+  private static final ObjectMapper MAPPER = new ObjectMapper();
 
   private JsonConverter() {
   }
 
   /**
-   * Serialize a Connect value (Struct/Map/List/primitive/logical type) into a JSON string for a
-   * JSON/JSONB column. Uses the schema to honor logical types when present, else infers from value.
+   * Serialize a map of strings into a JSON object string, writing null values as JSON null.
+   *
+   * @param value the map to serialize; null yields null
+   * @return the JSON object text, or null when the value is null
+   * @throws DataException if the value is not a map of strings, or has a null key
    */
-  public static String connectValueToJson(Schema schema, Object value) {
+  public static String connectValueToJson(Object value) {
     if (value == null) {
       return null;
     }
+    if (!(value instanceof Map)) {
+      throw new DataException("Expected a Map to serialize to JSON but was " + value.getClass());
+    }
     try {
-      return MAPPER.writeValueAsString(toJsonNode(schema, value));
+      return MAPPER.writeValueAsString(mapToJsonNode((Map<?, ?>) value));
     } catch (JsonProcessingException e) {
       throw new DataException("Failed to serialize Connect value to JSON", e);
     }
   }
 
-  private static JsonNode toJsonNode(Schema schema, Object value) {
-    if (value == null) {
-      return MAPPER.nullNode();
-    }
-    JsonNode logical = logicalToJsonNode(schema, value);
-    if (logical != null) {
-      return logical;
-    }
-    // Dispatch on the runtime type; the (nullable) schema is threaded through so a nested MAP or
-    // ARRAY value picks up its element schema.
-    if (value instanceof Struct) {
-      return structToJsonNode((Struct) value);
-    }
-    if (value instanceof Map) {
-      return mapToJsonNode(schema, (Map<?, ?>) value);
-    }
-    if (value instanceof List) {
-      return listToJsonNode(schema, (List<?>) value);
-    }
-    if (value instanceof byte[] || value instanceof ByteBuffer) {
-      return MAPPER.valueToTree(bytesToBase64(value));
-    }
-    return MAPPER.valueToTree(value);
-  }
-
-  private static JsonNode logicalToJsonNode(Schema schema, Object value) {
-    if (schema == null || schema.name() == null) {
-      return null;
-    }
-    switch (schema.name()) {
-      case Decimal.LOGICAL_NAME:
-        // JSON number; jsonb stores it losslessly as numeric.
-        return MAPPER.valueToTree((BigDecimal) value);
-      case Date.LOGICAL_NAME:
-      case Time.LOGICAL_NAME:
-      case Timestamp.LOGICAL_NAME:
-        return MAPPER.valueToTree(((java.util.Date) value).getTime());
-      default:
-        return null;
-    }
-  }
-
-  private static JsonNode structToJsonNode(Struct struct) {
-    ObjectNode obj = MAPPER.createObjectNode();
-    for (Field field : struct.schema().fields()) {
-      obj.set(field.name(), toJsonNode(field.schema(), struct.get(field)));
-    }
-    return obj;
-  }
-
-  private static JsonNode mapToJsonNode(Schema schema, Map<?, ?> map) {
-    Schema valueSchema = schema != null ? schema.valueSchema() : null;
-    ObjectNode obj = MAPPER.createObjectNode();
+  private static ObjectNode mapToJsonNode(Map<?, ?> map) {
+    ObjectNode object = JSON_NODE_FACTORY.objectNode();
     for (Map.Entry<?, ?> entry : map.entrySet()) {
       if (entry.getKey() == null) {
         throw new DataException("Cannot serialize a Connect MAP with null keys to JSON");
       }
-      obj.set(entry.getKey().toString(), toJsonNode(valueSchema, entry.getValue()));
+      Object value = entry.getValue();
+      if (value == null) {
+        object.set(entry.getKey().toString(), JSON_NODE_FACTORY.nullNode());
+      } else if (value instanceof String) {
+        object.set(entry.getKey().toString(), JSON_NODE_FACTORY.textNode((String) value));
+      } else {
+        throw new DataException("Expected a String map value but was " + value.getClass());
+      }
     }
-    return obj;
-  }
-
-  private static JsonNode listToJsonNode(Schema schema, List<?> list) {
-    Schema valueSchema = schema != null ? schema.valueSchema() : null;
-    ArrayNode arr = MAPPER.createArrayNode();
-    for (Object element : list) {
-      arr.add(toJsonNode(valueSchema, element));
-    }
-    return arr;
-  }
-
-  private static String bytesToBase64(Object value) {
-    final byte[] bytes;
-    if (value instanceof byte[]) {
-      bytes = (byte[]) value;
-    } else {
-      // slice() leaves the caller's buffer position/limit untouched.
-      ByteBuffer buffer = ((ByteBuffer) value).slice();
-      bytes = new byte[buffer.remaining()];
-      buffer.get(bytes);
-    }
-    return Base64.getEncoder().encodeToString(bytes);
+    return object;
   }
 }

@@ -345,9 +345,19 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return JSON_TYPE_NAME.equalsIgnoreCase(typeName) || JSONB_TYPE_NAME.equalsIgnoreCase(typeName);
   }
 
+  /**
+   * Whether the schema is a {@code MAP<STRING, STRING>}, the only Connect container mapped to a
+   * native {@code jsonb} column. That is the shape a PostgreSQL {@code hstore} column takes on the
+   * topic; STRUCT values and other map shapes are not supported.
+   */
+  private static boolean isStringToStringMap(Schema schema) {
+    return schema.type() == Schema.Type.MAP
+        && schema.keySchema().type() == Schema.Type.STRING
+        && schema.valueSchema().type() == Schema.Type.STRING;
+  }
+
   private boolean isJsonBindCandidate(Schema schema) {
-    Schema.Type type = schema.type();
-    if (type != Schema.Type.STRUCT && type != Schema.Type.MAP) {
+    if (!isStringToStringMap(schema)) {
       return false;
     }
     return config instanceof JdbcSinkConfig
@@ -363,7 +373,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     if (!isJsonBindCandidate(schema)) {
       return false;
     }
-    String json = JsonConverter.connectValueToJson(schema, value);
+    String json = JsonConverter.connectValueToJson(value);
     if (json == null) {
       statement.setNull(index, Types.OTHER);
     } else {
@@ -452,9 +462,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
             field.isPrimaryKey()
         );
         return getSqlType(childField) + "[]";
-      case STRUCT:
       case MAP:
-        if (config instanceof JdbcSinkConfig
+        if (isStringToStringMap(field.schema())
+            && config instanceof JdbcSinkConfig
             && ((JdbcSinkConfig) config).sqlComplexTypesEnable) {
           return JSONB_TYPE_NAME.toUpperCase();
         }

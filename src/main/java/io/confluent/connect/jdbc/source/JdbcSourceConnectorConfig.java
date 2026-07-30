@@ -1584,6 +1584,10 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     return Arrays.asList(MODE_INCREMENTING, MODE_TIMESTAMP_INCREMENTING).contains(mode);
   }
 
+  public boolean hstoreHandlingModeIsJson() {
+    return HSTORE_HANDLING_MODE_JSON.equalsIgnoreCase(getString(HSTORE_HANDLING_MODE_CONFIG));
+  }
+
   public boolean sqlComplexTypesEnabled() {
     return getBoolean(SQL_COMPLEX_TYPES_ENABLE_CONFIG);
   }

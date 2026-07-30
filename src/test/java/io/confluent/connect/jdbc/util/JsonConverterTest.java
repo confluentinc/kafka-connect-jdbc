@@ -30,7 +30,7 @@ public class JsonConverterTest {
 
   @Test
   public void serializeNullValueReturnsNull() {
-    assertNull(JsonConverter.connectValueToJson(null));
+    assertNull(JsonConverter.connectMapToJson(null));
   }
 
   @Test
@@ -39,12 +39,12 @@ public class JsonConverterTest {
     input.put("env", "prod");
     input.put("tier", "gold");
 
-    assertEquals("{\"env\":\"prod\",\"tier\":\"gold\"}", JsonConverter.connectValueToJson(input));
+    assertEquals("{\"env\":\"prod\",\"tier\":\"gold\"}", JsonConverter.connectMapToJson(input));
   }
 
   @Test
   public void serializeEmptyMapAsEmptyJsonObject() {
-    assertEquals("{}", JsonConverter.connectValueToJson(new LinkedHashMap<>()));
+    assertEquals("{}", JsonConverter.connectMapToJson(new LinkedHashMap<>()));
   }
 
   @Test
@@ -53,7 +53,7 @@ public class JsonConverterTest {
     input.put("present", "v");
     input.put("absent", null);
 
-    assertEquals("{\"present\":\"v\",\"absent\":null}", JsonConverter.connectValueToJson(input));
+    assertEquals("{\"present\":\"v\",\"absent\":null}", JsonConverter.connectMapToJson(input));
   }
 
   @Test
@@ -61,7 +61,7 @@ public class JsonConverterTest {
     Map<String, String> input = new LinkedHashMap<>();
     input.put("quote\"key", "line\nbreak");
 
-    assertEquals("{\"quote\\\"key\":\"line\\nbreak\"}", JsonConverter.connectValueToJson(input));
+    assertEquals("{\"quote\\\"key\":\"line\\nbreak\"}", JsonConverter.connectMapToJson(input));
   }
 
   @Test
@@ -69,7 +69,7 @@ public class JsonConverterTest {
     Map<String, String> input = new HashMap<>();
     input.put(null, "v");
 
-    assertThrows(DataException.class, () -> JsonConverter.connectValueToJson(input));
+    assertThrows(DataException.class, () -> JsonConverter.connectMapToJson(input));
   }
 
   @Test
@@ -77,11 +77,11 @@ public class JsonConverterTest {
     Map<String, Integer> input = new LinkedHashMap<>();
     input.put("n", 1);
 
-    assertThrows(DataException.class, () -> JsonConverter.connectValueToJson(input));
+    assertThrows(DataException.class, () -> JsonConverter.connectMapToJson(input));
   }
 
   @Test
   public void serializeNonMapValueThrows() {
-    assertThrows(DataException.class, () -> JsonConverter.connectValueToJson("not-a-map"));
+    assertThrows(DataException.class, () -> JsonConverter.connectMapToJson("not-a-map"));
   }
 }

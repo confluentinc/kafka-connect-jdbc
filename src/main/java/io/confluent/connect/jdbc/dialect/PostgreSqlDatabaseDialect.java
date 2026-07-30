@@ -376,7 +376,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     if (!isJsonBindCandidate(schema)) {
       return false;
     }
-    String json = JsonConverter.connectValueToJson(value);
+    String json = JsonConverter.connectMapToJson(value);
     if (json == null) {
       statement.setNull(index, Types.OTHER);
     } else {

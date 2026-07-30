@@ -17,6 +17,8 @@ package io.confluent.connect.jdbc.dialect;
 
 import io.confluent.connect.jdbc.data.Json;
 import io.confluent.connect.jdbc.data.VariableScaleDecimal;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
@@ -950,6 +952,21 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         schema, value, mock(ColumnDefinition.class), "field"));
     assertThrows(ConnectException.class, () -> complexTypesDialect().bindField(
         mock(PreparedStatement.class), 1, schema, value, mock(ColumnDefinition.class), "field"));
+  }
+
+  @Test
+  public void shouldNotMapStructArrayToSqlType() {
+    // The DDL side must agree with the bind side above: no column type is advertised for an
+    // ARRAY<STRUCT>, so auto-create fails rather than creating a column that cannot be written.
+    Schema schema = arraySchema(
+        SchemaBuilder.struct().optional().field("a", Schema.INT32_SCHEMA).build());
+    SinkRecordField field = new SinkRecordField(schema, "col", false);
+    // A sink config with the feature on is the only case that could have produced JSONB[].
+    PostgreSqlDatabaseDialect sink = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+
+    assertThrows(ConnectException.class, () -> dialect.getSqlType(field));
+    assertThrows(ConnectException.class, () -> sink.getSqlType(field));
   }
 
   @Test

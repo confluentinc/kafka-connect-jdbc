@@ -33,7 +33,6 @@ import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.SchemaBuilder;
-import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
@@ -824,16 +823,17 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
-  public void shouldBindStructValueAsJsonStringForJsonbColumn() throws Exception {
-    // STRUCT/MAP (hstore map mode) serialize to JSON, bind as String, cast ::jsonb on the sink.
+  public void shouldBindMapValueAsJsonStringForJsonbColumn() throws Exception {
+    // MAP<STRING,STRING> (hstore map mode) serializes to JSON, binds as String, cast ::jsonb.
     PreparedStatement statement = mock(PreparedStatement.class);
     ColumnDefinition colDef = mock(ColumnDefinition.class);
-    Schema schema = SchemaBuilder.struct().field("a", Schema.INT32_SCHEMA).optional().build();
-    Struct value = new Struct(schema).put("a", 1);
+    Schema schema = SchemaBuilder.map(
+        Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA).optional().build();
 
-    sinkDialect().bindField(statement, 3, schema, value, colDef, "field");
+    sinkDialect().bindField(
+        statement, 3, schema, Collections.singletonMap("env", "prod"), colDef, "field");
 
-    verify(statement).setString(3, "{\"a\":1}");
+    verify(statement).setString(3, "{\"env\":\"prod\"}");
   }
 
   // ----- complex-type test helpers -----

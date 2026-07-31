@@ -810,8 +810,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
     // "json": a STRING tagged as the Json logical type, which the sink lands in JSONB.
     PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
-        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG,
-        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_JSON);
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json");
     Schema jsonMode = sourceFieldSchema(jsonDialect, Types.OTHER, "hstore");
     assertEquals(Type.STRING, jsonMode.type());
     assertEquals(Json.LOGICAL_NAME, jsonMode.name());
@@ -821,8 +820,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   public void hstoreJsonModeShouldConvertValueToJsonObjectString() throws Exception {
     // In json mode the driver's hstore Map is serialized to a JSON-object STRING on the topic.
     PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
-        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG,
-        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_JSON);
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json");
     Map<String, String> hstore = new LinkedHashMap<>();
     hstore.put("env", "prod");
     hstore.put("region", "us-west-2");
@@ -847,8 +845,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     assertEquals("JSONB", sinkDialect().getSqlType(sinkField(mapMode)));
 
     PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
-        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG,
-        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_JSON);
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json");
     Schema jsonMode = sourceFieldSchema(jsonDialect, Types.OTHER, "hstore");
     assertEquals("JSONB", sinkDialect().getSqlType(sinkField(jsonMode)));
   }
@@ -910,8 +907,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     ResultSet rawText = hstoreResultSet("\"env\"=>\"prod\"");
 
     PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
-        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG,
-        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_JSON);
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json");
 
     for (PostgreSqlDatabaseDialect dialect : Arrays.asList(complexTypesDialect(), jsonDialect)) {
       assertNull(hstoreConverter(dialect, ColumnDefinition.Nullability.NULL).convert(rawText));
@@ -925,8 +921,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   @Test
   public void hstoreShouldConvertNullColumnToNullInBothModes() throws Exception {
     PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
-        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG,
-        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_JSON);
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json");
 
     for (PostgreSqlDatabaseDialect dialect : Arrays.asList(complexTypesDialect(), jsonDialect)) {
       assertNull(hstoreConverter(dialect).convert(hstoreResultSet(null)));

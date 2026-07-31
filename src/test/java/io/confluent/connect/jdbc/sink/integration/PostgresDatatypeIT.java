@@ -724,8 +724,7 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     // json mode: a JSON-object STRING. Compared parsed, since the driver returns a HashMap and
     // key order is therefore hash order rather than insertion order.
     Struct jsonMode = pollOneRow(hstoreSourceProps("postgres",
-        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG,
-        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_JSON));
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json"));
     Schema jsonSchema = jsonMode.schema().field("tags").schema();
     assertEquals(Schema.Type.STRING, jsonSchema.type());
     assertEquals("json mode must tag the STRING so the sink provisions JSONB, not TEXT",

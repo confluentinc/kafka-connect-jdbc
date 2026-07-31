@@ -21,6 +21,7 @@ import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.HstoreHandlingMode;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
@@ -89,8 +90,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   static final String HSTORE_TYPE_NAME = "hstore";
 
   private static final String HSTORE_UNEXPECTED_VALUE_WARNING =
-      "Unexpected value for hstore column {}: class={}. The hstore type must be visible on "
-          + "the connection's search_path for the driver to return a map; emitting null";
+      "Unexpected value for hstore column {}: class={}; emitting null. The hstore type must be "
+          + "visible on the connection's search_path for the driver to return a map.";
 
   /**
    * Define the PG datatypes that require casting upon insert/update statements.
@@ -341,10 +342,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         }
 
         if (complexTypesEnabled() && isHstoreType(columnDefn)) {
-          if (hstoreAsJson()) {
+          if (hstoreHandlingMode() == HstoreHandlingMode.JSON) {
             return rs -> {
               Object value = hstoreValue(columnDefn, rs.getObject(col));
-              return value == null ? null : JsonConverter.connectValueToJson(value);
+              return value == null ? null : JsonConverter.connectMapToJson(value);
             };
           }
           return rs -> hstoreValue(columnDefn, rs.getObject(col));
@@ -373,15 +374,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * The driver's value for an hstore column, as the map both handling modes require. pgjdbc returns
-   * a {@code Map} only while the hstore type is visible on the connection's {@code search_path};
-   * otherwise it reports the type as {@code "schema"."hstore"} and returns raw text, which
-   * {@link #isHstoreType(ColumnDefinition)} already declines so the column is skipped before
-   * reaching here.
-   *
-   * <p>Anything else follows Debezium's {@code JdbcValueConverters.handleUnknownData}: a nullable
-   * column degrades to null with a warning, while a NOT NULL column fails, since null would breach
-   * its schema anyway. The value itself is never logged, in case it is sensitive.
+   * The driver's value for an hstore column, as the map both handling modes require. pgjdbc only
+   * returns a {@code Map} while the hstore type is visible on the connection's {@code search_path}.
+   * Anything else follows Debezium's {@code handleUnknownData}: a nullable column degrades to null,
+   * a NOT NULL column fails. The value is never logged, in case it is sensitive.
    */
   private Object hstoreValue(ColumnDefinition columnDefn, Object value) {
     if (value == null || value instanceof Map) {
@@ -423,7 +419,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     if (!isJsonBindCandidate(schema)) {
       return false;
     }
-    String json = JsonConverter.connectValueToJson(value);
+    String json = JsonConverter.connectMapToJson(value);
     if (json == null) {
       statement.setNull(index, Types.OTHER);
     } else {
@@ -431,6 +427,16 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       statement.setString(index, json);
     }
     return true;
+  }
+
+  /**
+   * The configured {@code hstore.handling.mode}. Only the source connector selects a
+   * representation; the sink reads whichever shape arrives on the topic.
+   */
+  protected HstoreHandlingMode hstoreHandlingMode() {
+    return config instanceof JdbcSourceConnectorConfig
+        ? ((JdbcSourceConnectorConfig) config).hstoreHandlingMode()
+        : HstoreHandlingMode.MAP;
   }
 
   private boolean complexTypesEnabled() {
@@ -444,38 +450,25 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * Whether PostgreSQL hstore columns should be emitted as a logical JSON STRING (mode
-   * {@code json}) rather than a Connect Map (mode {@code map}, the default). Only the source
-   * connector exposes this; either shape lands in a native JSONB column on the sink.
-   */
-  private boolean hstoreAsJson() {
-    if (config instanceof JdbcSourceConnectorConfig) {
-      return ((JdbcSourceConnectorConfig) config).hstoreHandlingModeIsJson();
-    }
-    return false;
-  }
-
-  /**
-   * Build the Connect schema for a PostgreSQL hstore column, honoring
-   * {@code hstore.handling.mode}: a {@link Json} STRING when {@code json}, otherwise a
-   * Map&lt;String,String&gt; whose values are optional so a SQL NULL can be carried.
-   *
-   * <p>Both shapes are recognized by {@link #getSqlType(SinkRecordField)} and provisioned as a
-   * native {@code jsonb} column, so the mode changes only the on-topic representation. Tagging the
-   * json-mode STRING is what makes that possible, and mirrors Debezium, whose
-   * {@code PostgresValueConverter.hstoreSchema()} returns {@code Json.builder()} for the same mode.
+   * The Connect schema for a PostgreSQL hstore column, per {@code hstore.handling.mode}: a
+   * {@link Json} STRING, or a Map&lt;String,String&gt; whose values are optional so a SQL NULL can
+   * be carried. Both are provisioned as a native {@code jsonb} column, so the mode changes only the
+   * on-topic representation. Mirrors Debezium's {@code hstoreSchema()}.
    */
   private Schema hstoreSchema(ColumnDefinition columnDefn) {
     boolean optional = columnDefn.isOptional();
-    if (hstoreAsJson()) {
-      return optional ? Json.optionalSchema() : Json.schema();
+    switch (hstoreHandlingMode()) {
+      case JSON:
+        return optional ? Json.optionalSchema() : Json.schema();
+      case MAP:
+      default:
+        SchemaBuilder mapBuilder = SchemaBuilder.map(
+            Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA);
+        if (optional) {
+          mapBuilder.optional();
+        }
+        return mapBuilder.build();
     }
-    SchemaBuilder mapBuilder = SchemaBuilder.map(
-        Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA);
-    if (optional) {
-      mapBuilder.optional();
-    }
-    return mapBuilder.build();
   }
 
   @Override

@@ -182,9 +182,6 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final String SQL_COMPLEX_TYPES_ENABLE_DISPLAY = "Enable SQL Complex Types";
 
   public static final String HSTORE_HANDLING_MODE_CONFIG = "hstore.handling.mode";
-  public static final String HSTORE_HANDLING_MODE_MAP = "map";
-  public static final String HSTORE_HANDLING_MODE_JSON = "json";
-  public static final String HSTORE_HANDLING_MODE_DEFAULT = HSTORE_HANDLING_MODE_MAP;
   private static final String HSTORE_HANDLING_MODE_DOC =
       "Controls how PostgreSQL ``hstore`` columns are represented when "
       + "``sql.complex.types.enable`` is true. ``map`` (the default) emits a Connect "
@@ -891,8 +888,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     ).define(
         HSTORE_HANDLING_MODE_CONFIG,
         Type.STRING,
-        HSTORE_HANDLING_MODE_DEFAULT,
-        ConfigDef.ValidString.in(HSTORE_HANDLING_MODE_MAP, HSTORE_HANDLING_MODE_JSON),
+        HstoreHandlingMode.DEFAULT,
+        ConfigDef.ValidString.in(HstoreHandlingMode.getValidConfigValues()),
         Importance.LOW,
         HSTORE_HANDLING_MODE_DOC,
         DATABASE_GROUP,
@@ -1344,6 +1341,41 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     }
   }
 
+  /**
+   * Representations available for PostgreSQL {@code hstore} columns on the topic, selected by
+   * {@code hstore.handling.mode}.
+   */
+  public enum HstoreHandlingMode {
+
+    // Emit a Connect MAP<STRING, STRING>.
+    MAP,
+
+    // Emit a JSON-object STRING tagged with the Json logical type.
+    JSON;
+
+    public static final String DEFAULT = MAP.name().toLowerCase(Locale.ROOT);
+
+    private static final Map<String, HstoreHandlingMode> reverse = new HashMap<>(values().length);
+
+    static {
+      for (HstoreHandlingMode val : values()) {
+        reverse.put(val.name().toLowerCase(Locale.ROOT), val);
+      }
+    }
+
+    public static HstoreHandlingMode get(JdbcSourceConnectorConfig config) {
+      // not adding a check for null value because the validator should catch those.
+      return reverse.get(
+          config.getString(HSTORE_HANDLING_MODE_CONFIG).toLowerCase(Locale.ROOT));
+    }
+
+    public static String[] getValidConfigValues() {
+      return Arrays.stream(values())
+          .map(val -> val.name().toLowerCase(Locale.ROOT))
+          .toArray(String[]::new);
+    }
+  }
+
   public enum NumericMapping {
     NONE,
     PRECISION_ONLY,
@@ -1486,6 +1518,10 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     return NumericMapping.get(this);
   }
 
+  public HstoreHandlingMode hstoreHandlingMode() {
+    return HstoreHandlingMode.get(this);
+  }
+
   public ZoneId zoneId() {
     String dbTimeZone = getString(JdbcSourceTaskConfig.DB_TIMEZONE_CONFIG);
     ZoneId zoneId;
@@ -1582,10 +1618,6 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public boolean modeUsesIncrementingColumn() {
     String mode = getString(MODE_CONFIG);
     return Arrays.asList(MODE_INCREMENTING, MODE_TIMESTAMP_INCREMENTING).contains(mode);
-  }
-
-  public boolean hstoreHandlingModeIsJson() {
-    return HSTORE_HANDLING_MODE_JSON.equalsIgnoreCase(getString(HSTORE_HANDLING_MODE_CONFIG));
   }
 
   public boolean sqlComplexTypesEnabled() {

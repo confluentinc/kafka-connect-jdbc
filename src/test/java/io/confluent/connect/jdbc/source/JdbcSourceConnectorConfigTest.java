@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.source;
 import io.confluent.connect.jdbc.util.DefaultJdbcCredentialsProvider;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Recommender;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.HstoreHandlingMode;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.ConfigValue;
 import org.easymock.EasyMock;
@@ -39,6 +40,7 @@ import java.util.Map;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CachedRecommenderValues;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CachingRecommender;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -354,6 +356,23 @@ public class JdbcSourceConnectorConfigTest {
     assertTrue(config.tableExcludeListRegexes().isEmpty());
   }
 
+  @Test
+  public void testHstoreHandlingModeResolvesToEnum() {
+    assertEquals(HstoreHandlingMode.MAP,
+        new JdbcSourceConnectorConfig(createMinimalConfig()).hstoreHandlingMode());
+
+    Map<String, String> props = createMinimalConfig();
+    props.put(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json");
+    assertEquals(HstoreHandlingMode.JSON,
+        new JdbcSourceConnectorConfig(props).hstoreHandlingMode());
+  }
+
+  @Test
+  public void testHstoreHandlingModeValidValuesAreTheEnumNames() {
+    assertArrayEquals(new String[]{"map", "json"}, HstoreHandlingMode.getValidConfigValues());
+    assertEquals("map", HstoreHandlingMode.DEFAULT);
+  }
+
   @Test(expected = ConfigException.class)
   public void testInvalidHstoreHandlingModeThrowsException() {
     Map<String, String> props = createMinimalConfig();
@@ -373,7 +392,7 @@ public class JdbcSourceConnectorConfigTest {
   @Test(expected = ConfigException.class)
   public void testHstoreHandlingModeIsCaseSensitive() {
     // ConfigDef.ValidString.in is case-sensitive, so an upper-case mode is rejected at validation
-    // even though hstoreHandlingModeIsJson() compares case-insensitively.
+    // even though HstoreHandlingMode.get resolves case-insensitively.
     Map<String, String> props = createMinimalConfig();
     props.put(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "JSON");
 
@@ -395,19 +414,6 @@ public class JdbcSourceConnectorConfigTest {
     Map<String, String> props = createMinimalConfig();
     props.put(JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "TRUE");
     assertTrue(new JdbcSourceConnectorConfig(props).sqlComplexTypesEnabled());
-  }
-
-  @Test
-  public void testHstoreHandlingModeDefaultsToMapAndAcceptsJson() {
-    JdbcSourceConnectorConfig defaults = new JdbcSourceConnectorConfig(createMinimalConfig());
-    assertEquals(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_MAP,
-        defaults.getString(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG));
-    assertFalse(defaults.hstoreHandlingModeIsJson());
-
-    Map<String, String> props = createMinimalConfig();
-    props.put(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG,
-        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_JSON);
-    assertTrue(new JdbcSourceConnectorConfig(props).hstoreHandlingModeIsJson());
   }
 
   @Test(expected = ConfigException.class)

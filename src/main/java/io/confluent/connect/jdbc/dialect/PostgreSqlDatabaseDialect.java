@@ -696,27 +696,38 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return false;
   }
 
+  /**
+   * The column type for a Connect logical type, or null when the schema has no name or the name is
+   * not one this dialect maps. The complex types are additionally gated on
+   * {@code sql.complex.types.enable}, so a connector with the feature off keeps its previous types.
+   */
+  private String logicalSqlType(String schemaName) {
+    if (schemaName == null) {
+      return null;
+    }
+    switch (schemaName) {
+      case Decimal.LOGICAL_NAME:
+        return "DECIMAL";
+      case Date.LOGICAL_NAME:
+        return "DATE";
+      case Time.LOGICAL_NAME:
+        return "TIME";
+      case Timestamp.LOGICAL_NAME:
+        return "TIMESTAMP";
+      case Json.LOGICAL_NAME:
+        return complexTypesEnabled() ? JSONB_TYPE_NAME.toUpperCase() : null;
+      case VariableScaleDecimal.LOGICAL_NAME:
+        return complexTypesEnabled() ? NUMERIC_TYPE_NAME.toUpperCase() : null;
+      default:
+        return null;
+    }
+  }
+
   @Override
   protected String getSqlType(SinkRecordField field) {
-    if (field.schemaName() != null) {
-      switch (field.schemaName()) {
-        case Decimal.LOGICAL_NAME:
-          return "DECIMAL";
-        case Date.LOGICAL_NAME:
-          return "DATE";
-        case Time.LOGICAL_NAME:
-          return "TIME";
-        case Timestamp.LOGICAL_NAME:
-          return "TIMESTAMP";
-        case Json.LOGICAL_NAME:
-          // Logical JSON STRING -> native JSONB; text binds via the existing ::jsonb cast.
-          return JSONB_TYPE_NAME.toUpperCase();
-        case VariableScaleDecimal.LOGICAL_NAME:
-          // Per-value scale -> unconstrained NUMERIC (and NUMERIC[] as an array element).
-          return NUMERIC_TYPE_NAME.toUpperCase();
-        default:
-          // fall through to normal types
-      }
+    String logicalType = logicalSqlType(field.schemaName());
+    if (logicalType != null) {
+      return logicalType;
     }
     switch (field.schemaType()) {
       case INT8:

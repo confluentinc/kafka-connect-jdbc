@@ -122,6 +122,19 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
+  public void logicalJsonMapsToJsonbOnlyWhenComplexTypesEnabled() {
+    SinkRecordField field = new SinkRecordField(Json.optionalSchema(), "col", false);
+
+    PostgreSqlDatabaseDialect enabled = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+    assertEquals("JSONB", enabled.getSqlType(field));
+
+    PostgreSqlDatabaseDialect disabled =
+        new PostgreSqlDatabaseDialect(sinkConfigWithUrl("jdbc:postgresql://something"));
+    assertEquals("TEXT", disabled.getSqlType(field));
+  }
+
+  @Test
   public void shouldMapDataTypesForAddingColumnToTable() {
     verifyDataTypeMapping("SMALLINT", Schema.INT8_SCHEMA);
     verifyDataTypeMapping("SMALLINT", Schema.INT16_SCHEMA);
@@ -889,11 +902,33 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     verifyDataTypeMapping("REAL[]", arraySchema(Schema.FLOAT32_SCHEMA));
     verifyDataTypeMapping("DOUBLE PRECISION[]", arraySchema(Schema.FLOAT64_SCHEMA));
     verifyDataTypeMapping("BOOLEAN[]", arraySchema(Schema.BOOLEAN_SCHEMA));
-    verifyDataTypeMapping("JSONB[]", arraySchema(Json.optionalSchema()));
-    verifyDataTypeMapping("NUMERIC[]", arraySchema(VariableScaleDecimal.optionalSchema()));
     verifyDataTypeMapping("DATE[]", arraySchema(Date.builder().optional().build()));
     verifyDataTypeMapping("TIME[]", arraySchema(Time.builder().optional().build()));
     verifyDataTypeMapping("TIMESTAMP[]", arraySchema(Timestamp.builder().optional().build()));
+
+    // Json and VariableScaleDecimal are gated, so they need a sink with complex types enabled.
+    assertEquals("JSONB[]", complexTypesSinkDialect().getSqlType(
+        new SinkRecordField(arraySchema(Json.optionalSchema()), "col", false)));
+    assertEquals("NUMERIC[]", complexTypesSinkDialect().getSqlType(
+        new SinkRecordField(arraySchema(VariableScaleDecimal.optionalSchema()), "col", false)));
+  }
+
+  @Test
+  public void gatedLogicalTypesFallBackWhenComplexTypesDisabled() {
+    PostgreSqlDatabaseDialect disabled =
+        new PostgreSqlDatabaseDialect(sinkConfigWithUrl("jdbc:postgresql://something"));
+
+    assertEquals("TEXT", disabled.getSqlType(
+        new SinkRecordField(Json.optionalSchema(), "col", false)));
+    assertEquals("TEXT[]", disabled.getSqlType(
+        new SinkRecordField(arraySchema(Json.optionalSchema()), "col", false)));
+    assertThrows(ConnectException.class, () -> disabled.getSqlType(
+        new SinkRecordField(VariableScaleDecimal.optionalSchema(), "col", false)));
+  }
+
+  private PostgreSqlDatabaseDialect complexTypesSinkDialect() {
+    return new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
   }
 
   @Test

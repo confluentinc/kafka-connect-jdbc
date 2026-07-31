@@ -15,20 +15,22 @@
 
 package io.confluent.connect.jdbc.sink.integration;
 
-import java.sql.Array;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.sql.Array;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.Collections;
 import java.util.Map;
 import java.util.List;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -44,6 +46,7 @@ import io.zonky.test.db.postgres.junit.EmbeddedPostgresRules;
 import io.zonky.test.db.postgres.junit.SingleInstancePostgresRule;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.connect.data.Date;
+import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -615,10 +618,188 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     connect.kafka().produce(tableName, null, kafkaValue);
   }
 
+  // ---------- hstore, read from a real Postgres ----------
+
+  private static final Schema HSTORE_MAP_SCHEMA = SchemaBuilder
+      .map(Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA).optional().build();
+
   /**
-   * The sink half: a Connect {@code MAP<STRING,STRING>} — the shape an hstore column takes on the
-   * topic in map mode — must auto-create a native {@code JSONB} column and land as valid jsonb via
-   * the {@code ::jsonb} cast.
+   * Create an hstore table holding one row, and read it back in the given mode. Mirrors Debezium's
+   * per-scenario structure, where each hstore case is its own named test over a dedicated fixture.
+   */
+  private Struct readHstore(String hstoreLiteral, String mode) throws Exception {
+    execute("CREATE EXTENSION IF NOT EXISTS hstore",
+        "CREATE TABLE " + tableName + "(id int, hs hstore)",
+        "INSERT INTO " + tableName + " VALUES (1, '" + hstoreLiteral + "'::hstore)");
+    return pollOneRow(complexTypesSourceProps("postgres",
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, mode));
+  }
+
+  @Test
+  public void testHstoreSingleValueAsMap() throws Exception {
+    new SchemaAndValueField("hs", HSTORE_MAP_SCHEMA, Collections.singletonMap("key", "val"))
+        .assertFor(readHstore("\"key\" => \"val\"", "map"));
+  }
+
+  @Test
+  public void testHstoreMultipleValuesAsMap() throws Exception {
+    Map<String, String> expected = new LinkedHashMap<>();
+    expected.put("key1", "val1");
+    expected.put("key2", "val2");
+    expected.put("key3", "val3");
+    new SchemaAndValueField("hs", HSTORE_MAP_SCHEMA, expected).assertFor(
+        readHstore("\"key1\" => \"val1\",\"key2\" => \"val2\",\"key3\" => \"val3\"", "map"));
+  }
+
+  /**
+   * A NULL hstore <em>value</em> — distinct from the whole column being NULL. This is what guards the
+   * choice of an optional value schema: were it non-optional, Connect would reject the null entry.
+   */
+  @Test
+  public void testHstoreNullValueAsMap() throws Exception {
+    Map<String, String> expected = new LinkedHashMap<>();
+    expected.put("key1", "val1");
+    expected.put("key2", null);
+    new SchemaAndValueField("hs", HSTORE_MAP_SCHEMA, expected)
+        .assertFor(readHstore("\"key1\" => \"val1\",\"key2\" => NULL", "map"));
+  }
+
+  /**
+   * Spaces, {@code #} and a leading space inside a value must survive the driver's hstore parsing.
+   * Same literal Debezium uses.
+   */
+  @Test
+  public void testHstoreSpecialCharactersAsMap() throws Exception {
+    Map<String, String> expected = new LinkedHashMap<>();
+    expected.put("key_#1", "val 1");
+    expected.put("key 2", " ##123 78");
+    new SchemaAndValueField("hs", HSTORE_MAP_SCHEMA, expected)
+        .assertFor(readHstore("\"key_#1\" => \"val 1\",\"key 2\" =>\" ##123 78\"", "map"));
+  }
+
+  @Test
+  public void testHstoreSingleValueAsJsonString() throws Exception {
+    SchemaAndValueField.jsonText("hs", Json.optionalSchema(),
+        Collections.singletonMap("key", "val"))
+        .assertFor(readHstore("\"key\" => \"val\"", "json"));
+  }
+
+  @Test
+  public void testHstoreMultipleValuesAsJsonString() throws Exception {
+    Map<String, String> expected = new LinkedHashMap<>();
+    expected.put("key1", "val1");
+    expected.put("key2", "val2");
+    expected.put("key3", "val3");
+    SchemaAndValueField.jsonText("hs", Json.optionalSchema(), expected).assertFor(
+        readHstore("\"key1\" => \"val1\",\"key2\" => \"val2\",\"key3\" => \"val3\"", "json"));
+  }
+
+  /**
+   * A NULL hstore value becomes an unquoted JSON {@code null} — not the string {@code "null"} and not
+   * an omitted key.
+   */
+  @Test
+  public void testHstoreNullValueAsJsonString() throws Exception {
+    Map<String, String> expected = new LinkedHashMap<>();
+    expected.put("key1", "val1");
+    expected.put("key2", null);
+    Struct row = readHstore("\"key1\" => \"val1\",\"key2\" => NULL", "json");
+    SchemaAndValueField.jsonText("hs", Json.optionalSchema(), expected).assertFor(row);
+    // Pin the literal form too: an unquoted null, so a consumer can tell it from the text "null".
+    assertTrue("expected an unquoted JSON null, got " + row.get("hs"),
+        ((String) row.get("hs")).contains("\"key2\":null"));
+  }
+
+  @Test
+  public void testHstoreSpecialCharactersAsJsonString() throws Exception {
+    Map<String, String> expected = new LinkedHashMap<>();
+    expected.put("key_#1", "val 1");
+    expected.put("key 2", " ##123 78");
+    SchemaAndValueField.jsonText("hs", Json.optionalSchema(), expected)
+        .assertFor(readHstore("\"key_#1\" => \"val 1\",\"key 2\" =>\" ##123 78\"", "json"));
+  }
+
+  /** An empty hstore is an empty map, not a null and not a dropped field. */
+  @Test
+  public void testEmptyHstore() throws Exception {
+    new SchemaAndValueField("hs", HSTORE_MAP_SCHEMA, Collections.emptyMap())
+        .assertFor(readHstore("", "map"));
+    execute("DROP TABLE " + tableName);
+    SchemaAndValueField.jsonText("hs", Json.optionalSchema(), Collections.emptyMap())
+        .assertFor(readHstore("", "json"));
+  }
+
+  /** A SQL NULL hstore column is a Connect null in both modes. */
+  @Test
+  public void testHstoreSqlNullIsConnectNull() throws Exception {
+    execute("CREATE EXTENSION IF NOT EXISTS hstore",
+        "CREATE TABLE " + tableName + "(id int, hs hstore)",
+        "INSERT INTO " + tableName + " VALUES (1, NULL)");
+
+    new SchemaAndValueField("hs", HSTORE_MAP_SCHEMA, null)
+        .assertFor(pollOneRow(complexTypesSourceProps("postgres")));
+    new SchemaAndValueField("hs", Json.optionalSchema(), null)
+        .assertFor(pollOneRow(complexTypesSourceProps("postgres",
+            JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json")));
+  }
+
+  /**
+   * Pin the driver contract a mocked ResultSet can only assume: pgjdbc returns a Map for an hstore
+   * column while the type is visible on the search_path.
+   */
+  @Test
+  public void testHstoreDriverReturnsMap() throws Exception {
+    execute("CREATE EXTENSION IF NOT EXISTS hstore",
+        "CREATE TABLE " + tableName + "(id int, hs hstore)",
+        "INSERT INTO " + tableName + " VALUES (1, '\"k\" => \"v\"'::hstore)");
+
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
+         Statement s = c.createStatement();
+         ResultSet rs = s.executeQuery("SELECT hs FROM " + tableName)) {
+      assertTrue(rs.next());
+      Object driverValue = rs.getObject(1);
+      assertTrue("pgjdbc must return a Map for hstore, got " + driverValue.getClass().getName(),
+          driverValue instanceof Map);
+      assertEquals(Collections.singletonMap("k", "v"), driverValue);
+    }
+  }
+
+  /** Backward compatibility: with the default flag, hstore keeps today's drop-with-WARN behaviour. */
+  @Test
+  public void testHstoreDroppedWhenComplexTypesDisabled() throws Exception {
+    execute("CREATE EXTENSION IF NOT EXISTS hstore",
+        "CREATE TABLE " + tableName + "(id int, hs hstore)",
+        "INSERT INTO " + tableName + " VALUES (1, '\"k\" => \"v\"'::hstore)");
+
+    Map<String, String> sourceProps = complexTypesSourceProps("postgres");
+    sourceProps.remove(JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG);
+    Struct row = pollOneRow(sourceProps);
+
+    assertFieldAbsent(row, "hs");
+    assertEquals(1, row.get("id"));
+  }
+
+  /**
+   * An hstore type outside the connection's search_path is reported as {@code "ext"."hstore"} and
+   * read as raw text rather than a Map, so the column is skipped rather than mis-read.
+   */
+  @Test
+  public void testHstoreOutsideSearchPathIsSkipped() throws Exception {
+    execute("CREATE DATABASE offpath");
+    try (Connection c = pg.getEmbeddedPostgres().getDatabase("postgres", "offpath").getConnection();
+         Statement s = c.createStatement()) {
+      s.execute("CREATE SCHEMA ext");
+      s.execute("CREATE EXTENSION hstore SCHEMA ext");
+      s.execute("CREATE TABLE " + tableName + "(id int, hs ext.hstore)");
+      s.execute("INSERT INTO " + tableName + " VALUES (1, 'k=>v'::ext.hstore)");
+    }
+
+    assertFieldAbsent(pollOneRow(complexTypesSourceProps("offpath")), "hs");
+  }
+
+  /**
+   * The sink half: a Connect {@code MAP<STRING,STRING>} auto-creates a native jsonb column and lands
+   * as real jsonb, verified through jsonb operators.
    */
   @Test
   public void testWriteToTableWithHstoreMapColumn() throws Exception {
@@ -629,10 +810,8 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
 
     final Schema schema = SchemaBuilder.struct().name("com.example.Server")
         .field("name", Schema.STRING_SCHEMA)
-        .field("tags", SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA)
-            .optional().build())
+        .field("tags", HSTORE_MAP_SCHEMA)
         .build();
-
     Map<String, String> tags = new LinkedHashMap<>();
     tags.put("env", "prod");
     tags.put("cities", "Pune, Mumbai");
@@ -649,7 +828,6 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
         assertTrue(rs.next());
         assertEquals("jsonb", rs.getString(1));
       }
-      // Read it back through jsonb operators, which only work if the value really is jsonb.
       try (ResultSet rs = s.executeQuery(
           "SELECT tags->>'env', tags->>'cities' FROM " + tableName)) {
         assertTrue(rs.next());
@@ -659,12 +837,96 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     }
   }
 
-  // ---------- hstore, read from a real Postgres rather than a mocked ResultSet ----------
+  // ---------- shared harness for complex-type source tests ----------
 
-  private Map<String, String> hstoreSourceProps(String db, String... extras) {
+  /**
+   * A field's expected schema and value, asserted together, mirroring Debezium's
+   * {@code SchemaAndValueField}. The field must exist, its schema must match <em>in full</em> — type,
+   * logical name, optionality and nested key/value schemas, via Connect's own structural
+   * {@code Schema.equals} — and its value must match. Asserting the whole schema object is what
+   * catches a dropped logical name or a wrongly non-optional element in a single assertion.
+   */
+  protected static class SchemaAndValueField {
+
+    private final String fieldName;
+    private final Schema schema;
+    private final Object value;
+    private final boolean valueIsJsonText;
+
+    protected SchemaAndValueField(String fieldName, Schema schema, Object value) {
+      this(fieldName, schema, value, false);
+    }
+
+    private SchemaAndValueField(
+        String fieldName, Schema schema, Object value, boolean valueIsJsonText) {
+      this.fieldName = fieldName;
+      this.schema = schema;
+      this.value = value;
+      this.valueIsJsonText = valueIsJsonText;
+    }
+
+    /**
+     * A field carrying JSON text whose expected value is compared <em>parsed</em>. Necessary wherever
+     * the text is built from a driver-supplied {@code HashMap}, since key order is hash order and not
+     * insertion order — Debezium's own expectations are byte-exact and therefore order-fragile.
+     */
+    protected static SchemaAndValueField jsonText(String fieldName, Schema schema, Object parsed) {
+      return new SchemaAndValueField(fieldName, schema, parsed, true);
+    }
+
+    protected void assertFor(Struct content) {
+      assertSchema(content);
+      assertValue(content);
+    }
+
+    private void assertSchema(Struct content) {
+      Field field = content.schema().field(fieldName);
+      assertNotNull(fieldName + " not found in schema " + content.schema(), field);
+      assertEquals("Schema for " + fieldName, schema, field.schema());
+    }
+
+    private void assertValue(Struct content) {
+      Object actual = content.get(fieldName);
+      if (value == null) {
+        assertNull(fieldName + " should be null but was " + actual, actual);
+        return;
+      }
+      assertNotNull(fieldName + " should not be null", actual);
+      if (valueIsJsonText) {
+        assertTrue(fieldName + " should be JSON text but was " + actual.getClass(),
+            actual instanceof String);
+        assertEquals("Parsed JSON for " + fieldName, value, parseJson((String) actual));
+        return;
+      }
+      assertEquals("Value for " + fieldName, value, actual);
+    }
+
+    private static Object parseJson(String text) {
+      try {
+        return new ObjectMapper().readValue(text, Object.class);
+      } catch (Exception e) {
+        throw new AssertionError("Field value is not parseable JSON: " + text, e);
+      }
+    }
+  }
+
+  /**
+   * Assert that a field is absent from the record's schema, i.e. the column was dropped rather than
+   * emitted. Used for the complex-types-disabled and unsupported-type cases.
+   */
+  protected static void assertFieldAbsent(Struct content, String fieldName) {
+    assertNull(fieldName + " must not be emitted, but the schema has " + content.schema().fields(),
+        content.schema().field(fieldName));
+  }
+
+  /**
+   * Source-connector properties for a bulk read of {@link #tableName} in the given database, with
+   * complex types enabled. Extra key/value pairs override or add to the defaults.
+   */
+  protected Map<String, String> complexTypesSourceProps(String database, String... extras) {
     Map<String, String> sourceProps = new HashMap<>();
     sourceProps.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, String.format(
-        "jdbc:postgresql://localhost:%s/%s", pg.getEmbeddedPostgres().getPort(), db));
+        "jdbc:postgresql://localhost:%s/%s", pg.getEmbeddedPostgres().getPort(), database));
     sourceProps.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "postgres");
     sourceProps.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
     sourceProps.put(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG, "topic_");
@@ -677,106 +939,53 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     return sourceProps;
   }
 
-  private Struct pollOneRow(Map<String, String> sourceProps) throws InterruptedException {
+  /** Poll the configured table and return the single expected row's value Struct. */
+  protected Struct pollOneRow(Map<String, String> sourceProps) throws InterruptedException {
+    List<Struct> rows = pollRows(sourceProps);
+    assertEquals("expected exactly one row", 1, rows.size());
+    return rows.get(0);
+  }
+
+  /**
+   * Poll the configured table and return its rows, distinct by {@code id} and in {@code id} order.
+   *
+   * <p>De-duplication is deliberate: in bulk mode a single {@code poll()} re-runs the query once the
+   * querier is exhausted, so a small table can legitimately come back more than once in one batch.
+   * These tests assert type mapping, not polling cadence, so the primary key is the right notion of
+   * "the rows of the table" and keeps them deterministic.
+   */
+  protected List<Struct> pollRows(Map<String, String> sourceProps) throws InterruptedException {
     JdbcSourceTask task = new JdbcSourceTask();
     try {
       task.start(sourceProps);
       List<SourceRecord> records = task.poll();
-      assertEquals(1, records.size());
-      return (Struct) records.get(0).value();
+      assertNotNull("source task returned no records", records);
+      Map<Integer, Struct> byId = new TreeMap<>();
+      List<Struct> unkeyed = new ArrayList<>();
+      for (SourceRecord record : records) {
+        Struct row = (Struct) record.value();
+        if (row.schema().field("id") == null) {
+          unkeyed.add(row);
+        } else {
+          byId.putIfAbsent(row.getInt32("id"), row);
+        }
+      }
+      if (byId.isEmpty()) {
+        return unkeyed;
+      }
+      return new ArrayList<>(byId.values());
     } finally {
       task.stop();
     }
   }
 
-  /**
-   * Establishes what pgjdbc actually returns for an hstore column, for both handling modes. The
-   * value deliberately contains a comma, an {@code =>} and a SQL NULL, so a mis-read cannot pass.
-   */
-  @Test
-  public void testHstoreSourceEmitsMapAndJsonPerMode() throws Exception {
-    createTable("CREATE EXTENSION IF NOT EXISTS hstore; CREATE TABLE %s(tags hstore)");
+  /** Execute the given statements against {@link #tableName}'s database. */
+  protected void execute(String... statements) throws SQLException {
     try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
          Statement s = c.createStatement()) {
-      s.execute("INSERT INTO " + tableName + " VALUES (hstore("
-          + "ARRAY['env','cities','absent'], ARRAY['prod','Pune, Mumbai',NULL]))");
-
-      // Pin the driver contract directly, which a mocked ResultSet can only assume: pgjdbc
-      // returns a Map for an hstore column while the type is visible on the search_path.
-      try (ResultSet rs = s.executeQuery("SELECT tags FROM " + tableName)) {
-        assertTrue(rs.next());
-        Object driverValue = rs.getObject(1);
-        assertTrue("pgjdbc must return a Map for hstore, got " + driverValue.getClass().getName(),
-            driverValue instanceof Map);
+      for (String statement : statements) {
+        s.execute(statement);
       }
     }
-
-    Map<String, String> expected = new LinkedHashMap<>();
-    expected.put("env", "prod");
-    expected.put("cities", "Pune, Mumbai");
-    expected.put("absent", null);
-
-    // map mode (default): the driver's Map, with the SQL NULL preserved as a null value.
-    Struct mapMode = pollOneRow(hstoreSourceProps("postgres"));
-    assertEquals(Schema.Type.MAP, mapMode.schema().field("tags").schema().type());
-    assertEquals(expected, mapMode.get("tags"));
-
-    // json mode: a JSON-object STRING. Compared parsed, since the driver returns a HashMap and
-    // key order is therefore hash order rather than insertion order.
-    Struct jsonMode = pollOneRow(hstoreSourceProps("postgres",
-        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json"));
-    Schema jsonSchema = jsonMode.schema().field("tags").schema();
-    assertEquals(Schema.Type.STRING, jsonSchema.type());
-    assertEquals("json mode must tag the STRING so the sink provisions JSONB, not TEXT",
-        Json.LOGICAL_NAME, jsonSchema.name());
-    assertEquals(expected, new ObjectMapper()
-        .readValue((String) jsonMode.get("tags"), Map.class));
-  }
-
-  /**
-   * The backward-compatibility guarantee for the whole feature flag: with the default {@code false}
-   * an hstore column keeps today's drop-with-WARN behaviour and produces no field on the topic.
-   */
-  @Test
-  public void testHstoreDroppedWhenComplexTypesDisabled() throws Exception {
-    createTable("CREATE EXTENSION IF NOT EXISTS hstore; CREATE TABLE %s(id int, tags hstore)");
-    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
-         Statement s = c.createStatement()) {
-      s.execute("INSERT INTO " + tableName + " VALUES (1, 'env=>prod'::hstore)");
-    }
-
-    Map<String, String> sourceProps = hstoreSourceProps("postgres");
-    sourceProps.remove(JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG);
-    Struct value = pollOneRow(sourceProps);
-
-    assertNull("hstore must not reach the topic while complex types are disabled",
-        value.schema().field("tags"));
-    assertEquals(1, value.get("id"));
-  }
-
-  /**
-   * An hstore type outside the connection's {@code search_path} is reported by the driver as
-   * {@code "ext"."hstore"} and read as raw text rather than a Map, so the column is skipped rather
-   * than mis-read. This is the limitation that keeps the map-mode value guard unreachable.
-   */
-  @Test
-  public void testHstoreOutsideSearchPathIsSkipped() throws Exception {
-    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
-         Statement s = c.createStatement()) {
-      s.execute("CREATE DATABASE offpath");
-    }
-    // A fresh database, so hstore can be installed into "ext" only. The default search_path is
-    // "$user", public — so "ext" is deliberately not visible.
-    try (Connection c = pg.getEmbeddedPostgres().getDatabase("postgres", "offpath").getConnection();
-         Statement s = c.createStatement()) {
-      s.execute("CREATE SCHEMA ext");
-      s.execute("CREATE EXTENSION hstore SCHEMA ext");
-      s.execute("CREATE TABLE " + tableName + "(id int, tags ext.hstore)");
-      s.execute("INSERT INTO " + tableName + " VALUES (1, 'env=>prod'::ext.hstore)");
-    }
-
-    Struct value = pollOneRow(hstoreSourceProps("offpath"));
-    assertNull("an hstore type off the search_path must be skipped, not mis-read",
-        value.schema().field("tags"));
   }
 }

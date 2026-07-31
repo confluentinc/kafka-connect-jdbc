@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.dialect;
 
 import io.confluent.connect.jdbc.data.Json;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
@@ -102,6 +103,19 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     assertColumnConverter(Types.OTHER, PostgreSqlDatabaseDialect.JSON_TYPE_NAME, Schema.STRING_SCHEMA, String.class);
     assertColumnConverter(Types.OTHER, PostgreSqlDatabaseDialect.JSONB_TYPE_NAME, Schema.STRING_SCHEMA, String.class);
     assertColumnConverter(Types.OTHER, PostgreSqlDatabaseDialect.UUID_TYPE_NAME, Schema.STRING_SCHEMA, UUID.class);
+  }
+
+  @Test
+  public void logicalJsonMapsToJsonbOnlyWhenComplexTypesEnabled() {
+    SinkRecordField field = new SinkRecordField(Json.optionalSchema(), "col", false);
+
+    PostgreSqlDatabaseDialect enabled = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+    assertEquals("JSONB", enabled.getSqlType(field));
+
+    PostgreSqlDatabaseDialect disabled =
+        new PostgreSqlDatabaseDialect(sinkConfigWithUrl("jdbc:postgresql://something"));
+    assertEquals("TEXT", disabled.getSqlType(field));
   }
 
   @Test
@@ -818,8 +832,9 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
   @Test
   public void shouldMapComplexTypesToSqlTypes() {
-    // Scalar logical JSON STRING -> native JSONB.
-    verifyDataTypeMapping("JSONB", Json.schema());
+    // Scalar logical JSON STRING -> native JSONB, on a sink with complex types enabled.
+    assertEquals("JSONB",
+        sinkDialect().getSqlType(new SinkRecordField(Json.schema(), "col", false)));
   }
 
   @Test

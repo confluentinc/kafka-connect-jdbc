@@ -19,6 +19,7 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TransactionIsolationMode;
+import io.confluent.connect.jdbc.util.SqlParser;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigValue;
 import org.slf4j.Logger;
@@ -85,6 +86,9 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
       if (config == null && connectorConfigs != null) {
         config = new JdbcSourceConnectorConfig(connectorConfigs);
       }
+
+      // Log-only, kept outside the && chain so it can neither fail nor be short-circuited away.
+      logQueryAppendedCriteriaCompatibility();
 
       boolean validationResult = validateMultiConfigs()
           && validateLegacyNewConfigCompatibility()
@@ -396,6 +400,49 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
     }
 
     return true;
+  }
+
+  /**
+   * Shadow mode: log, but do not reject, a custom query whose outermost SELECT already has a
+   * clause that collides with the {@code WHERE}/{@code ORDER BY} the connector appends in the
+   * incremental modes. Such a query already fails at runtime; logging first lets the fleet-wide
+   * blast radius be measured before this is made an enforcing validation. {@code bulk} is exempt
+   * (it never appends a criteria). The query is never logged — it may contain customer data.
+   * Never throws, so it cannot alter {@link #validate()}.
+   */
+  private void logQueryAppendedCriteriaCompatibility() {
+    try {
+      if (!queryBlocksAppendedCriteria()) {
+        return;
+      }
+      log.info("[query-appended-criteria-shadow] VALIDATION FAILED for '{}' in mode '{}': the "
+          + "query's outermost SELECT has a top-level WHERE, ORDER BY, GROUP BY, HAVING, "
+          + "LIMIT/OFFSET/FETCH, or is a set operation (UNION/INTERSECT/EXCEPT), which collides "
+          + "with the WHERE and ORDER BY the connector appends to it. This check is log-only for "
+          + "now, so the connector has NOT been rejected.",
+          config.isQueryMasked()
+              ? JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG
+              : JdbcSourceConnectorConfig.QUERY_CONFIG,
+          config.getString(JdbcSourceConnectorConfig.MODE_CONFIG));
+    } catch (Exception e) {
+      log.debug("[query-appended-criteria-shadow] check failed to run", e);
+    }
+  }
+
+  /**
+   * Whether the configured custom query, in the configured mode, carries a clause on its outermost
+   * SELECT that collides with the criteria the connector appends. {@code bulk} (and any mode that
+   * appends nothing) returns {@code false}, as does a config with no custom query.
+   *
+   * <p>Visible for testing so the gating can be asserted without a log appender.
+   */
+  boolean queryBlocksAppendedCriteria() {
+    Optional<String> query = config.getQuery();
+    if (!query.isPresent()) {
+      return false;
+    }
+    boolean incremental = config.modeUsesIncrementingColumn() || config.modeUsesTimestampColumn();
+    return incremental && SqlParser.outerSelectHasTailClauses(query.get());
   }
 
   /**

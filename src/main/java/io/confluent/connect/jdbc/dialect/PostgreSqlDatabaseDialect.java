@@ -89,6 +89,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   static final String UUID_TYPE_NAME = "uuid";
   static final String HSTORE_TYPE_NAME = "hstore";
 
+  private static final String HSTORE_UNEXPECTED_VALUE_WARNING =
+      "Unexpected value for hstore column {}: class={}; emitting null. The hstore type must be "
+          + "visible on the connection's search_path for the driver to return a map.";
+
   /**
    * Define the PG datatypes that require casting upon insert/update statements.
    */
@@ -283,6 +287,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           return fieldName;
         }
 
+        if (complexTypesEnabled() && isHstoreType(columnDefn)) {
+          builder.field(fieldName, hstoreSchema(columnDefn));
+          return fieldName;
+        }
+
         if (UUID.class.getName().equals(columnDefn.classNameForType())) {
           builder.field(
               fieldName,
@@ -332,6 +341,16 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           return rs -> rs.getString(col);
         }
 
+        if (complexTypesEnabled() && isHstoreType(columnDefn)) {
+          if (hstoreHandlingMode() == HstoreHandlingMode.JSON) {
+            return rs -> {
+              Object value = hstoreValue(columnDefn, rs.getObject(col));
+              return value == null ? null : JsonConverter.connectMapToJson(value);
+            };
+          }
+          return rs -> hstoreValue(columnDefn, rs.getObject(col));
+        }
+
         if (UUID.class.getName().equals(columnDefn.classNameForType())) {
           return rs -> rs.getString(col);
         }
@@ -348,6 +367,28 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   protected boolean isJsonType(ColumnDefinition columnDefn) {
     String typeName = columnDefn.typeName();
     return JSON_TYPE_NAME.equalsIgnoreCase(typeName) || JSONB_TYPE_NAME.equalsIgnoreCase(typeName);
+  }
+
+  protected boolean isHstoreType(ColumnDefinition columnDefn) {
+    return HSTORE_TYPE_NAME.equalsIgnoreCase(columnDefn.typeName());
+  }
+
+  /**
+   * The driver's value for an hstore column, as the map both handling modes require. pgjdbc only
+   * returns a {@code Map} while the hstore type is visible on the connection's {@code search_path}.
+   * Anything else follows Debezium's {@code handleUnknownData}: a nullable column degrades to null,
+   * a NOT NULL column fails. The value is never logged, in case it is sensitive.
+   */
+  private Object hstoreValue(ColumnDefinition columnDefn, Object value) {
+    if (value == null || value instanceof Map) {
+      return value;
+    }
+    if (columnDefn.isOptional()) {
+      log.warn(HSTORE_UNEXPECTED_VALUE_WARNING, columnDefn.id(), value.getClass().getName());
+      return null;
+    }
+    throw new DataException("Unexpected value for hstore column " + columnDefn.id()
+        + ": class=" + value.getClass().getName());
   }
 
   /**
@@ -406,6 +447,28 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       return ((JdbcSourceConnectorConfig) config).sqlComplexTypesEnabled();
     }
     return false;
+  }
+
+  /**
+   * The Connect schema for a PostgreSQL hstore column, per {@code hstore.handling.mode}: a
+   * {@link Json} STRING, or a Map&lt;String,String&gt; whose values are optional so a SQL NULL can
+   * be carried. Both are provisioned as a native {@code jsonb} column, so the mode changes only the
+   * on-topic representation. Mirrors Debezium's {@code hstoreSchema()}.
+   */
+  private Schema hstoreSchema(ColumnDefinition columnDefn) {
+    boolean optional = columnDefn.isOptional();
+    switch (hstoreHandlingMode()) {
+      case JSON:
+        return optional ? Json.optionalSchema() : Json.schema();
+      case MAP:
+      default:
+        SchemaBuilder mapBuilder = SchemaBuilder.map(
+            Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA);
+        if (optional) {
+          mapBuilder.optional();
+        }
+        return mapBuilder.build();
+    }
   }
 
   @Override

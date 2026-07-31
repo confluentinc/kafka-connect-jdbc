@@ -33,6 +33,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import io.confluent.common.utils.IntegrationTest;
+import io.confluent.connect.jdbc.data.Json;
 import io.confluent.connect.jdbc.integration.BaseConnectorIT;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
@@ -608,6 +609,147 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     LOG.info("Creating table {} with a primary key", tableName);
     createTable("CREATE TABLE %s(firstName TEXT PRIMARY KEY, lastName TEXT)");
     LOG.info("Created table {} with a primary key", tableName);
+  }
+
+  // ---------- json / jsonb, read from a real Postgres ----------
+
+  private static final String JSON_DOC = "{\"bar\": \"baz\"}";
+
+  /**
+   * Both variants emit the logical JSON STRING, and the text is passed through untouched. The space
+   * after the colon is asserted deliberately: for {@code json} Postgres stores the document verbatim,
+   * so its survival proves the connector performs no normalization. Mirrors Debezium's
+   * {@code schemasAndValuesForTextTypes}, which asserts the same spaced document for both columns.
+   */
+  @Test
+  public void testJsonAndJsonbEmitLogicalJsonStringVerbatim() throws Exception {
+    execute("CREATE TABLE " + tableName + "(id int, j json, jb jsonb)",
+        "INSERT INTO " + tableName + " VALUES (1, '" + JSON_DOC + "'::json, '"
+            + JSON_DOC + "'::jsonb)");
+
+    Struct row = pollOneRow(complexTypesSourceProps("postgres"));
+
+    // json: byte-identical to what was written, including the space.
+    new SchemaAndValueField("j", Json.optionalSchema(), JSON_DOC).assertFor(row);
+    // jsonb: Postgres re-canonicalizes on write, so compare parsed rather than byte-for-byte.
+    SchemaAndValueField.jsonText("jb", Json.optionalSchema(),
+        Collections.singletonMap("bar", "baz")).assertFor(row);
+  }
+
+  /**
+   * A JSON document is opaque text, so shapes that are not objects must survive unchanged. hstore
+   * cannot produce any of these — only a real {@code json} column can — so this has no Debezium
+   * counterpart and is the widest gap their suite leaves open.
+   */
+  @Test
+  public void testJsonPreservesNonObjectDocuments() throws Exception {
+    execute("CREATE TABLE " + tableName + "(id int, j json)",
+        "INSERT INTO " + tableName + " VALUES (1, '[1, 2, 3]'::json)",
+        "INSERT INTO " + tableName + " VALUES (2, '\"a string\"'::json)",
+        "INSERT INTO " + tableName + " VALUES (3, '42'::json)",
+        "INSERT INTO " + tableName + " VALUES (4, 'true'::json)",
+        "INSERT INTO " + tableName + " VALUES (5, 'null'::json)",
+        "INSERT INTO " + tableName + " VALUES (6, '{\"a\": {\"b\": [1, null]}}'::json)");
+
+    List<Struct> rows = pollRows(complexTypesSourceProps("postgres"));
+    assertEquals(6, rows.size());
+
+    new SchemaAndValueField("j", Json.optionalSchema(), "[1, 2, 3]").assertFor(rows.get(0));
+    new SchemaAndValueField("j", Json.optionalSchema(), "\"a string\"").assertFor(rows.get(1));
+    new SchemaAndValueField("j", Json.optionalSchema(), "42").assertFor(rows.get(2));
+    new SchemaAndValueField("j", Json.optionalSchema(), "true").assertFor(rows.get(3));
+    // The JSON literal null is a 4-character document, NOT a SQL NULL and NOT a Connect null.
+    new SchemaAndValueField("j", Json.optionalSchema(), "null").assertFor(rows.get(4));
+    new SchemaAndValueField("j", Json.optionalSchema(), "{\"a\": {\"b\": [1, null]}}")
+        .assertFor(rows.get(5));
+  }
+
+  /**
+   * A SQL NULL is a Connect null, which must stay distinguishable from the JSON literal
+   * {@code null} asserted above.
+   */
+  @Test
+  public void testJsonSqlNullIsConnectNull() throws Exception {
+    execute("CREATE TABLE " + tableName + "(id int, j json, jb jsonb)",
+        "INSERT INTO " + tableName + " VALUES (1, NULL, NULL)");
+
+    Struct row = pollOneRow(complexTypesSourceProps("postgres"));
+    new SchemaAndValueField("j", Json.optionalSchema(), null).assertFor(row);
+    new SchemaAndValueField("jb", Json.optionalSchema(), null).assertFor(row);
+  }
+
+  /**
+   * A NOT NULL json column is emitted as the non-optional logical schema, so the optionality of the
+   * column survives into the topic. Debezium asserts the same distinction via {@code Json.schema()}
+   * versus {@code Json.builder().optional().build()}.
+   */
+  @Test
+  public void testNotNullJsonColumnEmitsNonOptionalSchema() throws Exception {
+    execute("CREATE TABLE " + tableName + "(id int, j json NOT NULL)",
+        "INSERT INTO " + tableName + " VALUES (1, '" + JSON_DOC + "'::json)");
+
+    Struct row = pollOneRow(complexTypesSourceProps("postgres"));
+    new SchemaAndValueField("j", Json.schema(), JSON_DOC).assertFor(row);
+  }
+
+  /**
+   * The backward-compatibility guarantee for the feature flag: with the default {@code false} a
+   * json/jsonb column stays an untagged STRING carrying the same text, so existing pipelines are
+   * unchanged. This is the branch of {@code jsonSchema} that had no coverage at all.
+   */
+  @Test
+  public void testJsonEmitsPlainStringWhenComplexTypesDisabled() throws Exception {
+    execute("CREATE TABLE " + tableName + "(id int, j json, jb jsonb)",
+        "INSERT INTO " + tableName + " VALUES (1, '" + JSON_DOC + "'::json, '"
+            + JSON_DOC + "'::jsonb)");
+
+    Map<String, String> sourceProps = complexTypesSourceProps("postgres");
+    sourceProps.remove(JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG);
+    Struct row = pollOneRow(sourceProps);
+
+    // Same value, but no logical name — the pre-feature behaviour.
+    new SchemaAndValueField("j", Schema.OPTIONAL_STRING_SCHEMA, JSON_DOC).assertFor(row);
+    assertNull("json must not be tagged while complex types are disabled",
+        row.schema().field("j").schema().name());
+  }
+
+  /**
+   * The sink half: a logical JSON STRING must auto-create a native {@code jsonb} column and land as
+   * real jsonb, not text. Verified through jsonb operators, which only work on a genuine jsonb value.
+   */
+  @Test
+  public void testWriteToTableWithJsonColumn() throws Exception {
+    props.put(JdbcSinkConfig.AUTO_CREATE, "true");
+    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
+    connect.configureConnector("jdbc-sink-connector", props);
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+
+    final Schema schema = SchemaBuilder.struct().name("com.example.Doc")
+        .field("name", Schema.STRING_SCHEMA)
+        .field("payload", Json.optionalSchema())
+        .build();
+    produceRecord(schema, new Struct(schema)
+        .put("name", "doc-1")
+        .put("payload", "{\"env\":\"prod\",\"nested\":{\"n\":1}}"));
+
+    waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 1, 1,
+        TimeUnit.MINUTES.toMillis(2));
+
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
+         Statement s = c.createStatement()) {
+      try (ResultSet rs = s.executeQuery(
+          "SELECT data_type FROM information_schema.columns "
+              + "WHERE table_name = '" + tableName + "' AND column_name = 'payload'")) {
+        assertTrue(rs.next());
+        assertEquals("jsonb", rs.getString(1));
+      }
+      try (ResultSet rs = s.executeQuery(
+          "SELECT payload->>'env', payload->'nested'->>'n' FROM " + tableName)) {
+        assertTrue(rs.next());
+        assertEquals("prod", rs.getString(1));
+        assertEquals("1", rs.getString(2));
+      }
+    }
   }
 
   private void produceRecord(Schema schema, Struct struct) {

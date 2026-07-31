@@ -1153,6 +1153,12 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     sinkProps.put("topics", ROUND_TRIP_TOPIC);
     sinkProps.put(JdbcSinkConfig.AUTO_CREATE, "true");
     sinkProps.put(JdbcSinkConfig.TABLE_NAME_FORMAT, DST_TABLE);
+    // Bulk mode re-reads the whole source table every poll, so the same rows are redelivered.
+    // Upserting on the primary key makes redelivery idempotent and the destination deterministic,
+    // which is also how a real pipeline would be configured.
+    sinkProps.put(JdbcSinkConfig.PK_MODE, "record_value");
+    sinkProps.put(JdbcSinkConfig.PK_FIELDS, "id");
+    sinkProps.put(JdbcSinkConfig.INSERT_MODE, "upsert");
     sinkProps.putAll(sinkExtras);
 
     connect.configureConnector("rt-source", sourceProps);

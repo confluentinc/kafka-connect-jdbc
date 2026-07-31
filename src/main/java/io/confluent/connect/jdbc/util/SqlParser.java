@@ -207,7 +207,9 @@ public class SqlParser {
     }
   }
 
-  /** Dispatches on the concrete {@link Select} type (jsqlparser 4.9 has no SelectBody). */
+  /**
+   * Dispatches on the concrete {@link Select} type (jsqlparser 4.9 has no SelectBody).
+   */
   private static boolean selectHasTailClauses(Select select) {
     if (select instanceof SetOperationList) {
       // Top-level UNION / INTERSECT / EXCEPT: nothing can be appended cleanly.
@@ -216,17 +218,20 @@ public class SqlParser {
     if (select instanceof ParenthesedSelect) {
       return selectHasTailClauses(((ParenthesedSelect) select).getSelect());
     }
-    if (!(select instanceof PlainSelect)) {
-      return false;
+    return select instanceof PlainSelect && plainSelectHasTailClauses((PlainSelect) select);
+  }
+
+  /**
+   * Checks the clauses of a single (already unwrapped) {@code SELECT} body.
+   */
+  private static boolean plainSelectHasTailClauses(PlainSelect select) {
+    if (select.getWhere() != null || select.getGroupBy() != null || select.getHaving() != null) {
+      return true;
     }
-    PlainSelect ps = (PlainSelect) select;
-    return ps.getWhere() != null
-        || (ps.getOrderByElements() != null && !ps.getOrderByElements().isEmpty())
-        || ps.getGroupBy() != null
-        || ps.getHaving() != null
-        || ps.getLimit() != null
-        || ps.getOffset() != null
-        || ps.getFetch() != null;
+    if (select.getLimit() != null || select.getOffset() != null || select.getFetch() != null) {
+      return true;
+    }
+    return select.getOrderByElements() != null && !select.getOrderByElements().isEmpty();
   }
 
   /** Redacts dollar-quoted and single-quoted string literals using regex. */

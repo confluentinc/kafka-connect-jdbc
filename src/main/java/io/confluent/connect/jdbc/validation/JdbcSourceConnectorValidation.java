@@ -412,11 +412,7 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
    */
   private void logQueryAppendedCriteriaCompatibility() {
     try {
-      Optional<String> query = config.getQuery();
-      boolean incremental =
-          config.modeUsesIncrementingColumn() || config.modeUsesTimestampColumn();
-      if (!query.isPresent() || !incremental
-          || !SqlParser.outerSelectHasTailClauses(query.get())) {
+      if (!queryBlocksAppendedCriteria()) {
         return;
       }
       log.info("[query-appended-criteria-shadow] VALIDATION FAILED for '{}' in mode '{}': the "
@@ -429,8 +425,24 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
               : JdbcSourceConnectorConfig.QUERY_CONFIG,
           config.getString(JdbcSourceConnectorConfig.MODE_CONFIG));
     } catch (Exception e) {
-      log.debug("[query-appended-criteria-shadow] check failed to run");
+      log.debug("[query-appended-criteria-shadow] check failed to run", e);
     }
+  }
+
+  /**
+   * Whether the configured custom query, in the configured mode, carries a clause on its outermost
+   * SELECT that collides with the criteria the connector appends. {@code bulk} (and any mode that
+   * appends nothing) returns {@code false}, as does a config with no custom query.
+   *
+   * <p>Visible for testing so the gating can be asserted without a log appender.
+   */
+  boolean queryBlocksAppendedCriteria() {
+    Optional<String> query = config.getQuery();
+    if (!query.isPresent()) {
+      return false;
+    }
+    boolean incremental = config.modeUsesIncrementingColumn() || config.modeUsesTimestampColumn();
+    return incremental && SqlParser.outerSelectHasTailClauses(query.get());
   }
 
   /**

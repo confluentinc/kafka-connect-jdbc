@@ -1072,29 +1072,44 @@ public class JdbcSourceConnectorValidationTest {
   // including for queries it flags. See logQueryAppendedCriteriaCompatibility.
 
   @Test
-  public void validate_withQueryIncrementingModeAndTopLevelOrderBy_noErrors() {
+  public void validate_withQueryIncrementingModeAndTopLevelOrderBy_flaggedButNoErrors() {
     props.put(MODE_CONFIG, MODE_INCREMENTING);
     props.put(QUERY_CONFIG, "SELECT * FROM sample_data ORDER BY id");
     props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");
 
     validate();
 
+    assertTrue(validation.queryBlocksAppendedCriteria());
     assertNoErrors();
   }
 
   @Test
-  public void validate_withQueryMaskedTimestampModeAndTopLevelWhere_noErrors() {
+  public void validate_withQueryMaskedTimestampModeAndTopLevelWhere_flaggedButNoErrors() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP);
     props.put(QUERY_MASKED_CONFIG, "SELECT * FROM sample_data WHERE active = true");
     props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts");
 
     validate();
 
+    assertTrue(validation.queryBlocksAppendedCriteria());
     assertNoErrors();
   }
 
   @Test
-  public void validate_withQueryIncrementingModeAndSubselectPattern_noErrors() {
+  public void validate_withQueryTimestampIncrementingModeAndSetOperation_flaggedButNoErrors() {
+    props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
+    props.put(QUERY_CONFIG, "SELECT id, ts FROM a UNION SELECT id, ts FROM b");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");
+    props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts");
+
+    validate();
+
+    assertTrue(validation.queryBlocksAppendedCriteria());
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_withQueryIncrementingModeAndSubselectPattern_notFlagged() {
     props.put(MODE_CONFIG, MODE_INCREMENTING);
     props.put(QUERY_CONFIG,
         "SELECT * FROM (SELECT id, ts FROM sample_data WHERE active = true ORDER BY ts) sub");
@@ -1102,9 +1117,33 @@ public class JdbcSourceConnectorValidationTest {
 
     validate();
 
+    assertFalse(validation.queryBlocksAppendedCriteria());
     assertNoErrors();
   }
 
+  @Test
+  public void validate_withQueryBulkModeAndTopLevelOrderBy_notFlagged() {
+    // bulk never appends a criteria, so top-level clauses are legitimate there.
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, "SELECT * FROM sample_data ORDER BY id");
+
+    validate();
+
+    assertFalse(validation.queryBlocksAppendedCriteria());
+    assertNoErrors();
+  }
+
+  @Test
+  public void validate_withoutQueryIncrementingMode_notFlagged() {
+    props.put(MODE_CONFIG, MODE_INCREMENTING);
+    props.put(TABLE_WHITELIST_CONFIG, "sample_data");
+    props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");
+
+    validate();
+
+    assertFalse(validation.queryBlocksAppendedCriteria());
+    assertNoErrors();
+  }
 
   // ========== Semantic Query Validation Tests ==========
 

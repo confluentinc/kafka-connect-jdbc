@@ -58,6 +58,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
@@ -1013,16 +1014,81 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
-  public void shouldSkipMultiDimensionalArraysWithoutFailing() throws Exception {
+  public void shouldEmitNullPerElementForMultiDimensionalArrays() throws Exception {
     DatabaseDialect.ColumnConverter converter = arrayColumnConverter("_int4");
 
     // Single-dimension int[] is read into a list of elements.
     ResultSet single = arrayResultSet(new Object[]{1, 2, 3});
     assertEquals(Arrays.asList(1, 2, 3), converter.convert(single));
 
-    // Multi-dimension int[][] is skipped (null) rather than crashing the task.
+    // Nested elements cannot be represented by the 1-D element schema, so each becomes null,
+    // preserving the outer cardinality as Debezium does rather than dropping the column.
     ResultSet multi = arrayResultSet(new Object[]{new Integer[]{1, 2}, new Integer[]{3}});
-    assertNull(converter.convert(multi));
+    assertEquals(Arrays.asList(null, null), converter.convert(multi));
+
+    // Detection happens on getArray() before the element-ResultSet route is chosen, so element
+    // types read that way are covered too.
+    ResultSet multiTimestamp = arrayResultSet(
+        new Object[]{new Object[]{new java.sql.Timestamp(0)}});
+    assertEquals(Collections.singletonList(null),
+        arrayColumnConverter("_timestamp").convert(multiTimestamp));
+  }
+
+  @Test
+  public void hstoreArrayElementSchemaShouldFollowHandlingMode() {
+    // map mode (default): ARRAY<MAP<STRING,STRING>> with optional values so a NULL survives.
+    Schema mapMode = sourceFieldSchema(complexTypesDialect(), Types.ARRAY, "_hstore");
+    assertEquals(Type.ARRAY, mapMode.type());
+    assertEquals(Type.MAP, mapMode.valueSchema().type());
+    assertTrue(mapMode.valueSchema().isOptional());
+    assertTrue(mapMode.valueSchema().valueSchema().isOptional());
+
+    // json mode: ARRAY<Json>, so the sink provisions jsonb[] either way.
+    Schema jsonMode = sourceFieldSchema(jsonHstoreDialect(), Types.ARRAY, "_hstore");
+    assertEquals(Type.ARRAY, jsonMode.type());
+    assertEquals(Json.LOGICAL_NAME, jsonMode.valueSchema().name());
+  }
+
+  @Test
+  public void hstoreArrayShouldReadElementsPerHandlingMode() throws Exception {
+    Map<String, String> withNull = new LinkedHashMap<>();
+    withNull.put("k", null);
+
+    // map mode: the driver's maps pass through, including an hstore NULL value.
+    assertEquals(
+        Arrays.asList(Collections.singletonMap("env", "prod"), withNull),
+        arrayColumnConverter(complexTypesDialect(), "_hstore").convert(
+            hstoreArrayResultSet(Collections.singletonMap("env", "prod"), withNull)));
+
+    // json mode: each element is serialized, with the hstore NULL becoming a JSON null.
+    assertEquals(
+        Arrays.asList("{\"env\":\"prod\"}", "{\"k\":null}"),
+        arrayColumnConverter(jsonHstoreDialect(), "_hstore").convert(
+            hstoreArrayResultSet(Collections.singletonMap("env", "prod"), withNull)));
+  }
+
+  @Test
+  public void hstoreArrayShouldBindToJsonbArrayInBothModes() throws SQLException {
+    // map mode: each element serialized to JSON text, bound as jsonb[].
+    verifyArrayBind(
+        SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA).optional().build(),
+        Arrays.asList(Collections.singletonMap("env", "prod"), null),
+        PostgreSqlDatabaseDialect.JSONB_TYPE_NAME,
+        new Object[]{"{\"env\":\"prod\"}", null});
+
+    // json mode: elements are already JSON text.
+    verifyArrayBind(
+        Json.optionalSchema(),
+        Arrays.asList("{\"env\":\"prod\"}", null),
+        PostgreSqlDatabaseDialect.JSONB_TYPE_NAME,
+        new Object[]{"{\"env\":\"prod\"}", null});
+  }
+
+  @Test
+  public void hstoreArrayShouldBeDroppedWhenComplexTypesDisabled() {
+    PostgreSqlDatabaseDialect disabled =
+        new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something"));
+    assertNull(sourceFieldSchema(disabled, Types.ARRAY, "_hstore"));
   }
 
   @Test
@@ -1272,13 +1338,25 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   private DatabaseDialect.ColumnConverter arrayColumnConverter(String pgArrayType) {
+    return arrayColumnConverter(complexTypesDialect(), pgArrayType);
+  }
+
+  private DatabaseDialect.ColumnConverter arrayColumnConverter(
+      PostgreSqlDatabaseDialect dialect, String pgArrayType) {
     ColumnDefinition column = column(Types.ARRAY, pgArrayType);
     ColumnMapping mapping = new ColumnMapping(
         column, 1, new Field("col", 0, arraySchema(Schema.OPTIONAL_INT32_SCHEMA)));
     DatabaseDialect.ColumnConverter converter =
-        complexTypesDialect().columnConverterFor(mapping, column, 1, true);
+        dialect.columnConverterFor(mapping, column, 1, true);
     assertNotNull(converter);
     return converter;
+  }
+
+  /** A source dialect with complex types enabled and {@code hstore.handling.mode=json}. */
+  private PostgreSqlDatabaseDialect jsonHstoreDialect() {
+    return new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something",
+        JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true",
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json"));
   }
 
   private static ResultSet arrayResultSet(Object[] elements) throws SQLException {
@@ -1286,6 +1364,20 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     Array array = mock(Array.class);
     when(resultSet.getArray(1)).thenReturn(array);
     when(array.getArray()).thenReturn(elements);
+    return resultSet;
+  }
+
+  /**
+   * An {@code hstore[]} ResultSet of two elements. {@code getArray()} yields opaque PGobjects, as
+   * pgjdbc does, while the element ResultSet yields the driver-decoded maps.
+   */
+  private static ResultSet hstoreArrayResultSet(Map<?, ?> first, Map<?, ?> second)
+      throws SQLException {
+    ResultSet resultSet = arrayResultSet(new Object[]{new Object(), new Object()});
+    ResultSet elementRs = mock(ResultSet.class);
+    when(resultSet.getArray(1).getResultSet()).thenReturn(elementRs);
+    when(elementRs.next()).thenReturn(true, true, false);
+    when(elementRs.getObject(2)).thenReturn(first, second);
     return resultSet;
   }
 

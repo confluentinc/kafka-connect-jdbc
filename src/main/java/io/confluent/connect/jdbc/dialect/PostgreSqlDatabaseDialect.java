@@ -21,6 +21,7 @@ import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.HstoreHandlingMode;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
@@ -86,6 +87,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   static final String JSON_TYPE_NAME = "json";
   static final String JSONB_TYPE_NAME = "jsonb";
   static final String UUID_TYPE_NAME = "uuid";
+  static final String HSTORE_TYPE_NAME = "hstore";
 
   /**
    * Define the PG datatypes that require casting upon insert/update statements.
@@ -373,7 +375,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     if (!isJsonBindCandidate(schema)) {
       return false;
     }
-    String json = JsonConverter.connectValueToJson(value);
+    String json = JsonConverter.connectMapToJson(value);
     if (json == null) {
       statement.setNull(index, Types.OTHER);
     } else {
@@ -381,6 +383,16 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       statement.setString(index, json);
     }
     return true;
+  }
+
+  /**
+   * The configured {@code hstore.handling.mode}. Only the source connector selects a
+   * representation; the sink reads whichever shape arrives on the topic.
+   */
+  protected HstoreHandlingMode hstoreHandlingMode() {
+    return config instanceof JdbcSourceConnectorConfig
+        ? ((JdbcSourceConnectorConfig) config).hstoreHandlingMode()
+        : HstoreHandlingMode.MAP;
   }
 
   private boolean complexTypesEnabled() {

@@ -46,7 +46,7 @@ public final class JsonConverter {
    * @return the JSON object text, or null when the value is null
    * @throws DataException if the value is not a map of strings, or has a null key
    */
-  public static String connectValueToJson(Object value) {
+  public static String connectMapToJson(Object value) {
     if (value == null) {
       return null;
     }

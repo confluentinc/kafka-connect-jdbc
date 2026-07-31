@@ -15,14 +15,18 @@
 
 package io.confluent.connect.jdbc.sink.integration;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.sql.Array;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
 import java.util.UUID;
@@ -31,16 +35,21 @@ import java.util.concurrent.TimeUnit;
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.jdbc.integration.BaseConnectorIT;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
+import io.confluent.connect.jdbc.source.JdbcSourceTask;
+import io.confluent.connect.jdbc.source.JdbcSourceTaskConfig;
 
 import io.zonky.test.db.postgres.junit.EmbeddedPostgresRules;
 import io.zonky.test.db.postgres.junit.SingleInstancePostgresRule;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.connect.data.Date;
+import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.runtime.errors.ToleranceType;
+import org.apache.kafka.connect.source.SourceRecord;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -55,6 +64,7 @@ import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_NAM
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_REPLICATION_FACTOR_CONFIG;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 
@@ -603,5 +613,145 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
   private void produceRecord(Schema schema, Struct struct) {
     String kafkaValue = new String(jsonConverter.fromConnectData(tableName, schema, struct));
     connect.kafka().produce(tableName, null, kafkaValue);
+  }
+
+  // ---------- shared harness for complex-type source tests ----------
+
+  /**
+   * A field's expected schema and value, asserted together, mirroring Debezium's
+   * {@code SchemaAndValueField}. The field must exist, its schema must match <em>in full</em> — type,
+   * logical name, optionality and nested key/value schemas, via Connect's own structural
+   * {@code Schema.equals} — and its value must match. Asserting the whole schema object is what
+   * catches a dropped logical name or a wrongly non-optional element in a single assertion.
+   */
+  protected static class SchemaAndValueField {
+
+    private final String fieldName;
+    private final Schema schema;
+    private final Object value;
+    private final boolean valueIsJsonText;
+
+    protected SchemaAndValueField(String fieldName, Schema schema, Object value) {
+      this(fieldName, schema, value, false);
+    }
+
+    private SchemaAndValueField(
+        String fieldName, Schema schema, Object value, boolean valueIsJsonText) {
+      this.fieldName = fieldName;
+      this.schema = schema;
+      this.value = value;
+      this.valueIsJsonText = valueIsJsonText;
+    }
+
+    /**
+     * A field carrying JSON text whose expected value is compared <em>parsed</em>. Necessary wherever
+     * the text is built from a driver-supplied {@code HashMap}, since key order is hash order and not
+     * insertion order — Debezium's own expectations are byte-exact and therefore order-fragile.
+     */
+    protected static SchemaAndValueField jsonText(String fieldName, Schema schema, Object parsed) {
+      return new SchemaAndValueField(fieldName, schema, parsed, true);
+    }
+
+    protected void assertFor(Struct content) {
+      assertSchema(content);
+      assertValue(content);
+    }
+
+    private void assertSchema(Struct content) {
+      Field field = content.schema().field(fieldName);
+      assertNotNull(fieldName + " not found in schema " + content.schema(), field);
+      assertEquals("Schema for " + fieldName, schema, field.schema());
+    }
+
+    private void assertValue(Struct content) {
+      Object actual = content.get(fieldName);
+      if (value == null) {
+        assertNull(fieldName + " should be null but was " + actual, actual);
+        return;
+      }
+      assertNotNull(fieldName + " should not be null", actual);
+      if (valueIsJsonText) {
+        assertTrue(fieldName + " should be JSON text but was " + actual.getClass(),
+            actual instanceof String);
+        assertEquals("Parsed JSON for " + fieldName, value, parseJson((String) actual));
+        return;
+      }
+      assertEquals("Value for " + fieldName, value, actual);
+    }
+
+    private static Object parseJson(String text) {
+      try {
+        return new ObjectMapper().readValue(text, Object.class);
+      } catch (Exception e) {
+        throw new AssertionError("Field value is not parseable JSON: " + text, e);
+      }
+    }
+  }
+
+  /**
+   * Assert that a field is absent from the record's schema, i.e. the column was dropped rather than
+   * emitted. Used for the complex-types-disabled and unsupported-type cases.
+   */
+  protected static void assertFieldAbsent(Struct content, String fieldName) {
+    assertNull(fieldName + " must not be emitted, but the schema has " + content.schema().fields(),
+        content.schema().field(fieldName));
+  }
+
+  /**
+   * Source-connector properties for a bulk read of {@link #tableName} in the given database, with
+   * complex types enabled. Extra key/value pairs override or add to the defaults.
+   */
+  protected Map<String, String> complexTypesSourceProps(String database, String... extras) {
+    Map<String, String> sourceProps = new HashMap<>();
+    sourceProps.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, String.format(
+        "jdbc:postgresql://localhost:%s/%s", pg.getEmbeddedPostgres().getPort(), database));
+    sourceProps.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "postgres");
+    sourceProps.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
+    sourceProps.put(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG, "topic_");
+    sourceProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, tableName);
+    sourceProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
+    sourceProps.put(JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true");
+    for (int i = 0; i < extras.length; i += 2) {
+      sourceProps.put(extras[i], extras[i + 1]);
+    }
+    return sourceProps;
+  }
+
+  /** Poll the configured table and return the single expected row's value Struct. */
+  protected Struct pollOneRow(Map<String, String> sourceProps) throws InterruptedException {
+    List<Struct> rows = pollRows(sourceProps);
+    assertEquals("expected exactly one row", 1, rows.size());
+    return rows.get(0);
+  }
+
+  /** Poll the configured table and return every row's value Struct, in {@code id} order. */
+  protected List<Struct> pollRows(Map<String, String> sourceProps) throws InterruptedException {
+    JdbcSourceTask task = new JdbcSourceTask();
+    try {
+      task.start(sourceProps);
+      List<SourceRecord> records = task.poll();
+      assertNotNull("source task returned no records", records);
+      List<Struct> rows = new ArrayList<>(records.size());
+      for (SourceRecord record : records) {
+        rows.add((Struct) record.value());
+      }
+      rows.sort((a, b) -> {
+        Field id = a.schema().field("id");
+        return id == null ? 0 : Integer.compare(a.getInt32("id"), b.getInt32("id"));
+      });
+      return rows;
+    } finally {
+      task.stop();
+    }
+  }
+
+  /** Execute the given statements against {@link #tableName}'s database. */
+  protected void execute(String... statements) throws SQLException {
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
+         Statement s = c.createStatement()) {
+      for (String statement : statements) {
+        s.execute(statement);
+      }
+    }
   }
 }

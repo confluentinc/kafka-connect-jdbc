@@ -36,6 +36,7 @@ import java.util.concurrent.TimeUnit;
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.jdbc.integration.BaseConnectorIT;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.JdbcSourceConnector;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.source.JdbcSourceTask;
 import io.confluent.connect.jdbc.source.JdbcSourceTaskConfig;
@@ -49,8 +50,10 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.json.JsonConverter;
+import org.apache.kafka.connect.runtime.ConnectorConfig;
 import org.apache.kafka.connect.runtime.errors.ToleranceType;
 import org.apache.kafka.connect.source.SourceRecord;
+import org.apache.kafka.connect.storage.StringConverter;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -107,6 +110,8 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
       try (Statement s = c.createStatement()) {
         s.execute("DROP TABLE IF EXISTS " + tableName);
+        s.execute("DROP TABLE IF EXISTS " + SRC_TABLE);
+        s.execute("DROP TABLE IF EXISTS " + DST_TABLE);
       }
       LOG.info("Dropped table");
     } finally {
@@ -756,6 +761,100 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     } finally {
       task.stop();
     }
+  }
+
+  // ---------- round-trip harness: source connector -> Kafka -> sink connector ----------
+
+  protected static final String SRC_TABLE = "src_types";
+  protected static final String DST_TABLE = "dst_types";
+  private static final String ROUND_TRIP_TOPIC = "rt_" + SRC_TABLE;
+
+  /**
+   * Run a full round trip: a source connector reads {@link #SRC_TABLE}, publishes to Kafka, and a sink
+   * connector writes to {@link #DST_TABLE}. Both connectors run in the embedded Connect cluster, so
+   * this exercises the converters and the worker, which the task-level tests bypass.
+   *
+   * <p>Modelled on Debezium's {@code AbstractJdbcSinkPipelineIT}, which likewise asserts the
+   * destination <em>column type</em> as well as the values.
+   *
+   * @param expectedRows how many rows the sink should commit before assertions run
+   * @param sourceExtras extra source-connector properties, as key/value pairs
+   * @param sinkExtras extra sink-connector properties, as key/value pairs
+   */
+  protected void runRoundTrip(int expectedRows, Map<String, String> sourceExtras,
+      Map<String, String> sinkExtras) throws Exception {
+    connect.kafka().createTopic(ROUND_TRIP_TOPIC, 1);
+
+    Map<String, String> sourceProps = new HashMap<>();
+    sourceProps.put(ConnectorConfig.CONNECTOR_CLASS_CONFIG, JdbcSourceConnector.class.getName());
+    sourceProps.put(ConnectorConfig.TASKS_MAX_CONFIG, "1");
+    sourceProps.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, jdbcUrl());
+    sourceProps.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "postgres");
+    sourceProps.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
+    sourceProps.put(JdbcSourceConnectorConfig.POLL_INTERVAL_MS_CONFIG, "1000");
+    sourceProps.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, SRC_TABLE);
+    sourceProps.put(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG, "rt_");
+    sourceProps.put("key.converter", StringConverter.class.getName());
+    sourceProps.put("value.converter", JsonConverter.class.getName());
+    sourceProps.putAll(sourceExtras);
+
+    Map<String, String> sinkProps = new HashMap<>(props);
+    sinkProps.put("topics", ROUND_TRIP_TOPIC);
+    sinkProps.put(JdbcSinkConfig.AUTO_CREATE, "true");
+    sinkProps.put(JdbcSinkConfig.TABLE_NAME_FORMAT, DST_TABLE);
+    sinkProps.putAll(sinkExtras);
+
+    connect.configureConnector("rt-source", sourceProps);
+    waitForConnectorToStart("rt-source", 1);
+    connect.configureConnector("rt-sink", sinkProps);
+    waitForConnectorToStart("rt-sink", 1);
+
+    waitForCommittedRecords("rt-sink", Collections.singleton(ROUND_TRIP_TOPIC), expectedRows, 1,
+        TimeUnit.MINUTES.toMillis(3));
+  }
+
+  protected void runRoundTrip(int expectedRows) throws Exception {
+    runRoundTrip(expectedRows, Collections.emptyMap(), Collections.emptyMap());
+  }
+
+  protected String jdbcUrl() {
+    return String.format("jdbc:postgresql://localhost:%s/postgres",
+        pg.getEmbeddedPostgres().getPort());
+  }
+
+  /**
+   * The declared SQL type of a column in the destination table, e.g. {@code jsonb} or {@code text}.
+   * Asserting this — not merely the value — is what proves the DDL mapping rather than just the bind.
+   */
+  protected String destColumnType(String column) throws SQLException {
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
+         Statement s = c.createStatement();
+         ResultSet rs = s.executeQuery(
+             "SELECT data_type FROM information_schema.columns WHERE table_name = '"
+                 + DST_TABLE + "' AND column_name = '" + column + "'")) {
+      assertTrue("destination table has no column " + column, rs.next());
+      return rs.getString(1);
+    }
+  }
+
+  /** Run a query against the destination table and hand each row to the given check, in order. */
+  protected void queryDest(String selectList, String orderBy, RowCheck... checks)
+      throws SQLException {
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
+         Statement s = c.createStatement();
+         ResultSet rs = s.executeQuery(
+             "SELECT " + selectList + " FROM " + DST_TABLE + " ORDER BY " + orderBy)) {
+      for (int i = 0; i < checks.length; i++) {
+        assertTrue("destination table has fewer than " + checks.length + " rows", rs.next());
+        checks[i].check(rs);
+      }
+      assertTrue("destination table has more than " + checks.length + " rows", !rs.next());
+    }
+  }
+
+  @FunctionalInterface
+  protected interface RowCheck {
+    void check(ResultSet rs) throws SQLException;
   }
 
   /** Execute the given statements against {@link #tableName}'s database. */

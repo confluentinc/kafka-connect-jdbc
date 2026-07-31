@@ -29,6 +29,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -724,22 +725,34 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     return rows.get(0);
   }
 
-  /** Poll the configured table and return every row's value Struct, in {@code id} order. */
+  /**
+   * Poll the configured table and return its rows, distinct by {@code id} and in {@code id} order.
+   *
+   * <p>De-duplication is deliberate: in bulk mode a single {@code poll()} re-runs the query once the
+   * querier is exhausted, so a small table can legitimately come back more than once in one batch.
+   * These tests assert type mapping, not polling cadence, so the primary key is the right notion of
+   * "the rows of the table" and keeps them deterministic.
+   */
   protected List<Struct> pollRows(Map<String, String> sourceProps) throws InterruptedException {
     JdbcSourceTask task = new JdbcSourceTask();
     try {
       task.start(sourceProps);
       List<SourceRecord> records = task.poll();
       assertNotNull("source task returned no records", records);
-      List<Struct> rows = new ArrayList<>(records.size());
+      Map<Integer, Struct> byId = new TreeMap<>();
+      List<Struct> unkeyed = new ArrayList<>();
       for (SourceRecord record : records) {
-        rows.add((Struct) record.value());
+        Struct row = (Struct) record.value();
+        if (row.schema().field("id") == null) {
+          unkeyed.add(row);
+        } else {
+          byId.putIfAbsent(row.getInt32("id"), row);
+        }
       }
-      rows.sort((a, b) -> {
-        Field id = a.schema().field("id");
-        return id == null ? 0 : Integer.compare(a.getInt32("id"), b.getInt32("id"));
-      });
-      return rows;
+      if (byId.isEmpty()) {
+        return unkeyed;
+      }
+      return new ArrayList<>(byId.values());
     } finally {
       task.stop();
     }

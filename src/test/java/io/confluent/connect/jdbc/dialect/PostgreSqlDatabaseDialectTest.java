@@ -16,8 +16,11 @@
 package io.confluent.connect.jdbc.dialect;
 
 import io.confluent.connect.jdbc.data.Json;
+import io.confluent.connect.jdbc.data.VariableScaleDecimal;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import io.confluent.connect.jdbc.source.ColumnMapping;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.QuoteMethod;
@@ -28,13 +31,20 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder;
 
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.SchemaBuilder;
+import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.errors.DataException;
 import org.junit.Test;
+import org.mockito.ArgumentCaptor;
 
+import java.math.BigDecimal;
+import java.sql.Array;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.JDBCType;
@@ -46,18 +56,28 @@ import java.sql.Statement;
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Calendar;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TimeZone;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.eq;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDatabaseDialect> {
@@ -797,7 +817,647 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
 
-  // validateQuery behaviour is inherited from GenericDatabaseDialect and exercised in
-  // GenericDatabaseDialectTest; no PostgreSQL-specific override exists to test here.
+  // validateQuery is inherited from GenericDatabaseDialect; tested in GenericDatabaseDialectTest.
+
+  // ========== Complex SQL types (sql.complex.types.enable) ==========
+
+  @Test
+  public void shouldMapSupportedArrayElementTypesToSourceSchema() {
+    assertArrayElement("_text", Type.STRING, null);
+    assertArrayElement("_varchar", Type.STRING, null);
+    assertArrayElement("_bpchar", Type.STRING, null);
+    assertArrayElement("_int2", Type.INT16, null);
+    assertArrayElement("_int4", Type.INT32, null);
+    assertArrayElement("_int8", Type.INT64, null);
+    assertArrayElement("_float4", Type.FLOAT32, null);
+    assertArrayElement("_float8", Type.FLOAT64, null);
+    assertArrayElement("_bool", Type.BOOLEAN, null);
+    assertArrayElement("_numeric", Type.STRUCT, VariableScaleDecimal.LOGICAL_NAME);
+    assertArrayElement("_json", Type.STRING, Json.LOGICAL_NAME);
+    assertArrayElement("_jsonb", Type.STRING, Json.LOGICAL_NAME);
+    assertArrayElement("_date", Type.INT32, Date.LOGICAL_NAME);
+    assertArrayElement("_time", Type.INT32, Time.LOGICAL_NAME);
+    assertArrayElement("_timestamp", Type.INT64, Timestamp.LOGICAL_NAME);
+    // timestamptz drops the zone and maps to the same timestamp schema as scalar timestamptz.
+    assertArrayElement("_timestamptz", Type.INT64, Timestamp.LOGICAL_NAME);
+  }
+
+  @Test
+  public void timestampArraysHonorTimestampGranularity() {
+    PostgreSqlDatabaseDialect microsString = complexTypesDialect(
+        JdbcSourceConnectorConfig.TIMESTAMP_GRANULARITY_CONFIG, "micros_string");
+    Schema tsElement = sourceFieldSchema(microsString, Types.ARRAY, "_timestamp").valueSchema();
+    Schema tsTzElement = sourceFieldSchema(microsString, Types.ARRAY, "_timestamptz").valueSchema();
+    assertEquals(Type.STRING, tsElement.type());
+    assertNull(tsElement.name());
+    assertEquals(Type.STRING, tsTzElement.type());
+    assertNull(tsTzElement.name());
+  }
+
+  @Test
+  public void shouldSkipUnsupportedArrayElementTypes() {
+    // uuid[]/inet[]/money[] are not in the supported element set, so the column is skipped.
+    assertNull(sourceFieldSchema(complexTypesDialect(), Types.ARRAY, "_uuid"));
+    assertNull(sourceFieldSchema(complexTypesDialect(), Types.ARRAY, "_inet"));
+    assertNull(sourceFieldSchema(complexTypesDialect(), Types.ARRAY, "_money"));
+  }
+
+  @Test
+  public void shouldDropArraysWhenComplexTypesDisabled() {
+    // The base 'dialect' has the feature off; arrays are skipped, as before the change.
+    assertNull(sourceFieldSchema(dialect, Types.ARRAY, "_int4"));
+  }
+
+  @Test
+  public void shouldBuildOptionalArrayFieldEvenForNotNullColumn() {
+    // A multi-dimensional array reports the same type name as 1-D and is skipped (null) at read
+    // time; array fields are therefore always optional so that null is accepted rather than
+    // failing a required field, even when the source column is NOT NULL.
+    ColumnDefinition notNull = column(Types.ARRAY, "_int4", ColumnDefinition.Nullability.NOT_NULL);
+    SchemaBuilder builder = SchemaBuilder.struct();
+    String fieldName = complexTypesDialect().addFieldToSchema(notNull, builder);
+    Schema fieldSchema = builder.build().field(fieldName).schema();
+    assertEquals(Type.ARRAY, fieldSchema.type());
+    assertTrue("array field must be optional even for a NOT NULL column", fieldSchema.isOptional());
+  }
+
+  @Test
+  public void shouldAcceptNullValueForNotNullArrayColumnField() {
+    // The multi-dim skip returns null; the (optional) field must accept it without throwing,
+    // which is what keeps the task alive instead of crashing on the record.
+    ColumnDefinition notNull = column(Types.ARRAY, "_int4", ColumnDefinition.Nullability.NOT_NULL);
+    SchemaBuilder builder = SchemaBuilder.struct();
+    String fieldName = complexTypesDialect().addFieldToSchema(notNull, builder);
+    Schema schema = builder.build();
+    new Struct(schema).put(fieldName, null); // no exception => skipped multi-dim value is tolerated
+  }
+
+  @Test
+  public void shouldMapComplexTypesToSqlTypes() {
+    // Arrays -> native elementType[]; the element DDL is exercised through the ARRAY recursion.
+    verifyDataTypeMapping("TEXT[]", arraySchema(Schema.STRING_SCHEMA));
+    verifyDataTypeMapping("SMALLINT[]", arraySchema(Schema.INT16_SCHEMA));
+    verifyDataTypeMapping("INT[]", arraySchema(Schema.INT32_SCHEMA));
+    verifyDataTypeMapping("BIGINT[]", arraySchema(Schema.INT64_SCHEMA));
+    verifyDataTypeMapping("REAL[]", arraySchema(Schema.FLOAT32_SCHEMA));
+    verifyDataTypeMapping("DOUBLE PRECISION[]", arraySchema(Schema.FLOAT64_SCHEMA));
+    verifyDataTypeMapping("BOOLEAN[]", arraySchema(Schema.BOOLEAN_SCHEMA));
+    verifyDataTypeMapping("DATE[]", arraySchema(Date.builder().optional().build()));
+    verifyDataTypeMapping("TIME[]", arraySchema(Time.builder().optional().build()));
+    verifyDataTypeMapping("TIMESTAMP[]", arraySchema(Timestamp.builder().optional().build()));
+
+    // Json and VariableScaleDecimal are gated, so they need a sink with complex types enabled.
+    assertEquals("JSONB[]", complexTypesSinkDialect().getSqlType(
+        new SinkRecordField(arraySchema(Json.optionalSchema()), "col", false)));
+    assertEquals("NUMERIC[]", complexTypesSinkDialect().getSqlType(
+        new SinkRecordField(arraySchema(VariableScaleDecimal.optionalSchema()), "col", false)));
+  }
+
+  @Test
+  public void gatedLogicalTypesFallBackWhenComplexTypesDisabled() {
+    PostgreSqlDatabaseDialect disabled =
+        new PostgreSqlDatabaseDialect(sinkConfigWithUrl("jdbc:postgresql://something"));
+
+    assertEquals("TEXT", disabled.getSqlType(
+        new SinkRecordField(Json.optionalSchema(), "col", false)));
+    assertEquals("TEXT[]", disabled.getSqlType(
+        new SinkRecordField(arraySchema(Json.optionalSchema()), "col", false)));
+    assertThrows(ConnectException.class, () -> disabled.getSqlType(
+        new SinkRecordField(VariableScaleDecimal.optionalSchema(), "col", false)));
+  }
+
+  private PostgreSqlDatabaseDialect complexTypesSinkDialect() {
+    return new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+  }
+
+  @Test
+  public void shouldBindJsonArrayAsNativeJsonbArray() throws Exception {
+    verifyArrayBind(
+        Json.optionalSchema(),
+        Arrays.asList("{\"k\":\"v\"}", "{\"a\":1}"),
+        "jsonb",
+        new Object[]{"{\"k\":\"v\"}", "{\"a\":1}"});
+  }
+
+
+  @Test
+  public void shouldBindNumericArrayAsNativeNumericArray() throws Exception {
+    Schema element = VariableScaleDecimal.optionalSchema();
+    verifyArrayBind(
+        element,
+        Arrays.asList(
+            VariableScaleDecimal.fromLogical(element, new BigDecimal("1.50")),
+            VariableScaleDecimal.fromLogical(element, new BigDecimal("3.14159"))),
+        "numeric",
+        new Object[]{new BigDecimal("1.50"), new BigDecimal("3.14159")});
+  }
+
+  @Test
+  public void shouldBindTemporalArraysAsNativeArrays() throws Exception {
+    // epoch 0 == 1970-01-01T00:00:00Z, rendered here with the default db.timezone of UTC.
+    java.util.Date epoch = new java.util.Date(0L);
+    verifyArrayBind(Date.builder().optional().build(),
+        Collections.singletonList(epoch), "date", new Object[]{"1970-01-01"});
+    verifyArrayBind(Time.builder().optional().build(),
+        Collections.singletonList(epoch), "time", new Object[]{"00:00:00.000"});
+    verifyArrayBind(Timestamp.builder().optional().build(),
+        Collections.singletonList(epoch), "timestamp", new Object[]{"1970-01-01 00:00:00.000"});
+  }
+
+  @Test
+  public void arrayBindPreservesNullElements() throws Exception {
+    Schema numeric = VariableScaleDecimal.optionalSchema();
+    verifyArrayBind(numeric,
+        Arrays.asList(VariableScaleDecimal.fromLogical(numeric, new BigDecimal("1.50")), null),
+        "numeric", new Object[]{new BigDecimal("1.50"), null});
+    verifyArrayBind(Json.optionalSchema(),
+        Arrays.asList("{\"k\":1}", null), "jsonb", new Object[]{"{\"k\":1}", null});
+    verifyArrayBind(Timestamp.builder().optional().build(),
+        Arrays.asList(new java.util.Date(0L), null), "timestamp",
+        new Object[]{"1970-01-01 00:00:00.000", null});
+  }
+
+  @Test
+  public void shouldNotBindStructArray() {
+    Schema element = SchemaBuilder.struct().optional().field("a", Schema.INT32_SCHEMA).build();
+    Schema schema = SchemaBuilder.array(element).optional().build();
+    List<?> value = Collections.singletonList(new Struct(element).put("a", 1));
+
+    assertThrows(ConnectException.class, () -> dialect.bindField(mock(PreparedStatement.class), 1,
+        schema, value, mock(ColumnDefinition.class), "field"));
+    assertThrows(ConnectException.class, () -> complexTypesDialect().bindField(
+        mock(PreparedStatement.class), 1, schema, value, mock(ColumnDefinition.class), "field"));
+  }
+
+  @Test
+  public void shouldNotMapStructArrayToSqlType() {
+    // The DDL side must agree with the bind side above: no column type is advertised for an
+    // ARRAY<STRUCT>, so auto-create fails rather than creating a column that cannot be written.
+    Schema schema = arraySchema(
+        SchemaBuilder.struct().optional().field("a", Schema.INT32_SCHEMA).build());
+    SinkRecordField field = new SinkRecordField(schema, "col", false);
+    // A sink config with the feature on is the only case that could have produced JSONB[].
+    PostgreSqlDatabaseDialect sink = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+
+    assertThrows(ConnectException.class, () -> dialect.getSqlType(field));
+    assertThrows(ConnectException.class, () -> sink.getSqlType(field));
+  }
+
+  @Test
+  public void shouldBindPrimitiveArrayWhenComplexTypesDisabled() throws Exception {
+    PreparedStatement statement = mock(PreparedStatement.class);
+    Schema schema = SchemaBuilder.array(Schema.OPTIONAL_INT32_SCHEMA).optional().build();
+
+    dialect.bindField(statement, 1, schema, Arrays.asList(1, 2),
+        mock(ColumnDefinition.class), "field");
+
+    verify(statement).setObject(eq(1), any(Integer[].class), eq(Types.ARRAY));
+  }
+
+  @Test
+  public void temporalArrayBindHonorsConfiguredDbTimezone() throws Exception {
+    // Mirrors the scalar sink path: time/timestamp render in db.timezone, date in the date zone
+    // (UTC on the source side). epoch 0 in America/New_York is 1969-12-31 19:00:00.
+    PostgreSqlDatabaseDialect dialect = complexTypesDialect(
+        JdbcSourceConnectorConfig.DB_TIMEZONE_CONFIG, "America/New_York");
+    java.util.Date epoch = new java.util.Date(0L);
+    verifyArrayBind(dialect, Timestamp.builder().optional().build(),
+        Collections.singletonList(epoch), "timestamp",
+        new Object[]{"1969-12-31 19:00:00.000"});
+    verifyArrayBind(dialect, Time.builder().optional().build(),
+        Collections.singletonList(epoch), "time", new Object[]{"19:00:00.000"});
+    verifyArrayBind(dialect, Date.builder().optional().build(),
+        Collections.singletonList(epoch), "date", new Object[]{"1970-01-01"});
+  }
+
+  @Test
+  public void temporalArrayBindHonorsCalendarSystem() throws Exception {
+    // The two calendar systems only diverge before the 1582 Gregorian cutover.
+    java.util.Date ancient = java.sql.Timestamp.valueOf("1500-01-01 00:00:00");
+    assertNotEquals(
+        "date.calendar.system must change how a pre-1582 timestamp is rendered",
+        bindTemporalArrayLiteral(complexTypesDialect(), ancient),
+        bindTemporalArrayLiteral(prolepticGregorianDialect(), ancient));
+
+    // A modern timestamp is rendered identically under both calendar systems.
+    java.util.Date epoch = new java.util.Date(0L);
+    assertEquals(
+        bindTemporalArrayLiteral(complexTypesDialect(), epoch),
+        bindTemporalArrayLiteral(prolepticGregorianDialect(), epoch));
+  }
+
+  @Test
+  public void shouldEmitNullPerElementForMultiDimensionalArrays() throws Exception {
+    DatabaseDialect.ColumnConverter converter = arrayColumnConverter("_int4");
+
+    // Single-dimension int[] is read into a list of elements.
+    ResultSet single = arrayResultSet(new Object[]{1, 2, 3});
+    assertEquals(Arrays.asList(1, 2, 3), converter.convert(single));
+
+    // Nested elements cannot be represented by the 1-D element schema, so each becomes null,
+    // preserving the outer cardinality as Debezium does rather than dropping the column.
+    ResultSet multi = arrayResultSet(new Object[]{new Integer[]{1, 2}, new Integer[]{3}});
+    assertEquals(Arrays.asList(null, null), converter.convert(multi));
+
+    // Detection happens on getArray() before the element-ResultSet route is chosen, so element
+    // types read that way are covered too.
+    ResultSet multiTimestamp = arrayResultSet(
+        new Object[]{new Object[]{new java.sql.Timestamp(0)}});
+    assertEquals(Collections.singletonList(null),
+        arrayColumnConverter("_timestamp").convert(multiTimestamp));
+  }
+
+  @Test
+  public void hstoreArrayElementSchemaShouldFollowHandlingMode() {
+    // map mode (default): ARRAY<MAP<STRING,STRING>> with optional values so a NULL survives.
+    Schema mapMode = sourceFieldSchema(complexTypesDialect(), Types.ARRAY, "_hstore");
+    assertEquals(Type.ARRAY, mapMode.type());
+    assertEquals(Type.MAP, mapMode.valueSchema().type());
+    assertTrue(mapMode.valueSchema().isOptional());
+    assertTrue(mapMode.valueSchema().valueSchema().isOptional());
+
+    // json mode: ARRAY<Json>, so the sink provisions jsonb[] either way.
+    Schema jsonMode = sourceFieldSchema(jsonHstoreDialect(), Types.ARRAY, "_hstore");
+    assertEquals(Type.ARRAY, jsonMode.type());
+    assertEquals(Json.LOGICAL_NAME, jsonMode.valueSchema().name());
+  }
+
+  @Test
+  public void hstoreArrayShouldReadElementsPerHandlingMode() throws Exception {
+    Map<String, String> withNull = new LinkedHashMap<>();
+    withNull.put("k", null);
+
+    // map mode: the driver's maps pass through, including an hstore NULL value.
+    assertEquals(
+        Arrays.asList(Collections.singletonMap("env", "prod"), withNull),
+        arrayColumnConverter(complexTypesDialect(), "_hstore").convert(
+            hstoreArrayResultSet(Collections.singletonMap("env", "prod"), withNull)));
+
+    // json mode: each element is serialized, with the hstore NULL becoming a JSON null.
+    assertEquals(
+        Arrays.asList("{\"env\":\"prod\"}", "{\"k\":null}"),
+        arrayColumnConverter(jsonHstoreDialect(), "_hstore").convert(
+            hstoreArrayResultSet(Collections.singletonMap("env", "prod"), withNull)));
+  }
+
+  @Test
+  public void hstoreArrayShouldBindToJsonbArrayInBothModes() throws SQLException {
+    // map mode: each element serialized to JSON text, bound as jsonb[].
+    verifyArrayBind(
+        SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA).optional().build(),
+        Arrays.asList(Collections.singletonMap("env", "prod"), null),
+        PostgreSqlDatabaseDialect.JSONB_TYPE_NAME,
+        new Object[]{"{\"env\":\"prod\"}", null});
+
+    // json mode: elements are already JSON text.
+    verifyArrayBind(
+        Json.optionalSchema(),
+        Arrays.asList("{\"env\":\"prod\"}", null),
+        PostgreSqlDatabaseDialect.JSONB_TYPE_NAME,
+        new Object[]{"{\"env\":\"prod\"}", null});
+  }
+
+  @Test
+  public void hstoreArrayShouldBeDroppedWhenComplexTypesDisabled() {
+    PostgreSqlDatabaseDialect disabled =
+        new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something"));
+    assertNull(sourceFieldSchema(disabled, Types.ARRAY, "_hstore"));
+  }
+
+  @Test
+  public void arrayConverterRoutesByElementLogicalType() throws Exception {
+    // numeric[] -> each element decoded into a VariableScaleDecimal struct (per-value scale).
+    Object num = ((List<?>) arrayColumnConverter("_numeric")
+        .convert(arrayResultSet(new Object[]{new BigDecimal("1.5")}))).get(0);
+    assertEquals(0, new BigDecimal("1.5").compareTo(
+        VariableScaleDecimal.toLogical((Struct) num)));
+
+    // jsonb[] -> each element carried as its raw JSON text.
+    Object json = ((List<?>) arrayColumnConverter("_jsonb")
+        .convert(arrayResultSet(new Object[]{"{\"k\":1}"}))).get(0);
+    assertEquals("{\"k\":1}", json);
+  }
+
+  @Test
+  public void arrayReadPreservesNullElements() throws Exception {
+    List<?> numeric = (List<?>) arrayColumnConverter("_numeric")
+        .convert(arrayResultSet(new Object[]{new BigDecimal("1.5"), null}));
+    assertEquals(2, numeric.size());
+    assertNull(numeric.get(1));
+
+    assertEquals(Arrays.asList("{\"k\":1}", null), arrayColumnConverter("_jsonb")
+        .convert(arrayResultSet(new Object[]{"{\"k\":1}", null})));
+
+    List<?> temporal = (List<?>) arrayColumnConverter("_timestamp")
+        .convert(temporalArrayResultSetWithNullElement());
+    assertEquals(2, temporal.size());
+    assertNull(temporal.get(1));
+  }
+
+  @Test
+  public void temporalArrayReadHonorsConfiguredDbTimezone() throws Exception {
+    // timestamp[] elements must be decoded with the configured db.timezone, matching the scalar
+    // (non-array) timestamp path, rather than a hard-coded UTC calendar.
+    TimeZone tz = TimeZone.getTimeZone("America/New_York");
+    ResultSet elementRs = captureTemporalArrayRead("_timestamp", tz);
+    ArgumentCaptor<Calendar> cal = ArgumentCaptor.forClass(Calendar.class);
+    verify(elementRs).getTimestamp(eq(2), cal.capture());
+    assertEquals(tz, cal.getValue().getTimeZone());
+  }
+
+  @Test
+  public void timestamptzArrayReadHonorsConfiguredDbTimezone() throws Exception {
+    // timestamptz[] drops the zone and is decoded like timestamp[], honoring db.timezone (scalar).
+    TimeZone tz = TimeZone.getTimeZone("America/New_York");
+    ResultSet elementRs = captureTemporalArrayRead("_timestamptz", tz);
+    ArgumentCaptor<Calendar> cal = ArgumentCaptor.forClass(Calendar.class);
+    verify(elementRs).getTimestamp(eq(2), cal.capture());
+    assertEquals(tz, cal.getValue().getTimeZone());
+  }
+
+  @Test
+  public void dateAndTimeArrayReadsFollowTheScalarZonePrecedence() throws Exception {
+    // date is decoded with the date time zone (UTC on the source), time with db.timezone.
+    TimeZone tz = TimeZone.getTimeZone("America/New_York");
+
+    ResultSet dateRs = captureTemporalArrayRead("_date", tz);
+    ArgumentCaptor<Calendar> dateCal = ArgumentCaptor.forClass(Calendar.class);
+    verify(dateRs).getDate(eq(2), dateCal.capture());
+    assertEquals(TimeZone.getTimeZone("UTC"), dateCal.getValue().getTimeZone());
+
+    ResultSet timeRs = captureTemporalArrayRead("_time", tz);
+    ArgumentCaptor<Calendar> timeCal = ArgumentCaptor.forClass(Calendar.class);
+    verify(timeRs).getTime(eq(2), timeCal.capture());
+    assertEquals(tz, timeCal.getValue().getTimeZone());
+  }
+
+  @Test
+  public void timestampArrayReadHonorsCalendarSystem() throws Exception {
+    // A pre-1582 timestamp is shifted by the proleptic Gregorian conversion.
+    java.sql.Timestamp ancient = java.sql.Timestamp.valueOf("1500-01-01 00:00:00");
+    assertNotEquals(
+        "date.calendar.system must change how a pre-1582 timestamp is decoded",
+        readSingleTimestampElement(complexTypesDialect(), ancient),
+        readSingleTimestampElement(prolepticGregorianDialect(), ancient));
+
+    // A modern timestamp decodes identically under both calendar systems.
+    java.sql.Timestamp epoch = new java.sql.Timestamp(0L);
+    assertEquals(
+        readSingleTimestampElement(complexTypesDialect(), epoch),
+        readSingleTimestampElement(prolepticGregorianDialect(), epoch));
+  }
+
+  @Test
+  public void timestampArrayReadHonorsPrecisionModeValue() throws Exception {
+    // micros_long emits epoch microseconds instead of a Connect Timestamp: 1000 ms -> 1_000_000 us.
+    Object value = readSingleTimestampElement(
+        complexTypesDialect(JdbcSourceConnectorConfig.TIMESTAMP_GRANULARITY_CONFIG, "micros_long"),
+        new java.sql.Timestamp(1000L));
+    assertEquals(1_000_000L, value);
+  }
+
+  @Test
+  public void shouldReturnNullWhenArrayHasNoContents() throws Exception {
+    // getArray() returning null short circuits before any element decoding.
+    ResultSet resultSet = mock(ResultSet.class);
+    Array array = mock(Array.class);
+    when(resultSet.getArray(1)).thenReturn(array);
+    when(array.getArray()).thenReturn(null);
+
+    assertNull(arrayColumnConverter("_int4").convert(resultSet));
+  }
+
+  @Test
+  public void shouldReturnEmptyListWhenArrayHasNoElements() throws Exception {
+    assertEquals(Collections.emptyList(),
+        arrayColumnConverter("_int4").convert(arrayResultSet(new Object[0])));
+  }
+
+  @Test
+  public void shouldRejectUnsupportedArrayValueType() {
+    // A Connect ARRAY value must be a Collection or a Java array; anything else is a DataException.
+    Schema schema = SchemaBuilder.array(Schema.OPTIONAL_INT32_SCHEMA).optional().build();
+    ColumnDefinition colDef = mock(ColumnDefinition.class);
+    assertThrows(DataException.class, () -> complexTypesDialect().bindField(
+        mock(PreparedStatement.class), 1, schema, "not-an-array", colDef, "field"));
+  }
+
+  // ----- complex-type test helpers -----
+
+  private PostgreSqlDatabaseDialect prolepticGregorianDialect() {
+    return complexTypesDialect(
+        JdbcSourceConnectorConfig.DATE_CALENDAR_SYSTEM_CONFIG, "PROLEPTIC_GREGORIAN");
+  }
+
+  /**
+   * Drive the array column converter for a single-element temporal array with the given
+   * {@code db.timezone}, wiring a mock element {@link ResultSet}. Returns that element ResultSet so
+   * the caller can verify the Calendar (time zone) used to decode the element.
+   */
+  private ResultSet captureTemporalArrayRead(String pgArrayType, TimeZone tz)
+      throws SQLException, java.io.IOException {
+    PostgreSqlDatabaseDialect dialect = complexTypesDialect(
+        JdbcSourceConnectorConfig.DB_TIMEZONE_CONFIG, tz.getID());
+    ColumnDefinition column = column(Types.ARRAY, pgArrayType);
+    ColumnMapping mapping = new ColumnMapping(
+        column, 1, new Field("col", 0, arraySchema(Schema.OPTIONAL_INT64_SCHEMA)));
+    DatabaseDialect.ColumnConverter converter =
+        dialect.columnConverterFor(mapping, column, 1, true);
+    assertNotNull(converter);
+
+    ResultSet resultSet = mock(ResultSet.class);
+    Array array = mock(Array.class);
+    ResultSet elementRs = mock(ResultSet.class);
+    when(resultSet.getArray(1)).thenReturn(array);
+    when(array.getArray()).thenReturn(new Object[]{new java.sql.Timestamp(0L)});
+    when(array.getResultSet()).thenReturn(elementRs);
+    when(elementRs.next()).thenReturn(true, false);
+    when(elementRs.getTimestamp(eq(2), any(Calendar.class)))
+        .thenReturn(new java.sql.Timestamp(0L));
+    when(elementRs.getDate(eq(2), any(Calendar.class))).thenReturn(new java.sql.Date(0L));
+    when(elementRs.getTime(eq(2), any(Calendar.class))).thenReturn(new java.sql.Time(0L));
+    when(elementRs.wasNull()).thenReturn(false);
+
+    converter.convert(resultSet);
+    return elementRs;
+  }
+
+  /**
+   * Bind a single-element {@code timestamp[]} with the given dialect and return the rendered text
+   * literal, so tests can assert the zone and calendar system applied on the sink path.
+   */
+  private String bindTemporalArrayLiteral(PostgreSqlDatabaseDialect dialect, java.util.Date value)
+      throws SQLException {
+    PreparedStatement statement = mock(PreparedStatement.class);
+    Connection connection = mock(Connection.class);
+    ColumnDefinition colDef = mock(ColumnDefinition.class);
+    when(colDef.type()).thenReturn(Types.ARRAY);
+    when(statement.getConnection()).thenReturn(connection);
+    when(connection.createArrayOf(eq("timestamp"), any())).thenReturn(mock(Array.class));
+
+    Schema schema = SchemaBuilder.array(Timestamp.builder().optional().build()).optional().build();
+    dialect.bindField(statement, 1, schema, Collections.singletonList(value), colDef, "field");
+
+    ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
+    verify(connection).createArrayOf(eq("timestamp"), captor.capture());
+    return (String) captor.getValue()[0];
+  }
+
+  /**
+   * Read a single-element {@code timestamp[]} with the given dialect and return the decoded Connect
+   * value, so tests can assert the calendar system and precision mode applied on the source path.
+   */
+  private Object readSingleTimestampElement(
+      PostgreSqlDatabaseDialect dialect, java.sql.Timestamp value) throws Exception {
+    ColumnDefinition column = column(Types.ARRAY, "_timestamp");
+    ColumnMapping mapping = new ColumnMapping(
+        column, 1, new Field("col", 0, arraySchema(Schema.OPTIONAL_INT64_SCHEMA)));
+    DatabaseDialect.ColumnConverter converter =
+        dialect.columnConverterFor(mapping, column, 1, true);
+    assertNotNull(converter);
+
+    ResultSet resultSet = mock(ResultSet.class);
+    Array array = mock(Array.class);
+    ResultSet elementRs = mock(ResultSet.class);
+    when(resultSet.getArray(1)).thenReturn(array);
+    when(array.getArray()).thenReturn(new Object[]{value});
+    when(array.getResultSet()).thenReturn(elementRs);
+    when(elementRs.next()).thenReturn(true, false);
+    when(elementRs.getTimestamp(eq(2), any(Calendar.class))).thenReturn(value);
+    when(elementRs.wasNull()).thenReturn(false);
+
+    return ((List<?>) converter.convert(resultSet)).get(0);
+  }
+
+  private PostgreSqlDatabaseDialect complexTypesDialect(String... extraProps) {
+    String[] props = new String[extraProps.length + 2];
+    props[0] = JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG;
+    props[1] = "true";
+    System.arraycopy(extraProps, 0, props, 2, extraProps.length);
+    return new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something", props));
+  }
+
+  private static Schema arraySchema(Schema elementSchema) {
+    return SchemaBuilder.array(elementSchema).build();
+  }
+
+  private void assertArrayElement(String pgArrayType, Type elementType, String elementName) {
+    Schema schema = sourceFieldSchema(complexTypesDialect(), Types.ARRAY, pgArrayType);
+    assertNotNull("Array column " + pgArrayType + " should produce a field", schema);
+    assertEquals(Type.ARRAY, schema.type());
+    assertEquals(elementType, schema.valueSchema().type());
+    assertEquals(elementName, schema.valueSchema().name());
+  }
+
+  private Schema sourceFieldSchema(
+      PostgreSqlDatabaseDialect dialect, int jdbcType, String typeName) {
+    ColumnDefinition column = column(jdbcType, typeName);
+    SchemaBuilder builder = SchemaBuilder.struct();
+    String fieldName = dialect.addFieldToSchema(column, builder);
+    return fieldName == null ? null : builder.build().field(fieldName).schema();
+  }
+
+  private ColumnDefinition column(int jdbcType, String typeName) {
+    return column(jdbcType, typeName, ColumnDefinition.Nullability.NULL);
+  }
+
+  private ColumnDefinition column(
+      int jdbcType, String typeName, ColumnDefinition.Nullability nullability) {
+    return new ColumnDefinition(
+        new ColumnId(new TableId(null, null, "t"), "col"),
+        jdbcType, typeName, Object.class.getName(),
+        nullability, ColumnDefinition.Mutability.UNKNOWN,
+        0, 0, false, 1, false, false, false, false, false);
+  }
+
+  private DatabaseDialect.ColumnConverter arrayColumnConverter(String pgArrayType) {
+    return arrayColumnConverter(complexTypesDialect(), pgArrayType);
+  }
+
+  private DatabaseDialect.ColumnConverter arrayColumnConverter(
+      PostgreSqlDatabaseDialect dialect, String pgArrayType) {
+    ColumnDefinition column = column(Types.ARRAY, pgArrayType);
+    ColumnMapping mapping = new ColumnMapping(
+        column, 1, new Field("col", 0, arraySchema(Schema.OPTIONAL_INT32_SCHEMA)));
+    DatabaseDialect.ColumnConverter converter =
+        dialect.columnConverterFor(mapping, column, 1, true);
+    assertNotNull(converter);
+    return converter;
+  }
+
+  /** A source dialect with complex types enabled and {@code hstore.handling.mode=json}. */
+  private PostgreSqlDatabaseDialect jsonHstoreDialect() {
+    return new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something",
+        JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true",
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json"));
+  }
+
+  private static ResultSet arrayResultSet(Object[] elements) throws SQLException {
+    ResultSet resultSet = mock(ResultSet.class);
+    Array array = mock(Array.class);
+    when(resultSet.getArray(1)).thenReturn(array);
+    when(array.getArray()).thenReturn(elements);
+    return resultSet;
+  }
+
+  /**
+   * An {@code hstore[]} ResultSet of two elements. {@code getArray()} yields opaque PGobjects, as
+   * pgjdbc does, while the element ResultSet yields the driver-decoded maps.
+   */
+  private static ResultSet hstoreArrayResultSet(Map<?, ?> first, Map<?, ?> second)
+      throws SQLException {
+    ResultSet resultSet = arrayResultSet(new Object[]{new Object(), new Object()});
+    ResultSet elementRs = mock(ResultSet.class);
+    when(resultSet.getArray(1).getResultSet()).thenReturn(elementRs);
+    when(elementRs.next()).thenReturn(true, true, false);
+    when(elementRs.getObject(2)).thenReturn(first, second);
+    return resultSet;
+  }
+
+  private static ResultSet temporalArrayResultSetWithNullElement() throws SQLException {
+    java.sql.Timestamp epoch = new java.sql.Timestamp(0L);
+    ResultSet resultSet = arrayResultSet(new Object[]{epoch, null});
+    ResultSet elementRs = mock(ResultSet.class);
+    when(resultSet.getArray(1).getResultSet()).thenReturn(elementRs);
+    when(elementRs.next()).thenReturn(true, true, false);
+    when(elementRs.getTimestamp(eq(2), any(Calendar.class))).thenReturn(epoch);
+    when(elementRs.wasNull()).thenReturn(false, true);
+    return resultSet;
+  }
+
+  private void verifyArrayBind(
+      Schema elementSchema,
+      List<?> value,
+      String expectedPgType,
+      Object[] expectedElements
+  ) throws SQLException {
+    verifyArrayBind(complexTypesDialect(), elementSchema, value, expectedPgType, expectedElements);
+  }
+
+  private void verifyArrayBind(
+      PostgreSqlDatabaseDialect dialect,
+      Schema elementSchema,
+      List<?> value,
+      String expectedPgType,
+      Object[] expectedElements
+  ) throws SQLException {
+    PreparedStatement statement = mock(PreparedStatement.class);
+    Connection connection = mock(Connection.class);
+    Array boundArray = mock(Array.class);
+    ColumnDefinition colDef = mock(ColumnDefinition.class);
+    when(colDef.type()).thenReturn(Types.ARRAY);
+    when(statement.getConnection()).thenReturn(connection);
+    when(connection.createArrayOf(eq(expectedPgType), any())).thenReturn(boundArray);
+
+    Schema arraySchema = SchemaBuilder.array(elementSchema).optional().build();
+    dialect.bindField(statement, 7, arraySchema, value, colDef, "field");
+
+    ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
+    verify(connection).createArrayOf(eq(expectedPgType), captor.capture());
+    assertEquals(Arrays.asList(expectedElements), Arrays.asList(captor.getValue()));
+    verify(statement).setArray(7, boundArray);
+  }
 
 }

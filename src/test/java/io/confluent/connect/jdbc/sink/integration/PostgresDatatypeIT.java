@@ -842,6 +842,136 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     }
   }
 
+  // ---------- hstore round trips: source -> Kafka -> sink ----------
+
+  /**
+   * Populate {@link #SRC_TABLE} with every hstore value scenario in one table, so a single round trip
+   * covers them all: a single pair, several pairs, a NULL hstore <em>value</em>, special characters,
+   * an empty hstore, a SQL NULL column, and a numeric-looking value.
+   */
+  private void createHstoreSourceRows() throws SQLException {
+    execute("CREATE EXTENSION IF NOT EXISTS hstore",
+        "CREATE TABLE " + SRC_TABLE + "(id int PRIMARY KEY, hs hstore)",
+        "INSERT INTO " + SRC_TABLE + " VALUES (1, '\"key\" => \"val\"'::hstore)",
+        "INSERT INTO " + SRC_TABLE + " VALUES "
+            + "(2, '\"key1\" => \"val1\",\"key2\" => \"val2\",\"key3\" => \"val3\"'::hstore)",
+        "INSERT INTO " + SRC_TABLE + " VALUES (3, '\"key1\" => \"val1\",\"key2\" => NULL'::hstore)",
+        "INSERT INTO " + SRC_TABLE
+            + " VALUES (4, '\"key_#1\" => \"val 1\",\"key 2\" =>\" ##123 78\"'::hstore)",
+        "INSERT INTO " + SRC_TABLE + " VALUES (5, ''::hstore)",
+        "INSERT INTO " + SRC_TABLE + " VALUES (6, NULL)",
+        "INSERT INTO " + SRC_TABLE + " VALUES (7, '\"count\" => \"5\"'::hstore)");
+  }
+
+  /**
+   * Assert the destination rows written by an hstore round trip. Identical expectations for both
+   * handling modes, since either representation lands in the same {@code jsonb} column — which is the
+   * property worth pinning.
+   */
+  private void assertHstoreRoundTripRows() throws SQLException {
+    assertEquals("hstore must land in a native jsonb column", "jsonb", destColumnType("hs"));
+
+    queryDest("id, hs, hs IS NULL AS is_null, jsonb_typeof(hs) AS kind", "id",
+        rs -> {
+          assertEquals(1, rs.getInt("id"));
+          assertEquals("{\"key\": \"val\"}", rs.getString("hs"));
+        },
+        rs -> assertEquals(parsedMap("key1", "val1", "key2", "val2", "key3", "val3"),
+            parseJson(rs.getString("hs"))),
+        rs -> {
+          // A NULL hstore value survives as a JSON null, with the key still present.
+          Map<String, Object> expected = new LinkedHashMap<>();
+          expected.put("key1", "val1");
+          expected.put("key2", null);
+          assertEquals(expected, parseJson(rs.getString("hs")));
+        },
+        rs -> assertEquals(parsedMap("key_#1", "val 1", "key 2", " ##123 78"),
+            parseJson(rs.getString("hs"))),
+        // Empty hstore is an empty JSON object, not NULL.
+        rs -> {
+          assertEquals("{}", rs.getString("hs"));
+          assertEquals(false, rs.getBoolean("is_null"));
+        },
+        // SQL NULL column stays SQL NULL, distinct from both {} and the JSON literal null.
+        rs -> {
+          assertEquals(true, rs.getBoolean("is_null"));
+          assertNull(rs.getString("kind"));
+        },
+        // hstore has no numeric type: "5" must remain a JSON string, never the number 5.
+        rs -> {
+          assertEquals("{\"count\": \"5\"}", rs.getString("hs"));
+          assertEquals("string", jsonbTypeOfField("hs", "count", 7));
+        });
+  }
+
+  @Test
+  public void testHstoreMapModeRoundTripsToJsonb() throws Exception {
+    createHstoreSourceRows();
+    runRoundTrip(7,
+        Collections.singletonMap(
+            JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true"),
+        Collections.singletonMap(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+    assertHstoreRoundTripRows();
+  }
+
+  @Test
+  public void testHstoreJsonModeRoundTripsToJsonb() throws Exception {
+    createHstoreSourceRows();
+    Map<String, String> sourceExtras = new HashMap<>();
+    sourceExtras.put(JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true");
+    sourceExtras.put(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json");
+
+    runRoundTrip(7, sourceExtras,
+        Collections.singletonMap(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+    assertHstoreRoundTripRows();
+  }
+
+  /**
+   * Backward compatibility, end to end: with the flag off on both connectors, an hstore column never
+   * reaches the topic, so the destination table has no such column at all.
+   */
+  @Test
+  public void testHstoreRoundTripDroppedWhenComplexTypesDisabled() throws Exception {
+    createHstoreSourceRows();
+    runRoundTrip(7);
+
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
+         Statement s = c.createStatement();
+         ResultSet rs = s.executeQuery(
+             "SELECT column_name FROM information_schema.columns WHERE table_name = '"
+                 + DST_TABLE + "' AND column_name = 'hs'")) {
+      assertTrue("hstore must not reach the destination while complex types are disabled",
+          !rs.next());
+    }
+  }
+
+  private static Map<String, Object> parsedMap(String... kv) {
+    Map<String, Object> map = new LinkedHashMap<>();
+    for (int i = 0; i < kv.length; i += 2) {
+      map.put(kv[i], kv[i + 1]);
+    }
+    return map;
+  }
+
+  private static Object parseJson(String text) {
+    try {
+      return new ObjectMapper().readValue(text, Object.class);
+    } catch (Exception e) {
+      throw new AssertionError("not parseable JSON: " + text, e);
+    }
+  }
+
+  /** {@code jsonb_typeof} of one field inside the destination document, e.g. "string". */
+  private String jsonbTypeOfField(String column, String field, int id) throws SQLException {
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
+         Statement s = c.createStatement();
+         ResultSet rs = s.executeQuery("SELECT jsonb_typeof(" + column + "->'" + field + "') FROM "
+             + DST_TABLE + " WHERE id = " + id)) {
+      assertTrue(rs.next());
+      return rs.getString(1);
+    }
+  }
+
   // ---------- shared harness for complex-type source tests ----------
 
   /**

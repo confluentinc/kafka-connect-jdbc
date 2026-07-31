@@ -421,8 +421,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         case Timestamp.LOGICAL_NAME:
           return "TIMESTAMP";
         case Json.LOGICAL_NAME:
-          // Logical JSON STRING -> native JSONB; text binds via the existing ::jsonb cast.
-          return JSONB_TYPE_NAME.toUpperCase();
+          if (complexTypesEnabled()) {
+            return JSONB_TYPE_NAME.toUpperCase();
+          }
+          break;
         default:
           // fall through to normal types
       }

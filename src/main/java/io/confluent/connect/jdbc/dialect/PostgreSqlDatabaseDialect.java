@@ -15,16 +15,20 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.data.Json;
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.HstoreHandlingMode;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.JdbcCredentials;
+import io.confluent.connect.jdbc.util.JsonConverter;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
@@ -83,6 +87,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   static final String JSON_TYPE_NAME = "json";
   static final String JSONB_TYPE_NAME = "jsonb";
   static final String UUID_TYPE_NAME = "uuid";
+  static final String HSTORE_TYPE_NAME = "hstore";
 
   /**
    * Define the PG datatypes that require casting upon insert/update statements.
@@ -345,6 +350,64 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return JSON_TYPE_NAME.equalsIgnoreCase(typeName) || JSONB_TYPE_NAME.equalsIgnoreCase(typeName);
   }
 
+  /**
+   * Whether the schema is a {@code MAP<STRING, STRING>}, the only Connect container mapped to a
+   * native {@code jsonb} column. That is the shape a PostgreSQL {@code hstore} column takes on the
+   * topic; STRUCT values and other map shapes are not supported.
+   */
+  private static boolean isStringToStringMap(Schema schema) {
+    return schema.type() == Schema.Type.MAP
+        && schema.keySchema().type() == Schema.Type.STRING
+        && schema.valueSchema().type() == Schema.Type.STRING;
+  }
+
+  private boolean isJsonBindCandidate(Schema schema) {
+    if (!isStringToStringMap(schema)) {
+      return false;
+    }
+    return config instanceof JdbcSinkConfig
+        && ((JdbcSinkConfig) config).sqlComplexTypesEnable;
+  }
+
+  private boolean maybeBindJson(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
+      Object value
+  ) throws SQLException {
+    if (!isJsonBindCandidate(schema)) {
+      return false;
+    }
+    String json = JsonConverter.connectMapToJson(value);
+    if (json == null) {
+      statement.setNull(index, Types.OTHER);
+    } else {
+      // Bind as text; the ::jsonb cast (see valueTypeCast) parses it into jsonb server-side.
+      statement.setString(index, json);
+    }
+    return true;
+  }
+
+  /**
+   * The configured {@code hstore.handling.mode}. Only the source connector selects a
+   * representation; the sink reads whichever shape arrives on the topic.
+   */
+  protected HstoreHandlingMode hstoreHandlingMode() {
+    return config instanceof JdbcSourceConnectorConfig
+        ? ((JdbcSourceConnectorConfig) config).hstoreHandlingMode()
+        : HstoreHandlingMode.MAP;
+  }
+
+  private boolean complexTypesEnabled() {
+    if (config instanceof JdbcSinkConfig) {
+      return ((JdbcSinkConfig) config).sqlComplexTypesEnable;
+    }
+    if (config instanceof JdbcSourceConnectorConfig) {
+      return ((JdbcSourceConnectorConfig) config).sqlComplexTypesEnabled();
+    }
+    return false;
+  }
+
   @Override
   protected String getSqlType(SinkRecordField field) {
     if (field.schemaName() != null) {
@@ -357,6 +420,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           return "TIME";
         case Timestamp.LOGICAL_NAME:
           return "TIMESTAMP";
+        case Json.LOGICAL_NAME:
+          if (complexTypesEnabled()) {
+            return JSONB_TYPE_NAME.toUpperCase();
+          }
+          break;
         default:
           // fall through to normal types
       }
@@ -394,6 +462,13 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
             field.isPrimaryKey()
         );
         return getSqlType(childField) + "[]";
+      case MAP:
+        if (isStringToStringMap(field.schema())
+            && config instanceof JdbcSinkConfig
+            && ((JdbcSinkConfig) config).sqlComplexTypesEnable) {
+          return JSONB_TYPE_NAME.toUpperCase();
+        }
+        return super.getSqlType(field);
       default:
         return super.getSqlType(field);
     }
@@ -560,6 +635,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       Object value,
       String fieldName
   ) throws SQLException {
+    if (maybeBindJson(statement, index, schema, value)) {
+      return true;
+    }
     switch (schema.type()) {
       case ARRAY: {
         Class<?> valueClass = value.getClass();

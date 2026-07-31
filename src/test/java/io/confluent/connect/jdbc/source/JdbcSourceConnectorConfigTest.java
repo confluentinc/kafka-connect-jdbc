@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.source;
 import io.confluent.connect.jdbc.util.DefaultJdbcCredentialsProvider;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Recommender;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.HstoreHandlingMode;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.ConfigValue;
 import org.easymock.EasyMock;
@@ -39,6 +40,7 @@ import java.util.Map;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CachedRecommenderValues;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CachingRecommender;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -352,6 +354,39 @@ public class JdbcSourceConnectorConfigTest {
     
     assertTrue(config.tableIncludeListRegexes().isEmpty());
     assertTrue(config.tableExcludeListRegexes().isEmpty());
+  }
+
+  @Test
+  public void testHstoreHandlingModeResolvesToEnum() {
+    assertEquals(HstoreHandlingMode.MAP,
+        new JdbcSourceConnectorConfig(createMinimalConfig()).hstoreHandlingMode());
+
+    Map<String, String> props = createMinimalConfig();
+    props.put(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json");
+    assertEquals(HstoreHandlingMode.JSON,
+        new JdbcSourceConnectorConfig(props).hstoreHandlingMode());
+  }
+
+  @Test
+  public void testHstoreHandlingModeValidValuesAreTheEnumNames() {
+    assertArrayEquals(new String[]{"map", "json"}, HstoreHandlingMode.getValidConfigValues());
+    assertEquals("map", HstoreHandlingMode.DEFAULT);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void testInvalidHstoreHandlingModeThrowsException() {
+    Map<String, String> props = createMinimalConfig();
+    props.put(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "not-a-mode");
+
+    new JdbcSourceConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void testEmptyHstoreHandlingModeThrowsException() {
+    Map<String, String> props = createMinimalConfig();
+    props.put(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "");
+
+    new JdbcSourceConnectorConfig(props);
   }
 
   @Test(expected = ConfigException.class)

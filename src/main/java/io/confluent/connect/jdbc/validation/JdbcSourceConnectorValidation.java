@@ -412,6 +412,13 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
     }
 
     String query = queryVal.get();
+    String suffix = config.getString(JdbcSourceConnectorConfig.QUERY_SUFFIX_CONFIG).trim();
+
+    if (!suffix.isEmpty()) {
+      // Append suffix so potential opening parentheses will be closed
+      query = query + " " + suffix;
+    }
+
     String configKey = config.isQueryMasked()
         ? JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG
         : JdbcSourceConnectorConfig.QUERY_CONFIG;

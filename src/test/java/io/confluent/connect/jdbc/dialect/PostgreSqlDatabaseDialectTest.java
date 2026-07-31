@@ -112,6 +112,19 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
+  public void logicalJsonMapsToJsonbOnlyWhenComplexTypesEnabled() {
+    SinkRecordField field = new SinkRecordField(Json.optionalSchema(), "col", false);
+
+    PostgreSqlDatabaseDialect enabled = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+    assertEquals("JSONB", enabled.getSqlType(field));
+
+    PostgreSqlDatabaseDialect disabled =
+        new PostgreSqlDatabaseDialect(sinkConfigWithUrl("jdbc:postgresql://something"));
+    assertEquals("TEXT", disabled.getSqlType(field));
+  }
+
+  @Test
   public void shouldMapDataTypesForAddingColumnToTable() {
     verifyDataTypeMapping("SMALLINT", Schema.INT8_SCHEMA);
     verifyDataTypeMapping("SMALLINT", Schema.INT16_SCHEMA);

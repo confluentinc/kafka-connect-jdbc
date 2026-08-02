@@ -59,6 +59,10 @@ import net.sf.jsqlparser.parser.CCJSqlParserUtil;
 import net.sf.jsqlparser.schema.Column;
 import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.select.OrderByElement;
+import net.sf.jsqlparser.statement.select.ParenthesedSelect;
+import net.sf.jsqlparser.statement.select.PlainSelect;
+import net.sf.jsqlparser.statement.select.Select;
+import net.sf.jsqlparser.statement.select.SetOperationList;
 import net.sf.jsqlparser.util.deparser.ExpressionDeParser;
 import net.sf.jsqlparser.util.deparser.SelectDeParser;
 import net.sf.jsqlparser.util.deparser.StatementDeParser;
@@ -174,6 +178,60 @@ public class SqlParser {
           + "falling back to regex redaction", e);
       return redactAllLiterals(sql);
     }
+  }
+
+  /**
+   * Returns {@code true} if the <em>outermost</em> SELECT of {@code sql} has a top-level
+   * {@code WHERE}, {@code ORDER BY}, {@code GROUP BY}, {@code HAVING},
+   * {@code LIMIT}/{@code OFFSET}/{@code FETCH}, or is a set operation — any of which turns the
+   * {@code WHERE ... ORDER BY ... ASC} the connector appends in the incremental query modes into
+   * invalid SQL. Clauses nested in a {@code FROM} sub-select are fine, since that leaves the outer
+   * SELECT bare (the documented {@code SELECT * FROM (<your query>) sub} pattern).
+   *
+   * <p>Fails open: returns {@code false} for empty, unparseable, or non-{@code SELECT} input, so
+   * exotic or dialect-specific SQL is never flagged.
+   *
+   * @param sql the user-provided query; may be null
+   * @return {@code true} if the outermost SELECT has a clause that blocks appending the criteria
+   */
+  public static boolean outerSelectHasTailClauses(String sql) {
+    if (sql == null || sql.trim().isEmpty()) {
+      return false;
+    }
+    try {
+      Statement statement = CCJSqlParserUtil.parse(sql);
+      return statement instanceof Select && selectHasTailClauses((Select) statement);
+    } catch (JSQLParserException e) {
+      log.debug("Could not parse query to check for appendable criteria; skipping check", e);
+      return false;
+    }
+  }
+
+  /**
+   * Dispatches on the concrete {@link Select} type (jsqlparser 4.9 has no SelectBody).
+   */
+  private static boolean selectHasTailClauses(Select select) {
+    if (select instanceof SetOperationList) {
+      // Top-level UNION / INTERSECT / EXCEPT: nothing can be appended cleanly.
+      return true;
+    }
+    if (select instanceof ParenthesedSelect) {
+      return selectHasTailClauses(((ParenthesedSelect) select).getSelect());
+    }
+    return select instanceof PlainSelect && plainSelectHasTailClauses((PlainSelect) select);
+  }
+
+  /**
+   * Checks the clauses of a single (already unwrapped) {@code SELECT} body.
+   */
+  private static boolean plainSelectHasTailClauses(PlainSelect select) {
+    if (select.getWhere() != null || select.getGroupBy() != null || select.getHaving() != null) {
+      return true;
+    }
+    if (select.getLimit() != null || select.getOffset() != null || select.getFetch() != null) {
+      return true;
+    }
+    return select.getOrderByElements() != null && !select.getOrderByElements().isEmpty();
   }
 
   /** Redacts dollar-quoted and single-quoted string literals using regex. */

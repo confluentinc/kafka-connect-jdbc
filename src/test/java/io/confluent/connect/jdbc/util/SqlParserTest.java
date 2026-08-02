@@ -3880,4 +3880,38 @@ public class SqlParserTest {
       assertTrue("Should contain redacted numbers", result.contains("0"));
     }
   }
+
+  // ========== outerSelectHasTailClauses ==========
+
+  @Test
+  public void outerSelectHasTailClauses_bareOuterSelect_false() {
+    assertFalse(SqlParser.outerSelectHasTailClauses("SELECT id, name FROM users"));
+    assertFalse(SqlParser.outerSelectHasTailClauses(
+        "SELECT a.id, b.name FROM a INNER JOIN b ON a.id = b.a_id"));
+    // Documented workaround: clauses live in the FROM sub-select, outer SELECT stays bare.
+    assertFalse(SqlParser.outerSelectHasTailClauses(
+        "SELECT * FROM (SELECT id, ts FROM t WHERE col1 = 'FOO' ORDER BY ts) sub"));
+  }
+
+  @Test
+  public void outerSelectHasTailClauses_topLevelClauses_true() {
+    assertTrue(SqlParser.outerSelectHasTailClauses("SELECT id FROM users WHERE active = true"));
+    assertTrue(SqlParser.outerSelectHasTailClauses("SELECT id FROM users ORDER BY id"));
+    assertTrue(SqlParser.outerSelectHasTailClauses(
+        "SELECT dept, COUNT(*) FROM emp GROUP BY dept HAVING COUNT(*) > 5"));
+    assertTrue(SqlParser.outerSelectHasTailClauses("SELECT id FROM users LIMIT 10 OFFSET 5"));
+    assertTrue(SqlParser.outerSelectHasTailClauses("SELECT id FROM a UNION SELECT id FROM b"));
+    // Sub-select wrapped, but the OUTER select still carries WHERE + ORDER BY.
+    assertTrue(SqlParser.outerSelectHasTailClauses(
+        "SELECT * FROM (SELECT id, rn FROM t WHERE x = 1) sub WHERE rn <= 10 ORDER BY rn"));
+  }
+
+  @Test
+  public void outerSelectHasTailClauses_unparseableEmptyOrNonSelect_false() {
+    // Fail-open: never flag what we cannot confidently parse.
+    assertFalse(SqlParser.outerSelectHasTailClauses(null));
+    assertFalse(SqlParser.outerSelectHasTailClauses("   "));
+    assertFalse(SqlParser.outerSelectHasTailClauses("this is not valid sql !!!"));
+    assertFalse(SqlParser.outerSelectHasTailClauses("UPDATE users SET active = false"));
+  }
 }

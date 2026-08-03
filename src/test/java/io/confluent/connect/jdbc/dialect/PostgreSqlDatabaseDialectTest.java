@@ -54,12 +54,15 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
+import java.util.GregorianCalendar;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TimeZone;
 import java.util.UUID;
@@ -941,6 +944,21 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
 
+  /**
+   * A fixed-scale {@code Decimal} element is what an upstream connector emits for
+   * {@code numeric(p,s)[]}. The converter already decoded it to BigDecimal, so only the array type
+   * matters, and it must be the unmodified {@code numeric}: {@code createArrayOf} resolves the name
+   * against {@code pg_type.typname}, which carries no modifiers.
+   */
+  @Test
+  public void shouldBindDecimalArrayAsNativeNumericArray() throws Exception {
+    verifyArrayBind(
+        Decimal.builder(2).optional().build(),
+        Arrays.asList(new BigDecimal("1.20"), new BigDecimal("3.40")),
+        "numeric",
+        new Object[]{new BigDecimal("1.20"), new BigDecimal("3.40")});
+  }
+
   @Test
   public void shouldBindNumericArrayAsNativeNumericArray() throws Exception {
     Schema element = VariableScaleDecimal.optionalSchema();
@@ -976,6 +994,51 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     verifyArrayBind(Timestamp.builder().optional().build(),
         Arrays.asList(new java.util.Date(0L), null), "timestamp",
         new Object[]{"1970-01-01 00:00:00.000", null});
+    verifyArrayBind(Decimal.builder(2).optional().build(),
+        Arrays.asList(new BigDecimal("1.20"), null),
+        "numeric", new Object[]{new BigDecimal("1.20"), null});
+  }
+
+  /**
+   * {@code numeric.mapping} narrows a scalar NUMERIC, but array elements always map to
+   * VariableScaleDecimal so each keeps its own scale. The asymmetry is deliberate.
+   */
+  @Test
+  public void numericArrayElementsIgnoreNumericMapping() {
+    for (String mapping : new String[]{"none", "best_fit", "best_fit_eager_double",
+        "precision_only"}) {
+      PostgreSqlDatabaseDialect dialect = complexTypesDialect(
+          JdbcSourceConnectorConfig.NUMERIC_MAPPING_CONFIG, mapping);
+      Schema schema = sourceFieldSchema(dialect, Types.ARRAY, "_numeric");
+
+      assertNotNull("numeric[] should produce a field for numeric.mapping=" + mapping, schema);
+      assertEquals("numeric.mapping=" + mapping, Type.ARRAY, schema.type());
+      assertEquals("numeric.mapping=" + mapping,
+          VariableScaleDecimal.LOGICAL_NAME, schema.valueSchema().name());
+    }
+  }
+
+  /**
+   * Characterizes a pre-existing gap rather than asserting desired behaviour: a BYTES element
+   * advertises {@code BYTEA[]} but has no array binding, so auto-create builds a column no insert
+   * can write. Both halves are unchanged from the previous release, so closing it would alter
+   * behaviour outside the complex-types flag and belongs in its own change.
+   */
+  @Test
+  public void bytesArrayAdvertisesDdlButCannotBind() {
+    Schema schema = arraySchema(Schema.OPTIONAL_BYTES_SCHEMA);
+
+    assertEquals("BYTEA[]",
+        complexTypesSinkDialect().getSqlType(new SinkRecordField(schema, "col", false)));
+    assertThrows(ConnectException.class, () -> complexTypesSinkDialect().bindField(
+        mock(PreparedStatement.class), 1, schema,
+        Collections.singletonList(new byte[]{1, 2}), mock(ColumnDefinition.class), "col"));
+  }
+
+  /** An empty list binds as an empty array, staying distinguishable from a NULL one. */
+  @Test
+  public void shouldBindEmptyArrayAsEmptyNativeArray() throws Exception {
+    verifyArrayBind(Json.optionalSchema(), Collections.emptyList(), "jsonb", new Object[]{});
   }
 
   @Test
@@ -1003,6 +1066,46 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
     assertThrows(ConnectException.class, () -> dialect.getSqlType(field));
     assertThrows(ConnectException.class, () -> sink.getSqlType(field));
+  }
+
+  /**
+   * DDL and DML must agree for every logical element type: {@code getSqlType} and
+   * {@code arrayElementBinding} are separate switches, so a type in one but not the other yields a
+   * column auto-create builds and no insert can write. New logical types belong in this map too.
+   */
+  @Test
+  public void arrayDdlAndBindAgreeForEveryLogicalElementType() throws Exception {
+    Schema variableScaleDecimal = VariableScaleDecimal.optionalSchema();
+    Map<Schema, Object> sampleByElementSchema = new LinkedHashMap<>();
+    sampleByElementSchema.put(Decimal.builder(2).optional().build(), new BigDecimal("1.20"));
+    sampleByElementSchema.put(Date.builder().optional().build(), new java.util.Date(0L));
+    sampleByElementSchema.put(Time.builder().optional().build(), new java.util.Date(0L));
+    sampleByElementSchema.put(Timestamp.builder().optional().build(), new java.util.Date(0L));
+    sampleByElementSchema.put(Json.optionalSchema(), "{\"k\":1}");
+    sampleByElementSchema.put(variableScaleDecimal,
+        VariableScaleDecimal.fromLogical(variableScaleDecimal, new BigDecimal("1.50")));
+
+    PostgreSqlDatabaseDialect sink = complexTypesSinkDialect();
+    for (Map.Entry<Schema, Object> entry : sampleByElementSchema.entrySet()) {
+      Schema elementSchema = entry.getKey();
+      Schema schema = SchemaBuilder.array(elementSchema).optional().build();
+      String element = elementSchema.name();
+
+      assertNotNull("No array column type advertised for element " + element,
+          sink.getSqlType(new SinkRecordField(schema, "col", false)));
+
+      PreparedStatement statement = mock(PreparedStatement.class);
+      Connection connection = mock(Connection.class);
+      ColumnDefinition colDef = mock(ColumnDefinition.class);
+      when(colDef.type()).thenReturn(Types.ARRAY);
+      when(statement.getConnection()).thenReturn(connection);
+      when(connection.createArrayOf(any(String.class), any())).thenReturn(mock(Array.class));
+
+      sink.bindField(statement, 1, schema, Collections.singletonList(entry.getValue()), colDef,
+          "col");
+
+      verify(connection).createArrayOf(any(String.class), any());
+    }
   }
 
   @Test
@@ -1048,6 +1151,50 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         bindTemporalArrayLiteral(prolepticGregorianDialect(), epoch));
   }
 
+  /**
+   * The Julian calendar runs nine days behind proleptic Gregorian in January 1500, so the same
+   * milliseconds render as 1500-01-01 hybrid and 1500-01-10 proleptic. Post-1582 they agree.
+   */
+  @Test
+  public void dateArrayBindHonorsCalendarSystem() throws Exception {
+    Schema element = Date.builder().optional().build();
+    java.util.Date ancient = new java.util.Date(utcHybridMillis(1500, Calendar.JANUARY, 1));
+
+    assertEquals("1500-01-01",
+        bindTemporalArrayLiteral(complexTypesDialect(), element, "date", ancient));
+    assertEquals("1500-01-10",
+        bindTemporalArrayLiteral(prolepticGregorianDialect(), element, "date", ancient));
+
+    java.util.Date epoch = new java.util.Date(0L);
+    assertEquals("1970-01-01",
+        bindTemporalArrayLiteral(complexTypesDialect(), element, "date", epoch));
+    assertEquals("1970-01-01",
+        bindTemporalArrayLiteral(prolepticGregorianDialect(), element, "date", epoch));
+  }
+
+  /**
+   * Array elements must render exactly as the scalar bind renders the same value. The scalar path
+   * hands a {@code java.sql} value plus a {@link Calendar} to the driver, so the expectation is
+   * derived that way rather than from the production formatter. Checked at 1500-01-01, where the
+   * calendars disagree, under both settings.
+   */
+  @Test
+  public void temporalArrayElementsRenderAsTheScalarBind() throws Exception {
+    java.util.Date value = new java.util.Date(utcHybridMillis(1500, Calendar.JANUARY, 1));
+
+    for (PostgreSqlDatabaseDialect dialect :
+        Arrays.asList(complexTypesDialect(), prolepticGregorianDialect())) {
+      assertEquals("date element must match the scalar bind",
+          scalarTemporalLiteral(dialect, Date.builder().optional().build(), value, "yyyy-MM-dd"),
+          bindTemporalArrayLiteral(dialect, Date.builder().optional().build(), "date", value));
+      assertEquals("timestamp element must match the scalar bind",
+          scalarTemporalLiteral(dialect, Timestamp.builder().optional().build(), value,
+              "yyyy-MM-dd HH:mm:ss.SSS"),
+          bindTemporalArrayLiteral(dialect, Timestamp.builder().optional().build(), "timestamp",
+              value));
+    }
+  }
+
   @Test
   public void shouldEmitNullPerElementForMultiDimensionalArrays() throws Exception {
     DatabaseDialect.ColumnConverter converter = arrayColumnConverter("_int4");
@@ -1067,6 +1214,11 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         new Object[]{new Object[]{new java.sql.Timestamp(0)}});
     assertEquals(Collections.singletonList(null),
         arrayColumnConverter("_timestamp").convert(multiTimestamp));
+
+    // String elements take the same route; a pass-through mapping would emit the JVM array
+    // toString() here, which reads like data rather than a gap.
+    ResultSet multiText = arrayResultSet(new Object[]{new String[]{"a", "b"}, new String[]{"c"}});
+    assertEquals(Arrays.asList(null, null), arrayColumnConverter("_text").convert(multiText));
   }
 
   @Test
@@ -1251,6 +1403,36 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         JdbcSourceConnectorConfig.DATE_CALENDAR_SYSTEM_CONFIG, "PROLEPTIC_GREGORIAN");
   }
 
+  /** Epoch millis of a hybrid-calendar date at UTC midnight, independent of the JVM zone. */
+  private static long utcHybridMillis(int year, int month, int day) {
+    Calendar calendar = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
+    calendar.clear();
+    calendar.set(year, month, day);
+    return calendar.getTimeInMillis();
+  }
+
+  /**
+   * What the scalar bind sends: the {@code java.sql} value and {@link Calendar} handed to the driver,
+   * rendered as the driver would. Uses no production formatter, so it is an independent oracle.
+   */
+  private String scalarTemporalLiteral(PostgreSqlDatabaseDialect dialect, Schema schema,
+      java.util.Date value, String pattern) throws SQLException {
+    PreparedStatement statement = mock(PreparedStatement.class);
+    dialect.bindField(statement, 1, schema, value, mock(ColumnDefinition.class), "field");
+
+    ArgumentCaptor<java.util.Date> bound = ArgumentCaptor.forClass(java.util.Date.class);
+    ArgumentCaptor<Calendar> calendar = ArgumentCaptor.forClass(Calendar.class);
+    if (Date.LOGICAL_NAME.equals(schema.name())) {
+      verify(statement).setDate(eq(1), (java.sql.Date) bound.capture(), calendar.capture());
+    } else {
+      verify(statement).setTimestamp(eq(1), (java.sql.Timestamp) bound.capture(),
+          calendar.capture());
+    }
+    SimpleDateFormat format = new SimpleDateFormat(pattern, Locale.ROOT);
+    format.setTimeZone(calendar.getValue().getTimeZone());
+    return format.format(bound.getValue());
+  }
+
   /**
    * Drive the array column converter for a single-element temporal array with the given
    * {@code db.timezone}, wiring a mock element {@link ResultSet}. Returns that element ResultSet so
@@ -1290,18 +1472,24 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
    */
   private String bindTemporalArrayLiteral(PostgreSqlDatabaseDialect dialect, java.util.Date value)
       throws SQLException {
+    return bindTemporalArrayLiteral(
+        dialect, Timestamp.builder().optional().build(), "timestamp", value);
+  }
+
+  private String bindTemporalArrayLiteral(PostgreSqlDatabaseDialect dialect, Schema elementSchema,
+      String pgElementType, java.util.Date value) throws SQLException {
     PreparedStatement statement = mock(PreparedStatement.class);
     Connection connection = mock(Connection.class);
     ColumnDefinition colDef = mock(ColumnDefinition.class);
     when(colDef.type()).thenReturn(Types.ARRAY);
     when(statement.getConnection()).thenReturn(connection);
-    when(connection.createArrayOf(eq("timestamp"), any())).thenReturn(mock(Array.class));
+    when(connection.createArrayOf(eq(pgElementType), any())).thenReturn(mock(Array.class));
 
-    Schema schema = SchemaBuilder.array(Timestamp.builder().optional().build()).optional().build();
+    Schema schema = SchemaBuilder.array(elementSchema).optional().build();
     dialect.bindField(statement, 1, schema, Collections.singletonList(value), colDef, "field");
 
     ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
-    verify(connection).createArrayOf(eq("timestamp"), captor.capture());
+    verify(connection).createArrayOf(eq(pgElementType), captor.capture());
     return (String) captor.getValue()[0];
   }
 

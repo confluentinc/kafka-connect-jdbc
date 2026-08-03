@@ -1011,6 +1011,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         case Json.LOGICAL_NAME:
           // Raw JSON text -> jsonb[].
           return new ArrayElementBinding(JSONB_TYPE_NAME, Collection::toArray);
+        case Decimal.LOGICAL_NAME:
+          // Already a BigDecimal from the converter; only the array type has to be exact.
+          return new ArrayElementBinding(
+              NUMERIC_TYPE_NAME, values -> values.toArray(new BigDecimal[0]));
         case VariableScaleDecimal.LOGICAL_NAME:
           // {scale,value} structs -> exact BigDecimal[] -> numeric[].
           return new ArrayElementBinding(
@@ -1095,21 +1099,18 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * Format one temporal element via {@link DateTimeUtils}, applying {@code date.calendar.system}
-   * and the appropriate zone, mirroring the scalar bind in {@link GenericDatabaseDialect}.
+   * Render one temporal element as the text literal bound into the native array. {@code
+   * createArrayOf} takes no calendar and pgjdbc has no encoder for the {@code java.sql} temporal
+   * types, so elements are rendered here, honouring the zone and calendar the scalar bind does.
    */
   private String formatTemporalElement(String elementName, java.util.Date value) {
     if (Date.LOGICAL_NAME.equals(elementName)) {
-      java.util.Date date = dateCalendarSystem().isModern()
-          ? DateTimeUtils.convertToLegacyDate(value, dateTimeZoneId()) : value;
-      return DateTimeUtils.formatDate(date, dateTimeZoneId());
+      return DateTimeUtils.formatDate(value, dateTimeZoneId(), dateCalendarSystem());
     }
     if (Time.LOGICAL_NAME.equals(elementName)) {
       return DateTimeUtils.formatTime(value, zoneId());
     }
-    java.util.Date ts = dateCalendarSystem().isModern()
-        ? DateTimeUtils.convertToLegacyTimestamp(value, zoneId()) : value;
-    return DateTimeUtils.formatTimestamp(ts, zoneId());
+    return DateTimeUtils.formatTimestamp(value, zoneId(), dateCalendarSystem());
   }
 
   /**

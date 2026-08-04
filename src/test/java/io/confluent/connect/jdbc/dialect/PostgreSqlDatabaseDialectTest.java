@@ -915,9 +915,10 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
   @Test
   public void hstoreValueThatIsNotAMapShouldFollowColumnNullability() throws Exception {
-    // pgjdbc returns raw hstore text rather than a Map when the type is not visible on the
-    // connection's search_path. Follows Debezium's handleUnknownData: a nullable column degrades
-    // to null, a NOT NULL column fails because null would breach its schema anyway.
+    // Defence in depth for any non-Map shape the driver might hand back. Off the search_path the
+    // type name is qualified, so the column is skipped before this runs; whatever else could reach
+    // here has no known cause. Follows Debezium's handleUnknownData: a nullable column degrades to
+    // null, a NOT NULL column fails because null would breach its schema anyway.
     ResultSet rawText = hstoreResultSet("\"env\"=>\"prod\"");
 
     PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
@@ -976,9 +977,67 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
-  public void shouldNotTreatOtherOtherTypesAsHstore() {
-    // A different Types.OTHER type must not be captured by the hstore branch just because the
-    // flag is on.
+  public void offSearchPathHstoreWarnsOncePerColumn() {
+    CollectingAppender appender = new CollectingAppender();
+    org.apache.log4j.Logger logger =
+        org.apache.log4j.Logger.getLogger(PostgreSqlDatabaseDialect.class);
+    // The test log config pins io.confluent.connect to ERROR, which would filter the warning out
+    // before any appender sees it.
+    org.apache.log4j.Level originalLevel = logger.getLevel();
+    logger.setLevel(org.apache.log4j.Level.WARN);
+    logger.addAppender(appender);
+    try {
+      PostgreSqlDatabaseDialect dialect = complexTypesDialect();
+      SchemaBuilder builder = SchemaBuilder.struct();
+      String offPath = "\"ext\".\"hstore\"";
+
+      assertNull("the column stays unsupported",
+          dialect.addFieldToSchema(column(Types.OTHER, offPath, "a"), builder));
+      assertEquals("first occurrence must warn", 1, appender.warnings.size());
+      assertTrue("the warning must name the actionable cause",
+          appender.warnings.get(0).contains("search_path"));
+
+      // The schema is rebuilt every query cycle, so the same column must not warn again.
+      assertNull(dialect.addFieldToSchema(column(Types.OTHER, offPath, "a"), builder));
+      assertEquals("repeat on the same column must not warn again", 1, appender.warnings.size());
+
+      assertNull(dialect.addFieldToSchema(column(Types.OTHER, offPath, "b"), builder));
+      assertEquals("a second column must warn on its own", 2, appender.warnings.size());
+
+      // An unrelated Types.OTHER type must not attract the hstore hint.
+      assertNull(dialect.addFieldToSchema(column(Types.OTHER, "citext", "c"), builder));
+      assertEquals("an unrelated type must not warn", 2, appender.warnings.size());
+    } finally {
+      logger.removeAppender(appender);
+      logger.setLevel(originalLevel);
+    }
+  }
+
+  /** Collects WARN events from the dialect's logger so the dedupe can be asserted. */
+  private static class CollectingAppender extends org.apache.log4j.AppenderSkeleton {
+    private final List<String> warnings = new ArrayList<>();
+
+    @Override
+    protected void append(org.apache.log4j.spi.LoggingEvent event) {
+      if (event.getLevel().isGreaterOrEqual(org.apache.log4j.Level.WARN)) {
+        warnings.add(event.getRenderedMessage());
+      }
+    }
+
+    @Override
+    public void close() {
+    }
+
+    @Override
+    public boolean requiresLayout() {
+      return false;
+    }
+  }
+
+  @Test
+  public void shouldNotTreatNonHstoreOtherTypesAsHstore() {
+    // Another Types.OTHER type must not be captured by the hstore branch just because the flag is
+    // on. The qualified name is the off-search_path rendering, which stays unsupported.
     PostgreSqlDatabaseDialect dialect = complexTypesDialect();
     assertNull(sourceFieldSchema(dialect, Types.OTHER, "citext"));
     assertNull(sourceFieldSchema(dialect, Types.OTHER, "hstore_extra"));
@@ -1047,8 +1106,17 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
   private ColumnDefinition column(
       int jdbcType, String typeName, ColumnDefinition.Nullability nullability) {
+    return column(jdbcType, typeName, nullability, "col");
+  }
+
+  private ColumnDefinition column(int jdbcType, String typeName, String columnName) {
+    return column(jdbcType, typeName, ColumnDefinition.Nullability.NULL, columnName);
+  }
+
+  private ColumnDefinition column(
+      int jdbcType, String typeName, ColumnDefinition.Nullability nullability, String columnName) {
     return new ColumnDefinition(
-        new ColumnId(new TableId(null, null, "t"), "col"),
+        new ColumnId(new TableId(null, null, "t"), columnName),
         jdbcType, typeName, Object.class.getName(),
         nullability, ColumnDefinition.Mutability.UNKNOWN,
         0, 0, false, 1, false, false, false, false, false);

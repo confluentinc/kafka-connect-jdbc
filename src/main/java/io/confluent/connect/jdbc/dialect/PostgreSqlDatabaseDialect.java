@@ -439,11 +439,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         // Raw JSON text via the Json logical type; round-trips to a native jsonb[] sink column.
         return Json.optionalSchema();
       case HSTORE_TYPE_NAME:
-        // Per hstore.handling.mode, as for a scalar hstore; elements are always optional.
-        return hstoreHandlingMode() == HstoreHandlingMode.JSON
-            ? Json.optionalSchema()
-            : SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA)
-                .optional().build();
+        // Shared with the scalar hstore path; array elements are always optional.
+        return hstoreSchema(true);
       case "date":
         return Date.builder().optional().build();
       case "time":

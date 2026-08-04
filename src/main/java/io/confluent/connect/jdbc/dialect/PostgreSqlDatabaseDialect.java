@@ -57,6 +57,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG;
 
@@ -88,6 +89,21 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   static final String JSONB_TYPE_NAME = "jsonb";
   static final String UUID_TYPE_NAME = "uuid";
   static final String HSTORE_TYPE_NAME = "hstore";
+
+  // How pgjdbc renders an hstore type whose schema is off the connection's search_path.
+  private static final String QUALIFIED_HSTORE_SUFFIX = ".\"" + HSTORE_TYPE_NAME + "\"";
+
+  private static final String HSTORE_OFF_SEARCH_PATH_WARNING =
+      "Skipping hstore column {}: the driver reports its type as {}, so the hstore extension is "
+          + "not on this connection's search_path. Add the schema owning the extension to "
+          + "search_path for the column to be mapped.";
+
+  /**
+   * Columns already warned about for {@link #HSTORE_OFF_SEARCH_PATH_WARNING}. The schema is rebuilt
+   * every query cycle, so the warning would otherwise repeat for the life of the task. Scoped to
+   * the dialect, i.e. to the task, so a restart warns again.
+   */
+  private final Set<ColumnId> hstoreOffSearchPathWarnedColumns = ConcurrentHashMap.newKeySet();
 
   /**
    * Define the PG datatypes that require casting upon insert/update statements.
@@ -283,6 +299,16 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           return fieldName;
         }
 
+        if (complexTypesEnabled() && isHstoreType(columnDefn)) {
+          builder.field(fieldName, hstoreSchema(columnDefn.isOptional()));
+          return fieldName;
+        }
+
+        if (complexTypesEnabled() && isUnresolvedHstoreType(columnDefn)
+            && hstoreOffSearchPathWarnedColumns.add(columnDefn.id())) {
+          log.warn(HSTORE_OFF_SEARCH_PATH_WARNING, columnDefn.id(), columnDefn.typeName());
+        }
+
         if (UUID.class.getName().equals(columnDefn.classNameForType())) {
           builder.field(
               fieldName,
@@ -332,6 +358,16 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           return rs -> rs.getString(col);
         }
 
+        if (complexTypesEnabled() && isHstoreType(columnDefn)) {
+          if (hstoreHandlingMode() == HstoreHandlingMode.JSON) {
+            return rs -> {
+              Object value = hstoreValue(columnDefn, rs.getObject(col));
+              return value == null ? null : JsonConverter.connectMapToJson(value);
+            };
+          }
+          return rs -> hstoreValue(columnDefn, rs.getObject(col));
+        }
+
         if (UUID.class.getName().equals(columnDefn.classNameForType())) {
           return rs -> rs.getString(col);
         }
@@ -348,6 +384,39 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   protected boolean isJsonType(ColumnDefinition columnDefn) {
     String typeName = columnDefn.typeName();
     return JSON_TYPE_NAME.equalsIgnoreCase(typeName) || JSONB_TYPE_NAME.equalsIgnoreCase(typeName);
+  }
+
+  protected boolean isHstoreType(ColumnDefinition columnDefn) {
+    return HSTORE_TYPE_NAME.equalsIgnoreCase(columnDefn.typeName());
+  }
+
+  /**
+   * Whether an hstore column's type name arrived schema-qualified, i.e. the extension is off this
+   * connection's search_path. The column is skipped either way; this only drives the warning that
+   * says why.
+   */
+  private static boolean isUnresolvedHstoreType(ColumnDefinition columnDefn) {
+    return columnDefn.typeName() != null
+        && columnDefn.typeName().endsWith(QUALIFIED_HSTORE_SUFFIX);
+  }
+
+  /**
+   * The driver's value for an hstore column, as the map both handling modes require. Anything else
+   * follows Debezium's {@code handleUnknownData}: a nullable column degrades to null, a NOT NULL
+   * column fails, and the same text is used either way. The value is never logged, in case it is
+   * sensitive.
+   */
+  private Object hstoreValue(ColumnDefinition columnDefn, Object value) {
+    if (value == null || value instanceof Map) {
+      return value;
+    }
+    if (columnDefn.isOptional()) {
+      log.warn("Unexpected value for hstore column {}: class={}; emitting null",
+          columnDefn.id(), value.getClass().getName());
+      return null;
+    }
+    throw new DataException("Unexpected value for hstore column " + columnDefn.id()
+        + ": class=" + value.getClass().getName());
   }
 
   /**

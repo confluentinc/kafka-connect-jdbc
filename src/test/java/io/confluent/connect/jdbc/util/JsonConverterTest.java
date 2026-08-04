@@ -81,6 +81,15 @@ public class JsonConverterTest {
   }
 
   @Test
+  public void serializeNonStringMapKeyThrows() {
+    // A key outside the MAP<STRING,STRING> contract fails rather than being coerced via toString().
+    Map<Integer, String> input = new LinkedHashMap<>();
+    input.put(7, "v");
+
+    assertThrows(DataException.class, () -> JsonConverter.connectMapToJson(input));
+  }
+
+  @Test
   public void serializeNonMapValueThrows() {
     assertThrows(DataException.class, () -> JsonConverter.connectMapToJson("not-a-map"));
   }

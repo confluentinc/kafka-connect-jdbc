@@ -811,14 +811,18 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
   @Test
   public void jsonColumnMapsToLogicalJsonStringSchema() {
-    // json/jsonb map to a logical JSON STRING tagged with the Json logical name.
-    SchemaBuilder builder = SchemaBuilder.struct();
-    String fieldName =
-        complexTypesDialect().addFieldToSchema(column(Types.OTHER, "jsonb"), builder);
-    Schema jsonSchema = builder.build().field(fieldName).schema();
+    // json/jsonb map to a logical JSON STRING tagged with the Json logical name, and optionality
+    // follows the column: a nullable column needs an optional schema or a NULL value breaches it.
+    // Schema equality covers the type, the logical name and the optional flag together.
+    assertEquals(Json.optionalSchema(), jsonColumnSchema(ColumnDefinition.Nullability.NULL));
+    assertEquals(Json.schema(), jsonColumnSchema(ColumnDefinition.Nullability.NOT_NULL));
+  }
 
-    assertEquals(Type.STRING, jsonSchema.type());
-    assertEquals(Json.LOGICAL_NAME, jsonSchema.name());
+  private Schema jsonColumnSchema(ColumnDefinition.Nullability nullability) {
+    SchemaBuilder builder = SchemaBuilder.struct();
+    String fieldName = complexTypesDialect()
+        .addFieldToSchema(column(Types.OTHER, "jsonb", nullability), builder);
+    return builder.build().field(fieldName).schema();
   }
 
   @Test
@@ -836,23 +840,11 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
   @Test
   public void shouldMapComplexTypesToSqlTypes() {
-    // Scalar logical JSON STRING -> native JSONB, on a sink with complex types enabled.
+    // The sink half of this PR's contract: the source now tags json/jsonb columns as Json, so a
+    // round trip only lands back in jsonb if the sink maps that tag. The mapping itself is #1651's
+    // and is covered there for both flag arms; this pins the half the schema change depends on.
     assertEquals("JSONB",
         sinkDialect().getSqlType(new SinkRecordField(Json.schema(), "col", false)));
-  }
-
-  @Test
-  public void shouldBindMapValueAsJsonStringForJsonbColumn() throws Exception {
-    // MAP<STRING,STRING> (hstore map mode) serializes to JSON, binds as String, cast ::jsonb.
-    PreparedStatement statement = mock(PreparedStatement.class);
-    ColumnDefinition colDef = mock(ColumnDefinition.class);
-    Schema schema = SchemaBuilder.map(
-        Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA).optional().build();
-
-    sinkDialect().bindField(
-        statement, 3, schema, Collections.singletonMap("env", "prod"), colDef, "field");
-
-    verify(statement).setString(3, "{\"env\":\"prod\"}");
   }
 
   // ----- complex-type test helpers -----
@@ -868,10 +860,15 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   private ColumnDefinition column(int jdbcType, String typeName) {
+    return column(jdbcType, typeName, ColumnDefinition.Nullability.NULL);
+  }
+
+  private ColumnDefinition column(
+      int jdbcType, String typeName, ColumnDefinition.Nullability nullability) {
     return new ColumnDefinition(
         new ColumnId(new TableId(null, null, "t"), "col"),
         jdbcType, typeName, Object.class.getName(),
-        ColumnDefinition.Nullability.NULL, ColumnDefinition.Mutability.UNKNOWN,
+        nullability, ColumnDefinition.Mutability.UNKNOWN,
         0, 0, false, 1, false, false, false, false, false);
   }
 

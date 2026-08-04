@@ -429,11 +429,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     if (!complexTypesEnabled()) {
       return optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA;
     }
-    SchemaBuilder jsonBuilder = Json.builder();
-    if (optional) {
-      jsonBuilder.optional();
-    }
-    return jsonBuilder.build();
+    return optional ? Json.optionalSchema() : Json.schema();
   }
 
   @Override

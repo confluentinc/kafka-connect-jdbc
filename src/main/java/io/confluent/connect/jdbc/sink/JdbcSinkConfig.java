@@ -241,10 +241,11 @@ public class JdbcSinkConfig extends AbstractConfig {
   public static final String SQL_COMPLEX_TYPES_ENABLE = "sql.complex.types.enable";
   private static final boolean SQL_COMPLEX_TYPES_ENABLE_DEFAULT = false;
   private static final String SQL_COMPLEX_TYPES_ENABLE_DOC =
-      "When enabled, the connector maps Connect Schema STRUCT, MAP, and ARRAY value-fields to the "
-      + "most appropriate native complex column type per dialect (e.g. JSONB on PostgreSQL, JSON "
-      + "on MySQL) and serializes the corresponding values into that column on writes. When "
-      + "disabled (the default), STRUCT/MAP/ARRAY fields fall back to the dialect's pre-existing "
+      "When enabled, the connector writes Connect complex value-fields into the native complex "
+      + "column type of the dialect. On PostgreSQL, a MAP<STRING,STRING> field (the shape an "
+      + "``hstore`` column takes on the topic) and a logical JSON string are written to ``jsonb``. "
+      + "Generic STRUCT values and other map shapes are not supported regardless of this setting. "
+      + "When disabled (the default), complex fields fall back to the dialect's pre-existing "
       + "behavior to preserve backwards compatibility.";
   private static final String SQL_COMPLEX_TYPES_ENABLE_DISPLAY = "Enable SQL Complex Types";
 

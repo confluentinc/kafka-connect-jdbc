@@ -184,9 +184,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String HSTORE_HANDLING_MODE_CONFIG = "hstore.handling.mode";
   private static final String HSTORE_HANDLING_MODE_DOC =
       "Controls how PostgreSQL ``hstore`` columns are represented when "
-      + "``sql.complex.types.enable`` is true. ``map`` (the default) emits a Connect "
-      + "Map<String,String>. ``json`` emits the hstore as a JSON-object STRING. Has no effect "
-      + "unless ``sql.complex.types.enable`` is true.";
+      + "``sql.complex.types.enable`` is true, and has no effect otherwise. ``map`` (the default) "
+      + "emits a Connect Map<String,String>; ``json`` emits the hstore as a JSON-object STRING. "
+      + "Either mode requires the schema owning the ``hstore`` extension to be on the "
+      + "connection's ``search_path``, because the column type is recognized by its unqualified "
+      + "name; an hstore column whose type is not visible there is skipped like any other "
+      + "unsupported type.";
   private static final String HSTORE_HANDLING_MODE_DISPLAY = "HStore Handling Mode";
 
   private static final EnumRecommender NUMERIC_MAPPING_RECOMMENDER =

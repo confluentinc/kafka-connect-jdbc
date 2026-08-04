@@ -666,10 +666,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   private boolean isJsonBindCandidate(Schema schema) {
-    if (!isStringToStringMap(schema)) {
-      return false;
-    }
-    return complexTypesEnabled();
+    return isStringToStringMap(schema) && complexTypesEnabled();
   }
 
   private boolean maybeBindJson(
@@ -699,6 +696,24 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return config instanceof JdbcSourceConnectorConfig
         ? ((JdbcSourceConnectorConfig) config).hstoreHandlingMode()
         : HstoreHandlingMode.MAP;
+  }
+
+  /**
+   * The on-topic schema for an hstore value under {@code hstore.handling.mode}: a {@code Json}
+   * STRING, or a {@code MAP<STRING, STRING>} whose values are optional since an hstore value may
+   * be NULL. Shared so a scalar column (optionality from the column) and an array element (always
+   * optional) cannot drift apart.
+   */
+  protected Schema hstoreSchema(boolean optional) {
+    if (hstoreHandlingMode() == HstoreHandlingMode.JSON) {
+      return optional ? Json.optionalSchema() : Json.schema();
+    }
+    SchemaBuilder mapBuilder =
+        SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA);
+    if (optional) {
+      mapBuilder.optional();
+    }
+    return mapBuilder.build();
   }
 
   private boolean complexTypesEnabled() {
@@ -799,9 +814,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         );
         return getSqlType(childField) + "[]";
       case MAP:
-        if (isStringToStringMap(field.schema())
-            && config instanceof JdbcSinkConfig
-            && ((JdbcSinkConfig) config).sqlComplexTypesEnable) {
+        if (isStringToStringMap(field.schema()) && complexTypesEnabled()) {
           return JSONB_TYPE_NAME.toUpperCase();
         }
         return super.getSqlType(field);
@@ -971,11 +984,19 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       Object value,
       String fieldName
   ) throws SQLException {
-    if (maybeBindJson(statement, index, schema, value)) {
-      return true;
-    }
-    if (schema.type() == Schema.Type.ARRAY && bindArray(statement, index, schema, value)) {
-      return true;
+    switch (schema.type()) {
+      case ARRAY:
+        if (bindArray(statement, index, schema, value)) {
+          return true;
+        }
+        break;
+      case MAP:
+        if (maybeBindJson(statement, index, schema, value)) {
+          return true;
+        }
+        break;
+      default:
+        break;
     }
     return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
   }
@@ -1150,7 +1171,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
   /**
    * Convert a collection into a typed Java array for a primitive Connect element type, following
-   * pgjdbc's documented array mapping. Returns null for unhandled element types.
+   * pgjdbc's array mapping (https://jdbc.postgresql.org/documentation/head/arrays.html). Returns
+   * null for unhandled element types.
    */
   private static Object primitiveArrayFor(Schema.Type elementType, Collection<?> valueCollection) {
     switch (elementType) {

@@ -16,9 +16,9 @@
 package io.confluent.connect.jdbc.util;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.ObjectWriter;
 
 import org.apache.kafka.connect.errors.DataException;
 
@@ -32,9 +32,9 @@ import java.util.Map;
  */
 public final class JsonConverter {
 
-  private static final JsonNodeFactory JSON_NODE_FACTORY = JsonNodeFactory.instance;
-
-  private static final ObjectMapper MAPPER = new ObjectMapper();
+  /** Typed so a non-String key or value fails rather than being silently coerced. */
+  private static final ObjectWriter STRING_MAP_WRITER =
+      new ObjectMapper().writerFor(new TypeReference<Map<String, String>>() {});
 
   private JsonConverter() {
   }
@@ -54,27 +54,9 @@ public final class JsonConverter {
       throw new DataException("Expected a Map to serialize to JSON but was " + value.getClass());
     }
     try {
-      return MAPPER.writeValueAsString(mapToJsonNode((Map<?, ?>) value));
+      return STRING_MAP_WRITER.writeValueAsString(value);
     } catch (JsonProcessingException e) {
       throw new DataException("Failed to serialize Connect value to JSON", e);
     }
-  }
-
-  private static ObjectNode mapToJsonNode(Map<?, ?> map) {
-    ObjectNode object = JSON_NODE_FACTORY.objectNode();
-    for (Map.Entry<?, ?> entry : map.entrySet()) {
-      if (entry.getKey() == null) {
-        throw new DataException("Cannot serialize a Connect MAP with null keys to JSON");
-      }
-      Object value = entry.getValue();
-      if (value == null) {
-        object.set(entry.getKey().toString(), JSON_NODE_FACTORY.nullNode());
-      } else if (value instanceof String) {
-        object.set(entry.getKey().toString(), JSON_NODE_FACTORY.textNode((String) value));
-      } else {
-        throw new DataException("Expected a String map value but was " + value.getClass());
-      }
-    }
-    return object;
   }
 }

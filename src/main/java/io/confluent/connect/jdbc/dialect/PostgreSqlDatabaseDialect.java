@@ -65,6 +65,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG;
 
@@ -103,9 +104,20 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   static final String TIMESTAMP_TYPE_NAME = "timestamp";
   static final String TIMESTAMPTZ_TYPE_NAME = "timestamptz";
 
+  // Array.getResultSet() yields two columns per element: 1 is the index, 2 the value.
+  private static final int ELEMENT_VALUE_COLUMN = 2;
+
   private static final String MULTI_DIMENSIONAL_ARRAY_MESSAGE =
       "Multi-dimensional array in column {}; nested elements cannot be represented by the "
           + "single-dimension element schema and are emitted as null";
+
+  /**
+   * Columns already warned about for {@link #MULTI_DIMENSIONAL_ARRAY_MESSAGE}. Multi-dimensionality
+   * is only detectable per value, so the warning would otherwise repeat for every row of every
+   * poll. Scoped to the dialect, i.e. to the task, so a restart warns again — which is wanted,
+   * since the emitted nulls are silent in the schema and a fresh log should show the loss.
+   */
+  private final Set<ColumnId> multiDimensionalWarnedColumns = ConcurrentHashMap.newKeySet();
 
   /**
    * Define the PG datatypes that require casting upon insert/update statements.
@@ -508,7 +520,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         return null;
       }
       if (raw instanceof Object[] && isMultiDimensional((Object[]) raw)) {
-        log.debug(MULTI_DIMENSIONAL_ARRAY_MESSAGE, columnId);
+        if (multiDimensionalWarnedColumns.add(columnId)) {
+          log.warn(MULTI_DIMENSIONAL_ARRAY_MESSAGE, columnId);
+        } else {
+          log.debug(MULTI_DIMENSIONAL_ARRAY_MESSAGE, columnId);
+        }
         return nullElements(((Object[]) raw).length);
       }
       if (readsViaElementResultSet(elementType)) {
@@ -572,7 +588,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     try (ResultSet elementRs = arr.getResultSet()) {
       List<Object> out = new ArrayList<>();
       while (elementRs.next()) {
-        // Element value is column 2 of the array's ResultSet (column 1 is the index).
         out.add(isTemporalElementType(elementType)
             ? decodeTemporalElement(elementRs, elementType, dateCal, timeCal)
             : decodeHstoreElement(elementRs));
@@ -586,7 +601,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * decoding, so the value arrives as a Map; json mode then serializes it.
    */
   private Object decodeHstoreElement(ResultSet elementRs) throws SQLException {
-    Object value = elementRs.getObject(2);
+    Object value = elementRs.getObject(ELEMENT_VALUE_COLUMN);
     if (value == null) {
       return null;
     }
@@ -604,7 +619,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       ResultSet elementRs, String elementType, Calendar dateCal, Calendar timeCal)
       throws SQLException {
     if (DATE_TYPE_NAME.equals(elementType)) {
-      java.sql.Date date = elementRs.getDate(2, dateCal);
+      java.sql.Date date = elementRs.getDate(ELEMENT_VALUE_COLUMN, dateCal);
       if (elementRs.wasNull()) {
         return null;
       }
@@ -612,10 +627,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           ? DateTimeUtils.convertToModernDate(date, dateTimeZoneId()) : date;
     }
     if (TIME_TYPE_NAME.equals(elementType)) {
-      java.sql.Time time = elementRs.getTime(2, timeCal);
+      java.sql.Time time = elementRs.getTime(ELEMENT_VALUE_COLUMN, timeCal);
       return elementRs.wasNull() ? null : time;
     }
-    java.sql.Timestamp ts = elementRs.getTimestamp(2, timeCal);
+    java.sql.Timestamp ts = elementRs.getTimestamp(ELEMENT_VALUE_COLUMN, timeCal);
     if (elementRs.wasNull()) {
       return null;
     }
@@ -697,6 +712,24 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
+   * Whether an array field's elements are ones {@link #bindArray} cannot write, so no column type
+   * is advertised: a nested array, a plain BYTES element, or any element under
+   * {@code timestamp.fields.list}, which selects TIMESTAMP by field name but has no binding for
+   * arrays. Advertising these would let auto-create build a column every insert then fails on.
+   */
+  private boolean isUnbindableArrayElement(SinkRecordField field) {
+    Schema element = field.schema().valueSchema();
+    if (element.type() == Schema.Type.ARRAY) {
+      return true;
+    }
+    if (element.type() == Schema.Type.BYTES && element.name() == null) {
+      return true;
+    }
+    return config instanceof JdbcSinkConfig
+        && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name());
+  }
+
+  /**
    * The column type for a Connect logical type, or null when the schema has no name or the name is
    * not one this dialect maps. The complex types are additionally gated on
    * {@code sql.complex.types.enable}, so a connector with the feature off keeps its previous types.
@@ -756,6 +789,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       case BYTES:
         return "BYTEA";
       case ARRAY:
+        if (isUnbindableArrayElement(field)) {
+          return super.getSqlType(field);
+        }
         SinkRecordField childField = new SinkRecordField(
             field.schema().valueSchema(),
             field.name(),
@@ -994,8 +1030,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   /**
    * Resolve the native array binding for a Connect element schema, or null if the element has no
    * dedicated PostgreSQL array type (a primitive, handled by {@link #maybeBindPrimitiveArray}).
-   * Dispatch is by logical type name first, then STRUCT/MAP -> jsonb kept last, since some logical
-   * types (e.g. VariableScaleDecimal) are themselves STRUCTs.
+   * Only the hstore-shaped {@code MAP<STRING, STRING>} and the logical types below are mapped.
    */
   private ArrayElementBinding arrayElementBinding(Schema elementSchema) {
     if (elementSchema == null) {

@@ -1019,20 +1019,47 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   /**
-   * Characterizes a pre-existing gap rather than asserting desired behaviour: a BYTES element
-   * advertises {@code BYTEA[]} but has no array binding, so auto-create builds a column no insert
-   * can write. Both halves are unchanged from the previous release, so closing it would alter
-   * behaviour outside the complex-types flag and belongs in its own change.
+   * Element shapes the bind path cannot write must not be advertised in DDL either, so auto-create
+   * never builds a column every insert then fails on. A nested array and a plain BYTES element both
+   * recursed to valid DDL before; a {@code Decimal} element is also BYTES-based but is named and
+   * binds, so it must still be accepted.
    */
   @Test
-  public void bytesArrayAdvertisesDdlButCannotBind() {
-    Schema schema = arraySchema(Schema.OPTIONAL_BYTES_SCHEMA);
+  public void shouldNotMapUnbindableArrayElementsToSqlType() {
+    PostgreSqlDatabaseDialect sink = complexTypesSinkDialect();
+    Schema nested = arraySchema(arraySchema(Schema.OPTIONAL_INT32_SCHEMA));
+    Schema bytes = arraySchema(Schema.OPTIONAL_BYTES_SCHEMA);
 
-    assertEquals("BYTEA[]",
-        complexTypesSinkDialect().getSqlType(new SinkRecordField(schema, "col", false)));
-    assertThrows(ConnectException.class, () -> complexTypesSinkDialect().bindField(
-        mock(PreparedStatement.class), 1, schema,
-        Collections.singletonList(new byte[]{1, 2}), mock(ColumnDefinition.class), "col"));
+    assertThrows(ConnectException.class,
+        () -> sink.getSqlType(new SinkRecordField(nested, "col", false)));
+    assertThrows(ConnectException.class,
+        () -> sink.getSqlType(new SinkRecordField(bytes, "col", false)));
+    assertEquals("a named BYTES element that does bind is still mapped", "DECIMAL[]",
+        sink.getSqlType(
+            new SinkRecordField(arraySchema(Decimal.builder(2).optional().build()), "col", false)));
+  }
+
+  /**
+   * {@code timestamp.fields.list} selects TIMESTAMP by field name, but there is no array binding
+   * for it — the element stays a plain INT64/STRING and would be sent as {@code int8[]}/{@code
+   * text[]}.
+   * Rejecting is better than quietly emitting {@code BIGINT[]}, which would store raw epoch values
+   * for someone who explicitly asked for timestamp semantics.
+   */
+  @Test
+  public void shouldNotMapTimestampFieldsListArrayToSqlType() {
+    PostgreSqlDatabaseDialect sink = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something",
+        JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true",
+        JdbcSinkConfig.TIMESTAMP_FIELDS_LIST, "ts_col"));
+
+    for (Schema element
+        : Arrays.asList(Schema.OPTIONAL_INT64_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA)) {
+      assertThrows(ConnectException.class, () -> sink.getSqlType(
+          new SinkRecordField(arraySchema(element), "ts_col", false)));
+      // A field not in the list is unaffected.
+      assertNotNull(sink.getSqlType(new SinkRecordField(arraySchema(element), "other", false)));
+    }
   }
 
   /** An empty list binds as an empty array, staying distinguishable from a NULL one. */
@@ -1117,6 +1144,31 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         mock(ColumnDefinition.class), "field");
 
     verify(statement).setObject(eq(1), any(Integer[].class), eq(Types.ARRAY));
+  }
+
+  /**
+   * With the flag off a gated element degrades according to its underlying Connect type rather than
+   * failing uniformly. {@code Json} is STRING-based, so it falls to the primitive path and binds as
+   * {@code text[]} with the documents intact; {@code VariableScaleDecimal} is a STRUCT, has no
+   * primitive equivalent, and is rejected. Both halves matter: the first is a lossless degrade
+   * for a partially upgraded pipeline, the second a hard failure.
+   */
+  @Test
+  public void gatedArrayElementsDegradeByUnderlyingTypeWhenComplexTypesDisabled() throws Exception {
+    PreparedStatement statement = mock(PreparedStatement.class);
+    Schema jsonArray = SchemaBuilder.array(Json.optionalSchema()).optional().build();
+
+    dialect.bindField(statement, 1, jsonArray, Arrays.asList("{\"a\":1}", "{\"b\":2}"),
+        mock(ColumnDefinition.class), "field");
+    verify(statement).setObject(eq(1), any(String[].class), eq(Types.ARRAY));
+
+    Schema numericArray = SchemaBuilder.array(VariableScaleDecimal.optionalSchema())
+        .optional().build();
+    assertThrows(ConnectException.class, () -> dialect.bindField(
+        mock(PreparedStatement.class), 1, numericArray,
+        Collections.singletonList(VariableScaleDecimal.fromLogical(
+            VariableScaleDecimal.optionalSchema(), new BigDecimal("1.5"))),
+        mock(ColumnDefinition.class), "field"));
   }
 
   @Test
@@ -1219,6 +1271,66 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     // toString() here, which reads like data rather than a gap.
     ResultSet multiText = arrayResultSet(new Object[]{new String[]{"a", "b"}, new String[]{"c"}});
     assertEquals(Arrays.asList(null, null), arrayColumnConverter("_text").convert(multiText));
+  }
+
+  /**
+   * The emitted nulls are invisible in the schema, so the warning is the only signal — but
+   * multi-dimensionality is detectable per value, so an undeduped warning would repeat for every
+   * row of every poll. It must fire once per column and drop to DEBUG after, with a second column
+   * warning on its own.
+   */
+  @Test
+  public void multiDimensionalArrayWarnsOncePerColumn() throws Exception {
+    CollectingAppender appender = new CollectingAppender();
+    org.apache.log4j.Logger logger =
+        org.apache.log4j.Logger.getLogger(PostgreSqlDatabaseDialect.class);
+    // The test log config pins io.confluent.connect to ERROR, which would filter the warning out
+    // before any appender sees it.
+    org.apache.log4j.Level originalLevel = logger.getLevel();
+    logger.setLevel(org.apache.log4j.Level.WARN);
+    logger.addAppender(appender);
+    try {
+      PostgreSqlDatabaseDialect dialect = complexTypesDialect();
+      Object[] nested = new Object[]{new Integer[]{1, 2}, new Integer[]{3}};
+
+      DatabaseDialect.ColumnConverter first = arrayColumnConverter(dialect, "_int4", "a");
+      assertEquals(Arrays.asList(null, null), first.convert(arrayResultSet(nested)));
+      assertEquals("first occurrence must warn", 1, appender.warnings.size());
+
+      // Same column again — still nulls, but no second warning.
+      assertEquals(Arrays.asList(null, null), first.convert(arrayResultSet(nested)));
+      assertEquals("repeat on the same column must not warn again",
+          1, appender.warnings.size());
+
+      // A different column is tracked independently.
+      DatabaseDialect.ColumnConverter second = arrayColumnConverter(dialect, "_int4", "b");
+      assertEquals(Arrays.asList(null, null), second.convert(arrayResultSet(nested)));
+      assertEquals("a second column must warn on its own", 2, appender.warnings.size());
+    } finally {
+      logger.removeAppender(appender);
+      logger.setLevel(originalLevel);
+    }
+  }
+
+  /** Collects WARN events from the dialect's logger so the dedupe can be asserted. */
+  private static class CollectingAppender extends org.apache.log4j.AppenderSkeleton {
+    private final List<String> warnings = new ArrayList<>();
+
+    @Override
+    protected void append(org.apache.log4j.spi.LoggingEvent event) {
+      if (event.getLevel().isGreaterOrEqual(org.apache.log4j.Level.WARN)) {
+        warnings.add(event.getRenderedMessage());
+      }
+    }
+
+    @Override
+    public void close() {
+    }
+
+    @Override
+    public boolean requiresLayout() {
+      return false;
+    }
   }
 
   @Test
@@ -1553,8 +1665,13 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
   private ColumnDefinition column(
       int jdbcType, String typeName, ColumnDefinition.Nullability nullability) {
+    return column(jdbcType, typeName, nullability, "col");
+  }
+
+  private ColumnDefinition column(int jdbcType, String typeName,
+      ColumnDefinition.Nullability nullability, String columnName) {
     return new ColumnDefinition(
-        new ColumnId(new TableId(null, null, "t"), "col"),
+        new ColumnId(new TableId(null, null, "t"), columnName),
         jdbcType, typeName, Object.class.getName(),
         nullability, ColumnDefinition.Mutability.UNKNOWN,
         0, 0, false, 1, false, false, false, false, false);
@@ -1566,7 +1683,13 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
   private DatabaseDialect.ColumnConverter arrayColumnConverter(
       PostgreSqlDatabaseDialect dialect, String pgArrayType) {
-    ColumnDefinition column = column(Types.ARRAY, pgArrayType);
+    return arrayColumnConverter(dialect, pgArrayType, "col");
+  }
+
+  private DatabaseDialect.ColumnConverter arrayColumnConverter(
+      PostgreSqlDatabaseDialect dialect, String pgArrayType, String columnName) {
+    ColumnDefinition column =
+        column(Types.ARRAY, pgArrayType, ColumnDefinition.Nullability.NULL, columnName);
     ColumnMapping mapping = new ColumnMapping(
         column, 1, new Field("col", 0, arraySchema(Schema.OPTIONAL_INT32_SCHEMA)));
     DatabaseDialect.ColumnConverter converter =

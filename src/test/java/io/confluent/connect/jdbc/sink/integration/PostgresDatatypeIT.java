@@ -1373,6 +1373,33 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
   }
 
   /**
+   * The upgrade asymmetry for arrays: the source is upgraded with the flag on, the sink still has
+   * it off. A {@code Json} element is STRING-based, so it falls to the primitive bind path and
+   * lands in {@code text[]} rather than {@code jsonb[]} — degraded, but every document intact.
+   * This is the only route by which the gated {@code Json} mapping is reachable on this branch,
+   * since a scalar json column is still emitted as an untagged STRING here.
+   */
+  @Test
+  public void testJsonArrayRoundTripSourceEnabledSinkDisabled() throws Exception {
+    execute("CREATE TABLE " + SRC_TABLE + "(id int PRIMARY KEY, j json[], jb jsonb[])",
+        "INSERT INTO " + SRC_TABLE + " VALUES (1, "
+            + "ARRAY['{\"a\": 1}'::json, '[1, 2]'::json], "
+            + "ARRAY['{\"a\": 1}'::jsonb, '[1, 2]'::jsonb])");
+
+    runRoundTrip(1,
+        Collections.singletonMap(
+            JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true"),
+        Collections.emptyMap());
+
+    assertEquals("a sink with the flag off must fall back to text[]",
+        "_text", columnUdtName(DST_TABLE, "j"));
+    assertEquals("a sink with the flag off must fall back to text[]",
+        "_text", columnUdtName(DST_TABLE, "jb"));
+    // The documents survive verbatim; only the column type is degraded.
+    assertDestArrayText("j::text", "{\"{\\\"a\\\": 1}\",\"[1, 2]\"}");
+  }
+
+  /**
    * Backward compatibility end to end: with the flag off on both connectors a gated element type
    * never reaches the topic, so the destination table has no such column.
    */

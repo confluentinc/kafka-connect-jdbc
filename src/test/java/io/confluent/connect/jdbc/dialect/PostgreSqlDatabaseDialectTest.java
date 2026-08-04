@@ -36,6 +36,7 @@ import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.junit.Test;
 
 import java.sql.Connection;
@@ -50,6 +51,7 @@ import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -57,6 +59,8 @@ import java.util.concurrent.ThreadLocalRandom;
 
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
@@ -869,6 +873,68 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         jdbcType, typeName, Object.class.getName(),
         ColumnDefinition.Nullability.NULL, ColumnDefinition.Mutability.UNKNOWN,
         0, 0, false, 1, false, false, false, false, false);
+  }
+
+  @Test
+  public void hstoreSchemaFollowsHandlingModeAndOptionality() {
+    // Shared by the scalar column path (#1661) and the array element path (#1662), so the contract
+    // is pinned here rather than in either consumer.
+    PostgreSqlDatabaseDialect mapMode = new PostgreSqlDatabaseDialect(sourceConfigWithUrl(
+        "jdbc:postgresql://something",
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "map"));
+    Schema optionalMap = mapMode.hstoreSchema(true);
+    assertEquals(Type.MAP, optionalMap.type());
+    assertEquals(Type.STRING, optionalMap.keySchema().type());
+    assertTrue("an hstore value may be NULL", optionalMap.valueSchema().isOptional());
+    assertTrue(optionalMap.isOptional());
+    assertFalse(mapMode.hstoreSchema(false).isOptional());
+
+    PostgreSqlDatabaseDialect jsonMode = new PostgreSqlDatabaseDialect(sourceConfigWithUrl(
+        "jdbc:postgresql://something",
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json"));
+    assertEquals(Json.optionalSchema(), jsonMode.hstoreSchema(true));
+    assertEquals(Json.schema(), jsonMode.hstoreSchema(false));
+  }
+
+  @Test
+  public void shouldMapStringToStringMapToJsonbOnlyWhenComplexTypesEnabled() {
+    SinkRecordField field = new SinkRecordField(stringToStringMap(), "col", false);
+
+    PostgreSqlDatabaseDialect enabled = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+    assertEquals("JSONB", enabled.getSqlType(field));
+
+    // Without the flag the generic dialect fails at DDL time rather than inventing a column type,
+    // which is what makes forgetting the flag on the sink a loud error.
+    PostgreSqlDatabaseDialect disabled =
+        new PostgreSqlDatabaseDialect(sinkConfigWithUrl("jdbc:postgresql://something"));
+    assertThrows(ConnectException.class, () -> disabled.getSqlType(field));
+  }
+
+  @Test
+  public void shouldBindStringToStringMapAsJsonbTextOnlyWhenComplexTypesEnabled()
+      throws SQLException {
+    Schema schema = stringToStringMap();
+    Map<String, String> value = new LinkedHashMap<>();
+    value.put("env", "prod");
+    value.put("absent", null);
+
+    // Serialized and bound as text; the ::jsonb cast from valueTypeCast parses it server-side.
+    PreparedStatement statement = mock(PreparedStatement.class);
+    new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"))
+        .bindField(statement, 1, schema, value);
+    verify(statement).setString(1, "{\"env\":\"prod\",\"absent\":null}");
+
+    PostgreSqlDatabaseDialect disabled =
+        new PostgreSqlDatabaseDialect(sinkConfigWithUrl("jdbc:postgresql://something"));
+    assertThrows(ConnectException.class,
+        () -> disabled.bindField(mock(PreparedStatement.class), 1, schema, value));
+  }
+
+  private Schema stringToStringMap() {
+    return SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA)
+        .optional().build();
   }
 
 }

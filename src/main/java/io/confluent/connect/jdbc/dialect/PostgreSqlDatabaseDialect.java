@@ -359,11 +359,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   private boolean isJsonBindCandidate(Schema schema) {
-    if (!isStringToStringMap(schema)) {
-      return false;
-    }
-    return config instanceof JdbcSinkConfig
-        && ((JdbcSinkConfig) config).sqlComplexTypesEnable;
+    return isStringToStringMap(schema) && complexTypesEnabled();
   }
 
   private boolean maybeBindJson(
@@ -393,6 +389,24 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return config instanceof JdbcSourceConnectorConfig
         ? ((JdbcSourceConnectorConfig) config).hstoreHandlingMode()
         : HstoreHandlingMode.MAP;
+  }
+
+  /**
+   * The on-topic schema for an hstore value under {@code hstore.handling.mode}: a {@code Json}
+   * STRING, or a {@code MAP<STRING, STRING>} whose values are optional since an hstore value may
+   * be NULL. Shared so a scalar column (optionality from the column) and an array element (always
+   * optional) cannot drift apart.
+   */
+  protected Schema hstoreSchema(boolean optional) {
+    if (hstoreHandlingMode() == HstoreHandlingMode.JSON) {
+      return optional ? Json.optionalSchema() : Json.schema();
+    }
+    SchemaBuilder mapBuilder =
+        SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA);
+    if (optional) {
+      mapBuilder.optional();
+    }
+    return mapBuilder.build();
   }
 
   private boolean complexTypesEnabled() {
@@ -477,9 +491,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         );
         return getSqlType(childField) + "[]";
       case MAP:
-        if (isStringToStringMap(field.schema())
-            && config instanceof JdbcSinkConfig
-            && ((JdbcSinkConfig) config).sqlComplexTypesEnable) {
+        if (isStringToStringMap(field.schema()) && complexTypesEnabled()) {
           return JSONB_TYPE_NAME.toUpperCase();
         }
         return super.getSqlType(field);
@@ -649,13 +661,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       Object value,
       String fieldName
   ) throws SQLException {
-    if (maybeBindJson(statement, index, schema, value)) {
-      return true;
-    }
     switch (schema.type()) {
       case ARRAY: {
         Class<?> valueClass = value.getClass();
-        Object newValue = null;
         Collection<?> valueCollection;
         if (Collection.class.isAssignableFrom(valueClass)) {
           valueCollection = (Collection<?>) value;
@@ -666,55 +674,51 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
               String.format("Type '%s' is not supported for Array.", valueClass.getName())
           );
         }
-
-        // All typecasts below are based on pgjdbc's documentation on how to use primitive arrays
-        // - https://jdbc.postgresql.org/documentation/head/arrays.html
-        switch (schema.valueSchema().type()) {
-          case INT8: {
-            // Gotta do this the long way, as Postgres has no single-byte integer,
-            // so we want to cast to short as the next best thing, and we can't do that with
-            // toArray.
-
-            newValue = valueCollection.stream()
-                .map(o -> ((Byte) o).shortValue())
-                .toArray(Short[]::new);
-            break;
-          }
-          case INT32:
-            newValue = valueCollection.toArray(new Integer[0]);
-            break;
-          case INT16:
-            newValue = valueCollection.toArray(new Short[0]);
-            break;
-          case BOOLEAN:
-            newValue = valueCollection.toArray(new Boolean[0]);
-            break;
-          case STRING:
-            newValue = valueCollection.toArray(new String[0]);
-            break;
-          case FLOAT64:
-            newValue = valueCollection.toArray(new Double[0]);
-            break;
-          case FLOAT32:
-            newValue = valueCollection.toArray(new Float[0]);
-            break;
-          case INT64:
-            newValue = valueCollection.toArray(new Long[0]);
-            break;
-          default:
-            break;
-        }
-
+        Object newValue = primitiveArrayFor(schema.valueSchema().type(), valueCollection);
         if (newValue != null) {
           statement.setObject(index, newValue, Types.ARRAY);
           return true;
         }
         break;
       }
+      case MAP:
+        if (maybeBindJson(statement, index, schema, value)) {
+          return true;
+        }
+        break;
       default:
         break;
     }
     return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
+  }
+
+  /**
+   * Convert a collection into a typed Java array for a primitive Connect element type, following
+   * pgjdbc's array mapping (https://jdbc.postgresql.org/documentation/head/arrays.html). Returns
+   * null for unhandled element types.
+   */
+  private static Object primitiveArrayFor(Schema.Type elementType, Collection<?> valueCollection) {
+    switch (elementType) {
+      case INT8:
+        // PostgreSQL has no single-byte integer; widen to short.
+        return valueCollection.stream().map(o -> ((Byte) o).shortValue()).toArray(Short[]::new);
+      case INT16:
+        return valueCollection.toArray(new Short[0]);
+      case INT32:
+        return valueCollection.toArray(new Integer[0]);
+      case INT64:
+        return valueCollection.toArray(new Long[0]);
+      case FLOAT32:
+        return valueCollection.toArray(new Float[0]);
+      case FLOAT64:
+        return valueCollection.toArray(new Double[0]);
+      case BOOLEAN:
+        return valueCollection.toArray(new Boolean[0]);
+      case STRING:
+        return valueCollection.toArray(new String[0]);
+      default:
+        return null;
+    }
   }
 
   /**

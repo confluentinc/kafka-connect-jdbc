@@ -169,6 +169,29 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final String NUMERIC_MAPPING_DISPLAY = "Map Numeric Values, Integral "
       + "or Decimal, By Precision and Scale";
 
+  public static final String SQL_COMPLEX_TYPES_ENABLE_CONFIG = "sql.complex.types.enable";
+  public static final boolean SQL_COMPLEX_TYPES_ENABLE_DEFAULT = false;
+  private static final String SQL_COMPLEX_TYPES_ENABLE_DOC =
+      "When enabled, the source connector maps native complex PostgreSQL column types "
+      + "(json/jsonb, hstore, and native arrays) to complex-aware Connect representations "
+      + "instead of plain STRING: json/jsonb become a logical JSON STRING, hstore becomes a "
+      + "logical JSON STRING or a Connect Map per hstore.handling.mode, and arrays become a "
+      + "Connect ARRAY of the mapped element type. When disabled (the default), json/jsonb "
+      + "and hstore are emitted as STRING and array columns are skipped, preserving "
+      + "backwards compatibility with existing pipelines.";
+  private static final String SQL_COMPLEX_TYPES_ENABLE_DISPLAY = "Enable SQL Complex Types";
+
+  public static final String HSTORE_HANDLING_MODE_CONFIG = "hstore.handling.mode";
+  private static final String HSTORE_HANDLING_MODE_DOC =
+      "Controls how PostgreSQL ``hstore`` columns are represented when "
+      + "``sql.complex.types.enable`` is true, and has no effect otherwise. ``map`` (the default) "
+      + "emits a Connect Map<String,String>; ``json`` emits the hstore as a JSON-object STRING. "
+      + "Either mode requires the schema owning the ``hstore`` extension to be on the "
+      + "connection's ``search_path``, because the column type is recognized by its unqualified "
+      + "name; an hstore column whose type is not visible there is skipped like any other "
+      + "unsupported type.";
+  private static final String HSTORE_HANDLING_MODE_DISPLAY = "HStore Handling Mode";
+
   private static final EnumRecommender NUMERIC_MAPPING_RECOMMENDER =
       EnumRecommender.in(NumericMapping.values());
 
@@ -854,7 +877,29 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         DATABASE_GROUP,
         ++orderInGroup,
         Width.MEDIUM,
-        DATE_CALENDAR_SYSTEM_DISPLAY);
+        DATE_CALENDAR_SYSTEM_DISPLAY
+    ).define(
+        SQL_COMPLEX_TYPES_ENABLE_CONFIG,
+        Type.BOOLEAN,
+        SQL_COMPLEX_TYPES_ENABLE_DEFAULT,
+        Importance.LOW,
+        SQL_COMPLEX_TYPES_ENABLE_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        SQL_COMPLEX_TYPES_ENABLE_DISPLAY
+    ).define(
+        HSTORE_HANDLING_MODE_CONFIG,
+        Type.STRING,
+        HstoreHandlingMode.DEFAULT,
+        ConfigDef.ValidString.in(HstoreHandlingMode.getValidConfigValues()),
+        Importance.LOW,
+        HSTORE_HANDLING_MODE_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.SHORT,
+        HSTORE_HANDLING_MODE_DISPLAY
+    );
   }
 
   private static final void addModeOptions(ConfigDef config) {
@@ -1299,6 +1344,41 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     }
   }
 
+  /**
+   * Representations available for PostgreSQL {@code hstore} columns on the topic, selected by
+   * {@code hstore.handling.mode}.
+   */
+  public enum HstoreHandlingMode {
+
+    // Emit a Connect MAP<STRING, STRING>.
+    MAP,
+
+    // Emit a JSON-object STRING tagged with the Json logical type.
+    JSON;
+
+    public static final String DEFAULT = MAP.name().toLowerCase(Locale.ROOT);
+
+    private static final Map<String, HstoreHandlingMode> reverse = new HashMap<>(values().length);
+
+    static {
+      for (HstoreHandlingMode val : values()) {
+        reverse.put(val.name().toLowerCase(Locale.ROOT), val);
+      }
+    }
+
+    public static HstoreHandlingMode get(JdbcSourceConnectorConfig config) {
+      // not adding a check for null value because the validator should catch those.
+      return reverse.get(
+          config.getString(HSTORE_HANDLING_MODE_CONFIG).toLowerCase(Locale.ROOT));
+    }
+
+    public static String[] getValidConfigValues() {
+      return Arrays.stream(values())
+          .map(val -> val.name().toLowerCase(Locale.ROOT))
+          .toArray(String[]::new);
+    }
+  }
+
   public enum NumericMapping {
     NONE,
     PRECISION_ONLY,
@@ -1441,6 +1521,10 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     return NumericMapping.get(this);
   }
 
+  public HstoreHandlingMode hstoreHandlingMode() {
+    return HstoreHandlingMode.get(this);
+  }
+
   public ZoneId zoneId() {
     String dbTimeZone = getString(JdbcSourceTaskConfig.DB_TIMEZONE_CONFIG);
     ZoneId zoneId;
@@ -1537,6 +1621,10 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public boolean modeUsesIncrementingColumn() {
     String mode = getString(MODE_CONFIG);
     return Arrays.asList(MODE_INCREMENTING, MODE_TIMESTAMP_INCREMENTING).contains(mode);
+  }
+
+  public boolean sqlComplexTypesEnabled() {
+    return getBoolean(SQL_COMPLEX_TYPES_ENABLE_CONFIG);
   }
 
   // Helper methods for configuration access

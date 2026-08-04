@@ -288,7 +288,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         }
 
         if (complexTypesEnabled() && isHstoreType(columnDefn)) {
-          builder.field(fieldName, hstoreSchema(columnDefn));
+          builder.field(fieldName, hstoreSchema(columnDefn.isOptional()));
           return fieldName;
         }
 
@@ -461,28 +461,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       return ((JdbcSourceConnectorConfig) config).sqlComplexTypesEnabled();
     }
     return false;
-  }
-
-  /**
-   * The Connect schema for a PostgreSQL hstore column, per {@code hstore.handling.mode}: a
-   * {@link Json} STRING, or a Map&lt;String,String&gt; whose values are optional so a SQL NULL can
-   * be carried. Both are provisioned as a native {@code jsonb} column, so the mode changes only the
-   * on-topic representation. Mirrors Debezium's {@code hstoreSchema()}.
-   */
-  private Schema hstoreSchema(ColumnDefinition columnDefn) {
-    boolean optional = columnDefn.isOptional();
-    switch (hstoreHandlingMode()) {
-      case JSON:
-        return optional ? Json.optionalSchema() : Json.schema();
-      case MAP:
-      default:
-        SchemaBuilder mapBuilder = SchemaBuilder.map(
-            Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA);
-        if (optional) {
-          mapBuilder.optional();
-        }
-        return mapBuilder.build();
-    }
   }
 
   @Override

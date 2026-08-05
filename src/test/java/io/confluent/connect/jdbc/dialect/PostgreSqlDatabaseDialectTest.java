@@ -807,21 +807,21 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   // GenericDatabaseDialectTest; no PostgreSQL-specific override exists to test here.
 
   @Test
-  public void hstoreMappingIsOffByDefaultAndPerMode() {
-    // hstore is opted into separately from json/jsonb and arrays: the feature flag alone is not
-    // enough, because hstore.handling.mode defaults to none.
-    assertFalse("the flag alone must not enable hstore",
+  public void hstoreMappingIsNotSelectedByDefault() {
+    // Half of the hstore gate: the mode must select a representation. The other half is the
+    // complex types flag, checked alongside it at every call site, so neither alone maps hstore.
+    assertFalse("the default must not select a mapping",
         new PostgreSqlDatabaseDialect(
             sourceConfigWithUrl("jdbc:postgresql://something",
                 JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true"))
-            .hstoreMappingEnabled());
+            .hstoreMappingSelected());
 
+    assertFalse("none must not select a mapping",
+        hstoreDialect("true", "none").hstoreMappingSelected());
     for (String mode : new String[]{"map", "json"}) {
-      assertTrue(mode + " must enable hstore", hstoreDialect("true", mode).hstoreMappingEnabled());
-      assertFalse("the flag must still gate " + mode,
-          hstoreDialect("false", mode).hstoreMappingEnabled());
+      assertTrue(mode + " must select a mapping",
+          hstoreDialect("true", mode).hstoreMappingSelected());
     }
-    assertFalse("none must disable hstore", hstoreDialect("true", "none").hstoreMappingEnabled());
   }
 
   private PostgreSqlDatabaseDialect hstoreDialect(String complexTypes, String mode) {

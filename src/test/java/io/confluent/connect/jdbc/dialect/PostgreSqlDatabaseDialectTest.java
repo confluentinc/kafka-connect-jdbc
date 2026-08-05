@@ -818,9 +818,9 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
   @Test
   public void hstoreHandlingModeShouldSelectSourceSchema() {
-    // Default is "map": a Map<String,String>.
+    // "map": a Map<String,String>. Not the default, which is "none".
     assertEquals(Type.MAP,
-        sourceFieldSchema(complexTypesDialect(), Types.OTHER, "hstore").type());
+        sourceFieldSchema(hstoreDialect("true", "map"), Types.OTHER, "hstore").type());
 
     // "json": a STRING tagged as the Json logical type, which the sink lands in JSONB.
     PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
@@ -845,17 +845,17 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
   @Test
   public void hstoreMapModeShouldPassThroughDriverMap() throws Exception {
-    // In map mode (the default) the driver's Map is emitted as-is for the Connect MAP schema.
+    // In map mode the driver's Map is emitted as-is for the Connect MAP schema.
     Map<String, String> hstore = Collections.singletonMap("env", "prod");
     assertEquals(hstore,
-        hstoreConverter(complexTypesDialect()).convert(hstoreResultSet(hstore)));
+        hstoreConverter(hstoreDialect("true", "map")).convert(hstoreResultSet(hstore)));
   }
 
   @Test
   public void hstoreSourceSchemaShouldMapToSinkSqlTypePerMode() {
     // Starts from the schema the source path actually produces for an hstore column, so this
     // exercises hstoreSchema() rather than re-asserting generic MAP/STRING behaviour.
-    Schema mapMode = sourceFieldSchema(complexTypesDialect(), Types.OTHER, "hstore");
+    Schema mapMode = sourceFieldSchema(hstoreDialect("true", "map"), Types.OTHER, "hstore");
     assertEquals("JSONB", sinkDialect().getSqlType(sinkField(mapMode)));
 
     PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
@@ -906,6 +906,36 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
+  public void shouldDropHstoreWhenHandlingModeIsNone() {
+    // The flag alone is not enough: none is the default, so hstore stays skipped until a mode is
+    // chosen. Both halves of the gate are required.
+    PostgreSqlDatabaseDialect defaulted = new PostgreSqlDatabaseDialect(
+        sourceConfigWithUrl("jdbc:postgresql://something",
+            JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true"));
+    assertNull(sourceFieldSchema(defaulted, Types.OTHER, "hstore"));
+    assertNull(sourceFieldSchema(hstoreDialect("true", "none"), Types.OTHER, "hstore"));
+  }
+
+  @Test
+  public void offSearchPathHstoreDoesNotWarnWhenHandlingModeIsNone() {
+    // An operator who asked for none should not be told about a type they chose to ignore.
+    CollectingAppender appender = new CollectingAppender();
+    org.apache.log4j.Logger logger =
+        org.apache.log4j.Logger.getLogger(PostgreSqlDatabaseDialect.class);
+    org.apache.log4j.Level originalLevel = logger.getLevel();
+    logger.setLevel(org.apache.log4j.Level.WARN);
+    logger.addAppender(appender);
+    try {
+      assertNull(sourceFieldSchema(
+          hstoreDialect("true", "none"), Types.OTHER, "\"ext\".\"hstore\""));
+      assertTrue("none must not warn about search_path", appender.warnings.isEmpty());
+    } finally {
+      logger.removeAppender(appender);
+      logger.setLevel(originalLevel);
+    }
+  }
+
+  @Test
   public void shouldDropHstoreWhenComplexTypesDisabled() {
     // The default is false, so hstore keeps today's drop-with-WARN behaviour and produces no field.
     PostgreSqlDatabaseDialect disabled =
@@ -924,7 +954,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
         JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json");
 
-    for (PostgreSqlDatabaseDialect dialect : Arrays.asList(complexTypesDialect(), jsonDialect)) {
+    for (PostgreSqlDatabaseDialect dialect : Arrays.asList(hstoreDialect("true", "map"), jsonDialect)) {
       assertNull(hstoreConverter(dialect, ColumnDefinition.Nullability.NULL).convert(rawText));
 
       DataException e = assertThrows(DataException.class, () ->
@@ -938,7 +968,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
         JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json");
 
-    for (PostgreSqlDatabaseDialect dialect : Arrays.asList(complexTypesDialect(), jsonDialect)) {
+    for (PostgreSqlDatabaseDialect dialect : Arrays.asList(hstoreDialect("true", "map"), jsonDialect)) {
       assertNull(hstoreConverter(dialect).convert(hstoreResultSet(null)));
     }
   }
@@ -987,7 +1017,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     logger.setLevel(org.apache.log4j.Level.WARN);
     logger.addAppender(appender);
     try {
-      PostgreSqlDatabaseDialect dialect = complexTypesDialect();
+      PostgreSqlDatabaseDialect dialect = hstoreDialect("true", "map");
       SchemaBuilder builder = SchemaBuilder.struct();
       String offPath = "\"ext\".\"hstore\"";
 
@@ -1038,7 +1068,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   public void shouldNotTreatNonHstoreOtherTypesAsHstore() {
     // Another Types.OTHER type must not be captured by the hstore branch just because the flag is
     // on. The qualified name is the off-search_path rendering, which stays unsupported.
-    PostgreSqlDatabaseDialect dialect = complexTypesDialect();
+    PostgreSqlDatabaseDialect dialect = hstoreDialect("true", "map");
     assertNull(sourceFieldSchema(dialect, Types.OTHER, "citext"));
     assertNull(sourceFieldSchema(dialect, Types.OTHER, "hstore_extra"));
     assertNull(sourceFieldSchema(dialect, Types.OTHER, "\"ext\".\"hstore\""));
@@ -1048,7 +1078,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   public void shouldMatchHstoreTypeNameCaseInsensitively() {
     // The driver's reported type name casing must not decide whether the feature works.
     assertEquals(Type.MAP,
-        sourceFieldSchema(complexTypesDialect(), Types.OTHER, "HSTORE").type());
+        sourceFieldSchema(hstoreDialect("true", "map"), Types.OTHER, "HSTORE").type());
   }
 
   // ----- complex-type test helpers -----

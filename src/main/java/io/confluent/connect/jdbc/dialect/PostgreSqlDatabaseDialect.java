@@ -299,12 +299,13 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           return fieldName;
         }
 
-        if (complexTypesEnabled() && isHstoreType(columnDefn)) {
+        if (complexTypesEnabled() && hstoreMappingSelected() && isHstoreType(columnDefn)) {
           builder.field(fieldName, hstoreSchema(columnDefn.isOptional()));
           return fieldName;
         }
 
-        if (complexTypesEnabled() && isUnresolvedHstoreType(columnDefn)
+        if (complexTypesEnabled() && hstoreMappingSelected()
+            && isUnresolvedHstoreType(columnDefn)
             && hstoreOffSearchPathWarnedColumns.add(columnDefn.id())) {
           log.warn(HSTORE_OFF_SEARCH_PATH_WARNING, columnDefn.id(), columnDefn.typeName());
         }
@@ -358,7 +359,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           return rs -> rs.getString(col);
         }
 
-        if (complexTypesEnabled() && isHstoreType(columnDefn)) {
+        if (complexTypesEnabled() && hstoreMappingSelected() && isHstoreType(columnDefn)) {
           if (hstoreHandlingMode() == HstoreHandlingMode.JSON) {
             return rs -> {
               Object value = hstoreValue(columnDefn, rs.getObject(col));

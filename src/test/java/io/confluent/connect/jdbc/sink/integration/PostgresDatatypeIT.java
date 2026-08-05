@@ -742,7 +742,8 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
         "INSERT INTO " + tableName + " VALUES (1, NULL)");
 
     new SchemaAndValueField("hs", HSTORE_MAP_SCHEMA, null)
-        .assertFor(pollOneRow(complexTypesSourceProps("postgres")));
+        .assertFor(pollOneRow(complexTypesSourceProps("postgres",
+            JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "map")));
     new SchemaAndValueField("hs", Json.optionalSchema(), null)
         .assertFor(pollOneRow(complexTypesSourceProps("postgres",
             JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json")));
@@ -799,7 +800,10 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
       s.execute("INSERT INTO " + tableName + " VALUES (1, 'k=>v'::ext.hstore)");
     }
 
-    assertFieldAbsent(pollOneRow(complexTypesSourceProps("offpath")), "hs");
+    // map mode is set explicitly: without it the default none would skip the column anyway and the
+    // test would pass without exercising the search_path behaviour at all.
+    assertFieldAbsent(pollOneRow(complexTypesSourceProps("offpath",
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "map")), "hs");
   }
 
   /**
@@ -907,11 +911,24 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
   @Test
   public void testHstoreMapModeRoundTripsToJsonb() throws Exception {
     createHstoreSourceRows();
-    runRoundTrip(7,
-        Collections.singletonMap(
-            JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true"),
+    Map<String, String> sourceExtras = new HashMap<>();
+    sourceExtras.put(JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true");
+    sourceExtras.put(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "map");
+    runRoundTrip(7, sourceExtras,
         Collections.singletonMap(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
     assertHstoreRoundTripRows();
+  }
+
+  @Test
+  public void testHstoreSkippedWhenHandlingModeIsNone() throws Exception {
+    // The complex types flag alone leaves hstore unmapped, since none is the default.
+    execute("CREATE EXTENSION IF NOT EXISTS hstore",
+        "CREATE TABLE " + tableName + "(id int, hs hstore)",
+        "INSERT INTO " + tableName + " VALUES (1, '\"k\" => \"v\"'::hstore)");
+
+    assertFieldAbsent(pollOneRow(complexTypesSourceProps("postgres")), "hs");
+    assertFieldAbsent(pollOneRow(complexTypesSourceProps("postgres",
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "none")), "hs");
   }
 
   @Test

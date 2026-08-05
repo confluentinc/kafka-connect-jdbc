@@ -35,6 +35,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CachedRecommenderValues;
@@ -358,19 +359,23 @@ public class JdbcSourceConnectorConfigTest {
 
   @Test
   public void testHstoreHandlingModeResolvesToEnum() {
-    assertEquals(HstoreHandlingMode.MAP,
+    // none is the default, so hstore is opted into separately from json/jsonb and arrays.
+    assertEquals(HstoreHandlingMode.NONE,
         new JdbcSourceConnectorConfig(createMinimalConfig()).hstoreHandlingMode());
 
-    Map<String, String> props = createMinimalConfig();
-    props.put(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json");
-    assertEquals(HstoreHandlingMode.JSON,
-        new JdbcSourceConnectorConfig(props).hstoreHandlingMode());
+    for (HstoreHandlingMode mode : HstoreHandlingMode.values()) {
+      Map<String, String> props = createMinimalConfig();
+      props.put(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG,
+          mode.name().toLowerCase(Locale.ROOT));
+      assertEquals(mode, new JdbcSourceConnectorConfig(props).hstoreHandlingMode());
+    }
   }
 
   @Test
   public void testHstoreHandlingModeValidValuesAreTheEnumNames() {
-    assertArrayEquals(new String[]{"map", "json"}, HstoreHandlingMode.getValidConfigValues());
-    assertEquals("map", HstoreHandlingMode.DEFAULT);
+    assertArrayEquals(new String[]{"none", "map", "json"},
+        HstoreHandlingMode.getValidConfigValues());
+    assertEquals("none", HstoreHandlingMode.DEFAULT);
   }
 
   @Test(expected = ConfigException.class)

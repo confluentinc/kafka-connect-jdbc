@@ -395,6 +395,33 @@ public class JdbcSourceConnectorConfigTest {
   }
 
   @Test(expected = ConfigException.class)
+  public void testHstoreHandlingModeIsCaseSensitive() {
+    // ConfigDef.ValidString.in is case-sensitive, so an upper-case mode is rejected at validation
+    // even though HstoreHandlingMode.get resolves case-insensitively.
+    Map<String, String> props = createMinimalConfig();
+    props.put(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "JSON");
+
+    new JdbcSourceConnectorConfig(props);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void testNonBooleanComplexTypesEnableThrowsException() {
+    Map<String, String> props = createMinimalConfig();
+    props.put(JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "not-a-boolean");
+
+    new JdbcSourceConnectorConfig(props);
+  }
+
+  @Test
+  public void testComplexTypesEnableDefaultsToFalse() {
+    assertFalse(new JdbcSourceConnectorConfig(createMinimalConfig()).sqlComplexTypesEnabled());
+
+    Map<String, String> props = createMinimalConfig();
+    props.put(JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "TRUE");
+    assertTrue(new JdbcSourceConnectorConfig(props).sqlComplexTypesEnabled());
+  }
+
+  @Test(expected = ConfigException.class)
   public void testInvalidRegexInIncludeListThrowsException() {
     Map<String, String> props = createMinimalConfig();
     props.put(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG, "[invalid-regex");

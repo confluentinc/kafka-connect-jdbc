@@ -57,7 +57,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.Properties;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG;
 
@@ -93,17 +92,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   // How pgjdbc renders an hstore type whose schema is off the connection's search_path.
   private static final String QUALIFIED_HSTORE_SUFFIX = ".\"" + HSTORE_TYPE_NAME + "\"";
 
-  private static final String HSTORE_OFF_SEARCH_PATH_WARNING =
-      "Skipping hstore column {}: the driver reports its type as {}, so the hstore extension is "
-          + "not on this connection's search_path. Add the schema owning the extension to "
-          + "search_path for the column to be mapped.";
-
-  /**
-   * Columns already warned about for {@link #HSTORE_OFF_SEARCH_PATH_WARNING}. The schema is rebuilt
-   * every query cycle, so the warning would otherwise repeat for the life of the task. Scoped to
-   * the dialect, i.e. to the task, so a restart warns again.
-   */
-  private final Set<ColumnId> hstoreOffSearchPathWarnedColumns = ConcurrentHashMap.newKeySet();
+  private static final String HSTORE_OFF_SEARCH_PATH_ERROR =
+      "Cannot map hstore column %s: the driver reports its type as %s, so the hstore extension is "
+          + "not on this connection's search_path. Add the schema owning the extension to the "
+          + "search_path, for example with ?currentSchema=ext,public on connection.url, or set "
+          + "hstore.handling.mode=none to skip hstore columns.";
 
   /**
    * Define the PG datatypes that require casting upon insert/update statements.
@@ -291,23 +284,27 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       case Types.OTHER: {
         // Some of these types will have fixed size, but we drop this from the schema conversion
         // since only fixed byte arrays can have a fixed size
+        if (complexTypesEnabled()) {
+          if (isHstoreType(columnDefn)) {
+            if (hstoreMappingSelected()) {
+              builder.field(fieldName, hstoreSchema(columnDefn.isOptional()));
+              return fieldName;
+            }
+            // hstore.handling.mode=none: skipped, as before the feature existed.
+          } else if (isUnresolvedHstoreType(columnDefn) && hstoreMappingSelected()) {
+            // A mapping mode was asked for and this column cannot honour it, so fail rather than
+            // silently drop the column.
+            throw new ConnectException(String.format(HSTORE_OFF_SEARCH_PATH_ERROR,
+                columnDefn.id(), columnDefn.typeName()));
+          }
+        }
+
         if (isJsonType(columnDefn)) {
           builder.field(
               fieldName,
               columnDefn.isOptional() ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA
           );
           return fieldName;
-        }
-
-        if (complexTypesEnabled() && hstoreMappingSelected() && isHstoreType(columnDefn)) {
-          builder.field(fieldName, hstoreSchema(columnDefn.isOptional()));
-          return fieldName;
-        }
-
-        if (complexTypesEnabled() && hstoreMappingSelected()
-            && isUnresolvedHstoreType(columnDefn)
-            && hstoreOffSearchPathWarnedColumns.add(columnDefn.id())) {
-          log.warn(HSTORE_OFF_SEARCH_PATH_WARNING, columnDefn.id(), columnDefn.typeName());
         }
 
         if (UUID.class.getName().equals(columnDefn.classNameForType())) {

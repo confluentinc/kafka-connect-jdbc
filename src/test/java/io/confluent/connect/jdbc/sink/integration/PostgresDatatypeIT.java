@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.jdbc.data.Json;
@@ -51,6 +52,7 @@ import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.runtime.ConnectorConfig;
 import org.apache.kafka.connect.runtime.errors.ToleranceType;
@@ -68,9 +70,11 @@ import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.MAX_RETRIES;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.ERRORS_TOLERANCE_CONFIG;
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_NAME_CONFIG;
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_REPLICATION_FACTOR_CONFIG;
+import static org.apache.kafka.test.TestUtils.waitForCondition;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 
@@ -790,7 +794,7 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
    * read as raw text rather than a Map, so the column is skipped rather than mis-read.
    */
   @Test
-  public void testHstoreOutsideSearchPathIsSkipped() throws Exception {
+  public void testHstoreOutsideSearchPathFailsWhenAMappingModeIsSelected() throws Exception {
     execute("CREATE DATABASE offpath");
     try (Connection c = pg.getEmbeddedPostgres().getDatabase("postgres", "offpath").getConnection();
          Statement s = c.createStatement()) {
@@ -800,10 +804,49 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
       s.execute("INSERT INTO " + tableName + " VALUES (1, 'k=>v'::ext.hstore)");
     }
 
-    // map mode is set explicitly: without it the default none would skip the column anyway and the
-    // test would pass without exercising the search_path behaviour at all.
+    // A mapping mode was asked for and this column cannot honour it, so the task fails rather than
+    // silently dropping the column. map mode is set explicitly: under the default none the column
+    // would be skipped and this would prove nothing about search_path.
+    String failure = pollUntilTaskFails(complexTypesSourceProps("offpath",
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "map"));
+    assertTrue("must name the cause, got: " + failure, failure.contains("search_path"));
+    assertTrue("must offer the escape hatch, got: " + failure,
+        failure.contains("hstore.handling.mode=none"));
+
+    // none is the escape hatch: the same column is skipped instead of failing.
     assertFieldAbsent(pollOneRow(complexTypesSourceProps("offpath",
-        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "map")), "hs");
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "none")), "hs");
+  }
+
+  /**
+   * Run a source task until it fails, returning the messages of the whole cause chain. The querier
+   * runs on a background thread, so the failure is recorded by {@code RecordQueue.failWith} and
+   * rethrown, wrapped, from a later poll rather than the first one.
+   */
+  private String pollUntilTaskFails(Map<String, String> sourceProps) throws Exception {
+    JdbcSourceTask task = new JdbcSourceTask();
+    AtomicReference<Throwable> thrown = new AtomicReference<>();
+    try {
+      task.start(sourceProps);
+      waitForCondition(() -> {
+        try {
+          task.poll();
+          return false;
+        } catch (InterruptedException e) {
+          throw new RuntimeException(e);
+        } catch (Throwable e) {
+          thrown.set(e);
+          return true;
+        }
+      }, 60_000, "the source task did not fail in time");
+    } finally {
+      task.stop();
+    }
+    StringBuilder messages = new StringBuilder();
+    for (Throwable cause = thrown.get(); cause != null; cause = cause.getCause()) {
+      messages.append(cause.getMessage()).append(' ');
+    }
+    return messages.toString();
   }
 
   /**

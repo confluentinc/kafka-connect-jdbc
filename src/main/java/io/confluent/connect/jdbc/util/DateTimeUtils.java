@@ -66,6 +66,18 @@ public class DateTimeUtils {
     return DATE_FORMATTER.format(zoned);
   }
 
+  /**
+   * Format a date whose milliseconds are expressed in the calendar {@code date.calendar.system}
+   * selects, shifting a hybrid Julian/Gregorian value into proleptic space first so a single
+   * renderer covers both. Rendering in the other calendar would move pre-1582 dates by up to ten
+   * days.
+   */
+  public static String formatDate(Date date, ZoneId zoneId, DateCalendarSystem calendarSystem) {
+    long millis = calendarSystem.isModern() ? date.getTime()
+        : convertToModernDate(new java.sql.Date(date.getTime()), zoneId).getTime();
+    return DATE_FORMATTER.format(Instant.ofEpochMilli(millis).atZone(zoneId));
+  }
+
   public static String formatTime(Date date, ZoneId zoneId) {
     ZonedDateTime zoned = date.toInstant().atZone(zoneId);
     return TIME_FORMATTER.format(zoned);
@@ -74,6 +86,16 @@ public class DateTimeUtils {
   public static String formatTimestamp(Date date, ZoneId zoneId) {
     ZonedDateTime zoned = date.toInstant().atZone(zoneId);
     return TIMESTAMP_FORMATTER.format(zoned);
+  }
+
+  /**
+   * As {@link #formatDate(Date, ZoneId, DateCalendarSystem)}, for a timestamp.
+   */
+  public static String formatTimestamp(Date date, ZoneId zoneId,
+      DateCalendarSystem calendarSystem) {
+    long millis = calendarSystem.isModern() ? date.getTime()
+        : convertToModernTimestamp(new java.sql.Timestamp(date.getTime()), zoneId).getTime();
+    return TIMESTAMP_FORMATTER.format(Instant.ofEpochMilli(millis).atZone(zoneId));
   }
 
   public static Timestamp formatSinkMicrosTimestamp(Long epochMicros) {

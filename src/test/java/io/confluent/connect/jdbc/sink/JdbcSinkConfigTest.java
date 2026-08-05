@@ -29,7 +29,9 @@ import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 public class JdbcSinkConfigTest {
 
@@ -46,6 +48,22 @@ public class JdbcSinkConfigTest {
   public void afterEach() {
     props.clear();
     config = null;
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldFailToCreateConfigWithNonBooleanComplexTypesEnable() {
+    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "not-a-boolean");
+    createConfig();
+  }
+
+  @Test
+  public void shouldDefaultComplexTypesEnableToFalse() {
+    createConfig();
+    assertFalse(config.sqlComplexTypesEnable);
+
+    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
+    createConfig();
+    assertTrue(config.sqlComplexTypesEnable);
   }
 
   @Test(expected = ConfigException.class)

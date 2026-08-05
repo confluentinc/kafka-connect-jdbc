@@ -1257,12 +1257,27 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
   public void testHstoreArrayMapModeRoundTrip() throws Exception {
     createHstoreArraySourceRows();
 
-    runRoundTrip(1,
-        Collections.singletonMap(
-            JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true"),
+    Map<String, String> sourceExtras = new HashMap<>();
+    sourceExtras.put(JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true");
+    sourceExtras.put(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "map");
+
+    runRoundTrip(1, sourceExtras,
         Collections.singletonMap(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
 
     assertHstoreArrayRoundTripRows();
+  }
+
+  @Test
+  public void testHstoreArraySkippedWhenHandlingModeIsNone() throws Exception {
+    // The hstore mode governs hstore[] too, so the array column is skipped while a plain int[]
+    // column alongside it is unaffected.
+    execute("CREATE EXTENSION IF NOT EXISTS hstore",
+        "CREATE TABLE " + tableName + "(id int, hs hstore[], nums int[])",
+        "INSERT INTO " + tableName + " VALUES (1, ARRAY['\"k\" => \"v\"'::hstore], ARRAY[1, 2])");
+
+    Struct row = pollOneRow(complexTypesSourceProps("postgres"));
+    assertFieldAbsent(row, "hs");
+    assertEquals(Arrays.asList(1, 2), row.get("nums"));
   }
 
   @Test

@@ -1336,8 +1336,8 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
   @Test
   public void hstoreArrayElementSchemaShouldFollowHandlingMode() {
-    // map mode (default): ARRAY<MAP<STRING,STRING>> with optional values so a NULL survives.
-    Schema mapMode = sourceFieldSchema(complexTypesDialect(), Types.ARRAY, "_hstore");
+    // map mode: ARRAY<MAP<STRING,STRING>> with optional values so a NULL survives.
+    Schema mapMode = sourceFieldSchema(hstoreDialect("true", "map"), Types.ARRAY, "_hstore");
     assertEquals(Type.ARRAY, mapMode.type());
     assertEquals(Type.MAP, mapMode.valueSchema().type());
     assertTrue(mapMode.valueSchema().isOptional());
@@ -1357,7 +1357,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     // map mode: the driver's maps pass through, including an hstore NULL value.
     assertEquals(
         Arrays.asList(Collections.singletonMap("env", "prod"), withNull),
-        arrayColumnConverter(complexTypesDialect(), "_hstore").convert(
+        arrayColumnConverter(hstoreDialect("true", "map"), "_hstore").convert(
             hstoreArrayResultSet(Collections.singletonMap("env", "prod"), withNull)));
 
     // json mode: each element is serialized, with the hstore NULL becoming a JSON null.
@@ -1389,6 +1389,21 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     PostgreSqlDatabaseDialect disabled =
         new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something"));
     assertNull(sourceFieldSchema(disabled, Types.ARRAY, "_hstore"));
+  }
+
+  @Test
+  public void hstoreArrayShouldBeDroppedWhenHandlingModeIsNone() {
+    // none applies to hstore[] exactly as to a scalar hstore column, so the two cannot disagree.
+    // The element has no representation, so the whole array column is skipped.
+    assertNull(sourceFieldSchema(hstoreDialect("true", "none"), Types.ARRAY, "_hstore"));
+    assertNull(sourceFieldSchema(
+        new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something",
+            JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true")),
+        Types.ARRAY, "_hstore"));
+
+    // Other element types are unaffected by the hstore mode.
+    assertEquals(Type.ARRAY,
+        sourceFieldSchema(hstoreDialect("true", "none"), Types.ARRAY, "_int4").type());
   }
 
   @Test

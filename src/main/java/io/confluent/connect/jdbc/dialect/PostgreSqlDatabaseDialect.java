@@ -395,10 +395,20 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
+   * Whether hstore columns are mapped at all: the complex types feature must be on and
+   * {@code hstore.handling.mode} must not be {@code none}, the default. Gates every hstore call
+   * site, so {@link #hstoreSchema(boolean)} is only ever reached for a real representation.
+   */
+  protected boolean hstoreMappingEnabled() {
+    return complexTypesEnabled() && hstoreHandlingMode() != HstoreHandlingMode.NONE;
+  }
+
+  /**
    * The on-topic schema for an hstore value under {@code hstore.handling.mode}: a {@code Json}
    * STRING, or a {@code MAP<STRING, STRING>} whose values are optional since an hstore value may
    * be NULL. Shared so a scalar column (optionality from the column) and an array element (always
-   * optional) cannot drift apart.
+   * optional) cannot drift apart. Only valid once {@link #hstoreMappingEnabled()} holds; the map
+   * branch is the fallback, so {@code none} would otherwise be read as {@code map}.
    */
   protected Schema hstoreSchema(boolean optional) {
     if (hstoreHandlingMode() == HstoreHandlingMode.JSON) {

@@ -807,6 +807,30 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   // GenericDatabaseDialectTest; no PostgreSQL-specific override exists to test here.
 
   @Test
+  public void hstoreMappingIsOffByDefaultAndPerMode() {
+    // hstore is opted into separately from json/jsonb and arrays: the feature flag alone is not
+    // enough, because hstore.handling.mode defaults to none.
+    assertFalse("the flag alone must not enable hstore",
+        new PostgreSqlDatabaseDialect(
+            sourceConfigWithUrl("jdbc:postgresql://something",
+                JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true"))
+            .hstoreMappingEnabled());
+
+    for (String mode : new String[]{"map", "json"}) {
+      assertTrue(mode + " must enable hstore", hstoreDialect("true", mode).hstoreMappingEnabled());
+      assertFalse("the flag must still gate " + mode,
+          hstoreDialect("false", mode).hstoreMappingEnabled());
+    }
+    assertFalse("none must disable hstore", hstoreDialect("true", "none").hstoreMappingEnabled());
+  }
+
+  private PostgreSqlDatabaseDialect hstoreDialect(String complexTypes, String mode) {
+    return new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something",
+        JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, complexTypes,
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, mode));
+  }
+
+  @Test
   public void hstoreSchemaFollowsHandlingModeAndOptionality() {
     // Shared by the scalar column path (#1661) and the array element path (#1662), so the contract
     // is pinned here rather than in either consumer.

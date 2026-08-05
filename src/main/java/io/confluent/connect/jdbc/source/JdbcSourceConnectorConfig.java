@@ -183,13 +183,13 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public static final String HSTORE_HANDLING_MODE_CONFIG = "hstore.handling.mode";
   private static final String HSTORE_HANDLING_MODE_DOC =
-      "Controls how PostgreSQL ``hstore`` columns are represented when "
-      + "``sql.complex.types.enable`` is true, and has no effect otherwise. ``map`` (the default) "
-      + "emits a Connect Map<String,String>; ``json`` emits the hstore as a JSON-object STRING. "
-      + "Either mode requires the schema owning the ``hstore`` extension to be on the "
-      + "connection's ``search_path``, because the column type is recognized by its unqualified "
-      + "name; an hstore column whose type is not visible there is skipped like any other "
-      + "unsupported type.";
+      "Controls how PostgreSQL ``hstore`` columns are handled. Has no effect "
+      + "unless ``sql.complex.types.enable`` is true, and applies to the source connector only.\n"
+      + "  * Use ``none``, the default, to leave hstore columns unmapped and therefore skipped.\n"
+      + "  * Use ``map`` to emit as Connect Map.\n"
+      + "  * Use ``json`` to emit the hstore as a JSON-object STRING.\n"
+      + "The sink writes either representation, and any Connect Map<String,String>, to a native "
+      + "``jsonb`` column.\n";
   private static final String HSTORE_HANDLING_MODE_DISPLAY = "HStore Handling Mode";
 
   private static final EnumRecommender NUMERIC_MAPPING_RECOMMENDER =
@@ -1350,13 +1350,17 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
    */
   public enum HstoreHandlingMode {
 
+    // Do not map hstore columns at all; they are skipped as before the feature existed. The
+    // default, so hstore is opted into separately from json/jsonb and arrays.
+    NONE,
+
     // Emit a Connect MAP<STRING, STRING>.
     MAP,
 
     // Emit a JSON-object STRING tagged with the Json logical type.
     JSON;
 
-    public static final String DEFAULT = MAP.name().toLowerCase(Locale.ROOT);
+    public static final String DEFAULT = NONE.name().toLowerCase(Locale.ROOT);
 
     private static final Map<String, HstoreHandlingMode> reverse = new HashMap<>(values().length);
 

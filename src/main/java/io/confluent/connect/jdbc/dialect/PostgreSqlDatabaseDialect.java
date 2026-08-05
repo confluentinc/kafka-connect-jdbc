@@ -445,9 +445,15 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         // Raw JSON text via the Json logical type; round-trips to a native jsonb[] sink column.
         return Json.optionalSchema();
       case HSTORE_TYPE_NAME:
-        // Shared with the scalar hstore path; array elements are always optional. Null when the
-        // handling mode is none, so hstore[] is skipped exactly as a scalar hstore column is.
-        return hstoreMappingSelected() ? hstoreSchema(true) : null;
+        if (!hstoreMappingSelected()) {
+          // hstore.handling.mode=none: skipped exactly as a scalar hstore column is.
+          return null;
+        }
+        if (isUnresolvedHstoreArrayType(columnDefn)) {
+          throw hstoreOffSearchPathError(columnDefn.id(), columnDefn.typeName());
+        }
+        // Shared with the scalar hstore path; array elements are always optional.
+        return hstoreSchema(true);
       case "date":
         return Date.builder().optional().build();
       case "time":
@@ -463,15 +469,28 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * Lowercased element type name of a PostgreSQL array column (strips the leading {@code _}).
+   * Lowercased element type name of a PostgreSQL array column (strips the leading {@code _}). The
+   * name is unqualified first, since pgjdbc schema-qualifies an extension type that is off the
+   * connection's {@code search_path} and {@code "ext"."_hstore"} would otherwise match nothing.
    */
   private static String arrayElementBaseType(ColumnDefinition columnDefn) {
-    String typeName = columnDefn.typeName();
+    String typeName = localTypeName(columnDefn.typeName());
     if (typeName == null) {
       return null;
     }
     String base = typeName.startsWith("_") ? typeName.substring(1) : typeName;
     return base.toLowerCase();
+  }
+
+  /**
+   * Whether an array column's element type is an hstore the driver could not resolve, i.e. the
+   * column type arrived schema-qualified as {@code "ext"."_hstore"}.
+   */
+  private static boolean isUnresolvedHstoreArrayType(ColumnDefinition columnDefn) {
+    String typeName = columnDefn.typeName();
+    return typeName != null
+        && !typeName.equals(localTypeName(typeName))
+        && HSTORE_TYPE_NAME.equals(arrayElementBaseType(columnDefn));
   }
 
   /**

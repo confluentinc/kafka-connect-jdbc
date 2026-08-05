@@ -1392,6 +1392,24 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
+  public void offSearchPathHstoreArrayFailsWhenAMappingModeIsSelected() {
+    // The array type is its own pg_type row in the same schema, so it is qualified exactly as the
+    // scalar type is; hstore[] must therefore fail the task rather than vanish, as hstore does.
+    for (String mode : new String[]{"map", "json"}) {
+      ConnectException e = assertThrows(mode + " must fail", ConnectException.class,
+          () -> sourceFieldSchema(
+              hstoreDialect("true", mode), Types.ARRAY, "\"ext\".\"_hstore\""));
+      assertTrue("must name the cause", e.getMessage().contains("search_path"));
+    }
+
+    // none stays the escape hatch, and an unrelated array element type is untouched.
+    assertNull(sourceFieldSchema(
+        hstoreDialect("true", "none"), Types.ARRAY, "\"ext\".\"_hstore\""));
+    assertNull(sourceFieldSchema(
+        hstoreDialect("true", "map"), Types.ARRAY, "\"ext\".\"_citext\""));
+  }
+
+  @Test
   public void hstoreArrayShouldBeDroppedWhenHandlingModeIsNone() {
     // none applies to hstore[] exactly as to a scalar hstore column, so the two cannot disagree.
     // The element has no representation, so the whole array column is skipped.

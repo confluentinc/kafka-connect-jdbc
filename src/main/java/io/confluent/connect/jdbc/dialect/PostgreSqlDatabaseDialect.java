@@ -464,12 +464,13 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * Whether hstore columns are mapped at all: the complex types feature must be on and
-   * {@code hstore.handling.mode} must not be {@code none}, the default. Gates every hstore call
-   * site, so {@link #hstoreSchema(boolean)} is only ever reached for a real representation.
+   * Whether {@code hstore.handling.mode} selects a representation, i.e. is not {@code none}, the
+   * default. Paired with the complex types flag at every hstore call site, so hstore is opted into
+   * independently of json/jsonb and arrays and {@link #hstoreSchema(boolean)} is only ever reached
+   * for a real representation.
    */
-  protected boolean hstoreMappingEnabled() {
-    return complexTypesEnabled() && hstoreHandlingMode() != HstoreHandlingMode.NONE;
+  protected boolean hstoreMappingSelected() {
+    return hstoreHandlingMode() != HstoreHandlingMode.NONE;
   }
 
   /**

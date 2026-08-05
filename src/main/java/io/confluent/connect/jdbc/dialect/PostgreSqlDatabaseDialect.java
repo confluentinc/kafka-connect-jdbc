@@ -281,6 +281,18 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       case Types.OTHER: {
         // Some of these types will have fixed size, but we drop this from the schema conversion
         // since only fixed byte arrays can have a fixed size
+        if (complexTypesEnabled()) {
+          if (isHstoreType(columnDefn)) {
+            if (hstoreMappingSelected()) {
+              builder.field(fieldName, hstoreSchema(columnDefn.isOptional()));
+              return fieldName;
+            }
+            // hstore.handling.mode=none: skipped, as before the feature existed.
+          } else if (isUnresolvedHstoreType(columnDefn.typeName()) && hstoreMappingSelected()) {
+            throw hstoreOffSearchPathError(columnDefn.id(), columnDefn.typeName());
+          }
+        }
+
         if (isJsonType(columnDefn)) {
           builder.field(
               fieldName,
@@ -338,6 +350,16 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           return rs -> rs.getString(col);
         }
 
+        if (complexTypesEnabled() && hstoreMappingSelected() && isHstoreType(columnDefn)) {
+          if (hstoreHandlingMode() == HstoreHandlingMode.JSON) {
+            return rs -> {
+              Object value = hstoreValue(columnDefn, rs.getObject(col));
+              return value == null ? null : JsonConverter.connectMapToJson(value);
+            };
+          }
+          return rs -> hstoreValue(columnDefn, rs.getObject(col));
+        }
+
         if (UUID.class.getName().equals(columnDefn.classNameForType())) {
           return rs -> rs.getString(col);
         }
@@ -354,6 +376,29 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   protected boolean isJsonType(ColumnDefinition columnDefn) {
     String typeName = columnDefn.typeName();
     return JSON_TYPE_NAME.equalsIgnoreCase(typeName) || JSONB_TYPE_NAME.equalsIgnoreCase(typeName);
+  }
+
+  protected boolean isHstoreType(ColumnDefinition columnDefn) {
+    return HSTORE_TYPE_NAME.equalsIgnoreCase(columnDefn.typeName());
+  }
+
+  /**
+   * The driver's value for an hstore column, as the map both handling modes require. Anything else
+   * follows Debezium's {@code handleUnknownData}: a nullable column degrades to null, a NOT NULL
+   * column fails, and the same text is used either way. The value is never logged, in case it is
+   * sensitive.
+   */
+  private Object hstoreValue(ColumnDefinition columnDefn, Object value) {
+    if (value == null || value instanceof Map) {
+      return value;
+    }
+    if (columnDefn.isOptional()) {
+      log.warn("Unexpected value for hstore column {}: class={}; emitting null",
+          columnDefn.id(), value.getClass().getName());
+      return null;
+    }
+    throw new DataException("Unexpected value for hstore column " + columnDefn.id()
+        + ": class=" + value.getClass().getName());
   }
 
   /**

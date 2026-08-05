@@ -89,6 +89,12 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   static final String UUID_TYPE_NAME = "uuid";
   static final String HSTORE_TYPE_NAME = "hstore";
 
+  private static final String HSTORE_OFF_SEARCH_PATH_ERROR =
+      "Cannot map hstore column %s: the driver reports its type as %s, so the hstore extension is "
+          + "not on this connection's search_path. Add the schema owning the extension to the "
+          + "search_path, for example with ?currentSchema=ext,public on connection.url, or set "
+          + "hstore.handling.mode=none to skip hstore columns.";
+
   /**
    * Define the PG datatypes that require casting upon insert/update statements.
    */
@@ -402,6 +408,39 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    */
   protected boolean hstoreMappingSelected() {
     return hstoreHandlingMode() != HstoreHandlingMode.NONE;
+  }
+
+  /**
+   * The local, unquoted PostgreSQL type name: {@code hstore} and {@code "ext"."hstore"} both yield
+   * {@code hstore}, and {@code "ext"."_hstore"} yields {@code _hstore}. pgjdbc renders an extension
+   * type bare only while its schema is on the connection's {@code search_path}, and
+   * schema-qualifies it otherwise.
+   */
+  protected static String localTypeName(String typeName) {
+    if (typeName == null) {
+      return null;
+    }
+    int lastDot = typeName.lastIndexOf('.');
+    return (lastDot < 0 ? typeName : typeName.substring(lastDot + 1)).replace("\"", "");
+  }
+
+  /**
+   * Whether a type name is an hstore the driver could not resolve, i.e. one that arrived
+   * schema-qualified because the extension is off the {@code search_path}. Shared by the scalar
+   * column path and the array element path, which must agree.
+   */
+  protected static boolean isUnresolvedHstoreType(String typeName) {
+    return typeName != null
+        && !HSTORE_TYPE_NAME.equalsIgnoreCase(typeName)
+        && HSTORE_TYPE_NAME.equalsIgnoreCase(localTypeName(typeName));
+  }
+
+  /**
+   * The failure for an hstore column that a selected mapping mode cannot honour. Failing beats
+   * silently dropping the column, since a mode was explicitly asked for.
+   */
+  protected ConnectException hstoreOffSearchPathError(ColumnId column, String typeName) {
+    return new ConnectException(String.format(HSTORE_OFF_SEARCH_PATH_ERROR, column, typeName));
   }
 
   /**

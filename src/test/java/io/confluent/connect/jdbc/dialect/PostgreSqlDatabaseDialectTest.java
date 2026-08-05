@@ -18,6 +18,7 @@ package io.confluent.connect.jdbc.dialect;
 import io.confluent.connect.jdbc.data.Json;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
@@ -29,6 +30,7 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder;
 
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -803,8 +805,72 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
 
-  // validateQuery behaviour is inherited from GenericDatabaseDialect and exercised in
-  // GenericDatabaseDialectTest; no PostgreSQL-specific override exists to test here.
+  // validateQuery is inherited from GenericDatabaseDialect; tested in GenericDatabaseDialectTest.
+
+  // ========== Complex SQL types (sql.complex.types.enable) ==========
+
+  @Test
+  public void jsonColumnMapsToLogicalJsonStringSchema() {
+    // json/jsonb map to a logical JSON STRING tagged with the Json logical name, and optionality
+    // follows the column: a nullable column needs an optional schema or a NULL value breaches it.
+    // Schema equality covers the type, the logical name and the optional flag together.
+    assertEquals(Json.optionalSchema(), jsonColumnSchema(ColumnDefinition.Nullability.NULL));
+    assertEquals(Json.schema(), jsonColumnSchema(ColumnDefinition.Nullability.NOT_NULL));
+  }
+
+  private Schema jsonColumnSchema(ColumnDefinition.Nullability nullability) {
+    SchemaBuilder builder = SchemaBuilder.struct();
+    String fieldName = complexTypesDialect()
+        .addFieldToSchema(column(Types.OTHER, "jsonb", nullability), builder);
+    return builder.build().field(fieldName).schema();
+  }
+
+  @Test
+  public void jsonColumnValueShouldStayRawJsonText() throws Exception {
+    // The value is the document's raw text (lossless), not a re-serialized/projected form.
+    ColumnDefinition column = column(Types.OTHER, "jsonb");
+    DatabaseDialect.ColumnConverter converter = complexTypesDialect().columnConverterFor(
+        new ColumnMapping(column, 1, new Field("col", 0, Json.optionalSchema())),
+        column, 1, true);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getString(1)).thenReturn("{\"b\":2,\"a\":[1,null]}");
+
+    assertEquals("{\"b\":2,\"a\":[1,null]}", converter.convert(resultSet));
+  }
+
+  @Test
+  public void shouldMapComplexTypesToSqlTypes() {
+    // The sink half of this PR's contract: the source now tags json/jsonb columns as Json, so a
+    // round trip only lands back in jsonb if the sink maps that tag. The mapping itself is #1651's
+    // and is covered there for both flag arms; this pins the half the schema change depends on.
+    assertEquals("JSONB",
+        sinkDialect().getSqlType(new SinkRecordField(Json.schema(), "col", false)));
+  }
+
+  // ----- complex-type test helpers -----
+
+  private PostgreSqlDatabaseDialect complexTypesDialect() {
+    return new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something",
+        JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true"));
+  }
+
+  private PostgreSqlDatabaseDialect sinkDialect() {
+    return new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+  }
+
+  private ColumnDefinition column(int jdbcType, String typeName) {
+    return column(jdbcType, typeName, ColumnDefinition.Nullability.NULL);
+  }
+
+  private ColumnDefinition column(
+      int jdbcType, String typeName, ColumnDefinition.Nullability nullability) {
+    return new ColumnDefinition(
+        new ColumnId(new TableId(null, null, "t"), "col"),
+        jdbcType, typeName, Object.class.getName(),
+        nullability, ColumnDefinition.Mutability.UNKNOWN,
+        0, 0, false, 1, false, false, false, false, false);
+  }
 
   @Test
   public void shouldRecogniseAnOffSearchPathHstoreTypeName() {

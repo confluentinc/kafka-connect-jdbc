@@ -873,6 +873,30 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
+  public void hstoreMappingIsNotSelectedByDefault() {
+    // Half of the hstore gate: the mode must select a representation. The other half is the
+    // complex types flag, checked alongside it at every call site, so neither alone maps hstore.
+    assertFalse("the default must not select a mapping",
+        new PostgreSqlDatabaseDialect(
+            sourceConfigWithUrl("jdbc:postgresql://something",
+                JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true"))
+            .hstoreMappingSelected());
+
+    assertFalse("none must not select a mapping",
+        hstoreDialect("true", "none").hstoreMappingSelected());
+    for (String mode : new String[]{"map", "json"}) {
+      assertTrue(mode + " must select a mapping",
+          hstoreDialect("true", mode).hstoreMappingSelected());
+    }
+  }
+
+  private PostgreSqlDatabaseDialect hstoreDialect(String complexTypes, String mode) {
+    return new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something",
+        JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, complexTypes,
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, mode));
+  }
+
+  @Test
   public void hstoreSchemaFollowsHandlingModeAndOptionality() {
     // Shared by the scalar column path (#1661) and the array element path (#1662), so the contract
     // is pinned here rather than in either consumer.

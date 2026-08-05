@@ -392,10 +392,21 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
+   * Whether {@code hstore.handling.mode} selects a representation, i.e. is not {@code none}, the
+   * default. Paired with the complex types flag at every hstore call site, so hstore is opted into
+   * independently of json/jsonb and arrays and {@link #hstoreSchema(boolean)} is only ever reached
+   * for a real representation.
+   */
+  protected boolean hstoreMappingSelected() {
+    return hstoreHandlingMode() != HstoreHandlingMode.NONE;
+  }
+
+  /**
    * The on-topic schema for an hstore value under {@code hstore.handling.mode}: a {@code Json}
    * STRING, or a {@code MAP<STRING, STRING>} whose values are optional since an hstore value may
    * be NULL. Shared so a scalar column (optionality from the column) and an array element (always
-   * optional) cannot drift apart.
+   * optional) cannot drift apart. Only valid once {@link #hstoreMappingEnabled()} holds; the map
+   * branch is the fallback, so {@code none} would otherwise be read as {@code map}.
    */
   protected Schema hstoreSchema(boolean optional) {
     if (hstoreHandlingMode() == HstoreHandlingMode.JSON) {

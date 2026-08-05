@@ -89,9 +89,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   static final String UUID_TYPE_NAME = "uuid";
   static final String HSTORE_TYPE_NAME = "hstore";
 
-  // How pgjdbc renders an hstore type whose schema is off the connection's search_path.
-  private static final String QUALIFIED_HSTORE_SUFFIX = ".\"" + HSTORE_TYPE_NAME + "\"";
-
   private static final String HSTORE_OFF_SEARCH_PATH_ERROR =
       "Cannot map hstore column %s: the driver reports its type as %s, so the hstore extension is "
           + "not on this connection's search_path. Add the schema owning the extension to the "
@@ -291,11 +288,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
               return fieldName;
             }
             // hstore.handling.mode=none: skipped, as before the feature existed.
-          } else if (isUnresolvedHstoreType(columnDefn) && hstoreMappingSelected()) {
-            // A mapping mode was asked for and this column cannot honour it, so fail rather than
-            // silently drop the column.
-            throw new ConnectException(String.format(HSTORE_OFF_SEARCH_PATH_ERROR,
-                columnDefn.id(), columnDefn.typeName()));
+          } else if (isUnresolvedHstoreType(columnDefn.typeName()) && hstoreMappingSelected()) {
+            throw hstoreOffSearchPathError(columnDefn.id(), columnDefn.typeName());
           }
         }
 
@@ -389,16 +383,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * Whether an hstore column's type name arrived schema-qualified, i.e. the extension is off this
-   * connection's search_path. The column is skipped either way; this only drives the warning that
-   * says why.
-   */
-  private static boolean isUnresolvedHstoreType(ColumnDefinition columnDefn) {
-    return columnDefn.typeName() != null
-        && columnDefn.typeName().endsWith(QUALIFIED_HSTORE_SUFFIX);
-  }
-
-  /**
    * The driver's value for an hstore column, as the map both handling modes require. Anything else
    * follows Debezium's {@code handleUnknownData}: a nullable column degrades to null, a NOT NULL
    * column fails, and the same text is used either way. The value is never logged, in case it is
@@ -469,6 +453,39 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    */
   protected boolean hstoreMappingSelected() {
     return hstoreHandlingMode() != HstoreHandlingMode.NONE;
+  }
+
+  /**
+   * The local, unquoted PostgreSQL type name: {@code hstore} and {@code "ext"."hstore"} both yield
+   * {@code hstore}, and {@code "ext"."_hstore"} yields {@code _hstore}. pgjdbc renders an extension
+   * type bare only while its schema is on the connection's {@code search_path}, and
+   * schema-qualifies it otherwise.
+   */
+  protected static String localTypeName(String typeName) {
+    if (typeName == null) {
+      return null;
+    }
+    int lastDot = typeName.lastIndexOf('.');
+    return (lastDot < 0 ? typeName : typeName.substring(lastDot + 1)).replace("\"", "");
+  }
+
+  /**
+   * Whether a type name is an hstore the driver could not resolve, i.e. one that arrived
+   * schema-qualified because the extension is off the {@code search_path}. Shared by the scalar
+   * column path and the array element path, which must agree.
+   */
+  protected static boolean isUnresolvedHstoreType(String typeName) {
+    return typeName != null
+        && !HSTORE_TYPE_NAME.equalsIgnoreCase(typeName)
+        && HSTORE_TYPE_NAME.equalsIgnoreCase(localTypeName(typeName));
+  }
+
+  /**
+   * The failure for an hstore column that a selected mapping mode cannot honour. Failing beats
+   * silently dropping the column, since a mode was explicitly asked for.
+   */
+  protected ConnectException hstoreOffSearchPathError(ColumnId column, String typeName) {
+    return new ConnectException(String.format(HSTORE_OFF_SEARCH_PATH_ERROR, column, typeName));
   }
 
   /**

@@ -873,6 +873,23 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
+  public void shouldRecogniseAnOffSearchPathHstoreTypeName() {
+    // Shared by the scalar column path (#1661) and the array element path (#1662): pgjdbc qualifies
+    // the name only when the extension is off the search_path, whatever the schema is called.
+    assertTrue(PostgreSqlDatabaseDialect.isUnresolvedHstoreType("\"ext\".\"hstore\""));
+    assertTrue(PostgreSqlDatabaseDialect.isUnresolvedHstoreType("\"my_extensions\".\"hstore\""));
+    assertFalse("on the search_path it arrives bare",
+        PostgreSqlDatabaseDialect.isUnresolvedHstoreType("hstore"));
+    assertFalse(PostgreSqlDatabaseDialect.isUnresolvedHstoreType("\"ext\".\"citext\""));
+    assertFalse(PostgreSqlDatabaseDialect.isUnresolvedHstoreType("hstore_extra"));
+    assertFalse(PostgreSqlDatabaseDialect.isUnresolvedHstoreType(null));
+
+    // The array type is its own pg_type row in the same schema, so it qualifies the same way.
+    assertEquals("_hstore", PostgreSqlDatabaseDialect.localTypeName("\"ext\".\"_hstore\""));
+    assertEquals("_hstore", PostgreSqlDatabaseDialect.localTypeName("_hstore"));
+  }
+
+  @Test
   public void hstoreMappingIsNotSelectedByDefault() {
     // Half of the hstore gate: the mode must select a representation. The other half is the
     // complex types flag, checked alongside it at every call site, so neither alone maps hstore.

@@ -15,32 +15,49 @@
 
 package io.confluent.connect.jdbc.sink.integration;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.sql.Array;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.List;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import io.confluent.common.utils.IntegrationTest;
+import io.confluent.connect.jdbc.data.Json;
 import io.confluent.connect.jdbc.integration.BaseConnectorIT;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.JdbcSourceConnector;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
+import io.confluent.connect.jdbc.source.JdbcSourceTask;
+import io.confluent.connect.jdbc.source.JdbcSourceTaskConfig;
 
 import io.zonky.test.db.postgres.junit.EmbeddedPostgresRules;
 import io.zonky.test.db.postgres.junit.SingleInstancePostgresRule;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.connect.data.Date;
+import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.json.JsonConverter;
+import org.apache.kafka.connect.runtime.ConnectorConfig;
 import org.apache.kafka.connect.runtime.errors.ToleranceType;
+import org.apache.kafka.connect.source.SourceRecord;
+import org.apache.kafka.connect.storage.StringConverter;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -53,8 +70,11 @@ import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.MAX_RETRIES;
 import static org.apache.kafka.connect.runtime.ConnectorConfig.ERRORS_TOLERANCE_CONFIG;
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_NAME_CONFIG;
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_REPLICATION_FACTOR_CONFIG;
+import static org.apache.kafka.test.TestUtils.waitForCondition;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 
@@ -96,6 +116,8 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection()) {
       try (Statement s = c.createStatement()) {
         s.execute("DROP TABLE IF EXISTS " + tableName);
+        s.execute("DROP TABLE IF EXISTS " + SRC_TABLE);
+        s.execute("DROP TABLE IF EXISTS " + DST_TABLE);
       }
       LOG.info("Dropped table");
     } finally {
@@ -600,8 +622,1004 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     LOG.info("Created table {} with a primary key", tableName);
   }
 
+  // ---------- json / jsonb, read from a real Postgres ----------
+
+  private static final String JSON_DOC = "{\"bar\": \"baz\"}";
+
+  /**
+   * Both variants emit the logical JSON STRING, and the text is passed through untouched. The space
+   * after the colon is asserted deliberately: for {@code json} Postgres stores the document verbatim,
+   * so its survival proves the connector performs no normalization. Mirrors Debezium's
+   * {@code schemasAndValuesForTextTypes}, which asserts the same spaced document for both columns.
+   */
+  @Test
+  public void testJsonAndJsonbEmitLogicalJsonStringVerbatim() throws Exception {
+    execute("CREATE TABLE " + tableName + "(id int, j json, jb jsonb)",
+        "INSERT INTO " + tableName + " VALUES (1, '" + JSON_DOC + "'::json, '"
+            + JSON_DOC + "'::jsonb)");
+
+    Struct row = pollOneRow(complexTypesSourceProps("postgres"));
+
+    // json: byte-identical to what was written, including the space.
+    new SchemaAndValueField("j", Json.optionalSchema(), JSON_DOC).assertFor(row);
+    // jsonb: Postgres re-canonicalizes on write, so compare parsed rather than byte-for-byte.
+    SchemaAndValueField.jsonText("jb", Json.optionalSchema(),
+        Collections.singletonMap("bar", "baz")).assertFor(row);
+  }
+
+  /**
+   * A JSON document is opaque text, so shapes that are not objects must survive unchanged. hstore
+   * cannot produce any of these — only a real {@code json} column can — so this has no Debezium
+   * counterpart and is the widest gap their suite leaves open.
+   */
+  @Test
+  public void testJsonPreservesNonObjectDocuments() throws Exception {
+    execute("CREATE TABLE " + tableName + "(id int, j json)",
+        "INSERT INTO " + tableName + " VALUES (1, '[1, 2, 3]'::json)",
+        "INSERT INTO " + tableName + " VALUES (2, '\"a string\"'::json)",
+        "INSERT INTO " + tableName + " VALUES (3, '42'::json)",
+        "INSERT INTO " + tableName + " VALUES (4, 'true'::json)",
+        "INSERT INTO " + tableName + " VALUES (5, 'null'::json)",
+        "INSERT INTO " + tableName + " VALUES (6, '{\"a\": {\"b\": [1, null]}}'::json)");
+
+    List<Struct> rows = pollRows(complexTypesSourceProps("postgres"));
+    assertEquals(6, rows.size());
+
+    new SchemaAndValueField("j", Json.optionalSchema(), "[1, 2, 3]").assertFor(rows.get(0));
+    new SchemaAndValueField("j", Json.optionalSchema(), "\"a string\"").assertFor(rows.get(1));
+    new SchemaAndValueField("j", Json.optionalSchema(), "42").assertFor(rows.get(2));
+    new SchemaAndValueField("j", Json.optionalSchema(), "true").assertFor(rows.get(3));
+    // The JSON literal null is a 4-character document, NOT a SQL NULL and NOT a Connect null.
+    new SchemaAndValueField("j", Json.optionalSchema(), "null").assertFor(rows.get(4));
+    new SchemaAndValueField("j", Json.optionalSchema(), "{\"a\": {\"b\": [1, null]}}")
+        .assertFor(rows.get(5));
+  }
+
+  /**
+   * A SQL NULL is a Connect null, which must stay distinguishable from the JSON literal
+   * {@code null} asserted above.
+   */
+  @Test
+  public void testJsonSqlNullIsConnectNull() throws Exception {
+    execute("CREATE TABLE " + tableName + "(id int, j json, jb jsonb)",
+        "INSERT INTO " + tableName + " VALUES (1, NULL, NULL)");
+
+    Struct row = pollOneRow(complexTypesSourceProps("postgres"));
+    new SchemaAndValueField("j", Json.optionalSchema(), null).assertFor(row);
+    new SchemaAndValueField("jb", Json.optionalSchema(), null).assertFor(row);
+  }
+
+  /**
+   * A NOT NULL json column is emitted as the non-optional logical schema, so the optionality of the
+   * column survives into the topic. Debezium asserts the same distinction via {@code Json.schema()}
+   * versus {@code Json.builder().optional().build()}.
+   */
+  @Test
+  public void testNotNullJsonColumnEmitsNonOptionalSchema() throws Exception {
+    execute("CREATE TABLE " + tableName + "(id int, j json NOT NULL)",
+        "INSERT INTO " + tableName + " VALUES (1, '" + JSON_DOC + "'::json)");
+
+    Struct row = pollOneRow(complexTypesSourceProps("postgres"));
+    new SchemaAndValueField("j", Json.schema(), JSON_DOC).assertFor(row);
+  }
+
+  /**
+   * The backward-compatibility guarantee for the feature flag: with the default {@code false} a
+   * json/jsonb column stays an untagged STRING carrying the same text, so existing pipelines are
+   * unchanged. This is the branch of {@code jsonSchema} that had no coverage at all.
+   */
+  @Test
+  public void testJsonEmitsPlainStringWhenComplexTypesDisabled() throws Exception {
+    execute("CREATE TABLE " + tableName + "(id int, j json, jb jsonb)",
+        "INSERT INTO " + tableName + " VALUES (1, '" + JSON_DOC + "'::json, '"
+            + JSON_DOC + "'::jsonb)");
+
+    Map<String, String> sourceProps = complexTypesSourceProps("postgres");
+    sourceProps.remove(JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG);
+    Struct row = pollOneRow(sourceProps);
+
+    // Same value, but no logical name — the pre-feature behaviour.
+    new SchemaAndValueField("j", Schema.OPTIONAL_STRING_SCHEMA, JSON_DOC).assertFor(row);
+    assertNull("json must not be tagged while complex types are disabled",
+        row.schema().field("j").schema().name());
+  }
+
+  /**
+   * The sink half: a logical JSON STRING must auto-create a native {@code jsonb} column and land as
+   * real jsonb, not text. Verified through jsonb operators, which only work on a genuine jsonb value.
+   */
+  @Test
+  public void testWriteToTableWithJsonColumn() throws Exception {
+    props.put(JdbcSinkConfig.AUTO_CREATE, "true");
+    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
+    connect.configureConnector("jdbc-sink-connector", props);
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+
+    final Schema schema = SchemaBuilder.struct().name("com.example.Doc")
+        .field("name", Schema.STRING_SCHEMA)
+        .field("payload", Json.optionalSchema())
+        .build();
+    produceRecord(schema, new Struct(schema)
+        .put("name", "doc-1")
+        .put("payload", "{\"env\":\"prod\",\"nested\":{\"n\":1}}"));
+
+    waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 1, 1,
+        TimeUnit.MINUTES.toMillis(2));
+
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
+         Statement s = c.createStatement()) {
+      try (ResultSet rs = s.executeQuery(
+          "SELECT data_type FROM information_schema.columns "
+              + "WHERE table_name = '" + tableName + "' AND column_name = 'payload'")) {
+        assertTrue(rs.next());
+        assertEquals("jsonb", rs.getString(1));
+      }
+      try (ResultSet rs = s.executeQuery(
+          "SELECT payload->>'env', payload->'nested'->>'n' FROM " + tableName)) {
+        assertTrue(rs.next());
+        assertEquals("prod", rs.getString(1));
+        assertEquals("1", rs.getString(2));
+      }
+    }
+  }
+
   private void produceRecord(Schema schema, Struct struct) {
     String kafkaValue = new String(jsonConverter.fromConnectData(tableName, schema, struct));
     connect.kafka().produce(tableName, null, kafkaValue);
+  }
+
+  // ---------- hstore, read from a real Postgres ----------
+
+  private static final Schema HSTORE_MAP_SCHEMA = SchemaBuilder
+      .map(Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA).optional().build();
+
+  /**
+   * Create an hstore table holding one row, and read it back in the given mode. Mirrors Debezium's
+   * per-scenario structure, where each hstore case is its own named test over a dedicated fixture.
+   */
+  private Struct readHstore(String hstoreLiteral, String mode) throws Exception {
+    execute("CREATE EXTENSION IF NOT EXISTS hstore",
+        "CREATE TABLE " + tableName + "(id int, hs hstore)",
+        "INSERT INTO " + tableName + " VALUES (1, '" + hstoreLiteral + "'::hstore)");
+    return pollOneRow(complexTypesSourceProps("postgres",
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, mode));
+  }
+
+  @Test
+  public void testHstoreSingleValueAsMap() throws Exception {
+    new SchemaAndValueField("hs", HSTORE_MAP_SCHEMA, Collections.singletonMap("key", "val"))
+        .assertFor(readHstore("\"key\" => \"val\"", "map"));
+  }
+
+  @Test
+  public void testHstoreMultipleValuesAsMap() throws Exception {
+    Map<String, String> expected = new LinkedHashMap<>();
+    expected.put("key1", "val1");
+    expected.put("key2", "val2");
+    expected.put("key3", "val3");
+    new SchemaAndValueField("hs", HSTORE_MAP_SCHEMA, expected).assertFor(
+        readHstore("\"key1\" => \"val1\",\"key2\" => \"val2\",\"key3\" => \"val3\"", "map"));
+  }
+
+  /**
+   * A NULL hstore <em>value</em> — distinct from the whole column being NULL. This is what guards the
+   * choice of an optional value schema: were it non-optional, Connect would reject the null entry.
+   */
+  @Test
+  public void testHstoreNullValueAsMap() throws Exception {
+    Map<String, String> expected = new LinkedHashMap<>();
+    expected.put("key1", "val1");
+    expected.put("key2", null);
+    new SchemaAndValueField("hs", HSTORE_MAP_SCHEMA, expected)
+        .assertFor(readHstore("\"key1\" => \"val1\",\"key2\" => NULL", "map"));
+  }
+
+  /**
+   * Spaces, {@code #} and a leading space inside a value must survive the driver's hstore parsing.
+   * Same literal Debezium uses.
+   */
+  @Test
+  public void testHstoreSpecialCharactersAsMap() throws Exception {
+    Map<String, String> expected = new LinkedHashMap<>();
+    expected.put("key_#1", "val 1");
+    expected.put("key 2", " ##123 78");
+    new SchemaAndValueField("hs", HSTORE_MAP_SCHEMA, expected)
+        .assertFor(readHstore("\"key_#1\" => \"val 1\",\"key 2\" =>\" ##123 78\"", "map"));
+  }
+
+  @Test
+  public void testHstoreSingleValueAsJsonString() throws Exception {
+    SchemaAndValueField.jsonText("hs", Json.optionalSchema(),
+        Collections.singletonMap("key", "val"))
+        .assertFor(readHstore("\"key\" => \"val\"", "json"));
+  }
+
+  @Test
+  public void testHstoreMultipleValuesAsJsonString() throws Exception {
+    Map<String, String> expected = new LinkedHashMap<>();
+    expected.put("key1", "val1");
+    expected.put("key2", "val2");
+    expected.put("key3", "val3");
+    SchemaAndValueField.jsonText("hs", Json.optionalSchema(), expected).assertFor(
+        readHstore("\"key1\" => \"val1\",\"key2\" => \"val2\",\"key3\" => \"val3\"", "json"));
+  }
+
+  /**
+   * A NULL hstore value becomes an unquoted JSON {@code null} — not the string {@code "null"} and not
+   * an omitted key.
+   */
+  @Test
+  public void testHstoreNullValueAsJsonString() throws Exception {
+    Map<String, String> expected = new LinkedHashMap<>();
+    expected.put("key1", "val1");
+    expected.put("key2", null);
+    Struct row = readHstore("\"key1\" => \"val1\",\"key2\" => NULL", "json");
+    SchemaAndValueField.jsonText("hs", Json.optionalSchema(), expected).assertFor(row);
+    // Pin the literal form too: an unquoted null, so a consumer can tell it from the text "null".
+    assertTrue("expected an unquoted JSON null, got " + row.get("hs"),
+        ((String) row.get("hs")).contains("\"key2\":null"));
+  }
+
+  @Test
+  public void testHstoreSpecialCharactersAsJsonString() throws Exception {
+    Map<String, String> expected = new LinkedHashMap<>();
+    expected.put("key_#1", "val 1");
+    expected.put("key 2", " ##123 78");
+    SchemaAndValueField.jsonText("hs", Json.optionalSchema(), expected)
+        .assertFor(readHstore("\"key_#1\" => \"val 1\",\"key 2\" =>\" ##123 78\"", "json"));
+  }
+
+  /** An empty hstore is an empty map, not a null and not a dropped field. */
+  @Test
+  public void testEmptyHstore() throws Exception {
+    new SchemaAndValueField("hs", HSTORE_MAP_SCHEMA, Collections.emptyMap())
+        .assertFor(readHstore("", "map"));
+    execute("DROP TABLE " + tableName);
+    SchemaAndValueField.jsonText("hs", Json.optionalSchema(), Collections.emptyMap())
+        .assertFor(readHstore("", "json"));
+  }
+
+  /** A SQL NULL hstore column is a Connect null in both modes. */
+  @Test
+  public void testHstoreSqlNullIsConnectNull() throws Exception {
+    execute("CREATE EXTENSION IF NOT EXISTS hstore",
+        "CREATE TABLE " + tableName + "(id int, hs hstore)",
+        "INSERT INTO " + tableName + " VALUES (1, NULL)");
+
+    new SchemaAndValueField("hs", HSTORE_MAP_SCHEMA, null)
+        .assertFor(pollOneRow(complexTypesSourceProps("postgres",
+            JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "map")));
+    new SchemaAndValueField("hs", Json.optionalSchema(), null)
+        .assertFor(pollOneRow(complexTypesSourceProps("postgres",
+            JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json")));
+  }
+
+  /**
+   * Pin the driver contract a mocked ResultSet can only assume: pgjdbc returns a Map for an hstore
+   * column while the type is visible on the search_path.
+   */
+  @Test
+  public void testHstoreDriverReturnsMap() throws Exception {
+    execute("CREATE EXTENSION IF NOT EXISTS hstore",
+        "CREATE TABLE " + tableName + "(id int, hs hstore)",
+        "INSERT INTO " + tableName + " VALUES (1, '\"k\" => \"v\"'::hstore)");
+
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
+         Statement s = c.createStatement();
+         ResultSet rs = s.executeQuery("SELECT hs FROM " + tableName)) {
+      assertTrue(rs.next());
+      Object driverValue = rs.getObject(1);
+      assertTrue("pgjdbc must return a Map for hstore, got " + driverValue.getClass().getName(),
+          driverValue instanceof Map);
+      assertEquals(Collections.singletonMap("k", "v"), driverValue);
+    }
+  }
+
+  /** Backward compatibility: with the default flag, hstore keeps today's drop-with-WARN behaviour. */
+  @Test
+  public void testHstoreDroppedWhenComplexTypesDisabled() throws Exception {
+    execute("CREATE EXTENSION IF NOT EXISTS hstore",
+        "CREATE TABLE " + tableName + "(id int, hs hstore)",
+        "INSERT INTO " + tableName + " VALUES (1, '\"k\" => \"v\"'::hstore)");
+
+    Map<String, String> sourceProps = complexTypesSourceProps("postgres");
+    sourceProps.remove(JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG);
+    Struct row = pollOneRow(sourceProps);
+
+    assertFieldAbsent(row, "hs");
+    assertEquals(1, row.get("id"));
+  }
+
+  /**
+   * An hstore type outside the connection's search_path is reported as {@code "ext"."hstore"}, so a
+   * selected mapping mode cannot be honoured. The task fails at schema time, before any value is
+   * read, rather than silently dropping the column.
+   */
+  @Test
+  public void testHstoreOutsideSearchPathFailsWhenAMappingModeIsSelected() throws Exception {
+    execute("CREATE DATABASE offpath");
+    try (Connection c = pg.getEmbeddedPostgres().getDatabase("postgres", "offpath").getConnection();
+         Statement s = c.createStatement()) {
+      s.execute("CREATE SCHEMA ext");
+      s.execute("CREATE EXTENSION hstore SCHEMA ext");
+      s.execute("CREATE TABLE " + tableName + "(id int, hs ext.hstore)");
+      s.execute("INSERT INTO " + tableName + " VALUES (1, 'k=>v'::ext.hstore)");
+    }
+
+    // A mapping mode was asked for and this column cannot honour it, so the task fails rather than
+    // silently dropping the column. map mode is set explicitly: under the default none the column
+    // would be skipped and this would prove nothing about search_path.
+    Throwable failure = pollUntilTaskFails(complexTypesSourceProps("offpath",
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "map"));
+    assertTrue("expected a ConnectException, got " + failure.getClass().getName(),
+        failure instanceof ConnectException);
+    String messages = causeChain(failure);
+    assertTrue("must name the cause, got: " + messages, messages.contains("search_path"));
+    assertTrue("must offer the escape hatch, got: " + messages,
+        messages.contains("hstore.handling.mode=none"));
+
+    // none is the escape hatch: the same column is skipped instead of failing.
+    assertFieldAbsent(pollOneRow(complexTypesSourceProps("offpath",
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "none")), "hs");
+  }
+
+  /**
+   * Run a source task until polling throws, returning what it threw. The querier runs on a
+   * background thread, so the failure is recorded by {@code RecordQueue.failWith} and rethrown,
+   * wrapped, from a later poll rather than the first one.
+   */
+  private Throwable pollUntilTaskFails(Map<String, String> sourceProps) throws Exception {
+    JdbcSourceTask task = new JdbcSourceTask();
+    AtomicReference<Throwable> thrown = new AtomicReference<>();
+    try {
+      task.start(sourceProps);
+      waitForCondition(() -> {
+        try {
+          task.poll();
+          return false;
+        } catch (InterruptedException e) {
+          throw new RuntimeException(e);
+        } catch (Throwable e) {
+          thrown.set(e);
+          return true;
+        }
+      }, 60_000, "the source task did not fail in time");
+    } finally {
+      task.stop();
+    }
+    return thrown.get();
+  }
+
+  /** The messages of a whole cause chain, since the original failure is wrapped on the way out. */
+  private static String causeChain(Throwable thrown) {
+    StringBuilder messages = new StringBuilder();
+    for (Throwable cause = thrown; cause != null; cause = cause.getCause()) {
+      messages.append(cause.getMessage()).append(' ');
+    }
+    return messages.toString();
+  }
+
+  /**
+   * The sink half: a Connect {@code MAP<STRING,STRING>} auto-creates a native jsonb column and lands
+   * as real jsonb, verified through jsonb operators.
+   */
+  @Test
+  public void testWriteToTableWithHstoreMapColumn() throws Exception {
+    props.put(JdbcSinkConfig.AUTO_CREATE, "true");
+    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
+    connect.configureConnector("jdbc-sink-connector", props);
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+
+    final Schema schema = SchemaBuilder.struct().name("com.example.Server")
+        .field("name", Schema.STRING_SCHEMA)
+        .field("tags", HSTORE_MAP_SCHEMA)
+        .build();
+    Map<String, String> tags = new LinkedHashMap<>();
+    tags.put("env", "prod");
+    tags.put("cities", "Pune, Mumbai");
+    produceRecord(schema, new Struct(schema).put("name", "web-1").put("tags", tags));
+
+    waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 1, 1,
+        TimeUnit.MINUTES.toMillis(2));
+
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
+         Statement s = c.createStatement()) {
+      try (ResultSet rs = s.executeQuery(
+          "SELECT data_type FROM information_schema.columns "
+              + "WHERE table_name = '" + tableName + "' AND column_name = 'tags'")) {
+        assertTrue(rs.next());
+        assertEquals("jsonb", rs.getString(1));
+      }
+      try (ResultSet rs = s.executeQuery(
+          "SELECT tags->>'env', tags->>'cities' FROM " + tableName)) {
+        assertTrue(rs.next());
+        assertEquals("prod", rs.getString(1));
+        assertEquals("Pune, Mumbai", rs.getString(2));
+      }
+    }
+  }
+
+  // ---------- hstore round trips: source -> Kafka -> sink ----------
+
+  /**
+   * Populate {@link #SRC_TABLE} with every hstore value scenario in one table, so a single round trip
+   * covers them all: a single pair, several pairs, a NULL hstore <em>value</em>, special characters,
+   * an empty hstore, a SQL NULL column, and a numeric-looking value.
+   */
+  private void createHstoreSourceRows() throws SQLException {
+    execute("CREATE EXTENSION IF NOT EXISTS hstore",
+        "CREATE TABLE " + SRC_TABLE + "(id int PRIMARY KEY, hs hstore)",
+        "INSERT INTO " + SRC_TABLE + " VALUES (1, '\"key\" => \"val\"'::hstore)",
+        "INSERT INTO " + SRC_TABLE + " VALUES "
+            + "(2, '\"key1\" => \"val1\",\"key2\" => \"val2\",\"key3\" => \"val3\"'::hstore)",
+        "INSERT INTO " + SRC_TABLE + " VALUES (3, '\"key1\" => \"val1\",\"key2\" => NULL'::hstore)",
+        "INSERT INTO " + SRC_TABLE
+            + " VALUES (4, '\"key_#1\" => \"val 1\",\"key 2\" =>\" ##123 78\"'::hstore)",
+        "INSERT INTO " + SRC_TABLE + " VALUES (5, ''::hstore)",
+        "INSERT INTO " + SRC_TABLE + " VALUES (6, NULL)",
+        "INSERT INTO " + SRC_TABLE + " VALUES (7, '\"count\" => \"5\"'::hstore)");
+  }
+
+  /**
+   * Assert the destination rows written by an hstore round trip. Identical expectations for both
+   * handling modes, since either representation lands in the same {@code jsonb} column — which is the
+   * property worth pinning.
+   */
+  private void assertHstoreRoundTripRows() throws SQLException {
+    assertEquals("hstore must land in a native jsonb column", "jsonb", destColumnType("hs"));
+
+    queryDest("id, hs, hs IS NULL AS is_null, jsonb_typeof(hs) AS kind", "id",
+        rs -> {
+          assertEquals(1, rs.getInt("id"));
+          assertEquals("{\"key\": \"val\"}", rs.getString("hs"));
+        },
+        rs -> assertEquals(parsedMap("key1", "val1", "key2", "val2", "key3", "val3"),
+            parseJson(rs.getString("hs"))),
+        rs -> {
+          // A NULL hstore value survives as a JSON null, with the key still present.
+          Map<String, Object> expected = new LinkedHashMap<>();
+          expected.put("key1", "val1");
+          expected.put("key2", null);
+          assertEquals(expected, parseJson(rs.getString("hs")));
+        },
+        rs -> assertEquals(parsedMap("key_#1", "val 1", "key 2", " ##123 78"),
+            parseJson(rs.getString("hs"))),
+        // Empty hstore is an empty JSON object, not NULL.
+        rs -> {
+          assertEquals("{}", rs.getString("hs"));
+          assertEquals(false, rs.getBoolean("is_null"));
+        },
+        // SQL NULL column stays SQL NULL, distinct from both {} and the JSON literal null.
+        rs -> {
+          assertEquals(true, rs.getBoolean("is_null"));
+          assertNull(rs.getString("kind"));
+        },
+        // hstore has no numeric type: "5" must remain a JSON string, never the number 5.
+        rs -> {
+          assertEquals("{\"count\": \"5\"}", rs.getString("hs"));
+          assertEquals("string", jsonbTypeOfField("hs", "count", 7));
+        });
+  }
+
+  @Test
+  public void testHstoreMapModeRoundTripsToJsonb() throws Exception {
+    createHstoreSourceRows();
+    Map<String, String> sourceExtras = new HashMap<>();
+    sourceExtras.put(JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true");
+    sourceExtras.put(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "map");
+    runRoundTrip(7, sourceExtras,
+        Collections.singletonMap(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+    assertHstoreRoundTripRows();
+  }
+
+  @Test
+  public void testHstoreSkippedWhenHandlingModeIsNone() throws Exception {
+    // The complex types flag alone leaves hstore unmapped, since none is the default.
+    execute("CREATE EXTENSION IF NOT EXISTS hstore",
+        "CREATE TABLE " + tableName + "(id int, hs hstore)",
+        "INSERT INTO " + tableName + " VALUES (1, '\"k\" => \"v\"'::hstore)");
+
+    assertFieldAbsent(pollOneRow(complexTypesSourceProps("postgres")), "hs");
+    assertFieldAbsent(pollOneRow(complexTypesSourceProps("postgres",
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "none")), "hs");
+  }
+
+  @Test
+  public void testHstoreJsonModeRoundTripsToJsonb() throws Exception {
+    createHstoreSourceRows();
+    Map<String, String> sourceExtras = new HashMap<>();
+    sourceExtras.put(JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true");
+    sourceExtras.put(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json");
+
+    runRoundTrip(7, sourceExtras,
+        Collections.singletonMap(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+    assertHstoreRoundTripRows();
+  }
+
+  /**
+   * Backward compatibility, end to end: with the flag off on both connectors, an hstore column never
+   * reaches the topic, so the destination table has no such column at all.
+   */
+  @Test
+  public void testHstoreRoundTripDroppedWhenComplexTypesDisabled() throws Exception {
+    createHstoreSourceRows();
+    runRoundTrip(7);
+
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
+         Statement s = c.createStatement();
+         ResultSet rs = s.executeQuery(
+             "SELECT column_name FROM information_schema.columns WHERE table_name = '"
+                 + DST_TABLE + "' AND column_name = 'hs'")) {
+      assertTrue("hstore must not reach the destination while complex types are disabled",
+          !rs.next());
+    }
+  }
+
+  // ---------- json round trips: source -> Kafka -> sink ----------
+
+  /**
+   * Populate {@link #SRC_TABLE} with every document shape in one table: an object, an array, a string
+   * scalar, a number, a boolean, the JSON literal null, a nested document and a SQL NULL.
+   */
+  private void createJsonSourceRows() throws SQLException {
+    execute("CREATE TABLE " + SRC_TABLE + "(id int PRIMARY KEY, j json, jb jsonb)",
+        "INSERT INTO " + SRC_TABLE + " VALUES (1, '{\"bar\": \"baz\"}', '{\"bar\": \"baz\"}')",
+        "INSERT INTO " + SRC_TABLE + " VALUES (2, '[1, 2, 3]', '[1, 2, 3]')",
+        "INSERT INTO " + SRC_TABLE + " VALUES (3, '\"a string\"', '\"a string\"')",
+        "INSERT INTO " + SRC_TABLE + " VALUES (4, '42', '42')",
+        "INSERT INTO " + SRC_TABLE + " VALUES (5, 'true', 'true')",
+        "INSERT INTO " + SRC_TABLE + " VALUES (6, 'null', 'null')",
+        "INSERT INTO " + SRC_TABLE
+            + " VALUES (7, '{\"a\": {\"b\": [1, null]}}', '{\"a\": {\"b\": [1, null]}}')",
+        "INSERT INTO " + SRC_TABLE + " VALUES (8, NULL, NULL)");
+  }
+
+  /**
+   * A full round trip for both json variants, covering every document shape. The literal {@code null}
+   * document (row 6) and the SQL NULL column (row 8) are the pair most easily conflated: one is a
+   * jsonb value of type {@code null}, the other is the absence of a value.
+   */
+  @Test
+  public void testJsonRoundTripsAcrossDocumentShapes() throws Exception {
+    createJsonSourceRows();
+    runRoundTrip(8,
+        Collections.singletonMap(
+            JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true"),
+        Collections.singletonMap(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+
+    assertEquals("json must land in a native jsonb column", "jsonb", destColumnType("j"));
+    assertEquals("jsonb must land in a native jsonb column", "jsonb", destColumnType("jb"));
+
+    queryDest("id, j, jb, j IS NULL AS j_null, jsonb_typeof(j) AS kind", "id",
+        rs -> assertEquals(parsedMap("bar", "baz"), parseJson(rs.getString("j"))),
+        rs -> {
+          assertEquals("array", rs.getString("kind"));
+          assertEquals(Arrays.asList(1, 2, 3), parseJson(rs.getString("j")));
+        },
+        rs -> {
+          assertEquals("string", rs.getString("kind"));
+          assertEquals("a string", parseJson(rs.getString("j")));
+        },
+        rs -> {
+          assertEquals("number", rs.getString("kind"));
+          assertEquals(42, parseJson(rs.getString("j")));
+        },
+        rs -> {
+          assertEquals("boolean", rs.getString("kind"));
+          assertEquals(true, parseJson(rs.getString("j")));
+        },
+        // The JSON literal null is a jsonb value of type "null" — NOT a SQL NULL.
+        rs -> {
+          assertEquals("null", rs.getString("kind"));
+          assertEquals(false, rs.getBoolean("j_null"));
+        },
+        rs -> assertEquals(parseJson("{\"a\":{\"b\":[1,null]}}"), parseJson(rs.getString("j"))),
+        // A SQL NULL column stays SQL NULL, with no jsonb type at all.
+        rs -> {
+          assertEquals(true, rs.getBoolean("j_null"));
+          assertNull(rs.getString("kind"));
+        });
+  }
+
+  /**
+   * Backward compatibility end to end: with the flag off on both connectors, json/jsonb reach the
+   * destination as plain {@code text}, exactly as before the feature existed.
+   */
+  @Test
+  public void testJsonRoundTripLandsInTextWhenComplexTypesDisabled() throws Exception {
+    createJsonSourceRows();
+    runRoundTrip(8);
+
+    assertEquals("json must stay text while complex types are disabled", "text",
+        destColumnType("j"));
+    assertEquals("jsonb must stay text while complex types are disabled", "text",
+        destColumnType("jb"));
+    queryDest("id, j", "id",
+        rs -> assertEquals("{\"bar\": \"baz\"}", rs.getString("j")),
+        rs -> assertEquals("[1, 2, 3]", rs.getString("j")),
+        rs -> assertEquals("\"a string\"", rs.getString("j")),
+        rs -> assertEquals("42", rs.getString("j")),
+        rs -> assertEquals("true", rs.getString("j")),
+        rs -> assertEquals("null", rs.getString("j")),
+        rs -> assertEquals("{\"a\": {\"b\": [1, null]}}", rs.getString("j")),
+        rs -> assertNull(rs.getString("j")));
+  }
+
+  /**
+   * The upgrade asymmetry: the source is upgraded and has the flag on, the sink still has it off. The
+   * topic carries the {@code Json} logical type but the sink ignores it, so the value lands in
+   * {@code text} rather than {@code jsonb} — degraded, but the document itself is not lost.
+   */
+  @Test
+  public void testSourceEnabledSinkDisabledLandsInTextWithoutDataLoss() throws Exception {
+    createJsonSourceRows();
+    runRoundTrip(8,
+        Collections.singletonMap(
+            JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true"),
+        Collections.emptyMap());
+
+    assertEquals("a sink with the flag off must fall back to text", "text", destColumnType("j"));
+    queryDest("id, j", "id",
+        rs -> assertEquals("{\"bar\": \"baz\"}", rs.getString("j")),
+        rs -> assertEquals("[1, 2, 3]", rs.getString("j")),
+        rs -> assertEquals("\"a string\"", rs.getString("j")),
+        rs -> assertEquals("42", rs.getString("j")),
+        rs -> assertEquals("true", rs.getString("j")),
+        rs -> assertEquals("null", rs.getString("j")),
+        rs -> assertEquals("{\"a\": {\"b\": [1, null]}}", rs.getString("j")),
+        rs -> assertNull(rs.getString("j")));
+  }
+
+  /**
+   * The reverse asymmetry: the source has the flag off so json arrives as an untagged STRING, and an
+   * enabled sink has nothing to recognise — it must still land in {@code text}, not guess.
+   */
+  @Test
+  public void testSourceDisabledSinkEnabledLandsInText() throws Exception {
+    createJsonSourceRows();
+    runRoundTrip(8, Collections.emptyMap(),
+        Collections.singletonMap(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+
+    assertEquals("an untagged STRING must not be promoted to jsonb", "text", destColumnType("j"));
+  }
+
+  // ---------- sink rejection of unexpected shapes (DLQ) ----------
+
+  private void configureDlqSink(String... extras) throws Exception {
+    props.put(ERRORS_TOLERANCE_CONFIG, ToleranceType.ALL.value());
+    props.put(DLQ_TOPIC_NAME_CONFIG, DLQ_TOPIC_NAME);
+    props.put(DLQ_TOPIC_REPLICATION_FACTOR_CONFIG, "1");
+    props.put(MAX_RETRIES, "0");
+    props.put(JdbcSinkConfig.AUTO_CREATE, "true");
+    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
+    for (int i = 0; i < extras.length; i += 2) {
+      props.put(extras[i], extras[i + 1]);
+    }
+    connect.configureConnector("jdbc-sink-connector", props);
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+  }
+
+  /**
+   * A malformed JSON document under the {@code Json} logical type cannot be cast to jsonb, so the
+   * record must be reported rather than silently corrupting the column.
+   */
+  @Test
+  public void testSinkReportsMalformedJsonText() throws Exception {
+    configureDlqSink();
+
+    final Schema schema = SchemaBuilder.struct().name("com.example.Doc")
+        .field("name", Schema.STRING_SCHEMA)
+        .field("payload", Json.optionalSchema())
+        .build();
+    produceRecord(schema, new Struct(schema).put("name", "bad").put("payload", "{not json"));
+
+    ConsumerRecords<byte[], byte[]> dlq =
+        connect.kafka().consume(1, CONSUME_MAX_DURATION_MS, DLQ_TOPIC_NAME);
+    assertEquals("malformed JSON must reach the DLQ", 1, dlq.count());
+  }
+
+  /**
+   * An untagged STRING written into a pre-existing jsonb column: the sink binds it as text and the
+   * {@code ::jsonb} cast applies, so a valid document still lands correctly.
+   */
+  @Test
+  public void testSinkWritesPlainStringIntoExistingJsonbColumn() throws Exception {
+    execute("CREATE TABLE " + tableName + "(name text, payload jsonb)");
+    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
+    connect.configureConnector("jdbc-sink-connector", props);
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+
+    final Schema schema = SchemaBuilder.struct().name("com.example.Doc")
+        .field("name", Schema.STRING_SCHEMA)
+        .field("payload", Schema.OPTIONAL_STRING_SCHEMA)
+        .build();
+    produceRecord(schema, new Struct(schema)
+        .put("name", "plain").put("payload", "{\"env\":\"prod\"}"));
+
+    waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 1, 1,
+        TimeUnit.MINUTES.toMillis(2));
+
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
+         Statement s = c.createStatement();
+         ResultSet rs = s.executeQuery("SELECT payload->>'env' FROM " + tableName)) {
+      assertTrue(rs.next());
+      assertEquals("prod", rs.getString(1));
+    }
+  }
+
+  private static Map<String, Object> parsedMap(String... kv) {
+    Map<String, Object> map = new LinkedHashMap<>();
+    for (int i = 0; i < kv.length; i += 2) {
+      map.put(kv[i], kv[i + 1]);
+    }
+    return map;
+  }
+
+  private static Object parseJson(String text) {
+    try {
+      return new ObjectMapper().readValue(text, Object.class);
+    } catch (Exception e) {
+      throw new AssertionError("not parseable JSON: " + text, e);
+    }
+  }
+
+  /** {@code jsonb_typeof} of one field inside the destination document, e.g. "string". */
+  private String jsonbTypeOfField(String column, String field, int id) throws SQLException {
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
+         Statement s = c.createStatement();
+         ResultSet rs = s.executeQuery("SELECT jsonb_typeof(" + column + "->'" + field + "') FROM "
+             + DST_TABLE + " WHERE id = " + id)) {
+      assertTrue(rs.next());
+      return rs.getString(1);
+    }
+  }
+
+  // ---------- shared harness for complex-type source tests ----------
+
+  /**
+   * A field's expected schema and value, asserted together, mirroring Debezium's
+   * {@code SchemaAndValueField}. The field must exist, its schema must match <em>in full</em> — type,
+   * logical name, optionality and nested key/value schemas, via Connect's own structural
+   * {@code Schema.equals} — and its value must match. Asserting the whole schema object is what
+   * catches a dropped logical name or a wrongly non-optional element in a single assertion.
+   */
+  protected static class SchemaAndValueField {
+
+    private final String fieldName;
+    private final Schema schema;
+    private final Object value;
+    private final boolean valueIsJsonText;
+
+    protected SchemaAndValueField(String fieldName, Schema schema, Object value) {
+      this(fieldName, schema, value, false);
+    }
+
+    private SchemaAndValueField(
+        String fieldName, Schema schema, Object value, boolean valueIsJsonText) {
+      this.fieldName = fieldName;
+      this.schema = schema;
+      this.value = value;
+      this.valueIsJsonText = valueIsJsonText;
+    }
+
+    /**
+     * A field carrying JSON text whose expected value is compared <em>parsed</em>. Necessary wherever
+     * the text is built from a driver-supplied {@code HashMap}, since key order is hash order and not
+     * insertion order — Debezium's own expectations are byte-exact and therefore order-fragile.
+     */
+    protected static SchemaAndValueField jsonText(String fieldName, Schema schema, Object parsed) {
+      return new SchemaAndValueField(fieldName, schema, parsed, true);
+    }
+
+    protected void assertFor(Struct content) {
+      assertSchema(content);
+      assertValue(content);
+    }
+
+    private void assertSchema(Struct content) {
+      Field field = content.schema().field(fieldName);
+      assertNotNull(fieldName + " not found in schema " + content.schema(), field);
+      assertEquals("Schema for " + fieldName, schema, field.schema());
+    }
+
+    private void assertValue(Struct content) {
+      Object actual = content.get(fieldName);
+      if (value == null) {
+        assertNull(fieldName + " should be null but was " + actual, actual);
+        return;
+      }
+      assertNotNull(fieldName + " should not be null", actual);
+      if (valueIsJsonText) {
+        assertTrue(fieldName + " should be JSON text but was " + actual.getClass(),
+            actual instanceof String);
+        assertEquals("Parsed JSON for " + fieldName, value, parseJson((String) actual));
+        return;
+      }
+      assertEquals("Value for " + fieldName, value, actual);
+    }
+
+    private static Object parseJson(String text) {
+      try {
+        return new ObjectMapper().readValue(text, Object.class);
+      } catch (Exception e) {
+        throw new AssertionError("Field value is not parseable JSON: " + text, e);
+      }
+    }
+  }
+
+  /**
+   * Assert that a field is absent from the record's schema, i.e. the column was dropped rather than
+   * emitted. Used for the complex-types-disabled and unsupported-type cases.
+   */
+  protected static void assertFieldAbsent(Struct content, String fieldName) {
+    assertNull(fieldName + " must not be emitted, but the schema has " + content.schema().fields(),
+        content.schema().field(fieldName));
+  }
+
+  /**
+   * Source-connector properties for a bulk read of {@link #tableName} in the given database, with
+   * complex types enabled. Extra key/value pairs override or add to the defaults.
+   */
+  protected Map<String, String> complexTypesSourceProps(String database, String... extras) {
+    Map<String, String> sourceProps = new HashMap<>();
+    sourceProps.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, String.format(
+        "jdbc:postgresql://localhost:%s/%s", pg.getEmbeddedPostgres().getPort(), database));
+    sourceProps.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "postgres");
+    sourceProps.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
+    sourceProps.put(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG, "topic_");
+    sourceProps.put(JdbcSourceTaskConfig.TABLES_CONFIG, tableName);
+    sourceProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");
+    sourceProps.put(JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true");
+    for (int i = 0; i < extras.length; i += 2) {
+      sourceProps.put(extras[i], extras[i + 1]);
+    }
+    return sourceProps;
+  }
+
+  /** Poll the configured table and return the single expected row's value Struct. */
+  protected Struct pollOneRow(Map<String, String> sourceProps) throws InterruptedException {
+    List<Struct> rows = pollRows(sourceProps);
+    assertEquals("expected exactly one row", 1, rows.size());
+    return rows.get(0);
+  }
+
+  /**
+   * Poll the configured table and return its rows, distinct by {@code id} and in {@code id} order.
+   *
+   * <p>De-duplication is deliberate: in bulk mode a single {@code poll()} re-runs the query once the
+   * querier is exhausted, so a small table can legitimately come back more than once in one batch.
+   * These tests assert type mapping, not polling cadence, so the primary key is the right notion of
+   * "the rows of the table" and keeps them deterministic.
+   */
+  protected List<Struct> pollRows(Map<String, String> sourceProps) throws InterruptedException {
+    JdbcSourceTask task = new JdbcSourceTask();
+    try {
+      task.start(sourceProps);
+      List<SourceRecord> records = task.poll();
+      assertNotNull("source task returned no records", records);
+      Map<Integer, Struct> byId = new TreeMap<>();
+      List<Struct> unkeyed = new ArrayList<>();
+      for (SourceRecord record : records) {
+        Struct row = (Struct) record.value();
+        if (row.schema().field("id") == null) {
+          unkeyed.add(row);
+        } else {
+          byId.putIfAbsent(row.getInt32("id"), row);
+        }
+      }
+      if (byId.isEmpty()) {
+        return unkeyed;
+      }
+      return new ArrayList<>(byId.values());
+    } finally {
+      task.stop();
+    }
+  }
+
+  // ---------- round-trip harness: source connector -> Kafka -> sink connector ----------
+
+  protected static final String SRC_TABLE = "src_types";
+  protected static final String DST_TABLE = "dst_types";
+  private static final String ROUND_TRIP_TOPIC = "rt_" + SRC_TABLE;
+
+  /**
+   * Run a full round trip: a source connector reads {@link #SRC_TABLE}, publishes to Kafka, and a sink
+   * connector writes to {@link #DST_TABLE}. Both connectors run in the embedded Connect cluster, so
+   * this exercises the converters and the worker, which the task-level tests bypass.
+   *
+   * <p>Modelled on Debezium's {@code AbstractJdbcSinkPipelineIT}, which likewise asserts the
+   * destination <em>column type</em> as well as the values.
+   *
+   * @param expectedRows how many rows the sink should commit before assertions run
+   * @param sourceExtras extra source-connector properties, as key/value pairs
+   * @param sinkExtras extra sink-connector properties, as key/value pairs
+   */
+  protected void runRoundTrip(int expectedRows, Map<String, String> sourceExtras,
+      Map<String, String> sinkExtras) throws Exception {
+    connect.kafka().createTopic(ROUND_TRIP_TOPIC, 1);
+
+    Map<String, String> sourceProps = new HashMap<>();
+    sourceProps.put(ConnectorConfig.CONNECTOR_CLASS_CONFIG, JdbcSourceConnector.class.getName());
+    sourceProps.put(ConnectorConfig.TASKS_MAX_CONFIG, "1");
+    sourceProps.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, jdbcUrl());
+    sourceProps.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, "postgres");
+    sourceProps.put(JdbcSourceConnectorConfig.MODE_CONFIG, JdbcSourceConnectorConfig.MODE_BULK);
+    sourceProps.put(JdbcSourceConnectorConfig.POLL_INTERVAL_MS_CONFIG, "1000");
+    sourceProps.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, SRC_TABLE);
+    sourceProps.put(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG, "rt_");
+    sourceProps.put("key.converter", StringConverter.class.getName());
+    sourceProps.put("value.converter", JsonConverter.class.getName());
+    sourceProps.putAll(sourceExtras);
+
+    Map<String, String> sinkProps = new HashMap<>(props);
+    sinkProps.put("topics", ROUND_TRIP_TOPIC);
+    sinkProps.put(JdbcSinkConfig.AUTO_CREATE, "true");
+    sinkProps.put(JdbcSinkConfig.TABLE_NAME_FORMAT, DST_TABLE);
+    sinkProps.put(JdbcSinkConfig.PK_MODE, "record_value");
+    sinkProps.put(JdbcSinkConfig.PK_FIELDS, "id");
+    sinkProps.put(JdbcSinkConfig.INSERT_MODE, "upsert");
+    sinkProps.putAll(sinkExtras);
+
+    connect.configureConnector("rt-source", sourceProps);
+    waitForConnectorToStart("rt-source", 1);
+    connect.configureConnector("rt-sink", sinkProps);
+    waitForConnectorToStart("rt-sink", 1);
+
+    waitForCommittedRecords("rt-sink", Collections.singleton(ROUND_TRIP_TOPIC), expectedRows, 1,
+        TimeUnit.MINUTES.toMillis(3));
+  }
+
+  protected void runRoundTrip(int expectedRows) throws Exception {
+    runRoundTrip(expectedRows, Collections.emptyMap(), Collections.emptyMap());
+  }
+
+  protected String jdbcUrl() {
+    return String.format("jdbc:postgresql://localhost:%s/postgres",
+        pg.getEmbeddedPostgres().getPort());
+  }
+
+  /**
+   * The declared SQL type of a column in the destination table, e.g. {@code jsonb} or {@code text}.
+   * Asserting this — not merely the value — is what proves the DDL mapping rather than just the bind.
+   */
+  protected String destColumnType(String column) throws SQLException {
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
+         Statement s = c.createStatement();
+         ResultSet rs = s.executeQuery(
+             "SELECT data_type FROM information_schema.columns WHERE table_name = '"
+                 + DST_TABLE + "' AND column_name = '" + column + "'")) {
+      assertTrue("destination table has no column " + column, rs.next());
+      return rs.getString(1);
+    }
+  }
+
+  /** Run a query against the destination table and hand each row to the given check, in order. */
+  protected void queryDest(String selectList, String orderBy, RowCheck... checks)
+      throws SQLException {
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
+         Statement s = c.createStatement();
+         ResultSet rs = s.executeQuery(
+             "SELECT " + selectList + " FROM " + DST_TABLE + " ORDER BY " + orderBy)) {
+      for (int i = 0; i < checks.length; i++) {
+        assertTrue("destination table has fewer than " + checks.length + " rows", rs.next());
+        checks[i].check(rs);
+      }
+      assertTrue("destination table has more than " + checks.length + " rows", !rs.next());
+    }
+  }
+
+  @FunctionalInterface
+  protected interface RowCheck {
+    void check(ResultSet rs) throws SQLException;
+  }
+
+  /** Execute the given statements against {@link #tableName}'s database. */
+  protected void execute(String... statements) throws SQLException {
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
+         Statement s = c.createStatement()) {
+      for (String statement : statements) {
+        s.execute(statement);
+      }
+    }
   }
 }

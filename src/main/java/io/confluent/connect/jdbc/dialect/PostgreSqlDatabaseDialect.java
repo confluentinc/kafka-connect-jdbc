@@ -15,16 +15,20 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.data.Json;
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.HstoreHandlingMode;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.JdbcCredentials;
+import io.confluent.connect.jdbc.util.JsonConverter;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
@@ -83,6 +87,13 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   static final String JSON_TYPE_NAME = "json";
   static final String JSONB_TYPE_NAME = "jsonb";
   static final String UUID_TYPE_NAME = "uuid";
+  static final String HSTORE_TYPE_NAME = "hstore";
+
+  private static final String HSTORE_OFF_SEARCH_PATH_ERROR =
+      "Cannot map hstore column %s: the driver reports its type as %s, so the hstore extension is "
+          + "not on this connection's search_path. Add the schema owning the extension to the "
+          + "search_path, for example with ?currentSchema=ext,public on connection.url, or set "
+          + "hstore.handling.mode=none to skip hstore columns.";
 
   /**
    * Define the PG datatypes that require casting upon insert/update statements.
@@ -270,11 +281,20 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       case Types.OTHER: {
         // Some of these types will have fixed size, but we drop this from the schema conversion
         // since only fixed byte arrays can have a fixed size
+        if (complexTypesEnabled()) {
+          if (isHstoreType(columnDefn)) {
+            if (hstoreMappingSelected()) {
+              builder.field(fieldName, hstoreSchema(columnDefn.isOptional()));
+              return fieldName;
+            }
+            // hstore.handling.mode=none: skipped, as before the feature existed.
+          } else if (isUnresolvedHstoreType(columnDefn.typeName()) && hstoreMappingSelected()) {
+            throw hstoreOffSearchPathError(columnDefn.id(), columnDefn.typeName());
+          }
+        }
+
         if (isJsonType(columnDefn)) {
-          builder.field(
-              fieldName,
-              columnDefn.isOptional() ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA
-          );
+          builder.field(fieldName, jsonSchema(columnDefn));
           return fieldName;
         }
 
@@ -327,6 +347,16 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           return rs -> rs.getString(col);
         }
 
+        if (complexTypesEnabled() && hstoreMappingSelected() && isHstoreType(columnDefn)) {
+          if (hstoreHandlingMode() == HstoreHandlingMode.JSON) {
+            return rs -> {
+              Object value = hstoreValue(columnDefn, rs.getObject(col));
+              return value == null ? null : JsonConverter.connectMapToJson(value);
+            };
+          }
+          return rs -> hstoreValue(columnDefn, rs.getObject(col));
+        }
+
         if (UUID.class.getName().equals(columnDefn.classNameForType())) {
           return rs -> rs.getString(col);
         }
@@ -345,6 +375,158 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return JSON_TYPE_NAME.equalsIgnoreCase(typeName) || JSONB_TYPE_NAME.equalsIgnoreCase(typeName);
   }
 
+  protected boolean isHstoreType(ColumnDefinition columnDefn) {
+    return HSTORE_TYPE_NAME.equalsIgnoreCase(columnDefn.typeName());
+  }
+
+  /**
+   * The driver's value for an hstore column, as the map both handling modes require. Anything else
+   * follows Debezium's {@code handleUnknownData}: a nullable column degrades to null, a NOT NULL
+   * column fails, and the same text is used either way. The value is never logged, in case it is
+   * sensitive.
+   */
+  private Object hstoreValue(ColumnDefinition columnDefn, Object value) {
+    if (value == null || value instanceof Map) {
+      return value;
+    }
+    if (columnDefn.isOptional()) {
+      log.warn("Unexpected value for hstore column {}: class={}; emitting null",
+          columnDefn.id(), value.getClass().getName());
+      return null;
+    }
+    throw new DataException("Unexpected value for hstore column " + columnDefn.id()
+        + ": class=" + value.getClass().getName());
+  }
+
+  /**
+   * Whether the schema is a {@code MAP<STRING, STRING>}, the only Connect container mapped to a
+   * native {@code jsonb} column. That is the shape a PostgreSQL {@code hstore} column takes on the
+   * topic; STRUCT values and other map shapes are not supported.
+   */
+  private static boolean isStringToStringMap(Schema schema) {
+    return schema.type() == Schema.Type.MAP
+        && schema.keySchema().type() == Schema.Type.STRING
+        && schema.valueSchema().type() == Schema.Type.STRING;
+  }
+
+  private boolean isJsonBindCandidate(Schema schema) {
+    return isStringToStringMap(schema) && complexTypesEnabled();
+  }
+
+  private boolean maybeBindJson(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
+      Object value
+  ) throws SQLException {
+    if (!isJsonBindCandidate(schema)) {
+      return false;
+    }
+    String json = JsonConverter.connectMapToJson(value);
+    if (json == null) {
+      statement.setNull(index, Types.OTHER);
+    } else {
+      // Bind as text; the ::jsonb cast (see valueTypeCast) parses it into jsonb server-side.
+      statement.setString(index, json);
+    }
+    return true;
+  }
+
+  /**
+   * The configured {@code hstore.handling.mode}. Only the source connector selects a
+   * representation; the sink reads whichever shape arrives on the topic.
+   */
+  protected HstoreHandlingMode hstoreHandlingMode() {
+    return config instanceof JdbcSourceConnectorConfig
+        ? ((JdbcSourceConnectorConfig) config).hstoreHandlingMode()
+        : HstoreHandlingMode.MAP;
+  }
+
+  /**
+   * Whether {@code hstore.handling.mode} selects a representation, i.e. is not {@code none}, the
+   * default. Paired with the complex types flag at every hstore call site, so hstore is opted into
+   * independently of json/jsonb and arrays and {@link #hstoreSchema(boolean)} is only ever reached
+   * for a real representation.
+   */
+  protected boolean hstoreMappingSelected() {
+    return hstoreHandlingMode() != HstoreHandlingMode.NONE;
+  }
+
+  /**
+   * The local, unquoted PostgreSQL type name: {@code hstore} and {@code "ext"."hstore"} both yield
+   * {@code hstore}, and {@code "ext"."_hstore"} yields {@code _hstore}. pgjdbc renders an extension
+   * type bare only while its schema is on the connection's {@code search_path}, and
+   * schema-qualifies it otherwise.
+   */
+  protected static String localTypeName(String typeName) {
+    if (typeName == null) {
+      return null;
+    }
+    int lastDot = typeName.lastIndexOf('.');
+    return (lastDot < 0 ? typeName : typeName.substring(lastDot + 1)).replace("\"", "");
+  }
+
+  /**
+   * Whether a type name is an hstore the driver could not resolve, i.e. one that arrived
+   * schema-qualified because the extension is off the {@code search_path}. Shared by the scalar
+   * column path and the array element path, which must agree.
+   */
+  protected static boolean isUnresolvedHstoreType(String typeName) {
+    return typeName != null
+        && !HSTORE_TYPE_NAME.equalsIgnoreCase(typeName)
+        && HSTORE_TYPE_NAME.equalsIgnoreCase(localTypeName(typeName));
+  }
+
+  /**
+   * The failure for an hstore column that a selected mapping mode cannot honour. Failing beats
+   * silently dropping the column, since a mode was explicitly asked for.
+   */
+  protected ConnectException hstoreOffSearchPathError(ColumnId column, String typeName) {
+    return new ConnectException(String.format(HSTORE_OFF_SEARCH_PATH_ERROR, column, typeName));
+  }
+
+  /**
+   * The on-topic schema for an hstore value under {@code hstore.handling.mode}: a {@code Json}
+   * STRING, or a {@code MAP<STRING, STRING>} whose values are optional since an hstore value may
+   * be NULL. Shared so a scalar column (optionality from the column) and an array element (always
+   * optional) cannot drift apart. Only valid once {@link #hstoreMappingEnabled()} holds; the map
+   * branch is the fallback, so {@code none} would otherwise be read as {@code map}.
+   */
+  protected Schema hstoreSchema(boolean optional) {
+    if (hstoreHandlingMode() == HstoreHandlingMode.JSON) {
+      return optional ? Json.optionalSchema() : Json.schema();
+    }
+    SchemaBuilder mapBuilder =
+        SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA);
+    if (optional) {
+      mapBuilder.optional();
+    }
+    return mapBuilder.build();
+  }
+
+  private boolean complexTypesEnabled() {
+    if (config instanceof JdbcSinkConfig) {
+      return ((JdbcSinkConfig) config).sqlComplexTypesEnable;
+    }
+    if (config instanceof JdbcSourceConnectorConfig) {
+      return ((JdbcSourceConnectorConfig) config).sqlComplexTypesEnabled();
+    }
+    return false;
+  }
+
+  /**
+   * Build the Connect schema for a PostgreSQL json/jsonb column. When complex types are disabled
+   * the column stays a plain STRING; when enabled it is a logical JSON STRING (raw text, aligned
+   * with Debezium's {@code io.debezium.data.Json}).
+   */
+  private Schema jsonSchema(ColumnDefinition columnDefn) {
+    boolean optional = columnDefn.isOptional();
+    if (!complexTypesEnabled()) {
+      return optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA;
+    }
+    return optional ? Json.optionalSchema() : Json.schema();
+  }
+
   @Override
   protected String getSqlType(SinkRecordField field) {
     if (field.schemaName() != null) {
@@ -357,6 +539,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           return "TIME";
         case Timestamp.LOGICAL_NAME:
           return "TIMESTAMP";
+        case Json.LOGICAL_NAME:
+          if (complexTypesEnabled()) {
+            return JSONB_TYPE_NAME.toUpperCase();
+          }
+          break;
         default:
           // fall through to normal types
       }
@@ -394,6 +581,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
             field.isPrimaryKey()
         );
         return getSqlType(childField) + "[]";
+      case MAP:
+        if (isStringToStringMap(field.schema()) && complexTypesEnabled()) {
+          return JSONB_TYPE_NAME.toUpperCase();
+        }
+        return super.getSqlType(field);
       default:
         return super.getSqlType(field);
     }
@@ -563,7 +755,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     switch (schema.type()) {
       case ARRAY: {
         Class<?> valueClass = value.getClass();
-        Object newValue = null;
         Collection<?> valueCollection;
         if (Collection.class.isAssignableFrom(valueClass)) {
           valueCollection = (Collection<?>) value;
@@ -574,55 +765,51 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
               String.format("Type '%s' is not supported for Array.", valueClass.getName())
           );
         }
-
-        // All typecasts below are based on pgjdbc's documentation on how to use primitive arrays
-        // - https://jdbc.postgresql.org/documentation/head/arrays.html
-        switch (schema.valueSchema().type()) {
-          case INT8: {
-            // Gotta do this the long way, as Postgres has no single-byte integer,
-            // so we want to cast to short as the next best thing, and we can't do that with
-            // toArray.
-
-            newValue = valueCollection.stream()
-                .map(o -> ((Byte) o).shortValue())
-                .toArray(Short[]::new);
-            break;
-          }
-          case INT32:
-            newValue = valueCollection.toArray(new Integer[0]);
-            break;
-          case INT16:
-            newValue = valueCollection.toArray(new Short[0]);
-            break;
-          case BOOLEAN:
-            newValue = valueCollection.toArray(new Boolean[0]);
-            break;
-          case STRING:
-            newValue = valueCollection.toArray(new String[0]);
-            break;
-          case FLOAT64:
-            newValue = valueCollection.toArray(new Double[0]);
-            break;
-          case FLOAT32:
-            newValue = valueCollection.toArray(new Float[0]);
-            break;
-          case INT64:
-            newValue = valueCollection.toArray(new Long[0]);
-            break;
-          default:
-            break;
-        }
-
+        Object newValue = primitiveArrayFor(schema.valueSchema().type(), valueCollection);
         if (newValue != null) {
           statement.setObject(index, newValue, Types.ARRAY);
           return true;
         }
         break;
       }
+      case MAP:
+        if (maybeBindJson(statement, index, schema, value)) {
+          return true;
+        }
+        break;
       default:
         break;
     }
     return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
+  }
+
+  /**
+   * Convert a collection into a typed Java array for a primitive Connect element type, following
+   * pgjdbc's array mapping (https://jdbc.postgresql.org/documentation/head/arrays.html). Returns
+   * null for unhandled element types.
+   */
+  private static Object primitiveArrayFor(Schema.Type elementType, Collection<?> valueCollection) {
+    switch (elementType) {
+      case INT8:
+        // PostgreSQL has no single-byte integer; widen to short.
+        return valueCollection.stream().map(o -> ((Byte) o).shortValue()).toArray(Short[]::new);
+      case INT16:
+        return valueCollection.toArray(new Short[0]);
+      case INT32:
+        return valueCollection.toArray(new Integer[0]);
+      case INT64:
+        return valueCollection.toArray(new Long[0]);
+      case FLOAT32:
+        return valueCollection.toArray(new Float[0]);
+      case FLOAT64:
+        return valueCollection.toArray(new Double[0]);
+      case BOOLEAN:
+        return valueCollection.toArray(new Boolean[0]);
+      case STRING:
+        return valueCollection.toArray(new String[0]);
+      default:
+        return null;
+    }
   }
 
   /**

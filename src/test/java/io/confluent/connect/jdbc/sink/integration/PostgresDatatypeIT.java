@@ -790,8 +790,9 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
   }
 
   /**
-   * An hstore type outside the connection's search_path is reported as {@code "ext"."hstore"} and
-   * read as raw text rather than a Map, so the column is skipped rather than mis-read.
+   * An hstore type outside the connection's search_path is reported as {@code "ext"."hstore"}, so a
+   * selected mapping mode cannot be honoured. The task fails at schema time, before any value is
+   * read, rather than silently dropping the column.
    */
   @Test
   public void testHstoreOutsideSearchPathFailsWhenAMappingModeIsSelected() throws Exception {
@@ -807,11 +808,14 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     // A mapping mode was asked for and this column cannot honour it, so the task fails rather than
     // silently dropping the column. map mode is set explicitly: under the default none the column
     // would be skipped and this would prove nothing about search_path.
-    String failure = pollUntilTaskFails(complexTypesSourceProps("offpath",
+    Throwable failure = pollUntilTaskFails(complexTypesSourceProps("offpath",
         JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "map"));
-    assertTrue("must name the cause, got: " + failure, failure.contains("search_path"));
-    assertTrue("must offer the escape hatch, got: " + failure,
-        failure.contains("hstore.handling.mode=none"));
+    assertTrue("expected a ConnectException, got " + failure.getClass().getName(),
+        failure instanceof ConnectException);
+    String messages = causeChain(failure);
+    assertTrue("must name the cause, got: " + messages, messages.contains("search_path"));
+    assertTrue("must offer the escape hatch, got: " + messages,
+        messages.contains("hstore.handling.mode=none"));
 
     // none is the escape hatch: the same column is skipped instead of failing.
     assertFieldAbsent(pollOneRow(complexTypesSourceProps("offpath",
@@ -819,11 +823,11 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
   }
 
   /**
-   * Run a source task until it fails, returning the messages of the whole cause chain. The querier
-   * runs on a background thread, so the failure is recorded by {@code RecordQueue.failWith} and
-   * rethrown, wrapped, from a later poll rather than the first one.
+   * Run a source task until polling throws, returning what it threw. The querier runs on a
+   * background thread, so the failure is recorded by {@code RecordQueue.failWith} and rethrown,
+   * wrapped, from a later poll rather than the first one.
    */
-  private String pollUntilTaskFails(Map<String, String> sourceProps) throws Exception {
+  private Throwable pollUntilTaskFails(Map<String, String> sourceProps) throws Exception {
     JdbcSourceTask task = new JdbcSourceTask();
     AtomicReference<Throwable> thrown = new AtomicReference<>();
     try {
@@ -842,8 +846,13 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     } finally {
       task.stop();
     }
+    return thrown.get();
+  }
+
+  /** The messages of a whole cause chain, since the original failure is wrapped on the way out. */
+  private static String causeChain(Throwable thrown) {
     StringBuilder messages = new StringBuilder();
-    for (Throwable cause = thrown.get(); cause != null; cause = cause.getCause()) {
+    for (Throwable cause = thrown; cause != null; cause = cause.getCause()) {
       messages.append(cause.getMessage()).append(' ');
     }
     return messages.toString();

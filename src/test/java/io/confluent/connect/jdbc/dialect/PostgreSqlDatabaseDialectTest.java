@@ -1028,6 +1028,44 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         sourceFieldSchema(hstoreDialect("true", "map"), Types.OTHER, "HSTORE").type());
   }
 
+  @Test
+  public void jsonColumnMapsToLogicalJsonStringSchema() {
+    // json/jsonb map to a logical JSON STRING tagged with the Json logical name, and optionality
+    // follows the column: a nullable column needs an optional schema or a NULL value breaches it.
+    // Schema equality covers the type, the logical name and the optional flag together.
+    assertEquals(Json.optionalSchema(), jsonColumnSchema(ColumnDefinition.Nullability.NULL));
+    assertEquals(Json.schema(), jsonColumnSchema(ColumnDefinition.Nullability.NOT_NULL));
+  }
+
+  private Schema jsonColumnSchema(ColumnDefinition.Nullability nullability) {
+    SchemaBuilder builder = SchemaBuilder.struct();
+    String fieldName = complexTypesDialect()
+        .addFieldToSchema(column(Types.OTHER, "jsonb", nullability), builder);
+    return builder.build().field(fieldName).schema();
+  }
+
+  @Test
+  public void jsonColumnValueShouldStayRawJsonText() throws Exception {
+    // The value is the document's raw text (lossless), not a re-serialized/projected form.
+    ColumnDefinition column = column(Types.OTHER, "jsonb");
+    DatabaseDialect.ColumnConverter converter = complexTypesDialect().columnConverterFor(
+        new ColumnMapping(column, 1, new Field("col", 0, Json.optionalSchema())),
+        column, 1, true);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getString(1)).thenReturn("{\"b\":2,\"a\":[1,null]}");
+
+    assertEquals("{\"b\":2,\"a\":[1,null]}", converter.convert(resultSet));
+  }
+
+  @Test
+  public void shouldMapComplexTypesToSqlTypes() {
+    // The sink half of this PR's contract: the source now tags json/jsonb columns as Json, so a
+    // round trip only lands back in jsonb if the sink maps that tag. The mapping itself is #1651's
+    // and is covered there for both flag arms; this pins the half the schema change depends on.
+    assertEquals("JSONB",
+        sinkDialect().getSqlType(new SinkRecordField(Json.schema(), "col", false)));
+  }
+
   // ----- complex-type test helpers -----
 
   private PostgreSqlDatabaseDialect sinkDialect() {

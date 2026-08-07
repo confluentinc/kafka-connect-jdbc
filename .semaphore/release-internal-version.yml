@@ -20,7 +20,6 @@ blocks:
       jobs:
         - name: Release
           commands:
-            - . assume-iam-role arn:aws:iam::519856050701:role/semaphore-oidc
             - ci-tools ci-update-version
             - ci-tools ci-push-tag
             - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 -Ddependency.check.skip=true --batch-mode --no-transfer-progress 

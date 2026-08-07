@@ -15,6 +15,11 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.data.Json;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import io.confluent.connect.jdbc.source.ColumnMapping;
+import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.QuoteMethod;
@@ -25,11 +30,14 @@ import io.confluent.connect.jdbc.util.ExpressionBuilder;
 
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.errors.DataException;
 import org.junit.Test;
 
 import java.sql.Connection;
@@ -44,6 +52,7 @@ import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -51,11 +60,27 @@ import java.util.concurrent.ThreadLocalRandom;
 
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import io.confluent.connect.jdbc.data.VariableScaleDecimal;
+import org.apache.kafka.connect.data.Struct;
+import org.mockito.ArgumentCaptor;
+import java.math.BigDecimal;
+import java.sql.Array;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.GregorianCalendar;
+import java.util.Locale;
+import java.util.TimeZone;
+import static org.junit.Assert.assertNotEquals;
 
 public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDatabaseDialect> {
 
@@ -96,6 +121,19 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     assertColumnConverter(Types.OTHER, PostgreSqlDatabaseDialect.JSON_TYPE_NAME, Schema.STRING_SCHEMA, String.class);
     assertColumnConverter(Types.OTHER, PostgreSqlDatabaseDialect.JSONB_TYPE_NAME, Schema.STRING_SCHEMA, String.class);
     assertColumnConverter(Types.OTHER, PostgreSqlDatabaseDialect.UUID_TYPE_NAME, Schema.STRING_SCHEMA, UUID.class);
+  }
+
+  @Test
+  public void logicalJsonMapsToJsonbOnlyWhenComplexTypesEnabled() {
+    SinkRecordField field = new SinkRecordField(Json.optionalSchema(), "col", false);
+
+    PostgreSqlDatabaseDialect enabled = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+    assertEquals("JSONB", enabled.getSqlType(field));
+
+    PostgreSqlDatabaseDialect disabled =
+        new PostgreSqlDatabaseDialect(sinkConfigWithUrl("jdbc:postgresql://something"));
+    assertEquals("TEXT", disabled.getSqlType(field));
   }
 
   @Test
@@ -309,14 +347,18 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     builder.withColumn("columnA").type(VARCHAR_TYPE, JDBCType.VARCHAR, Integer.class);
     builder.withColumn("uuidColumn").type("uuid", JDBCType.OTHER, UUID.class);
     builder.withColumn("dateColumn").type("date", JDBCType.DATE, java.sql.Date.class);
+    builder.withColumn("jsonbColumn").type("jsonb", JDBCType.OTHER, String.class);
     TableDefinition tableDefn = builder.build();
     ColumnId uuidColumn = tableDefn.definitionForColumn("uuidColumn").id();
     ColumnId dateColumn = tableDefn.definitionForColumn("dateColumn").id();
+    ColumnId jsonbColumn = tableDefn.definitionForColumn("jsonbColumn").id();
     assertEquals("", dialect.valueTypeCast(tableDefn, columnPK1));
     assertEquals("", dialect.valueTypeCast(tableDefn, columnPK2));
     assertEquals("", dialect.valueTypeCast(tableDefn, columnA));
     assertEquals("::uuid", dialect.valueTypeCast(tableDefn, uuidColumn));
     assertEquals("", dialect.valueTypeCast(tableDefn, dateColumn));
+    // The cast that turns the bound JSON text into jsonb server-side.
+    assertEquals("::jsonb", dialect.valueTypeCast(tableDefn, jsonbColumn));
   }
 
   @Test
@@ -781,7 +823,1354 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
 
-  // validateQuery behaviour is inherited from GenericDatabaseDialect and exercised in
-  // GenericDatabaseDialectTest; no PostgreSQL-specific override exists to test here.
+  // validateQuery is inherited from GenericDatabaseDialect; tested in GenericDatabaseDialectTest.
 
+  // ========== Complex SQL types (sql.complex.types.enable) ==========
+
+  @Test
+  public void hstoreHandlingModeShouldSelectSourceSchema() {
+    // "map": a Map<String,String>. Not the default, which is "none".
+    assertEquals(Type.MAP,
+        sourceFieldSchema(hstoreDialect("true", "map"), Types.OTHER, "hstore").type());
+
+    // "json": a STRING tagged as the Json logical type, which the sink lands in JSONB.
+    PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json");
+    Schema jsonMode = sourceFieldSchema(jsonDialect, Types.OTHER, "hstore");
+    assertEquals(Type.STRING, jsonMode.type());
+    assertEquals(Json.LOGICAL_NAME, jsonMode.name());
+  }
+
+  @Test
+  public void hstoreJsonModeShouldConvertValueToJsonObjectString() throws Exception {
+    // In json mode the driver's hstore Map is serialized to a JSON-object STRING on the topic.
+    PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json");
+    Map<String, String> hstore = new LinkedHashMap<>();
+    hstore.put("env", "prod");
+    hstore.put("region", "us-west-2");
+
+    assertEquals("{\"env\":\"prod\",\"region\":\"us-west-2\"}",
+        hstoreConverter(jsonDialect).convert(hstoreResultSet(hstore)));
+  }
+
+  @Test
+  public void hstoreMapModeShouldPassThroughDriverMap() throws Exception {
+    // In map mode the driver's Map is emitted as-is for the Connect MAP schema.
+    Map<String, String> hstore = Collections.singletonMap("env", "prod");
+    assertEquals(hstore,
+        hstoreConverter(hstoreDialect("true", "map")).convert(hstoreResultSet(hstore)));
+  }
+
+  @Test
+  public void hstoreSourceSchemaShouldMapToSinkSqlTypePerMode() {
+    // Starts from the schema the source path actually produces for an hstore column, so this
+    // exercises hstoreSchema() rather than re-asserting generic MAP/STRING behaviour.
+    Schema mapMode = sourceFieldSchema(hstoreDialect("true", "map"), Types.OTHER, "hstore");
+    assertEquals("JSONB", sinkDialect().getSqlType(sinkField(mapMode)));
+
+    PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json");
+    Schema jsonMode = sourceFieldSchema(jsonDialect, Types.OTHER, "hstore");
+    assertEquals("JSONB", sinkDialect().getSqlType(sinkField(jsonMode)));
+  }
+
+  @Test
+  public void shouldBindStringMapAsJsonTextForJsonbColumn() throws SQLException {
+    // The value half of MAP -> JSONB: the map is serialized and bound as text, which the ::jsonb
+    // cast then parses server-side. Only the DDL half was covered before.
+    Map<String, String> value = new LinkedHashMap<>();
+    value.put("env", "prod");
+    value.put("absent", null);
+    Schema schema = SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA)
+        .optional().build();
+
+    PreparedStatement statement = mock(PreparedStatement.class);
+    sinkDialect().bindField(statement, 1, schema, value);
+    verify(statement).setString(1, "{\"env\":\"prod\",\"absent\":null}");
+
+    // A null map never reaches maybeBindJson: bindFieldInternal short-circuits nulls before
+    // maybeBindPrimitive, so the generic null path binds it.
+    PreparedStatement nullStatement = mock(PreparedStatement.class);
+    sinkDialect().bindField(nullStatement, 1, schema, null);
+    verify(nullStatement).setObject(1, null);
+  }
+
+  @Test
+  public void shouldBindJsonStringAsTextForJsonbColumn() throws SQLException {
+    // The bind half for json mode: a Json-tagged STRING is not a string-to-string map, so
+    // maybeBindJson declines and it binds as text — the ::jsonb cast parses it server-side.
+    PreparedStatement statement = mock(PreparedStatement.class);
+    sinkDialect().bindField(statement, 1, Json.optionalSchema(), "{\"env\":\"prod\"}");
+    verify(statement).setString(1, "{\"env\":\"prod\"}");
+  }
+
+  @Test
+  public void shouldNotBindStringMapWhenComplexTypesDisabled() {
+    Schema schema = SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA)
+        .optional().build();
+    PostgreSqlDatabaseDialect disabled = new PostgreSqlDatabaseDialect(
+        sinkConfigWithUrl("jdbc:postgresql://something"));
+
+    assertThrows(ConnectException.class, () -> disabled.bindField(
+        mock(PreparedStatement.class), 1, schema, Collections.singletonMap("env", "prod")));
+  }
+
+  @Test
+  public void shouldDropHstoreWhenHandlingModeIsNone() {
+    // The flag alone is not enough: none is the default, so hstore stays skipped until a mode is
+    // chosen. Both halves of the gate are required.
+    PostgreSqlDatabaseDialect defaulted = new PostgreSqlDatabaseDialect(
+        sourceConfigWithUrl("jdbc:postgresql://something",
+            JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true"));
+    assertNull(sourceFieldSchema(defaulted, Types.OTHER, "hstore"));
+    assertNull(sourceFieldSchema(hstoreDialect("true", "none"), Types.OTHER, "hstore"));
+  }
+
+  @Test
+  public void offSearchPathHstoreIsSkippedWhenHandlingModeIsNone() {
+    // An operator who asked for none must not be failed over a type they chose to ignore, so the
+    // column is simply skipped. Also holds when the feature flag itself is off.
+    assertNull(sourceFieldSchema(
+        hstoreDialect("true", "none"), Types.OTHER, "\"ext\".\"hstore\""));
+    assertNull(sourceFieldSchema(
+        hstoreDialect("false", "map"), Types.OTHER, "\"ext\".\"hstore\""));
+  }
+
+  @Test
+  public void shouldDropHstoreWhenComplexTypesDisabled() {
+    // The default is false, so hstore keeps today's drop-with-WARN behaviour and produces no field.
+    PostgreSqlDatabaseDialect disabled =
+        new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something"));
+    assertNull(sourceFieldSchema(disabled, Types.OTHER, "hstore"));
+  }
+
+  @Test
+  public void hstoreValueThatIsNotAMapShouldFollowColumnNullability() throws Exception {
+    // Defence in depth for any non-Map shape the driver might hand back. Off the search_path the
+    // type name is qualified, so the column is skipped before this runs; whatever else could reach
+    // here has no known cause. Follows Debezium's handleUnknownData: a nullable column degrades to
+    // null, a NOT NULL column fails because null would breach its schema anyway.
+    ResultSet rawText = hstoreResultSet("\"env\"=>\"prod\"");
+
+    PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json");
+
+    for (PostgreSqlDatabaseDialect dialect : Arrays.asList(hstoreDialect("true", "map"), jsonDialect)) {
+      assertNull(hstoreConverter(dialect, ColumnDefinition.Nullability.NULL).convert(rawText));
+
+      DataException e = assertThrows(DataException.class, () ->
+          hstoreConverter(dialect, ColumnDefinition.Nullability.NOT_NULL).convert(rawText));
+      assertTrue(e.getMessage().contains("hstore"));
+    }
+  }
+
+  @Test
+  public void hstoreShouldConvertNullColumnToNullInBothModes() throws Exception {
+    PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json");
+
+    for (PostgreSqlDatabaseDialect dialect : Arrays.asList(hstoreDialect("true", "map"), jsonDialect)) {
+      assertNull(hstoreConverter(dialect).convert(hstoreResultSet(null)));
+    }
+  }
+
+  @Test
+  public void shouldRejectMapShapesOtherThanStringToString() {
+    // Only MAP<STRING,STRING> — the shape hstore produces — maps to JSONB. Every other map shape
+    // must fall through to the generic dialect and fail rather than silently become jsonb.
+    List<Schema> unsupported = Arrays.asList(
+        SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.INT32_SCHEMA).optional().build(),
+        SchemaBuilder.map(Schema.INT32_SCHEMA, Schema.STRING_SCHEMA).optional().build(),
+        SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.OPTIONAL_BYTES_SCHEMA).optional().build(),
+        SchemaBuilder.map(Schema.STRING_SCHEMA,
+            SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.STRING_SCHEMA).build()).build(),
+        SchemaBuilder.map(Schema.STRING_SCHEMA,
+            SchemaBuilder.array(Schema.STRING_SCHEMA).build()).build());
+
+    for (Schema schema : unsupported) {
+      assertThrows("expected " + schema.valueSchema().type() + " map value to be rejected",
+          ConnectException.class, () -> sinkDialect().getSqlType(sinkField(schema)));
+    }
+  }
+
+  @Test
+  public void shouldNotBindMapShapesOtherThanStringToString() throws SQLException {
+    // The bind half of the same restriction, with complex types enabled.
+    Schema intValued = SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.INT32_SCHEMA)
+        .optional().build();
+    assertThrows(ConnectException.class, () -> sinkDialect().bindField(
+        mock(PreparedStatement.class), 1, intValued, Collections.singletonMap("n", 1)));
+
+    Schema intKeyed = SchemaBuilder.map(Schema.INT32_SCHEMA, Schema.STRING_SCHEMA)
+        .optional().build();
+    assertThrows(ConnectException.class, () -> sinkDialect().bindField(
+        mock(PreparedStatement.class), 1, intKeyed, Collections.singletonMap(1, "v")));
+  }
+
+  @Test
+  public void offSearchPathHstoreFailsWhenAMappingModeIsSelected() {
+    // A mapping mode was asked for and this column cannot honour it, so the task fails rather than
+    // silently dropping the column. The message has to carry the remedy, since it is what an
+    // operator sees.
+    ConnectException e = assertThrows(ConnectException.class,
+        () -> sourceFieldSchema(hstoreDialect("true", "map"), Types.OTHER, "\"ext\".\"hstore\""));
+    assertTrue("must name the cause", e.getMessage().contains("search_path"));
+    assertTrue("must offer the escape hatch", e.getMessage().contains("hstore.handling.mode=none"));
+
+    assertThrows("json mode must fail the same way", ConnectException.class,
+        () -> sourceFieldSchema(hstoreDialect("true", "json"), Types.OTHER, "\"ext\".\"hstore\""));
+  }
+
+  @Test
+  public void shouldNotTreatNonHstoreOtherTypesAsHstore() {
+    // Another Types.OTHER type must be neither captured by the hstore branch nor mistaken for an
+    // off-search_path hstore, which would fail the task.
+    PostgreSqlDatabaseDialect dialect = hstoreDialect("true", "map");
+    assertNull(sourceFieldSchema(dialect, Types.OTHER, "citext"));
+    assertNull(sourceFieldSchema(dialect, Types.OTHER, "hstore_extra"));
+    assertNull(sourceFieldSchema(dialect, Types.OTHER, "\"ext\".\"citext\""));
+  }
+
+  @Test
+  public void shouldMatchHstoreTypeNameCaseInsensitively() {
+    // The driver's reported type name casing must not decide whether the feature works.
+    assertEquals(Type.MAP,
+        sourceFieldSchema(hstoreDialect("true", "map"), Types.OTHER, "HSTORE").type());
+  }
+
+  @Test
+  public void jsonColumnMapsToLogicalJsonStringSchema() {
+    // json/jsonb map to a logical JSON STRING tagged with the Json logical name, and optionality
+    // follows the column: a nullable column needs an optional schema or a NULL value breaches it.
+    // Schema equality covers the type, the logical name and the optional flag together.
+    assertEquals(Json.optionalSchema(), jsonColumnSchema(ColumnDefinition.Nullability.NULL));
+    assertEquals(Json.schema(), jsonColumnSchema(ColumnDefinition.Nullability.NOT_NULL));
+  }
+
+  private Schema jsonColumnSchema(ColumnDefinition.Nullability nullability) {
+    SchemaBuilder builder = SchemaBuilder.struct();
+    String fieldName = complexTypesDialect()
+        .addFieldToSchema(column(Types.OTHER, "jsonb", nullability), builder);
+    return builder.build().field(fieldName).schema();
+  }
+
+  @Test
+  public void jsonColumnValueShouldStayRawJsonText() throws Exception {
+    // The value is the document's raw text (lossless), not a re-serialized/projected form.
+    ColumnDefinition column = column(Types.OTHER, "jsonb");
+    DatabaseDialect.ColumnConverter converter = complexTypesDialect().columnConverterFor(
+        new ColumnMapping(column, 1, new Field("col", 0, Json.optionalSchema())),
+        column, 1, true);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getString(1)).thenReturn("{\"b\":2,\"a\":[1,null]}");
+
+    assertEquals("{\"b\":2,\"a\":[1,null]}", converter.convert(resultSet));
+  }
+
+  @Test
+  public void shouldMapComplexTypesToSqlTypes() {
+    // The sink half of this PR's contract: the source now tags json/jsonb columns as Json, so a
+    // round trip only lands back in jsonb if the sink maps that tag. The mapping itself is #1651's
+    // and is covered there for both flag arms; this pins the half the schema change depends on.
+    assertEquals("JSONB",
+        sinkDialect().getSqlType(new SinkRecordField(Json.schema(), "col", false)));
+  }
+
+  // ----- complex-type test helpers -----
+
+  private PostgreSqlDatabaseDialect sinkDialect() {
+    return new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+  }
+
+  private static SinkRecordField sinkField(Schema schema) {
+    return new SinkRecordField(schema, "col", false);
+  }
+
+  /** Column converter for an {@code hstore} column, as produced by the source path. */
+  private DatabaseDialect.ColumnConverter hstoreConverter(PostgreSqlDatabaseDialect dialect) {
+    return hstoreConverter(dialect, ColumnDefinition.Nullability.NULL);
+  }
+
+  private DatabaseDialect.ColumnConverter hstoreConverter(
+      PostgreSqlDatabaseDialect dialect, ColumnDefinition.Nullability nullability) {
+    ColumnDefinition column = column(Types.OTHER, "hstore", nullability);
+    DatabaseDialect.ColumnConverter converter = dialect.columnConverterFor(
+        new ColumnMapping(column, 1, new Field("col", 0, Schema.OPTIONAL_STRING_SCHEMA)),
+        column, 1, true);
+    assertNotNull(converter);
+    return converter;
+  }
+
+  /** A ResultSet whose column 1 returns the given hstore value, as pgjdbc does. */
+  private static ResultSet hstoreResultSet(Object value) throws SQLException {
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getObject(1)).thenReturn(value);
+    return resultSet;
+  }
+
+  private PostgreSqlDatabaseDialect complexTypesDialect(String... extraProps) {
+    String[] props = new String[extraProps.length + 2];
+    props[0] = JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG;
+    props[1] = "true";
+    System.arraycopy(extraProps, 0, props, 2, extraProps.length);
+    return new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something", props));
+  }
+
+  private Schema sourceFieldSchema(
+      PostgreSqlDatabaseDialect dialect, int jdbcType, String typeName) {
+    ColumnDefinition column = column(jdbcType, typeName);
+    SchemaBuilder builder = SchemaBuilder.struct();
+    String fieldName = dialect.addFieldToSchema(column, builder);
+    return fieldName == null ? null : builder.build().field(fieldName).schema();
+  }
+
+  private ColumnDefinition column(int jdbcType, String typeName) {
+    return column(jdbcType, typeName, ColumnDefinition.Nullability.NULL);
+  }
+
+  private ColumnDefinition column(
+      int jdbcType, String typeName, ColumnDefinition.Nullability nullability) {
+    return column(jdbcType, typeName, nullability, "col");
+  }
+
+  private ColumnDefinition column(int jdbcType, String typeName, String columnName) {
+    return column(jdbcType, typeName, ColumnDefinition.Nullability.NULL, columnName);
+  }
+
+  @Test
+  public void shouldRecogniseAnOffSearchPathHstoreTypeName() {
+    // Shared by the scalar column path (#1661) and the array element path (#1662): pgjdbc qualifies
+    // the name only when the extension is off the search_path, whatever the schema is called.
+    assertTrue(PostgreSqlDatabaseDialect.isUnresolvedHstoreType("\"ext\".\"hstore\""));
+    assertTrue(PostgreSqlDatabaseDialect.isUnresolvedHstoreType("\"my_extensions\".\"hstore\""));
+    assertFalse("on the search_path it arrives bare",
+        PostgreSqlDatabaseDialect.isUnresolvedHstoreType("hstore"));
+    assertFalse(PostgreSqlDatabaseDialect.isUnresolvedHstoreType("\"ext\".\"citext\""));
+    assertFalse(PostgreSqlDatabaseDialect.isUnresolvedHstoreType("hstore_extra"));
+    assertFalse(PostgreSqlDatabaseDialect.isUnresolvedHstoreType(null));
+
+    // The array type is its own pg_type row in the same schema, so it qualifies the same way.
+    assertEquals("_hstore", PostgreSqlDatabaseDialect.localTypeName("\"ext\".\"_hstore\""));
+    assertEquals("_hstore", PostgreSqlDatabaseDialect.localTypeName("_hstore"));
+  }
+
+  @Test
+  public void hstoreMappingIsNotSelectedByDefault() {
+    // Half of the hstore gate: the mode must select a representation. The other half is the
+    // complex types flag, checked alongside it at every call site, so neither alone maps hstore.
+    assertFalse("the default must not select a mapping",
+        new PostgreSqlDatabaseDialect(
+            sourceConfigWithUrl("jdbc:postgresql://something",
+                JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true"))
+            .hstoreMappingSelected());
+
+    assertFalse("none must not select a mapping",
+        hstoreDialect("true", "none").hstoreMappingSelected());
+    for (String mode : new String[]{"map", "json"}) {
+      assertTrue(mode + " must select a mapping",
+          hstoreDialect("true", mode).hstoreMappingSelected());
+    }
+  }
+
+  private PostgreSqlDatabaseDialect hstoreDialect(String complexTypes, String mode) {
+    return new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something",
+        JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, complexTypes,
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, mode));
+  }
+
+  @Test
+  public void hstoreSchemaFollowsHandlingModeAndOptionality() {
+    // Shared by the scalar column path (#1661) and the array element path (#1662), so the contract
+    // is pinned here rather than in either consumer.
+    PostgreSqlDatabaseDialect mapMode = new PostgreSqlDatabaseDialect(sourceConfigWithUrl(
+        "jdbc:postgresql://something",
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "map"));
+    Schema optionalMap = mapMode.hstoreSchema(true);
+    assertEquals(Type.MAP, optionalMap.type());
+    assertEquals(Type.STRING, optionalMap.keySchema().type());
+    assertTrue("an hstore value may be NULL", optionalMap.valueSchema().isOptional());
+    assertTrue(optionalMap.isOptional());
+    assertFalse(mapMode.hstoreSchema(false).isOptional());
+
+    PostgreSqlDatabaseDialect jsonMode = new PostgreSqlDatabaseDialect(sourceConfigWithUrl(
+        "jdbc:postgresql://something",
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json"));
+    assertEquals(Json.optionalSchema(), jsonMode.hstoreSchema(true));
+    assertEquals(Json.schema(), jsonMode.hstoreSchema(false));
+  }
+
+  @Test
+  public void shouldMapStringToStringMapToJsonbOnlyWhenComplexTypesEnabled() {
+    SinkRecordField field = new SinkRecordField(stringToStringMap(), "col", false);
+
+    PostgreSqlDatabaseDialect enabled = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+    assertEquals("JSONB", enabled.getSqlType(field));
+
+    // Without the flag the generic dialect fails at DDL time rather than inventing a column type,
+    // which is what makes forgetting the flag on the sink a loud error.
+    PostgreSqlDatabaseDialect disabled =
+        new PostgreSqlDatabaseDialect(sinkConfigWithUrl("jdbc:postgresql://something"));
+    assertThrows(ConnectException.class, () -> disabled.getSqlType(field));
+  }
+
+  @Test
+  public void shouldBindStringToStringMapAsJsonbTextOnlyWhenComplexTypesEnabled()
+      throws SQLException {
+    Schema schema = stringToStringMap();
+    Map<String, String> value = new LinkedHashMap<>();
+    value.put("env", "prod");
+    value.put("absent", null);
+
+    // Serialized and bound as text; the ::jsonb cast from valueTypeCast parses it server-side.
+    PreparedStatement statement = mock(PreparedStatement.class);
+    new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"))
+        .bindField(statement, 1, schema, value);
+    verify(statement).setString(1, "{\"env\":\"prod\",\"absent\":null}");
+
+    PostgreSqlDatabaseDialect disabled =
+        new PostgreSqlDatabaseDialect(sinkConfigWithUrl("jdbc:postgresql://something"));
+    assertThrows(ConnectException.class,
+        () -> disabled.bindField(mock(PreparedStatement.class), 1, schema, value));
+  }
+
+  private Schema stringToStringMap() {
+    return SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA)
+        .optional().build();
+  }
+
+
+  @Test
+  public void shouldMapSupportedArrayElementTypesToSourceSchema() {
+    assertArrayElement("_text", Type.STRING, null);
+    assertArrayElement("_varchar", Type.STRING, null);
+    assertArrayElement("_bpchar", Type.STRING, null);
+    assertArrayElement("_int2", Type.INT16, null);
+    assertArrayElement("_int4", Type.INT32, null);
+    assertArrayElement("_int8", Type.INT64, null);
+    assertArrayElement("_float4", Type.FLOAT32, null);
+    assertArrayElement("_float8", Type.FLOAT64, null);
+    assertArrayElement("_bool", Type.BOOLEAN, null);
+    assertArrayElement("_numeric", Type.STRUCT, VariableScaleDecimal.LOGICAL_NAME);
+    assertArrayElement("_json", Type.STRING, Json.LOGICAL_NAME);
+    assertArrayElement("_jsonb", Type.STRING, Json.LOGICAL_NAME);
+    assertArrayElement("_date", Type.INT32, Date.LOGICAL_NAME);
+    assertArrayElement("_time", Type.INT32, Time.LOGICAL_NAME);
+    assertArrayElement("_timestamp", Type.INT64, Timestamp.LOGICAL_NAME);
+    // timestamptz drops the zone and maps to the same timestamp schema as scalar timestamptz.
+    assertArrayElement("_timestamptz", Type.INT64, Timestamp.LOGICAL_NAME);
+  }
+
+  @Test
+  public void timestampArraysHonorTimestampGranularity() {
+    PostgreSqlDatabaseDialect microsString = complexTypesDialect(
+        JdbcSourceConnectorConfig.TIMESTAMP_GRANULARITY_CONFIG, "micros_string");
+    Schema tsElement = sourceFieldSchema(microsString, Types.ARRAY, "_timestamp").valueSchema();
+    Schema tsTzElement = sourceFieldSchema(microsString, Types.ARRAY, "_timestamptz").valueSchema();
+    assertEquals(Type.STRING, tsElement.type());
+    assertNull(tsElement.name());
+    assertEquals(Type.STRING, tsTzElement.type());
+    assertNull(tsTzElement.name());
+  }
+
+  @Test
+  public void shouldSkipUnsupportedArrayElementTypes() {
+    // uuid[]/inet[]/money[] are not in the supported element set, so the column is skipped.
+    assertNull(sourceFieldSchema(complexTypesDialect(), Types.ARRAY, "_uuid"));
+    assertNull(sourceFieldSchema(complexTypesDialect(), Types.ARRAY, "_inet"));
+    assertNull(sourceFieldSchema(complexTypesDialect(), Types.ARRAY, "_money"));
+  }
+
+  @Test
+  public void shouldDropArraysWhenComplexTypesDisabled() {
+    // The base 'dialect' has the feature off; arrays are skipped, as before the change.
+    assertNull(sourceFieldSchema(dialect, Types.ARRAY, "_int4"));
+  }
+
+  @Test
+  public void shouldBuildOptionalArrayFieldEvenForNotNullColumn() {
+    // A multi-dimensional array reports the same type name as 1-D and is skipped (null) at read
+    // time; array fields are therefore always optional so that null is accepted rather than
+    // failing a required field, even when the source column is NOT NULL.
+    ColumnDefinition notNull = column(Types.ARRAY, "_int4", ColumnDefinition.Nullability.NOT_NULL);
+    SchemaBuilder builder = SchemaBuilder.struct();
+    String fieldName = complexTypesDialect().addFieldToSchema(notNull, builder);
+    Schema fieldSchema = builder.build().field(fieldName).schema();
+    assertEquals(Type.ARRAY, fieldSchema.type());
+    assertTrue("array field must be optional even for a NOT NULL column", fieldSchema.isOptional());
+  }
+
+  @Test
+  public void shouldAcceptNullValueForNotNullArrayColumnField() {
+    // The multi-dim skip returns null; the (optional) field must accept it without throwing,
+    // which is what keeps the task alive instead of crashing on the record.
+    ColumnDefinition notNull = column(Types.ARRAY, "_int4", ColumnDefinition.Nullability.NOT_NULL);
+    SchemaBuilder builder = SchemaBuilder.struct();
+    String fieldName = complexTypesDialect().addFieldToSchema(notNull, builder);
+    Schema schema = builder.build();
+    new Struct(schema).put(fieldName, null); // no exception => skipped multi-dim value is tolerated
+  }
+
+  @Test
+  public void gatedLogicalTypesFallBackWhenComplexTypesDisabled() {
+    PostgreSqlDatabaseDialect disabled =
+        new PostgreSqlDatabaseDialect(sinkConfigWithUrl("jdbc:postgresql://something"));
+
+    assertEquals("TEXT", disabled.getSqlType(
+        new SinkRecordField(Json.optionalSchema(), "col", false)));
+    assertEquals("TEXT[]", disabled.getSqlType(
+        new SinkRecordField(arraySchema(Json.optionalSchema()), "col", false)));
+    assertThrows(ConnectException.class, () -> disabled.getSqlType(
+        new SinkRecordField(VariableScaleDecimal.optionalSchema(), "col", false)));
+  }
+
+  private PostgreSqlDatabaseDialect complexTypesSinkDialect() {
+    return new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+  }
+
+  @Test
+  public void shouldBindJsonArrayAsNativeJsonbArray() throws Exception {
+    verifyArrayBind(
+        Json.optionalSchema(),
+        Arrays.asList("{\"k\":\"v\"}", "{\"a\":1}"),
+        "jsonb",
+        new Object[]{"{\"k\":\"v\"}", "{\"a\":1}"});
+  }
+
+  /**
+   * A fixed-scale {@code Decimal} element is what an upstream connector emits for
+   * {@code numeric(p,s)[]}. The converter already decoded it to BigDecimal, so only the array type
+   * matters, and it must be the unmodified {@code numeric}: {@code createArrayOf} resolves the name
+   * against {@code pg_type.typname}, which carries no modifiers.
+   */
+  @Test
+  public void shouldBindDecimalArrayAsNativeNumericArray() throws Exception {
+    verifyArrayBind(
+        Decimal.builder(2).optional().build(),
+        Arrays.asList(new BigDecimal("1.20"), new BigDecimal("3.40")),
+        "numeric",
+        new Object[]{new BigDecimal("1.20"), new BigDecimal("3.40")});
+  }
+
+  @Test
+  public void shouldBindNumericArrayAsNativeNumericArray() throws Exception {
+    Schema element = VariableScaleDecimal.optionalSchema();
+    verifyArrayBind(
+        element,
+        Arrays.asList(
+            VariableScaleDecimal.fromLogical(element, new BigDecimal("1.50")),
+            VariableScaleDecimal.fromLogical(element, new BigDecimal("3.14159"))),
+        "numeric",
+        new Object[]{new BigDecimal("1.50"), new BigDecimal("3.14159")});
+  }
+
+  @Test
+  public void shouldBindTemporalArraysAsNativeArrays() throws Exception {
+    // epoch 0 == 1970-01-01T00:00:00Z, rendered here with the default db.timezone of UTC.
+    java.util.Date epoch = new java.util.Date(0L);
+    verifyArrayBind(Date.builder().optional().build(),
+        Collections.singletonList(epoch), "date", new Object[]{"1970-01-01"});
+    verifyArrayBind(Time.builder().optional().build(),
+        Collections.singletonList(epoch), "time", new Object[]{"00:00:00.000"});
+    verifyArrayBind(Timestamp.builder().optional().build(),
+        Collections.singletonList(epoch), "timestamp", new Object[]{"1970-01-01 00:00:00.000"});
+  }
+
+  @Test
+  public void arrayBindPreservesNullElements() throws Exception {
+    Schema numeric = VariableScaleDecimal.optionalSchema();
+    verifyArrayBind(numeric,
+        Arrays.asList(VariableScaleDecimal.fromLogical(numeric, new BigDecimal("1.50")), null),
+        "numeric", new Object[]{new BigDecimal("1.50"), null});
+    verifyArrayBind(Json.optionalSchema(),
+        Arrays.asList("{\"k\":1}", null), "jsonb", new Object[]{"{\"k\":1}", null});
+    verifyArrayBind(Timestamp.builder().optional().build(),
+        Arrays.asList(new java.util.Date(0L), null), "timestamp",
+        new Object[]{"1970-01-01 00:00:00.000", null});
+    verifyArrayBind(Decimal.builder(2).optional().build(),
+        Arrays.asList(new BigDecimal("1.20"), null),
+        "numeric", new Object[]{new BigDecimal("1.20"), null});
+  }
+
+  /**
+   * {@code numeric.mapping} narrows a scalar NUMERIC, but array elements always map to
+   * VariableScaleDecimal so each keeps its own scale. The asymmetry is deliberate.
+   */
+  @Test
+  public void numericArrayElementsIgnoreNumericMapping() {
+    for (String mapping : new String[]{"none", "best_fit", "best_fit_eager_double",
+        "precision_only"}) {
+      PostgreSqlDatabaseDialect dialect = complexTypesDialect(
+          JdbcSourceConnectorConfig.NUMERIC_MAPPING_CONFIG, mapping);
+      Schema schema = sourceFieldSchema(dialect, Types.ARRAY, "_numeric");
+
+      assertNotNull("numeric[] should produce a field for numeric.mapping=" + mapping, schema);
+      assertEquals("numeric.mapping=" + mapping, Type.ARRAY, schema.type());
+      assertEquals("numeric.mapping=" + mapping,
+          VariableScaleDecimal.LOGICAL_NAME, schema.valueSchema().name());
+    }
+  }
+
+  /**
+   * Element shapes the bind path cannot write must not be advertised in DDL either, so auto-create
+   * never builds a column every insert then fails on. A nested array and a plain BYTES element both
+   * recursed to valid DDL before; a {@code Decimal} element is also BYTES-based but is named and
+   * binds, so it must still be accepted.
+   */
+  @Test
+  public void shouldNotMapUnbindableArrayElementsToSqlType() {
+    PostgreSqlDatabaseDialect sink = complexTypesSinkDialect();
+    Schema nested = arraySchema(arraySchema(Schema.OPTIONAL_INT32_SCHEMA));
+    Schema bytes = arraySchema(Schema.OPTIONAL_BYTES_SCHEMA);
+
+    assertThrows(ConnectException.class,
+        () -> sink.getSqlType(new SinkRecordField(nested, "col", false)));
+    assertThrows(ConnectException.class,
+        () -> sink.getSqlType(new SinkRecordField(bytes, "col", false)));
+    assertEquals("a named BYTES element that does bind is still mapped", "DECIMAL[]",
+        sink.getSqlType(
+            new SinkRecordField(arraySchema(Decimal.builder(2).optional().build()), "col", false)));
+  }
+
+  /**
+   * {@code timestamp.fields.list} selects TIMESTAMP by field name, but there is no array binding
+   * for it — the element stays a plain INT64/STRING and would be sent as {@code int8[]}/{@code
+   * text[]}.
+   * Rejecting is better than quietly emitting {@code BIGINT[]}, which would store raw epoch values
+   * for someone who explicitly asked for timestamp semantics.
+   */
+  @Test
+  public void shouldNotMapTimestampFieldsListArrayToSqlType() {
+    PostgreSqlDatabaseDialect sink = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something",
+        JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true",
+        JdbcSinkConfig.TIMESTAMP_FIELDS_LIST, "ts_col"));
+
+    for (Schema element
+        : Arrays.asList(Schema.OPTIONAL_INT64_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA)) {
+      assertThrows(ConnectException.class, () -> sink.getSqlType(
+          new SinkRecordField(arraySchema(element), "ts_col", false)));
+      // A field not in the list is unaffected.
+      assertNotNull(sink.getSqlType(new SinkRecordField(arraySchema(element), "other", false)));
+    }
+  }
+
+  /** An empty list binds as an empty array, staying distinguishable from a NULL one. */
+  @Test
+  public void shouldBindEmptyArrayAsEmptyNativeArray() throws Exception {
+    verifyArrayBind(Json.optionalSchema(), Collections.emptyList(), "jsonb", new Object[]{});
+  }
+
+  @Test
+  public void shouldNotBindStructArray() {
+    Schema element = SchemaBuilder.struct().optional().field("a", Schema.INT32_SCHEMA).build();
+    Schema schema = SchemaBuilder.array(element).optional().build();
+    List<?> value = Collections.singletonList(new Struct(element).put("a", 1));
+
+    assertThrows(ConnectException.class, () -> dialect.bindField(mock(PreparedStatement.class), 1,
+        schema, value, mock(ColumnDefinition.class), "field"));
+    assertThrows(ConnectException.class, () -> complexTypesDialect().bindField(
+        mock(PreparedStatement.class), 1, schema, value, mock(ColumnDefinition.class), "field"));
+  }
+
+  @Test
+  public void shouldNotMapStructArrayToSqlType() {
+    // The DDL side must agree with the bind side above: no column type is advertised for an
+    // ARRAY<STRUCT>, so auto-create fails rather than creating a column that cannot be written.
+    Schema schema = arraySchema(
+        SchemaBuilder.struct().optional().field("a", Schema.INT32_SCHEMA).build());
+    SinkRecordField field = new SinkRecordField(schema, "col", false);
+    // A sink config with the feature on is the only case that could have produced JSONB[].
+    PostgreSqlDatabaseDialect sink = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+
+    assertThrows(ConnectException.class, () -> dialect.getSqlType(field));
+    assertThrows(ConnectException.class, () -> sink.getSqlType(field));
+  }
+
+  /**
+   * DDL and DML must agree for every logical element type: {@code getSqlType} and
+   * {@code arrayElementBinding} are separate switches, so a type in one but not the other yields a
+   * column auto-create builds and no insert can write. New logical types belong in this map too.
+   */
+  @Test
+  public void arrayDdlAndBindAgreeForEveryLogicalElementType() throws Exception {
+    Schema variableScaleDecimal = VariableScaleDecimal.optionalSchema();
+    Map<Schema, Object> sampleByElementSchema = new LinkedHashMap<>();
+    sampleByElementSchema.put(Decimal.builder(2).optional().build(), new BigDecimal("1.20"));
+    sampleByElementSchema.put(Date.builder().optional().build(), new java.util.Date(0L));
+    sampleByElementSchema.put(Time.builder().optional().build(), new java.util.Date(0L));
+    sampleByElementSchema.put(Timestamp.builder().optional().build(), new java.util.Date(0L));
+    sampleByElementSchema.put(Json.optionalSchema(), "{\"k\":1}");
+    sampleByElementSchema.put(variableScaleDecimal,
+        VariableScaleDecimal.fromLogical(variableScaleDecimal, new BigDecimal("1.50")));
+
+    PostgreSqlDatabaseDialect sink = complexTypesSinkDialect();
+    for (Map.Entry<Schema, Object> entry : sampleByElementSchema.entrySet()) {
+      Schema elementSchema = entry.getKey();
+      Schema schema = SchemaBuilder.array(elementSchema).optional().build();
+      String element = elementSchema.name();
+
+      assertNotNull("No array column type advertised for element " + element,
+          sink.getSqlType(new SinkRecordField(schema, "col", false)));
+
+      PreparedStatement statement = mock(PreparedStatement.class);
+      Connection connection = mock(Connection.class);
+      ColumnDefinition colDef = mock(ColumnDefinition.class);
+      when(colDef.type()).thenReturn(Types.ARRAY);
+      when(statement.getConnection()).thenReturn(connection);
+      when(connection.createArrayOf(any(String.class), any())).thenReturn(mock(Array.class));
+
+      sink.bindField(statement, 1, schema, Collections.singletonList(entry.getValue()), colDef,
+          "col");
+
+      verify(connection).createArrayOf(any(String.class), any());
+    }
+  }
+
+  @Test
+  public void shouldBindPrimitiveArrayWhenComplexTypesDisabled() throws Exception {
+    PreparedStatement statement = mock(PreparedStatement.class);
+    Schema schema = SchemaBuilder.array(Schema.OPTIONAL_INT32_SCHEMA).optional().build();
+
+    dialect.bindField(statement, 1, schema, Arrays.asList(1, 2),
+        mock(ColumnDefinition.class), "field");
+
+    verify(statement).setObject(eq(1), any(Integer[].class), eq(Types.ARRAY));
+  }
+
+  /**
+   * With the flag off a gated element degrades according to its underlying Connect type rather than
+   * failing uniformly. {@code Json} is STRING-based, so it falls to the primitive path and binds as
+   * {@code text[]} with the documents intact; {@code VariableScaleDecimal} is a STRUCT, has no
+   * primitive equivalent, and is rejected. Both halves matter: the first is a lossless degrade
+   * for a partially upgraded pipeline, the second a hard failure.
+   */
+  @Test
+  public void gatedArrayElementsDegradeByUnderlyingTypeWhenComplexTypesDisabled() throws Exception {
+    PreparedStatement statement = mock(PreparedStatement.class);
+    Schema jsonArray = SchemaBuilder.array(Json.optionalSchema()).optional().build();
+
+    dialect.bindField(statement, 1, jsonArray, Arrays.asList("{\"a\":1}", "{\"b\":2}"),
+        mock(ColumnDefinition.class), "field");
+    verify(statement).setObject(eq(1), any(String[].class), eq(Types.ARRAY));
+
+    Schema numericArray = SchemaBuilder.array(VariableScaleDecimal.optionalSchema())
+        .optional().build();
+    assertThrows(ConnectException.class, () -> dialect.bindField(
+        mock(PreparedStatement.class), 1, numericArray,
+        Collections.singletonList(VariableScaleDecimal.fromLogical(
+            VariableScaleDecimal.optionalSchema(), new BigDecimal("1.5"))),
+        mock(ColumnDefinition.class), "field"));
+  }
+
+  @Test
+  public void temporalArrayBindHonorsConfiguredDbTimezone() throws Exception {
+    // Mirrors the scalar sink path: time/timestamp render in db.timezone, date in the date zone
+    // (UTC on the source side). epoch 0 in America/New_York is 1969-12-31 19:00:00.
+    PostgreSqlDatabaseDialect dialect = complexTypesDialect(
+        JdbcSourceConnectorConfig.DB_TIMEZONE_CONFIG, "America/New_York");
+    java.util.Date epoch = new java.util.Date(0L);
+    verifyArrayBind(dialect, Timestamp.builder().optional().build(),
+        Collections.singletonList(epoch), "timestamp",
+        new Object[]{"1969-12-31 19:00:00.000"});
+    verifyArrayBind(dialect, Time.builder().optional().build(),
+        Collections.singletonList(epoch), "time", new Object[]{"19:00:00.000"});
+    verifyArrayBind(dialect, Date.builder().optional().build(),
+        Collections.singletonList(epoch), "date", new Object[]{"1970-01-01"});
+  }
+
+  @Test
+  public void temporalArrayBindHonorsCalendarSystem() throws Exception {
+    // The two calendar systems only diverge before the 1582 Gregorian cutover.
+    java.util.Date ancient = java.sql.Timestamp.valueOf("1500-01-01 00:00:00");
+    assertNotEquals(
+        "date.calendar.system must change how a pre-1582 timestamp is rendered",
+        bindTemporalArrayLiteral(complexTypesDialect(), ancient),
+        bindTemporalArrayLiteral(prolepticGregorianDialect(), ancient));
+
+    // A modern timestamp is rendered identically under both calendar systems.
+    java.util.Date epoch = new java.util.Date(0L);
+    assertEquals(
+        bindTemporalArrayLiteral(complexTypesDialect(), epoch),
+        bindTemporalArrayLiteral(prolepticGregorianDialect(), epoch));
+  }
+
+  /**
+   * The Julian calendar runs nine days behind proleptic Gregorian in January 1500, so the same
+   * milliseconds render as 1500-01-01 hybrid and 1500-01-10 proleptic. Post-1582 they agree.
+   */
+  @Test
+  public void dateArrayBindHonorsCalendarSystem() throws Exception {
+    Schema element = Date.builder().optional().build();
+    java.util.Date ancient = new java.util.Date(utcHybridMillis(1500, Calendar.JANUARY, 1));
+
+    assertEquals("1500-01-01",
+        bindTemporalArrayLiteral(complexTypesDialect(), element, "date", ancient));
+    assertEquals("1500-01-10",
+        bindTemporalArrayLiteral(prolepticGregorianDialect(), element, "date", ancient));
+
+    java.util.Date epoch = new java.util.Date(0L);
+    assertEquals("1970-01-01",
+        bindTemporalArrayLiteral(complexTypesDialect(), element, "date", epoch));
+    assertEquals("1970-01-01",
+        bindTemporalArrayLiteral(prolepticGregorianDialect(), element, "date", epoch));
+  }
+
+  /**
+   * Array elements must render exactly as the scalar bind renders the same value. The scalar path
+   * hands a {@code java.sql} value plus a {@link Calendar} to the driver, so the expectation is
+   * derived that way rather than from the production formatter. Checked at 1500-01-01, where the
+   * calendars disagree, under both settings.
+   */
+  @Test
+  public void temporalArrayElementsRenderAsTheScalarBind() throws Exception {
+    java.util.Date value = new java.util.Date(utcHybridMillis(1500, Calendar.JANUARY, 1));
+
+    for (PostgreSqlDatabaseDialect dialect :
+        Arrays.asList(complexTypesDialect(), prolepticGregorianDialect())) {
+      assertEquals("date element must match the scalar bind",
+          scalarTemporalLiteral(dialect, Date.builder().optional().build(), value, "yyyy-MM-dd"),
+          bindTemporalArrayLiteral(dialect, Date.builder().optional().build(), "date", value));
+      assertEquals("timestamp element must match the scalar bind",
+          scalarTemporalLiteral(dialect, Timestamp.builder().optional().build(), value,
+              "yyyy-MM-dd HH:mm:ss.SSS"),
+          bindTemporalArrayLiteral(dialect, Timestamp.builder().optional().build(), "timestamp",
+              value));
+    }
+  }
+
+  @Test
+  public void shouldEmitNullPerElementForMultiDimensionalArrays() throws Exception {
+    DatabaseDialect.ColumnConverter converter = arrayColumnConverter("_int4");
+
+    // Single-dimension int[] is read into a list of elements.
+    ResultSet single = arrayResultSet(new Object[]{1, 2, 3});
+    assertEquals(Arrays.asList(1, 2, 3), converter.convert(single));
+
+    // Nested elements cannot be represented by the 1-D element schema, so each becomes null,
+    // preserving the outer cardinality as Debezium does rather than dropping the column.
+    ResultSet multi = arrayResultSet(new Object[]{new Integer[]{1, 2}, new Integer[]{3}});
+    assertEquals(Arrays.asList(null, null), converter.convert(multi));
+
+    // Detection happens on getArray() before the element-ResultSet route is chosen, so element
+    // types read that way are covered too.
+    ResultSet multiTimestamp = arrayResultSet(
+        new Object[]{new Object[]{new java.sql.Timestamp(0)}});
+    assertEquals(Collections.singletonList(null),
+        arrayColumnConverter("_timestamp").convert(multiTimestamp));
+
+    // String elements take the same route; a pass-through mapping would emit the JVM array
+    // toString() here, which reads like data rather than a gap.
+    ResultSet multiText = arrayResultSet(new Object[]{new String[]{"a", "b"}, new String[]{"c"}});
+    assertEquals(Arrays.asList(null, null), arrayColumnConverter("_text").convert(multiText));
+  }
+
+  /**
+   * The emitted nulls are invisible in the schema, so the warning is the only signal — but
+   * multi-dimensionality is detectable per value, so an undeduped warning would repeat for every
+   * row of every poll. It must fire once per column and drop to DEBUG after, with a second column
+   * warning on its own.
+   */
+  @Test
+  public void multiDimensionalArrayWarnsOncePerColumn() throws Exception {
+    CollectingAppender appender = new CollectingAppender();
+    org.apache.log4j.Logger logger =
+        org.apache.log4j.Logger.getLogger(PostgreSqlDatabaseDialect.class);
+    // The test log config pins io.confluent.connect to ERROR, which would filter the warning out
+    // before any appender sees it.
+    org.apache.log4j.Level originalLevel = logger.getLevel();
+    logger.setLevel(org.apache.log4j.Level.WARN);
+    logger.addAppender(appender);
+    try {
+      PostgreSqlDatabaseDialect dialect = complexTypesDialect();
+      Object[] nested = new Object[]{new Integer[]{1, 2}, new Integer[]{3}};
+
+      DatabaseDialect.ColumnConverter first = arrayColumnConverter(dialect, "_int4", "a");
+      assertEquals(Arrays.asList(null, null), first.convert(arrayResultSet(nested)));
+      assertEquals("first occurrence must warn", 1, appender.warnings.size());
+
+      // Same column again — still nulls, but no second warning.
+      assertEquals(Arrays.asList(null, null), first.convert(arrayResultSet(nested)));
+      assertEquals("repeat on the same column must not warn again",
+          1, appender.warnings.size());
+
+      // A different column is tracked independently.
+      DatabaseDialect.ColumnConverter second = arrayColumnConverter(dialect, "_int4", "b");
+      assertEquals(Arrays.asList(null, null), second.convert(arrayResultSet(nested)));
+      assertEquals("a second column must warn on its own", 2, appender.warnings.size());
+    } finally {
+      logger.removeAppender(appender);
+      logger.setLevel(originalLevel);
+    }
+  }
+
+  @Test
+  public void hstoreArrayElementSchemaShouldFollowHandlingMode() {
+    // map mode: ARRAY<MAP<STRING,STRING>> with optional values so a NULL survives.
+    Schema mapMode = sourceFieldSchema(hstoreDialect("true", "map"), Types.ARRAY, "_hstore");
+    assertEquals(Type.ARRAY, mapMode.type());
+    assertEquals(Type.MAP, mapMode.valueSchema().type());
+    assertTrue(mapMode.valueSchema().isOptional());
+    assertTrue(mapMode.valueSchema().valueSchema().isOptional());
+
+    // json mode: ARRAY<Json>, so the sink provisions jsonb[] either way.
+    Schema jsonMode = sourceFieldSchema(jsonHstoreDialect(), Types.ARRAY, "_hstore");
+    assertEquals(Type.ARRAY, jsonMode.type());
+    assertEquals(Json.LOGICAL_NAME, jsonMode.valueSchema().name());
+  }
+
+  @Test
+  public void hstoreArrayShouldReadElementsPerHandlingMode() throws Exception {
+    Map<String, String> withNull = new LinkedHashMap<>();
+    withNull.put("k", null);
+
+    // map mode: the driver's maps pass through, including an hstore NULL value.
+    assertEquals(
+        Arrays.asList(Collections.singletonMap("env", "prod"), withNull),
+        arrayColumnConverter(hstoreDialect("true", "map"), "_hstore").convert(
+            hstoreArrayResultSet(Collections.singletonMap("env", "prod"), withNull)));
+
+    // json mode: each element is serialized, with the hstore NULL becoming a JSON null.
+    assertEquals(
+        Arrays.asList("{\"env\":\"prod\"}", "{\"k\":null}"),
+        arrayColumnConverter(jsonHstoreDialect(), "_hstore").convert(
+            hstoreArrayResultSet(Collections.singletonMap("env", "prod"), withNull)));
+  }
+
+  @Test
+  public void hstoreArrayShouldBindToJsonbArrayInBothModes() throws SQLException {
+    // map mode: each element serialized to JSON text, bound as jsonb[].
+    verifyArrayBind(
+        SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA).optional().build(),
+        Arrays.asList(Collections.singletonMap("env", "prod"), null),
+        PostgreSqlDatabaseDialect.JSONB_TYPE_NAME,
+        new Object[]{"{\"env\":\"prod\"}", null});
+
+    // json mode: elements are already JSON text.
+    verifyArrayBind(
+        Json.optionalSchema(),
+        Arrays.asList("{\"env\":\"prod\"}", null),
+        PostgreSqlDatabaseDialect.JSONB_TYPE_NAME,
+        new Object[]{"{\"env\":\"prod\"}", null});
+  }
+
+  @Test
+  public void hstoreArrayShouldBeDroppedWhenComplexTypesDisabled() {
+    PostgreSqlDatabaseDialect disabled =
+        new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something"));
+    assertNull(sourceFieldSchema(disabled, Types.ARRAY, "_hstore"));
+  }
+
+  @Test
+  public void offSearchPathHstoreArrayFailsWhenAMappingModeIsSelected() {
+    // The array type is its own pg_type row in the same schema, so it is qualified exactly as the
+    // scalar type is; hstore[] must therefore fail the task rather than vanish, as hstore does.
+    for (String mode : new String[]{"map", "json"}) {
+      ConnectException e = assertThrows(mode + " must fail", ConnectException.class,
+          () -> sourceFieldSchema(
+              hstoreDialect("true", mode), Types.ARRAY, "\"ext\".\"_hstore\""));
+      assertTrue("must name the cause", e.getMessage().contains("search_path"));
+    }
+
+    // none stays the escape hatch, and an unrelated array element type is untouched.
+    assertNull(sourceFieldSchema(
+        hstoreDialect("true", "none"), Types.ARRAY, "\"ext\".\"_hstore\""));
+    assertNull(sourceFieldSchema(
+        hstoreDialect("true", "map"), Types.ARRAY, "\"ext\".\"_citext\""));
+  }
+
+  @Test
+  public void hstoreArrayShouldBeDroppedWhenHandlingModeIsNone() {
+    // none applies to hstore[] exactly as to a scalar hstore column, so the two cannot disagree.
+    // The element has no representation, so the whole array column is skipped.
+    assertNull(sourceFieldSchema(hstoreDialect("true", "none"), Types.ARRAY, "_hstore"));
+    assertNull(sourceFieldSchema(
+        new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something",
+            JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true")),
+        Types.ARRAY, "_hstore"));
+
+    // Other element types are unaffected by the hstore mode.
+    assertEquals(Type.ARRAY,
+        sourceFieldSchema(hstoreDialect("true", "none"), Types.ARRAY, "_int4").type());
+  }
+
+  @Test
+  public void arrayConverterRoutesByElementLogicalType() throws Exception {
+    // numeric[] -> each element decoded into a VariableScaleDecimal struct (per-value scale).
+    Object num = ((List<?>) arrayColumnConverter("_numeric")
+        .convert(arrayResultSet(new Object[]{new BigDecimal("1.5")}))).get(0);
+    assertEquals(0, new BigDecimal("1.5").compareTo(
+        VariableScaleDecimal.toLogical((Struct) num)));
+
+    // jsonb[] -> each element carried as its raw JSON text.
+    Object json = ((List<?>) arrayColumnConverter("_jsonb")
+        .convert(arrayResultSet(new Object[]{"{\"k\":1}"}))).get(0);
+    assertEquals("{\"k\":1}", json);
+  }
+
+  @Test
+  public void arrayReadPreservesNullElements() throws Exception {
+    List<?> numeric = (List<?>) arrayColumnConverter("_numeric")
+        .convert(arrayResultSet(new Object[]{new BigDecimal("1.5"), null}));
+    assertEquals(2, numeric.size());
+    assertNull(numeric.get(1));
+
+    assertEquals(Arrays.asList("{\"k\":1}", null), arrayColumnConverter("_jsonb")
+        .convert(arrayResultSet(new Object[]{"{\"k\":1}", null})));
+
+    List<?> temporal = (List<?>) arrayColumnConverter("_timestamp")
+        .convert(temporalArrayResultSetWithNullElement());
+    assertEquals(2, temporal.size());
+    assertNull(temporal.get(1));
+  }
+
+  @Test
+  public void temporalArrayReadHonorsConfiguredDbTimezone() throws Exception {
+    // timestamp[] elements must be decoded with the configured db.timezone, matching the scalar
+    // (non-array) timestamp path, rather than a hard-coded UTC calendar.
+    TimeZone tz = TimeZone.getTimeZone("America/New_York");
+    ResultSet elementRs = captureTemporalArrayRead("_timestamp", tz);
+    ArgumentCaptor<Calendar> cal = ArgumentCaptor.forClass(Calendar.class);
+    verify(elementRs).getTimestamp(eq(2), cal.capture());
+    assertEquals(tz, cal.getValue().getTimeZone());
+  }
+
+  @Test
+  public void timestamptzArrayReadHonorsConfiguredDbTimezone() throws Exception {
+    // timestamptz[] drops the zone and is decoded like timestamp[], honoring db.timezone (scalar).
+    TimeZone tz = TimeZone.getTimeZone("America/New_York");
+    ResultSet elementRs = captureTemporalArrayRead("_timestamptz", tz);
+    ArgumentCaptor<Calendar> cal = ArgumentCaptor.forClass(Calendar.class);
+    verify(elementRs).getTimestamp(eq(2), cal.capture());
+    assertEquals(tz, cal.getValue().getTimeZone());
+  }
+
+  @Test
+  public void dateAndTimeArrayReadsFollowTheScalarZonePrecedence() throws Exception {
+    // date is decoded with the date time zone (UTC on the source), time with db.timezone.
+    TimeZone tz = TimeZone.getTimeZone("America/New_York");
+
+    ResultSet dateRs = captureTemporalArrayRead("_date", tz);
+    ArgumentCaptor<Calendar> dateCal = ArgumentCaptor.forClass(Calendar.class);
+    verify(dateRs).getDate(eq(2), dateCal.capture());
+    assertEquals(TimeZone.getTimeZone("UTC"), dateCal.getValue().getTimeZone());
+
+    ResultSet timeRs = captureTemporalArrayRead("_time", tz);
+    ArgumentCaptor<Calendar> timeCal = ArgumentCaptor.forClass(Calendar.class);
+    verify(timeRs).getTime(eq(2), timeCal.capture());
+    assertEquals(tz, timeCal.getValue().getTimeZone());
+  }
+
+  @Test
+  public void timestampArrayReadHonorsCalendarSystem() throws Exception {
+    // A pre-1582 timestamp is shifted by the proleptic Gregorian conversion.
+    java.sql.Timestamp ancient = java.sql.Timestamp.valueOf("1500-01-01 00:00:00");
+    assertNotEquals(
+        "date.calendar.system must change how a pre-1582 timestamp is decoded",
+        readSingleTimestampElement(complexTypesDialect(), ancient),
+        readSingleTimestampElement(prolepticGregorianDialect(), ancient));
+
+    // A modern timestamp decodes identically under both calendar systems.
+    java.sql.Timestamp epoch = new java.sql.Timestamp(0L);
+    assertEquals(
+        readSingleTimestampElement(complexTypesDialect(), epoch),
+        readSingleTimestampElement(prolepticGregorianDialect(), epoch));
+  }
+
+  @Test
+  public void timestampArrayReadHonorsPrecisionModeValue() throws Exception {
+    // micros_long emits epoch microseconds instead of a Connect Timestamp: 1000 ms -> 1_000_000 us.
+    Object value = readSingleTimestampElement(
+        complexTypesDialect(JdbcSourceConnectorConfig.TIMESTAMP_GRANULARITY_CONFIG, "micros_long"),
+        new java.sql.Timestamp(1000L));
+    assertEquals(1_000_000L, value);
+  }
+
+  @Test
+  public void shouldReturnNullWhenArrayHasNoContents() throws Exception {
+    // getArray() returning null short circuits before any element decoding.
+    ResultSet resultSet = mock(ResultSet.class);
+    Array array = mock(Array.class);
+    when(resultSet.getArray(1)).thenReturn(array);
+    when(array.getArray()).thenReturn(null);
+
+    assertNull(arrayColumnConverter("_int4").convert(resultSet));
+  }
+
+  @Test
+  public void shouldReturnEmptyListWhenArrayHasNoElements() throws Exception {
+    assertEquals(Collections.emptyList(),
+        arrayColumnConverter("_int4").convert(arrayResultSet(new Object[0])));
+  }
+
+  @Test
+  public void shouldRejectUnsupportedArrayValueType() {
+    // A Connect ARRAY value must be a Collection or a Java array; anything else is a DataException.
+    Schema schema = SchemaBuilder.array(Schema.OPTIONAL_INT32_SCHEMA).optional().build();
+    ColumnDefinition colDef = mock(ColumnDefinition.class);
+    assertThrows(DataException.class, () -> complexTypesDialect().bindField(
+        mock(PreparedStatement.class), 1, schema, "not-an-array", colDef, "field"));
+  }
+
+  private PostgreSqlDatabaseDialect prolepticGregorianDialect() {
+    return complexTypesDialect(
+        JdbcSourceConnectorConfig.DATE_CALENDAR_SYSTEM_CONFIG, "PROLEPTIC_GREGORIAN");
+  }
+
+  /** Epoch millis of a hybrid-calendar date at UTC midnight, independent of the JVM zone. */
+  private static long utcHybridMillis(int year, int month, int day) {
+    Calendar calendar = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
+    calendar.clear();
+    calendar.set(year, month, day);
+    return calendar.getTimeInMillis();
+  }
+
+  /**
+   * What the scalar bind sends: the {@code java.sql} value and {@link Calendar} handed to the driver,
+   * rendered as the driver would. Uses no production formatter, so it is an independent oracle.
+   */
+  private String scalarTemporalLiteral(PostgreSqlDatabaseDialect dialect, Schema schema,
+      java.util.Date value, String pattern) throws SQLException {
+    PreparedStatement statement = mock(PreparedStatement.class);
+    dialect.bindField(statement, 1, schema, value, mock(ColumnDefinition.class), "field");
+
+    ArgumentCaptor<java.util.Date> bound = ArgumentCaptor.forClass(java.util.Date.class);
+    ArgumentCaptor<Calendar> calendar = ArgumentCaptor.forClass(Calendar.class);
+    if (Date.LOGICAL_NAME.equals(schema.name())) {
+      verify(statement).setDate(eq(1), (java.sql.Date) bound.capture(), calendar.capture());
+    } else {
+      verify(statement).setTimestamp(eq(1), (java.sql.Timestamp) bound.capture(),
+          calendar.capture());
+    }
+    SimpleDateFormat format = new SimpleDateFormat(pattern, Locale.ROOT);
+    format.setTimeZone(calendar.getValue().getTimeZone());
+    return format.format(bound.getValue());
+  }
+
+  /**
+   * Drive the array column converter for a single-element temporal array with the given
+   * {@code db.timezone}, wiring a mock element {@link ResultSet}. Returns that element ResultSet so
+   * the caller can verify the Calendar (time zone) used to decode the element.
+   */
+  private ResultSet captureTemporalArrayRead(String pgArrayType, TimeZone tz)
+      throws SQLException, java.io.IOException {
+    PostgreSqlDatabaseDialect dialect = complexTypesDialect(
+        JdbcSourceConnectorConfig.DB_TIMEZONE_CONFIG, tz.getID());
+    ColumnDefinition column = column(Types.ARRAY, pgArrayType);
+    ColumnMapping mapping = new ColumnMapping(
+        column, 1, new Field("col", 0, arraySchema(Schema.OPTIONAL_INT64_SCHEMA)));
+    DatabaseDialect.ColumnConverter converter =
+        dialect.columnConverterFor(mapping, column, 1, true);
+    assertNotNull(converter);
+
+    ResultSet resultSet = mock(ResultSet.class);
+    Array array = mock(Array.class);
+    ResultSet elementRs = mock(ResultSet.class);
+    when(resultSet.getArray(1)).thenReturn(array);
+    when(array.getArray()).thenReturn(new Object[]{new java.sql.Timestamp(0L)});
+    when(array.getResultSet()).thenReturn(elementRs);
+    when(elementRs.next()).thenReturn(true, false);
+    when(elementRs.getTimestamp(eq(2), any(Calendar.class)))
+        .thenReturn(new java.sql.Timestamp(0L));
+    when(elementRs.getDate(eq(2), any(Calendar.class))).thenReturn(new java.sql.Date(0L));
+    when(elementRs.getTime(eq(2), any(Calendar.class))).thenReturn(new java.sql.Time(0L));
+    when(elementRs.wasNull()).thenReturn(false);
+
+    converter.convert(resultSet);
+    return elementRs;
+  }
+
+  /**
+   * Bind a single-element {@code timestamp[]} with the given dialect and return the rendered text
+   * literal, so tests can assert the zone and calendar system applied on the sink path.
+   */
+  private String bindTemporalArrayLiteral(PostgreSqlDatabaseDialect dialect, java.util.Date value)
+      throws SQLException {
+    return bindTemporalArrayLiteral(
+        dialect, Timestamp.builder().optional().build(), "timestamp", value);
+  }
+
+  private String bindTemporalArrayLiteral(PostgreSqlDatabaseDialect dialect, Schema elementSchema,
+      String pgElementType, java.util.Date value) throws SQLException {
+    PreparedStatement statement = mock(PreparedStatement.class);
+    Connection connection = mock(Connection.class);
+    ColumnDefinition colDef = mock(ColumnDefinition.class);
+    when(colDef.type()).thenReturn(Types.ARRAY);
+    when(statement.getConnection()).thenReturn(connection);
+    when(connection.createArrayOf(eq(pgElementType), any())).thenReturn(mock(Array.class));
+
+    Schema schema = SchemaBuilder.array(elementSchema).optional().build();
+    dialect.bindField(statement, 1, schema, Collections.singletonList(value), colDef, "field");
+
+    ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
+    verify(connection).createArrayOf(eq(pgElementType), captor.capture());
+    return (String) captor.getValue()[0];
+  }
+
+  /**
+   * Read a single-element {@code timestamp[]} with the given dialect and return the decoded Connect
+   * value, so tests can assert the calendar system and precision mode applied on the source path.
+   */
+  private Object readSingleTimestampElement(
+      PostgreSqlDatabaseDialect dialect, java.sql.Timestamp value) throws Exception {
+    ColumnDefinition column = column(Types.ARRAY, "_timestamp");
+    ColumnMapping mapping = new ColumnMapping(
+        column, 1, new Field("col", 0, arraySchema(Schema.OPTIONAL_INT64_SCHEMA)));
+    DatabaseDialect.ColumnConverter converter =
+        dialect.columnConverterFor(mapping, column, 1, true);
+    assertNotNull(converter);
+
+    ResultSet resultSet = mock(ResultSet.class);
+    Array array = mock(Array.class);
+    ResultSet elementRs = mock(ResultSet.class);
+    when(resultSet.getArray(1)).thenReturn(array);
+    when(array.getArray()).thenReturn(new Object[]{value});
+    when(array.getResultSet()).thenReturn(elementRs);
+    when(elementRs.next()).thenReturn(true, false);
+    when(elementRs.getTimestamp(eq(2), any(Calendar.class))).thenReturn(value);
+    when(elementRs.wasNull()).thenReturn(false);
+
+    return ((List<?>) converter.convert(resultSet)).get(0);
+  }
+
+  private static Schema arraySchema(Schema elementSchema) {
+    return SchemaBuilder.array(elementSchema).build();
+  }
+
+  private void assertArrayElement(String pgArrayType, Type elementType, String elementName) {
+    Schema schema = sourceFieldSchema(complexTypesDialect(), Types.ARRAY, pgArrayType);
+    assertNotNull("Array column " + pgArrayType + " should produce a field", schema);
+    assertEquals(Type.ARRAY, schema.type());
+    assertEquals(elementType, schema.valueSchema().type());
+    assertEquals(elementName, schema.valueSchema().name());
+  }
+
+  private ColumnDefinition column(int jdbcType, String typeName,
+      ColumnDefinition.Nullability nullability, String columnName) {
+    return new ColumnDefinition(
+        new ColumnId(new TableId(null, null, "t"), columnName),
+        jdbcType, typeName, Object.class.getName(),
+        nullability, ColumnDefinition.Mutability.UNKNOWN,
+        0, 0, false, 1, false, false, false, false, false);
+  }
+
+  private DatabaseDialect.ColumnConverter arrayColumnConverter(String pgArrayType) {
+    return arrayColumnConverter(complexTypesDialect(), pgArrayType);
+  }
+
+  private DatabaseDialect.ColumnConverter arrayColumnConverter(
+      PostgreSqlDatabaseDialect dialect, String pgArrayType) {
+    return arrayColumnConverter(dialect, pgArrayType, "col");
+  }
+
+  private DatabaseDialect.ColumnConverter arrayColumnConverter(
+      PostgreSqlDatabaseDialect dialect, String pgArrayType, String columnName) {
+    ColumnDefinition column =
+        column(Types.ARRAY, pgArrayType, ColumnDefinition.Nullability.NULL, columnName);
+    ColumnMapping mapping = new ColumnMapping(
+        column, 1, new Field("col", 0, arraySchema(Schema.OPTIONAL_INT32_SCHEMA)));
+    DatabaseDialect.ColumnConverter converter =
+        dialect.columnConverterFor(mapping, column, 1, true);
+    assertNotNull(converter);
+    return converter;
+  }
+
+  /** A source dialect with complex types enabled and {@code hstore.handling.mode=json}. */
+  private PostgreSqlDatabaseDialect jsonHstoreDialect() {
+    return new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something",
+        JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true",
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json"));
+  }
+
+  private static ResultSet arrayResultSet(Object[] elements) throws SQLException {
+    ResultSet resultSet = mock(ResultSet.class);
+    Array array = mock(Array.class);
+    when(resultSet.getArray(1)).thenReturn(array);
+    when(array.getArray()).thenReturn(elements);
+    return resultSet;
+  }
+
+  /**
+   * An {@code hstore[]} ResultSet of two elements. {@code getArray()} yields opaque PGobjects, as
+   * pgjdbc does, while the element ResultSet yields the driver-decoded maps.
+   */
+  private static ResultSet hstoreArrayResultSet(Map<?, ?> first, Map<?, ?> second)
+      throws SQLException {
+    ResultSet resultSet = arrayResultSet(new Object[]{new Object(), new Object()});
+    ResultSet elementRs = mock(ResultSet.class);
+    when(resultSet.getArray(1).getResultSet()).thenReturn(elementRs);
+    when(elementRs.next()).thenReturn(true, true, false);
+    when(elementRs.getObject(2)).thenReturn(first, second);
+    return resultSet;
+  }
+
+  private static ResultSet temporalArrayResultSetWithNullElement() throws SQLException {
+    java.sql.Timestamp epoch = new java.sql.Timestamp(0L);
+    ResultSet resultSet = arrayResultSet(new Object[]{epoch, null});
+    ResultSet elementRs = mock(ResultSet.class);
+    when(resultSet.getArray(1).getResultSet()).thenReturn(elementRs);
+    when(elementRs.next()).thenReturn(true, true, false);
+    when(elementRs.getTimestamp(eq(2), any(Calendar.class))).thenReturn(epoch);
+    when(elementRs.wasNull()).thenReturn(false, true);
+    return resultSet;
+  }
+
+  private void verifyArrayBind(
+      Schema elementSchema,
+      List<?> value,
+      String expectedPgType,
+      Object[] expectedElements
+  ) throws SQLException {
+    verifyArrayBind(complexTypesDialect(), elementSchema, value, expectedPgType, expectedElements);
+  }
+
+  private void verifyArrayBind(
+      PostgreSqlDatabaseDialect dialect,
+      Schema elementSchema,
+      List<?> value,
+      String expectedPgType,
+      Object[] expectedElements
+  ) throws SQLException {
+    PreparedStatement statement = mock(PreparedStatement.class);
+    Connection connection = mock(Connection.class);
+    Array boundArray = mock(Array.class);
+    ColumnDefinition colDef = mock(ColumnDefinition.class);
+    when(colDef.type()).thenReturn(Types.ARRAY);
+    when(statement.getConnection()).thenReturn(connection);
+    when(connection.createArrayOf(eq(expectedPgType), any())).thenReturn(boundArray);
+
+    Schema arraySchema = SchemaBuilder.array(elementSchema).optional().build();
+    dialect.bindField(statement, 7, arraySchema, value, colDef, "field");
+
+    ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
+    verify(connection).createArrayOf(eq(expectedPgType), captor.capture());
+    assertEquals(Arrays.asList(expectedElements), Arrays.asList(captor.getValue()));
+    verify(statement).setArray(7, boundArray);
+  }
+
+  /** Collects WARN events from the dialect's logger so the dedupe can be asserted. */
+  private static class CollectingAppender extends org.apache.log4j.AppenderSkeleton {
+    private final List<String> warnings = new ArrayList<>();
+
+    @Override
+    protected void append(org.apache.log4j.spi.LoggingEvent event) {
+      if (event.getLevel().isGreaterOrEqual(org.apache.log4j.Level.WARN)) {
+        warnings.add(event.getRenderedMessage());
+      }
+    }
+
+    @Override
+    public void close() {
+    }
+
+    @Override
+    public boolean requiresLayout() {
+      return false;
+    }
+  }
 }

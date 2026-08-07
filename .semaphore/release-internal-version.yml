@@ -21,9 +21,8 @@ blocks:
         - name: Release
           commands:
             - . assume-iam-role arn:aws:iam::519856050701:role/semaphore-oidc
-            - git fetch --tags -q || true
-            - ci-update-version "$(pwd)" "$SEMAPHORE_GIT_DIR" --no-update-dependency-versions
-            - ci-push-tag "$(pwd)" "$SEMAPHORE_GIT_DIR"
+            - ci-tools ci-update-version
+            - ci-tools ci-push-tag
             - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 -Ddependency.check.skip=true --batch-mode --no-transfer-progress 
               -DaltDeploymentRepository=confluent-codeartifact-internal::default::https://confluent-519856050701.d.codeartifact.us-west-2.amazonaws.com/maven/maven-snapshots/ 
               -DrepositoryId=confluent-codeartifact-internal clean deploy -DskipTests

@@ -21,5 +21,8 @@ blocks:
         - name: Release
           commands:
             - . assume-iam-role arn:aws:iam::519856050701:role/semaphore-oidc
-            - chmod +x scripts/release-internal-version.sh
-            - ./scripts/release-internal-version.sh
+            - ci-tools ci-update-version
+            - ci-tools ci-push-tag
+            - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 -Ddependency.check.skip=true --batch-mode --no-transfer-progress 
+              -DaltDeploymentRepository=confluent-codeartifact-internal::default::https://confluent-519856050701.d.codeartifact.us-west-2.amazonaws.com/maven/maven-snapshots/ 
+              -DrepositoryId=confluent-codeartifact-internal clean deploy -DskipTests

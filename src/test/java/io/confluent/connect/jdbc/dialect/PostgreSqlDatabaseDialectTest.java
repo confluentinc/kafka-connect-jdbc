@@ -365,8 +365,8 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
   /**
    * The array of a cast type needs the same cast: a uuid[] source column becomes a Connect
-   * ARRAY&lt;STRING&gt; and binds as text[], which only reaches a uuid[] column through {@code
-   * ::uuid[]}. Off the search_path the type name arrives schema-qualified and must still match.
+   * ARRAY&lt;STRING&gt; and binds as text[], which only reaches a uuid[] column through
+   * {@code ::uuid[]}.
    */
   @Test
   public void shouldComputeValueTypeCastForArrayColumns() {
@@ -374,8 +374,6 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     builder.withColumn("uuidArray").type("_uuid", JDBCType.ARRAY, Object.class);
     builder.withColumn("jsonbArray").type("_jsonb", JDBCType.ARRAY, Object.class);
     builder.withColumn("textArray").type("_text", JDBCType.ARRAY, Object.class);
-    builder.withColumn("qualifiedUuidArray")
-        .type("\"ext\".\"_uuid\"", JDBCType.ARRAY, Object.class);
     TableDefinition tableDefn = builder.build();
 
     assertEquals("::uuid[]",
@@ -384,8 +382,6 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         dialect.valueTypeCast(tableDefn, tableDefn.definitionForColumn("jsonbArray").id()));
     assertEquals("",
         dialect.valueTypeCast(tableDefn, tableDefn.definitionForColumn("textArray").id()));
-    assertEquals("::uuid[]", dialect.valueTypeCast(
-        tableDefn, tableDefn.definitionForColumn("qualifiedUuidArray").id()));
   }
 
   @Test

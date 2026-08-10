@@ -23,8 +23,9 @@ import java.util.Map;
  * Serializes a Connect {@code MAP<STRING, STRING>} into the PostgreSQL {@code hstore} text form,
  * {@code "key"=>"value"}, for binding into an {@code hstore} column through a cast.
  *
- * <p>The driver's own converter is not usable here: pgjdbc is a runtime-scope dependency, so no
- * dialect compiles against it.
+ * <p>pgjdbc's own {@code org.postgresql.util.HStoreConverter} is not usable here: the driver is a
+ * runtime-scope dependency so that it ships with the connector without any dialect compiling
+ * against it, which keeps the dialects on JDBC APIs alone.
  */
 public final class HstoreConverter {
 

@@ -85,6 +85,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * The type name to write hstore columns with, resolved once per connection: {@code hstore} when
    * the extension is on the search_path, {@code "schema".hstore} when it is installed elsewhere,
    * and null when it is not installed at all. Visible for testing.
+   *
+   * <p>{@link #hstoreTypeResolved} is written last, inside the {@code synchronized} block in
+   * {@link #getConnection()}. Both are volatile, so a reader that sees it {@code true} is
+   * guaranteed to see the name written before it, and needs no lock of its own.
    */
   volatile String hstoreTypeName;
   volatile boolean hstoreTypeResolved;
@@ -210,9 +214,18 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       if (maxIdentifierLength <= 0) {
         maxIdentifierLength = computeMaxIdentifierLength(result);
       }
-      if (!hstoreTypeResolved && complexTypesEnabled()) {
-        hstoreTypeName = resolveHstoreTypeName(result);
-        hstoreTypeResolved = true;
+      // Only the sink writes hstore columns, so a source task never pays for the lookup.
+      if (!hstoreTypeResolved && complexTypesEnabled() && config instanceof JdbcSinkConfig) {
+        try {
+          hstoreTypeName = resolveHstoreTypeName(result);
+          // Written last: see the ordering note on hstoreTypeResolved.
+          hstoreTypeResolved = true;
+        } catch (SQLException e) {
+          // Leave it unresolved rather than report the extension as missing, which would name the
+          // wrong cause. A write then assumes the bare type name and lets PostgreSQL say why.
+          log.warn("Unable to determine where the hstore extension is installed; hstore columns "
+              + "will be written as the unqualified type", e);
+        }
       }
     }
     return result;
@@ -221,9 +234,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   /**
    * Locate the hstore extension: the bare name when {@code search_path} resolves it, otherwise the
    * schema it was installed into, so {@code CREATE EXTENSION hstore SCHEMA ext} is usable without
-   * changing the connection's search_path. Returns null when the extension is not installed.
+   * changing the connection's search_path. Returns null when the extension is not installed, and
+   * throws when the catalog cannot be read — the two are distinct and must not be conflated.
    */
-  static String resolveHstoreTypeName(Connection connection) {
+  static String resolveHstoreTypeName(Connection connection) throws SQLException {
     try (Statement stmt = connection.createStatement()) {
       try (ResultSet rs = stmt.executeQuery("SELECT to_regtype('hstore') IS NOT NULL")) {
         if (rs.next() && rs.getBoolean(1)) {
@@ -233,20 +247,15 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       try (ResultSet rs = stmt.executeQuery(
           "SELECT n.nspname FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace"
               + " WHERE e.extname = 'hstore'")) {
-        if (rs.next()) {
-          return "\"" + rs.getString(1) + "\"." + HSTORE_TYPE_NAME;
-        }
+        return rs.next() ? "\"" + rs.getString(1) + "\"." + HSTORE_TYPE_NAME : null;
       }
-    } catch (SQLException e) {
-      log.warn("Unable to determine whether the hstore extension is installed", e);
     }
-    return null;
   }
 
   /**
-   * The type name for an hstore column, or a failure naming the field when the extension is not
-   * installed. Before any connection exists — unit tests, and validation before the first write —
-   * the bare name is assumed, since there is nothing yet to check it against.
+   * The type name for an hstore column, or a failure naming the field when the extension is known
+   * to be absent. Where it is merely unresolved — before any connection exists, or after a catalog
+   * read failed — the bare name is assumed, since there is nothing to contradict it.
    */
   private String hstoreTypeName(String fieldName) {
     if (hstoreTypeResolved && hstoreTypeName == null) {
@@ -1158,7 +1167,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   ) throws SQLException {
     switch (schema.type()) {
       case ARRAY:
-        if (bindArray(statement, index, schema, value)) {
+        if (bindArray(statement, index, schema, value, fieldName)) {
           return true;
         }
         break;
@@ -1176,16 +1185,21 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   /**
    * Bind a Connect ARRAY value to a native PostgreSQL array parameter. When complex types are
    * enabled, element types with a dedicated PostgreSQL array type (json, numeric and the
-   * temporals) are resolved by {@link #arrayElementBinding(Schema)} and bound via
+   * temporals) are resolved by {@link #arrayElementBinding(Schema, String)} and bound via
    * {@code createArrayOf}; any other (primitive) element type falls back to the pre-existing
    * {@link #maybeBindPrimitiveArray}. Returns false if the element type is not handled here.
    */
-  private boolean bindArray(PreparedStatement statement, int index, Schema schema, Object value)
-      throws SQLException {
+  private boolean bindArray(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
+      Object value,
+      String fieldName
+  ) throws SQLException {
     Collection<?> values = arrayValueCollection(value);
     Schema elementSchema = schema.valueSchema();
     ArrayElementBinding binding =
-        complexTypesEnabled() ? arrayElementBinding(elementSchema) : null;
+        complexTypesEnabled() ? arrayElementBinding(elementSchema, fieldName) : null;
     if (binding == null) {
       return maybeBindPrimitiveArray(statement, index, elementSchema, values);
     }
@@ -1224,15 +1238,16 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * Resolve the native array binding for a Connect element schema, or null if the element has no
    * dedicated PostgreSQL array type (a primitive, handled by {@link #maybeBindPrimitiveArray}).
    * Only the hstore-shaped {@code MAP<STRING, STRING>} and the logical types below are mapped.
+   * The field name is carried only so a missing hstore extension can name the column it fails on.
    */
-  private ArrayElementBinding arrayElementBinding(Schema elementSchema) {
+  private ArrayElementBinding arrayElementBinding(Schema elementSchema, String fieldName) {
     if (elementSchema == null) {
       return null;
     }
     if (isStringToStringMap(elementSchema)) {
       // Each element serialized to hstore text -> hstore[].
       return new ArrayElementBinding(
-          hstoreTypeName(null), PostgreSqlDatabaseDialect::hstoreArrayFor);
+          hstoreTypeName(fieldName), PostgreSqlDatabaseDialect::hstoreArrayFor);
     }
     String elementName = elementSchema.name();
     if (elementName != null) {

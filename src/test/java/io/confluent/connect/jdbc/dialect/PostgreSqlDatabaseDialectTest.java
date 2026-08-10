@@ -1299,6 +1299,30 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         thrown.getMessage().contains("tags"));
     assertTrue("message should say how to install it, but was: " + thrown.getMessage(),
         thrown.getMessage().contains("CREATE EXTENSION hstore"));
+
+    // An array element fails the same way, and must name its column rather than "a map value".
+    ConnectException fromArray = assertThrows(ConnectException.class,
+        () -> sink.bindField(mock(PreparedStatement.class), 1,
+            arraySchema(stringToStringMap()), Collections.singletonList(
+                Collections.singletonMap("env", "prod")),
+            mock(ColumnDefinition.class), "tags"));
+    assertTrue("array message should name the field, but was: " + fromArray.getMessage(),
+        fromArray.getMessage().contains("tags"));
+  }
+
+  /**
+   * Unresolved is not the same as absent. Before a connection exists, or after a catalog read
+   * failed, the bare type name is assumed rather than reporting the extension as missing — which
+   * would name the wrong cause and fail a write that PostgreSQL might well accept.
+   */
+  @Test
+  public void shouldAssumeTheBareHstoreTypeNameWhileUnresolved() {
+    PostgreSqlDatabaseDialect sink = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+    assertFalse("precondition: nothing has been resolved yet", sink.hstoreTypeResolved);
+
+    assertEquals("hstore",
+        sink.getSqlType(new SinkRecordField(stringToStringMap(), "tags", false)));
   }
 
   /** An hstore column off the search_path is reported qualified and must be cast by that name. */

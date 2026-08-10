@@ -17,11 +17,15 @@ package io.confluent.connect.jdbc.util;
 
 import org.apache.kafka.connect.errors.DataException;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
- * Serializes a Connect {@code MAP<STRING, STRING>} into the PostgreSQL {@code hstore} text form,
- * {@code "key"=>"value"}, for binding into an {@code hstore} column through a cast.
+ * Converts between a Connect {@code MAP<STRING, STRING>} and the PostgreSQL {@code hstore} text
+ * form, {@code "key"=>"value"} — writing it for a bind through a cast, and reading it back for the
+ * columns the driver hands over as text rather than as a decoded map.
  *
  * <p>pgjdbc's own {@code org.postgresql.util.HStoreConverter} is not usable here: the driver is a
  * runtime-scope dependency so that it ships with the connector without any dialect compiling
@@ -31,7 +35,54 @@ public final class HstoreConverter {
 
   private static final String NULL_VALUE = "NULL";
 
+  /** A quoted token: any run of characters that are neither a quote nor an escape lead-in. */
+  private static final String QUOTED = "\"((?:[^\"\\\\]|\\\\.)*)\"";
+
+  /**
+   * One {@code "key"=>"value"} or {@code "key"=>NULL} pair, and the separator that follows it.
+   */
+  private static final Pattern HSTORE_PAIR =
+      Pattern.compile(QUOTED + "\\s*=>\\s*(?:" + NULL_VALUE + "|" + QUOTED + ")\\s*(?:,\\s*|$)");
+
+  private static final Pattern ESCAPED_CHARACTER = Pattern.compile("\\\\(.)");
+
   private HstoreConverter() {
+  }
+
+  /**
+   * Parse PostgreSQL {@code hstore} text into a map. The driver hands back this form instead of a
+   * decoded map whenever it cannot resolve the extension's type OID, which is the case for any
+   * hstore that is not on the connection's {@code search_path}.
+   *
+   * <p>Only what {@code hstore_out} emits is accepted: {@code "key"=>"value"} pairs separated by
+   * {@code ", "}, with both sides always quoted apart from a bare {@code NULL} value. Anything else
+   * did not come from PostgreSQL and is rejected rather than guessed at.
+   *
+   * @param text the hstore text; null yields null
+   * @return the parsed map, preserving pair order; empty text yields an empty map
+   * @throws DataException if the text is not well-formed hstore
+   */
+  public static Map<String, String> hstoreToConnectMap(String text) {
+    if (text == null) {
+      return null;
+    }
+    String remaining = text.trim();
+    Map<String, String> out = new LinkedHashMap<>();
+    Matcher pair = HSTORE_PAIR.matcher(remaining);
+    int at = 0;
+    while (at < remaining.length()) {
+      if (!pair.find(at) || pair.start() != at) {
+        throw new DataException(
+            "Malformed hstore text at position " + at + " of " + remaining.length());
+      }
+      out.put(unescape(pair.group(1)), pair.group(2) == null ? null : unescape(pair.group(2)));
+      at = pair.end();
+    }
+    return out;
+  }
+
+  private static String unescape(String token) {
+    return ESCAPED_CHARACTER.matcher(token).replaceAll("$1");
   }
 
   /**

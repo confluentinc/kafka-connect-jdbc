@@ -19,6 +19,11 @@ import io.confluent.connect.jdbc.data.Json;
 import io.confluent.connect.jdbc.data.VariableScaleDecimal;
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode;
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig.PrimaryKeyMode;
+import io.confluent.connect.jdbc.sink.PreparedStatementBinder;
+import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
+import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
@@ -133,11 +138,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    */
   private final Set<ColumnId> multiDimensionalWarnedColumns = ConcurrentHashMap.newKeySet();
 
-  private static final String HSTORE_OFF_SEARCH_PATH_ERROR =
-      "Cannot map hstore column %s: the driver reports its type as %s, so the hstore extension is "
-          + "not on this connection's search_path. Add the schema owning the extension to the "
-          + "search_path, for example with ?currentSchema=ext,public on connection.url, or set "
-          + "hstore.handling.mode=none to skip hstore columns.";
+  private static final String HSTORE_COLUMN_REQUIRED =
+      "Cannot write field %s as hstore: column type is %s, not %s. Recreate the column with the "
+          + "hstore type, or set " + JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE + "=false.";
 
   private static final String HSTORE_EXTENSION_MISSING =
       "Cannot write %s to an hstore column: the hstore extension is not installed on this "
@@ -257,7 +260,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * to be absent. Where it is merely unresolved — before any connection exists, or after a catalog
    * read failed — the bare name is assumed, since there is nothing to contradict it.
    */
-  private String hstoreTypeName(String fieldName) {
+  private String requireHstoreTypeName(String fieldName) {
     if (hstoreTypeResolved && hstoreTypeName == null) {
       throw new ConnectException(String.format(HSTORE_EXTENSION_MISSING,
           fieldName == null ? "a map value" : "field " + fieldName));
@@ -376,16 +379,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       case Types.OTHER: {
         // Some of these types will have fixed size, but we drop this from the schema conversion
         // since only fixed byte arrays can have a fixed size
-        if (complexTypesEnabled()) {
-          if (isHstoreType(columnDefn)) {
-            if (hstoreMappingSelected()) {
-              builder.field(fieldName, hstoreSchema(columnDefn.isOptional()));
-              return fieldName;
-            }
-            // hstore.handling.mode=none: skipped, as before the feature existed.
-          } else if (isUnresolvedHstoreType(columnDefn.typeName()) && hstoreMappingSelected()) {
-            throw hstoreOffSearchPathError(columnDefn.id(), columnDefn.typeName());
-          }
+        // Under hstore.handling.mode=none this falls through and the column is skipped, as it was
+        // before the feature existed.
+        if (complexTypesEnabled() && hstoreMappingSelected() && isHstoreType(columnDefn)) {
+          builder.field(fieldName, hstoreSchema(columnDefn.isOptional()));
+          return fieldName;
         }
 
         if (isJsonType(columnDefn)) {
@@ -491,27 +489,40 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return JSON_TYPE_NAME.equalsIgnoreCase(typeName) || JSONB_TYPE_NAME.equalsIgnoreCase(typeName);
   }
 
+  /**
+   * Whether the column is an {@code hstore}, wherever the extension is installed. pgjdbc reports
+   * the type bare while its schema is on the connection's {@code search_path} and qualified
+   * otherwise, so the local name decides — the same normalisation Debezium applies before its own
+   * catalog lookup, and what lets an {@code ext.hstore} column be mapped rather than refused.
+   */
   protected boolean isHstoreType(ColumnDefinition columnDefn) {
-    return HSTORE_TYPE_NAME.equalsIgnoreCase(columnDefn.typeName());
+    return HSTORE_TYPE_NAME.equalsIgnoreCase(localTypeName(columnDefn.typeName()));
   }
 
   /**
-   * The driver's value for an hstore column, as the map both handling modes require. Anything else
-   * follows Debezium's {@code handleUnknownData}: a nullable column degrades to null, a NOT NULL
-   * column fails, and the same text is used either way. The value is never logged, in case it is
-   * sensitive.
+   * The driver's value for an hstore column, as the map both handling modes require. pgjdbc decodes
+   * one only while it can resolve the extension's type OID; off the {@code search_path} it hands
+   * back the raw {@code "k"=>"v"} text instead, which is parsed here — the same normalisation
+   * Debezium performs with the driver's own parser.
+   *
+   * <p>Anything that is neither follows Debezium's {@code handleUnknownData}: a nullable column
+   * degrades to null, a NOT NULL column fails. The value is never logged, in case it is sensitive.
    */
   private Object hstoreValue(ColumnDefinition columnDefn, Object value) {
     if (value == null || value instanceof Map) {
       return value;
     }
-    if (columnDefn.isOptional()) {
-      log.warn("Unexpected value for hstore column {}: class={}; emitting null",
-          columnDefn.id(), value.getClass().getName());
-      return null;
+    try {
+      return HstoreConverter.hstoreToConnectMap(value.toString());
+    } catch (DataException e) {
+      if (columnDefn.isOptional()) {
+        log.warn("Unparseable value for hstore column {}: class={}; emitting null",
+            columnDefn.id(), value.getClass().getName(), e);
+        return null;
+      }
+      throw new DataException("Unparseable value for hstore column " + columnDefn.id()
+          + ": class=" + value.getClass().getName(), e);
     }
-    throw new DataException("Unexpected value for hstore column " + columnDefn.id()
-        + ": class=" + value.getClass().getName());
   }
 
   /**
@@ -556,9 +567,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           // hstore.handling.mode=none: skipped exactly as a scalar hstore column is.
           return null;
         }
-        if (isUnresolvedHstoreArrayType(columnDefn)) {
-          throw hstoreOffSearchPathError(columnDefn.id(), columnDefn.typeName());
-        }
         // Shared with the scalar hstore path; array elements are always optional.
         return hstoreSchema(true);
       case "date":
@@ -587,17 +595,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     }
     String base = typeName.startsWith("_") ? typeName.substring(1) : typeName;
     return base.toLowerCase();
-  }
-
-  /**
-   * Whether an array column's element type is an hstore the driver could not resolve, i.e. the
-   * column type arrived schema-qualified as {@code "ext"."_hstore"}.
-   */
-  private static boolean isUnresolvedHstoreArrayType(ColumnDefinition columnDefn) {
-    String typeName = columnDefn.typeName();
-    return typeName != null
-        && !typeName.equals(localTypeName(typeName))
-        && HSTORE_TYPE_NAME.equals(arrayElementBaseType(columnDefn));
   }
 
   /**
@@ -727,17 +724,26 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * Decode one hstore array element. The element {@link ResultSet} applies the driver's own hstore
-   * decoding, so the value arrives as a Map; json mode then serializes it.
+   * Decode one hstore array element. The element {@link ResultSet} gives a decoded Map where the
+   * driver could resolve the type and the raw text where it could not, so both are normalised here
+   * exactly as the scalar path does; json mode then serializes the result.
    */
   private Object decodeHstoreElement(ResultSet elementRs) throws SQLException {
     Object value = elementRs.getObject(ELEMENT_VALUE_COLUMN);
     if (value == null) {
       return null;
     }
+    Map<String, String> map = value instanceof Map
+        ? asStringMap(value)
+        : HstoreConverter.hstoreToConnectMap(value.toString());
     return hstoreHandlingMode() == HstoreHandlingMode.JSON
-        ? JsonConverter.connectMapToJson(value)
-        : value;
+        ? JsonConverter.connectMapToJson(map)
+        : map;
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, String> asStringMap(Object value) {
+    return (Map<String, String>) value;
   }
 
   /**
@@ -796,6 +802,77 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
+   * {@inheritDoc}
+   *
+   * <p>Overridden only to carry the table definition into the binder. The interface default drops
+   * it, which leaves every column definition null at bind time; the SQL Server, Oracle and Sybase
+   * dialects override it for the same reason.
+   */
+  @Override
+  public StatementBinder statementBinder(
+      PreparedStatement statement,
+      PrimaryKeyMode pkMode,
+      SchemaPair schemaPair,
+      FieldsMetadata fieldsMetadata,
+      TableDefinition tableDefinition,
+      InsertMode insertMode,
+      boolean replaceNullWithDefault
+  ) {
+    return new PreparedStatementBinder(
+        this,
+        statement,
+        pkMode,
+        schemaPair,
+        fieldsMetadata,
+        tableDefinition,
+        insertMode,
+        replaceNullWithDefault
+    );
+  }
+
+  /**
+   * {@inheritDoc}
+   *
+   * <p>A map is written as hstore text, so the target column has to be an hstore. Checked here
+   * because this is the only bind entry point given the column definition; without it the statement
+   * carries the wrong cast and PostgreSQL reports a syntax error that never mentions hstore.
+   */
+  @Override
+  public void bindField(
+      PreparedStatement statement,
+      int index,
+      Schema schema,
+      Object value,
+      ColumnDefinition colDef,
+      String fieldName
+  ) throws SQLException {
+    if (value != null && complexTypesEnabled()) {
+      if (isStringToStringMap(schema)) {
+        requireHstoreColumn(colDef, fieldName, HSTORE_TYPE_NAME);
+      } else if (schema.type() == Schema.Type.ARRAY && isStringToStringMap(schema.valueSchema())) {
+        requireHstoreColumn(colDef, fieldName, "_" + HSTORE_TYPE_NAME);
+      }
+    }
+    super.bindField(statement, index, schema, value, colDef, fieldName);
+  }
+
+  /**
+   * Fail unless an existing column can hold hstore text. An unknown column or type is left alone:
+   * either the table is about to be created with the type this dialect chose, or there is nothing
+   * to check against.
+   */
+  private void requireHstoreColumn(ColumnDefinition colDef, String fieldName, String expected) {
+    String actual = colDef == null ? null : localTypeName(colDef.typeName());
+    if (actual == null) {
+      return;
+    }
+    if (!expected.equalsIgnoreCase(actual)) {
+      throw new ConnectException(
+          String.format(HSTORE_COLUMN_REQUIRED, fieldName, actual, expected));
+    }
+  }
+
+  /**
    * Bind a Connect map as hstore text; the {@code ::hstore} cast from {@link #valueTypeCast} parses
    * it server-side. Returns false when the schema is not the supported map shape.
    */
@@ -844,25 +921,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     }
     int lastDot = typeName.lastIndexOf('.');
     return (lastDot < 0 ? typeName : typeName.substring(lastDot + 1)).replace("\"", "");
-  }
-
-  /**
-   * Whether a type name is an hstore the driver could not resolve, i.e. one that arrived
-   * schema-qualified because the extension is off the {@code search_path}. Shared by the scalar
-   * column path and the array element path, which must agree.
-   */
-  protected static boolean isUnresolvedHstoreType(String typeName) {
-    return typeName != null
-        && !HSTORE_TYPE_NAME.equalsIgnoreCase(typeName)
-        && HSTORE_TYPE_NAME.equalsIgnoreCase(localTypeName(typeName));
-  }
-
-  /**
-   * The failure for an hstore column that a selected mapping mode cannot honour. Failing beats
-   * silently dropping the column, since a mode was explicitly asked for.
-   */
-  protected ConnectException hstoreOffSearchPathError(ColumnId column, String typeName) {
-    return new ConnectException(String.format(HSTORE_OFF_SEARCH_PATH_ERROR, column, typeName));
   }
 
   /**
@@ -996,7 +1054,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         return getSqlType(childField) + "[]";
       case MAP:
         if (isStringToStringMap(field.schema()) && complexTypesEnabled()) {
-          return hstoreTypeName(field.name());
+          return requireHstoreTypeName(field.name());
         }
         return super.getSqlType(field);
       default:
@@ -1247,7 +1305,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     if (isStringToStringMap(elementSchema)) {
       // Each element serialized to hstore text -> hstore[].
       return new ArrayElementBinding(
-          hstoreTypeName(fieldName), PostgreSqlDatabaseDialect::hstoreArrayFor);
+          requireHstoreTypeName(fieldName), PostgreSqlDatabaseDialect::hstoreArrayFor);
     }
     String elementName = elementSchema.name();
     if (elementName != null) {

@@ -938,36 +938,171 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
   }
 
   /**
-   * An hstore type outside the connection's search_path is reported as {@code "ext"."hstore"}, so a
-   * selected mapping mode cannot be honoured. The task fails at schema time, before any value is
-   * read, rather than silently dropping the column.
+   * An hstore installed outside the connection's search_path is reported as {@code "ext"."hstore"}
+   * and its values arrive as raw text rather than a decoded map. Both are normalised, so the column
+   * maps exactly as an on-search_path one does — the extension's location is not the operator's
+   * problem, matching Debezium, which strips the schema before its own catalog lookup.
    */
   @Test
-  public void testHstoreOutsideSearchPathFailsWhenAMappingModeIsSelected() throws Exception {
+  public void testHstoreOutsideSearchPathIsMappedInBothModes() throws Exception {
     execute("CREATE DATABASE offpath");
-    try (Connection c = pg.getEmbeddedPostgres().getDatabase("postgres", "offpath").getConnection();
-         Statement s = c.createStatement()) {
-      s.execute("CREATE SCHEMA ext");
-      s.execute("CREATE EXTENSION hstore SCHEMA ext");
-      s.execute("CREATE TABLE " + tableName + "(id int, hs ext.hstore)");
-      s.execute("INSERT INTO " + tableName + " VALUES (1, 'k=>v'::ext.hstore)");
-    }
+    executeIn("offpath",
+        "CREATE SCHEMA ext",
+        "CREATE EXTENSION hstore SCHEMA ext",
+        "CREATE TABLE " + tableName + "(id int, hs ext.hstore, hsa ext.hstore[])",
+        "INSERT INTO " + tableName + " VALUES (1, '\"k\" => \"v\",\"n\" => NULL'::ext.hstore, "
+            + "ARRAY['\"a\" => \"1\"'::ext.hstore, ''::ext.hstore])");
 
-    // A mapping mode was asked for and this column cannot honour it, so the task fails rather than
-    // silently dropping the column. map mode is set explicitly: under the default none the column
-    // would be skipped and this would prove nothing about search_path.
-    Throwable failure = pollUntilTaskFails(complexTypesSourceProps("offpath",
+    Map<String, String> expected = new LinkedHashMap<>();
+    expected.put("k", "v");
+    expected.put("n", null);
+
+    // map mode: the raw text is parsed into the same map a resolved column would yield.
+    Struct mapRow = pollOneRow(complexTypesSourceProps("offpath",
         JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "map"));
-    assertTrue("expected a ConnectException, got " + failure.getClass().getName(),
-        failure instanceof ConnectException);
-    String messages = causeChain(failure);
-    assertTrue("must name the cause, got: " + messages, messages.contains("search_path"));
-    assertTrue("must offer the escape hatch, got: " + messages,
-        messages.contains("hstore.handling.mode=none"));
+    new SchemaAndValueField("hs", HSTORE_MAP_SCHEMA, expected).assertFor(mapRow);
+    assertEquals("hstore[] elements must decode too",
+        Arrays.asList(Collections.singletonMap("a", "1"), Collections.emptyMap()),
+        mapRow.get("hsa"));
 
-    // none is the escape hatch: the same column is skipped instead of failing.
+    // json mode: the same value, serialized.
+    Struct jsonRow = pollOneRow(complexTypesSourceProps("offpath",
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json"));
+    SchemaAndValueField.jsonText("hs", Json.optionalSchema(),
+        parsedMapWithNull("k", "v", "n")).assertFor(jsonRow);
+
+    // none still means skip, wherever the extension lives.
     assertFieldAbsent(pollOneRow(complexTypesSourceProps("offpath",
         JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "none")), "hs");
+  }
+
+  /**
+   * The whole feature end to end against an extension in its own schema: source reads
+   * {@code ext.hstore} and {@code ext.hstore[]}, and the sink provisions and writes native hstore
+   * columns in the same database. This is the case that previously failed the source task outright.
+   */
+  @Test
+  public void testHstoreRoundTripWithExtensionOutsideSearchPath() throws Exception {
+    final String database = "extroundtrip";
+    execute("CREATE DATABASE " + database);
+    executeIn(database,
+        "CREATE SCHEMA ext",
+        "CREATE EXTENSION hstore SCHEMA ext",
+        "CREATE TABLE " + SRC_TABLE + "(id int PRIMARY KEY, hs ext.hstore, hsa ext.hstore[])",
+        "INSERT INTO " + SRC_TABLE + " VALUES (1, "
+            + "'\"key\" => \"val\",\"absent\" => NULL'::ext.hstore, "
+            + "ARRAY['\"a\" => \"1\"'::ext.hstore, ''::ext.hstore])",
+        "INSERT INTO " + SRC_TABLE + " VALUES (2, ''::ext.hstore, NULL)");
+
+    Map<String, String> sourceExtras = new HashMap<>();
+    sourceExtras.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, jdbcUrl(database));
+    sourceExtras.put(JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true");
+    sourceExtras.put(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "map");
+    Map<String, String> sinkExtras = new HashMap<>();
+    sinkExtras.put(JdbcSinkConfig.CONNECTION_URL, jdbcUrl(database));
+    sinkExtras.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
+
+    runRoundTrip(2, sourceExtras, sinkExtras);
+
+    // Both destination columns are the real extension type, not jsonb or text.
+    assertEquals("hstore", queryOne(database,
+        "SELECT udt_name FROM information_schema.columns WHERE table_name = '" + DST_TABLE
+            + "' AND column_name = 'hs'"));
+    assertEquals("_hstore", queryOne(database,
+        "SELECT udt_name FROM information_schema.columns WHERE table_name = '" + DST_TABLE
+            + "' AND column_name = 'hsa'"));
+
+    // Values survive, read back through the extension's own operators.
+    assertEquals("val", queryOne(database, "SELECT hs OPERATOR(ext.->) 'key' FROM " + DST_TABLE
+        + " WHERE id = 1"));
+    assertNull("a NULL hstore value stays NULL", queryOne(database,
+        "SELECT hs OPERATOR(ext.->) 'absent' FROM " + DST_TABLE + " WHERE id = 1"));
+    assertEquals("the key is still present", "2", queryOne(database,
+        "SELECT array_length(ext.akeys(hs), 1)::text FROM " + DST_TABLE + " WHERE id = 1"));
+    assertEquals("1", queryOne(database,
+        "SELECT hsa[1] OPERATOR(ext.->) 'a' FROM " + DST_TABLE + " WHERE id = 1"));
+    // An empty hstore stays empty rather than becoming NULL, and a NULL array stays NULL.
+    assertEquals("0", queryOne(database,
+        "SELECT coalesce(array_length(ext.akeys(hs), 1), 0)::text FROM " + DST_TABLE
+            + " WHERE id = 2"));
+    assertNull(queryOne(database, "SELECT hsa::text FROM " + DST_TABLE + " WHERE id = 2"));
+  }
+
+  /**
+   * Writing into a hand-created hstore column, rather than one this connector provisioned, and with
+   * the extension off the search_path so the cast has to carry the qualified type name.
+   */
+  @Test
+  public void testWriteToPreExistingHstoreColumnOutsideSearchPath() throws Exception {
+    final String database = "extexisting";
+    execute("CREATE DATABASE " + database);
+    executeIn(database,
+        "CREATE SCHEMA ext",
+        "CREATE EXTENSION hstore SCHEMA ext",
+        "CREATE TABLE " + tableName + "(name text, tags ext.hstore)");
+
+    props.put(JdbcSinkConfig.CONNECTION_URL, jdbcUrl(database));
+    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
+    connect.configureConnector("jdbc-sink-connector", props);
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+
+    produceRecord(HSTORE_SINK_SCHEMA, new Struct(HSTORE_SINK_SCHEMA)
+        .put("name", "web-1")
+        .put("tags", Collections.singletonMap("env", "prod")));
+
+    waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 1, 1,
+        TimeUnit.MINUTES.toMillis(2));
+
+    assertEquals("prod", queryOne(database,
+        "SELECT tags OPERATOR(ext.->) 'env' FROM " + tableName));
+  }
+
+  /**
+   * A map is written as hstore text, so an existing column of another type has to be refused with a
+   * message naming it, rather than letting PostgreSQL report a JSON syntax error.
+   */
+  @Test
+  public void testMapIntoNonHstoreColumnIsRefused() throws Exception {
+    execute("CREATE EXTENSION IF NOT EXISTS hstore",
+        "CREATE TABLE " + tableName + "(name text, tags jsonb)");
+    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
+    props.put(MAX_RETRIES, "0");
+    connect.configureConnector("jdbc-sink-connector", props);
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+
+    produceRecord(HSTORE_SINK_SCHEMA, new Struct(HSTORE_SINK_SCHEMA)
+        .put("name", "web-1")
+        .put("tags", Collections.singletonMap("env", "prod")));
+
+    assertTasksFailedWithTrace("jdbc-sink-connector", 1, "not hstore");
+  }
+
+  /** Execute statements against a named database rather than the default one. */
+  private void executeIn(String database, String... statements) throws SQLException {
+    try (Connection c = pg.getEmbeddedPostgres().getDatabase("postgres", database).getConnection();
+         Statement s = c.createStatement()) {
+      for (String statement : statements) {
+        s.execute(statement);
+      }
+    }
+  }
+
+  /** The first column of the single row the query returns, from a named database. */
+  private String queryOne(String database, String sql) throws SQLException {
+    try (Connection c = pg.getEmbeddedPostgres().getDatabase("postgres", database).getConnection();
+         Statement s = c.createStatement();
+         ResultSet rs = s.executeQuery(sql)) {
+      assertTrue("query returned no rows: " + sql, rs.next());
+      return rs.getString(1);
+    }
+  }
+
+  /** An expected parsed JSON object whose last named key carries a JSON null. */
+  private static Map<String, Object> parsedMapWithNull(String key, String value, String nullKey) {
+    Map<String, Object> map = new LinkedHashMap<>();
+    map.put(key, value);
+    map.put(nullKey, null);
+    return map;
   }
 
   /**

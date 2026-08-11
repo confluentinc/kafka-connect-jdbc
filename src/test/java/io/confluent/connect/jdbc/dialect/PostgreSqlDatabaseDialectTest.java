@@ -17,10 +17,12 @@ package io.confluent.connect.jdbc.dialect;
 
 import io.confluent.connect.jdbc.data.Json;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.sink.TableAlterOrCreateException;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
+import io.confluent.connect.jdbc.util.HstoreConverter;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
@@ -66,8 +68,10 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.startsWith;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import io.confluent.connect.jdbc.data.VariableScaleDecimal;
@@ -865,9 +869,11 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   @Test
   public void hstoreSourceSchemaShouldMapToSinkSqlTypePerMode() {
     // Starts from the schema the source path actually produces for an hstore column, so this
-    // exercises hstoreSchema() rather than re-asserting generic MAP/STRING behaviour.
+    // exercises hstoreSchema() rather than re-asserting generic MAP/STRING behaviour. The two
+    // modes deliberately land in different columns, matching Debezium: a map is hstore, while a
+    // Json string is a JSON document that happens to have come from hstore.
     Schema mapMode = sourceFieldSchema(hstoreDialect("true", "map"), Types.OTHER, "hstore");
-    assertEquals("JSONB", sinkDialect().getSqlType(sinkField(mapMode)));
+    assertEquals("hstore", sinkDialect().getSqlType(sinkField(mapMode)));
 
     PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
         JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json");
@@ -876,8 +882,8 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
-  public void shouldBindStringMapAsJsonTextForJsonbColumn() throws SQLException {
-    // The value half of MAP -> JSONB: the map is serialized and bound as text, which the ::jsonb
+  public void shouldBindStringMapAsHstoreTextForHstoreColumn() throws SQLException {
+    // The value half of MAP -> hstore: the map is serialized and bound as text, which the ::hstore
     // cast then parses server-side. Only the DDL half was covered before.
     Map<String, String> value = new LinkedHashMap<>();
     value.put("env", "prod");
@@ -887,9 +893,9 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
     PreparedStatement statement = mock(PreparedStatement.class);
     sinkDialect().bindField(statement, 1, schema, value);
-    verify(statement).setString(1, "{\"env\":\"prod\",\"absent\":null}");
+    verify(statement).setString(1, "\"env\"=>\"prod\",\"absent\"=>NULL");
 
-    // A null map never reaches maybeBindJson: bindFieldInternal short-circuits nulls before
+    // A null map never reaches maybeBindHstore: bindFieldInternal short-circuits nulls before
     // maybeBindPrimitive, so the generic null path binds it.
     PreparedStatement nullStatement = mock(PreparedStatement.class);
     sinkDialect().bindField(nullStatement, 1, schema, null);
@@ -899,7 +905,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   @Test
   public void shouldBindJsonStringAsTextForJsonbColumn() throws SQLException {
     // The bind half for json mode: a Json-tagged STRING is not a string-to-string map, so
-    // maybeBindJson declines and it binds as text — the ::jsonb cast parses it server-side.
+    // maybeBindHstore declines and it binds as text — the ::jsonb cast parses it server-side.
     PreparedStatement statement = mock(PreparedStatement.class);
     sinkDialect().bindField(statement, 1, Json.optionalSchema(), "{\"env\":\"prod\"}");
     verify(statement).setString(1, "{\"env\":\"prod\"}");
@@ -929,8 +935,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
   @Test
   public void offSearchPathHstoreIsSkippedWhenHandlingModeIsNone() {
-    // An operator who asked for none must not be failed over a type they chose to ignore, so the
-    // column is simply skipped. Also holds when the feature flag itself is off.
+    // none means skip, wherever the extension lives. Also holds when the feature flag itself is off.
     assertNull(sourceFieldSchema(
         hstoreDialect("true", "none"), Types.OTHER, "\"ext\".\"hstore\""));
     assertNull(sourceFieldSchema(
@@ -945,22 +950,40 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     assertNull(sourceFieldSchema(disabled, Types.OTHER, "hstore"));
   }
 
+  /**
+   * The raw text form is what the driver returns for an hstore it could not resolve, so it is valid
+   * input and must decode to the same map a resolved column would give.
+   */
   @Test
-  public void hstoreValueThatIsNotAMapShouldFollowColumnNullability() throws Exception {
-    // Defence in depth for any non-Map shape the driver might hand back. Off the search_path the
-    // type name is qualified, so the column is skipped before this runs; whatever else could reach
-    // here has no known cause. Follows Debezium's handleUnknownData: a nullable column degrades to
-    // null, a NOT NULL column fails because null would breach its schema anyway.
-    ResultSet rawText = hstoreResultSet("\"env\"=>\"prod\"");
+  public void hstoreRawTextShouldDecodeLikeADriverMap() throws Exception {
+    ResultSet rawText = hstoreResultSet("\"env\"=>\"prod\", \"absent\"=>NULL");
+    Map<String, String> expected = new LinkedHashMap<>();
+    expected.put("env", "prod");
+    expected.put("absent", null);
+
+    assertEquals(expected, hstoreConverter(hstoreDialect("true", "map")).convert(rawText));
+    assertEquals("{\"env\":\"prod\",\"absent\":null}",
+        hstoreConverter(jsonHstoreDialect()).convert(hstoreResultSet(
+            "\"env\"=>\"prod\", \"absent\"=>NULL")));
+  }
+
+  /**
+   * Anything that is neither a map nor parseable hstore text follows Debezium's handleUnknownData:
+   * a nullable column degrades to null, a NOT NULL column fails because null would breach its
+   * schema anyway.
+   */
+  @Test
+  public void hstoreValueThatIsNotParseableShouldFollowColumnNullability() throws Exception {
+    ResultSet garbage = hstoreResultSet("not hstore at all");
 
     PostgreSqlDatabaseDialect jsonDialect = complexTypesDialect(
         JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json");
 
     for (PostgreSqlDatabaseDialect dialect : Arrays.asList(hstoreDialect("true", "map"), jsonDialect)) {
-      assertNull(hstoreConverter(dialect, ColumnDefinition.Nullability.NULL).convert(rawText));
+      assertNull(hstoreConverter(dialect, ColumnDefinition.Nullability.NULL).convert(garbage));
 
       DataException e = assertThrows(DataException.class, () ->
-          hstoreConverter(dialect, ColumnDefinition.Nullability.NOT_NULL).convert(rawText));
+          hstoreConverter(dialect, ColumnDefinition.Nullability.NOT_NULL).convert(garbage));
       assertTrue(e.getMessage().contains("hstore"));
     }
   }
@@ -977,7 +1000,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
   @Test
   public void shouldRejectMapShapesOtherThanStringToString() {
-    // Only MAP<STRING,STRING> — the shape hstore produces — maps to JSONB. Every other map shape
+    // Only MAP<STRING,STRING> — the shape hstore produces — maps to hstore. Every other map shape
     // must fall through to the generic dialect and fail rather than silently become jsonb.
     List<Schema> unsupported = Arrays.asList(
         SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.INT32_SCHEMA).optional().build(),
@@ -1008,18 +1031,18 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         mock(PreparedStatement.class), 1, intKeyed, Collections.singletonMap(1, "v")));
   }
 
+  /**
+   * An hstore installed outside the search_path is reported schema-qualified, and is mapped exactly
+   * as a bare one — the extension's location is not the operator's problem. Any schema qualifies.
+   */
   @Test
-  public void offSearchPathHstoreFailsWhenAMappingModeIsSelected() {
-    // A mapping mode was asked for and this column cannot honour it, so the task fails rather than
-    // silently dropping the column. The message has to carry the remedy, since it is what an
-    // operator sees.
-    ConnectException e = assertThrows(ConnectException.class,
-        () -> sourceFieldSchema(hstoreDialect("true", "map"), Types.OTHER, "\"ext\".\"hstore\""));
-    assertTrue("must name the cause", e.getMessage().contains("search_path"));
-    assertTrue("must offer the escape hatch", e.getMessage().contains("hstore.handling.mode=none"));
-
-    assertThrows("json mode must fail the same way", ConnectException.class,
-        () -> sourceFieldSchema(hstoreDialect("true", "json"), Types.OTHER, "\"ext\".\"hstore\""));
+  public void offSearchPathHstoreIsMappedInEveryMode() {
+    for (String qualified : new String[]{"\"ext\".\"hstore\"", "\"my_extensions\".\"hstore\""}) {
+      assertEquals(hstoreDialect("true", "map").hstoreSchema(true),
+          sourceFieldSchema(hstoreDialect("true", "map"), Types.OTHER, qualified));
+      assertEquals(Json.optionalSchema(),
+          sourceFieldSchema(hstoreDialect("true", "json"), Types.OTHER, qualified));
+    }
   }
 
   @Test
@@ -1140,16 +1163,15 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
-  public void shouldRecogniseAnOffSearchPathHstoreTypeName() {
-    // Shared by the scalar column path (#1661) and the array element path (#1662): pgjdbc qualifies
-    // the name only when the extension is off the search_path, whatever the schema is called.
-    assertTrue(PostgreSqlDatabaseDialect.isUnresolvedHstoreType("\"ext\".\"hstore\""));
-    assertTrue(PostgreSqlDatabaseDialect.isUnresolvedHstoreType("\"my_extensions\".\"hstore\""));
-    assertFalse("on the search_path it arrives bare",
-        PostgreSqlDatabaseDialect.isUnresolvedHstoreType("hstore"));
-    assertFalse(PostgreSqlDatabaseDialect.isUnresolvedHstoreType("\"ext\".\"citext\""));
-    assertFalse(PostgreSqlDatabaseDialect.isUnresolvedHstoreType("hstore_extra"));
-    assertFalse(PostgreSqlDatabaseDialect.isUnresolvedHstoreType(null));
+  public void shouldRecogniseAnHstoreTypeInAnySchema() {
+    // pgjdbc reports the type bare while its schema is on the search_path and qualified otherwise;
+    // both are the same type, so both must be recognised, whatever the schema is called.
+    PostgreSqlDatabaseDialect dialect = hstoreDialect("true", "map");
+    assertTrue(dialect.isHstoreType(column(Types.OTHER, "hstore")));
+    assertTrue(dialect.isHstoreType(column(Types.OTHER, "\"ext\".\"hstore\"")));
+    assertTrue(dialect.isHstoreType(column(Types.OTHER, "\"my_extensions\".\"hstore\"")));
+    assertFalse(dialect.isHstoreType(column(Types.OTHER, "\"ext\".\"citext\"")));
+    assertFalse(dialect.isHstoreType(column(Types.OTHER, "hstore_extra")));
 
     // The array type is its own pg_type row in the same schema, so it qualifies the same way.
     assertEquals("_hstore", PostgreSqlDatabaseDialect.localTypeName("\"ext\".\"_hstore\""));
@@ -1202,12 +1224,12 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
-  public void shouldMapStringToStringMapToJsonbOnlyWhenComplexTypesEnabled() {
+  public void shouldMapStringToStringMapToHstoreOnlyWhenComplexTypesEnabled() {
     SinkRecordField field = new SinkRecordField(stringToStringMap(), "col", false);
 
     PostgreSqlDatabaseDialect enabled = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
         "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
-    assertEquals("JSONB", enabled.getSqlType(field));
+    assertEquals("hstore", enabled.getSqlType(field));
 
     // Without the flag the generic dialect fails at DDL time rather than inventing a column type,
     // which is what makes forgetting the flag on the sink a loud error.
@@ -1217,24 +1239,352 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
-  public void shouldBindStringToStringMapAsJsonbTextOnlyWhenComplexTypesEnabled()
+  public void shouldBindStringToStringMapAsHstoreTextOnlyWhenComplexTypesEnabled()
       throws SQLException {
     Schema schema = stringToStringMap();
     Map<String, String> value = new LinkedHashMap<>();
     value.put("env", "prod");
     value.put("absent", null);
 
-    // Serialized and bound as text; the ::jsonb cast from valueTypeCast parses it server-side.
+    // Serialized and bound as text; the ::hstore cast from valueTypeCast parses it server-side.
     PreparedStatement statement = mock(PreparedStatement.class);
     new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
         "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"))
         .bindField(statement, 1, schema, value);
-    verify(statement).setString(1, "{\"env\":\"prod\",\"absent\":null}");
+    verify(statement).setString(1, "\"env\"=>\"prod\",\"absent\"=>NULL");
 
     PostgreSqlDatabaseDialect disabled =
         new PostgreSqlDatabaseDialect(sinkConfigWithUrl("jdbc:postgresql://something"));
     assertThrows(ConnectException.class,
         () -> disabled.bindField(mock(PreparedStatement.class), 1, schema, value));
+  }
+
+  /**
+   * The hstore text form the bind produces. Everything is quoted, so a delimiter inside a key or
+   * value is inert and the string {@code NULL} stays distinct from a NULL value.
+   */
+  @Test
+  public void shouldSerializeMapsToHstoreText() {
+    Map<String, String> map = new LinkedHashMap<>();
+    map.put("env", "prod");
+    map.put("absent", null);
+    map.put("literal", "NULL");
+    map.put("a=>b", "c,d");
+    map.put("say \"hi\"", "back\\slash");
+
+    assertEquals("\"env\"=>\"prod\",\"absent\"=>NULL,\"literal\"=>\"NULL\","
+            + "\"a=>b\"=>\"c,d\",\"say \\\"hi\\\"\"=>\"back\\\\slash\"",
+        HstoreConverter.connectMapToHstore(map));
+
+    assertEquals("", HstoreConverter.connectMapToHstore(Collections.emptyMap()));
+    assertNull(HstoreConverter.connectMapToHstore(null));
+  }
+
+  /**
+   * The text form the driver hands back for an hstore it could not resolve. Quoting makes the
+   * delimiters inert, and a bare NULL is a null value while a quoted one is the string.
+   */
+  @Test
+  public void shouldParseHstoreText() {
+    Map<String, String> expected = new LinkedHashMap<>();
+    expected.put("env", "prod");
+    expected.put("absent", null);
+    expected.put("literal", "NULL");
+    expected.put("a=>b", "c,d");
+    expected.put("say \"hi\"", "back\\slash");
+
+    // PostgreSQL renders pairs separated by ", " and escapes quotes and backslashes.
+    assertEquals(expected, HstoreConverter.hstoreToConnectMap(
+        "\"env\"=>\"prod\", \"absent\"=>NULL, \"literal\"=>\"NULL\", "
+            + "\"a=>b\"=>\"c,d\", \"say \\\"hi\\\"\"=>\"back\\\\slash\""));
+
+    assertEquals(Collections.emptyMap(), HstoreConverter.hstoreToConnectMap(""));
+    assertEquals(Collections.emptyMap(), HstoreConverter.hstoreToConnectMap("   "));
+    assertNull(HstoreConverter.hstoreToConnectMap(null));
+  }
+
+  /** Whatever the serializer writes, the parser must read back identically. */
+  @Test
+  public void shouldRoundTripHstoreTextThroughBothDirections() {
+    Map<String, String> original = new LinkedHashMap<>();
+    original.put("env", "prod");
+    original.put("absent", null);
+    original.put("literal", "NULL");
+    original.put("a=>b", "c,d");
+    original.put("say \"hi\"", "back\\slash");
+    original.put("key 2", " ##123 78");
+    original.put("empty", "");
+
+    assertEquals(original, HstoreConverter.hstoreToConnectMap(
+        HstoreConverter.connectMapToHstore(original)));
+    assertEquals(Collections.emptyMap(), HstoreConverter.hstoreToConnectMap(
+        HstoreConverter.connectMapToHstore(Collections.emptyMap())));
+  }
+
+  @Test
+  public void shouldRejectMalformedHstoreText() {
+    for (String malformed : new String[]{
+        "not hstore at all",          // no => at all
+        "\"k\"",                      // key with no value
+        "\"k\"=>",                    // separator with no value
+        "\"k\"=>\"unterminated",      // unclosed quote
+        "\"a\"=>\"1\" \"b\"=>\"2\"",     // missing comma between pairs
+        "a=>1",                       // unquoted: hstore_out always quotes, so this is not ours
+        "\"a\"=>1",                   // unquoted value, likewise
+        "\"a\"=>null"                 // lowercase null is the string, never the NULL literal
+    }) {
+      assertThrows("should reject: " + malformed, DataException.class,
+          () -> HstoreConverter.hstoreToConnectMap(malformed));
+    }
+  }
+
+  @Test
+  public void shouldRejectValuesThatAreNotStringMaps() {
+    assertThrows(DataException.class, () -> HstoreConverter.connectMapToHstore("not a map"));
+    assertThrows(DataException.class,
+        () -> HstoreConverter.connectMapToHstore(Collections.singletonMap(null, "v")));
+    // A non-String key or value fails rather than being coerced through toString, so a schema and
+    // value that disagree surface here instead of silently reaching the database.
+    assertThrows(DataException.class,
+        () -> HstoreConverter.connectMapToHstore(Collections.singletonMap("k", 1)));
+    assertThrows(DataException.class,
+        () -> HstoreConverter.connectMapToHstore(Collections.singletonMap(1, "v")));
+  }
+
+  /**
+   * An extension installed outside the search_path must still be usable: the DDL and the array
+   * element type take the schema-qualified name resolved from the connection.
+   */
+  @Test
+  public void shouldUseTheResolvedHstoreTypeNameForDdl() {
+    PostgreSqlDatabaseDialect sink = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+    SinkRecordField field = new SinkRecordField(stringToStringMap(), "col", false);
+
+    sink.hstoreTypeName = "\"ext\".hstore";
+    sink.hstoreTypeResolved = true;
+    assertEquals("\"ext\".hstore", sink.getSqlType(field));
+    assertEquals("\"ext\".hstore[]",
+        sink.getSqlType(new SinkRecordField(arraySchema(stringToStringMap()), "col", false)));
+  }
+
+  /**
+   * A schema name is user-chosen and may legally contain a double quote, which has to be doubled
+   * for the qualified type name to parse. Without escaping, a schema named {@code my"schema}
+   * produces {@code "my"schema".hstore}, which terminates the identifier early.
+   */
+  @Test
+  public void shouldEscapeQuotesInTheResolvedHstoreSchemaName() throws Exception {
+    ResultSet searchPath = mock(ResultSet.class);
+    when(searchPath.next()).thenReturn(true);
+    when(searchPath.getBoolean(1)).thenReturn(false);
+
+    ResultSet extension = mock(ResultSet.class);
+    when(extension.next()).thenReturn(true);
+    when(extension.getString(1)).thenReturn("my\"schema");
+
+    Statement statement = mock(Statement.class);
+    when(statement.executeQuery("SELECT to_regtype('hstore') IS NOT NULL")).thenReturn(searchPath);
+    when(statement.executeQuery(startsWith("SELECT n.nspname"))).thenReturn(extension);
+
+    Connection connection = mock(Connection.class);
+    when(connection.createStatement()).thenReturn(statement);
+
+    assertEquals("\"my\"\"schema\".hstore",
+        PostgreSqlDatabaseDialect.resolveHstoreTypeName(connection));
+  }
+
+  /**
+   * A catalog read that fails is attempted once, not once per connection: a persistent failure
+   * would otherwise cost a round-trip and a WARN on every batch. It still leaves the type
+   * unresolved, so the bare name is assumed rather than the extension reported as missing.
+   */
+  @Test
+  public void shouldRetryTheHstoreLookupAfterACatalogFailure() throws Exception {
+    ResultSet resolved = mock(ResultSet.class);
+    when(resolved.next()).thenReturn(true);
+    when(resolved.getBoolean(1)).thenReturn(true);
+
+    Statement statement = mock(Statement.class);
+    when(statement.executeQuery("SELECT to_regtype('hstore') IS NOT NULL"))
+        .thenThrow(new SQLException("permission denied for table pg_extension"))
+        .thenReturn(resolved);
+    Connection connection = mock(Connection.class);
+    when(connection.createStatement()).thenReturn(statement);
+
+    PostgreSqlDatabaseDialect sink = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+
+    sink.maybeResolveHstoreType(connection);
+    assertFalse("a failed read is not a resolution", sink.hstoreTypeResolved);
+    assertEquals("the bare name is assumed while unresolved", "hstore",
+        sink.getSqlType(new SinkRecordField(stringToStringMap(), "tags", false)));
+
+    // The next connection retries, so a transient failure heals.
+    sink.maybeResolveHstoreType(connection);
+    assertTrue("the retry should resolve", sink.hstoreTypeResolved);
+    verify(statement, times(2)).executeQuery("SELECT to_regtype('hstore') IS NOT NULL");
+  }
+
+  /**
+   * An unparseable array element degrades to null, as the scalar path does for an optional column,
+   * rather than failing the whole source task on one bad element.
+   */
+  @Test
+  public void shouldEmitNullForAnUnparseableHstoreArrayElement() throws Exception {
+    PostgreSqlDatabaseDialect dialect = complexTypesDialect(
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "map");
+    ColumnDefinition column = column(Types.ARRAY, "_hstore");
+    ColumnMapping mapping = new ColumnMapping(
+        column, 1, new Field("col", 0, arraySchema(stringToStringMap())));
+    DatabaseDialect.ColumnConverter converter =
+        dialect.columnConverterFor(mapping, column, 1, true);
+    assertNotNull(converter);
+
+    ResultSet resultSet = mock(ResultSet.class);
+    Array array = mock(Array.class);
+    ResultSet elementRs = mock(ResultSet.class);
+    when(resultSet.getArray(1)).thenReturn(array);
+    when(array.getArray()).thenReturn(new Object[]{"not hstore at all"});
+    when(array.getResultSet()).thenReturn(elementRs);
+    when(elementRs.next()).thenReturn(true, false);
+    when(elementRs.getObject(2)).thenReturn("not hstore at all");
+
+    assertEquals(Collections.singletonList(null), converter.convert(resultSet));
+  }
+
+  /**
+   * Both refusals must be {@link TableAlterOrCreateException}: that is what the writer rolls the
+   * batch back on and what the task routes to a reporter, so a plain ConnectException would leak
+   * an open transaction and bypass the DLQ.
+   */
+  @Test
+  public void shouldRaiseHstoreRefusalsAsTableAlterOrCreate() {
+    PostgreSqlDatabaseDialect sink = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+    sink.hstoreTypeName = null;
+    sink.hstoreTypeResolved = true;
+    assertThrows("a missing extension must roll back and be reportable",
+        TableAlterOrCreateException.class,
+        () -> sink.getSqlType(new SinkRecordField(stringToStringMap(), "tags", false)));
+
+    TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("t");
+    builder.withColumn("tags").type("jsonb", JDBCType.OTHER, Object.class);
+    TableDefinition tableDefn = builder.build();
+    assertThrows("a wrong column type must roll back and be reportable",
+        TableAlterOrCreateException.class,
+        () -> sinkDialect().bindField(mock(PreparedStatement.class), 1, stringToStringMap(),
+            Collections.singletonMap("k", "v"),
+            tableDefn.definitionForColumn("tags"), "tags"));
+  }
+
+  /** Selected but unavailable must fail, naming the field and how to install the extension. */
+  @Test
+  public void shouldFailWhenTheHstoreExtensionIsNotInstalled() {
+    PostgreSqlDatabaseDialect sink = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+    sink.hstoreTypeName = null;
+    sink.hstoreTypeResolved = true;
+
+    ConnectException thrown = assertThrows(ConnectException.class, () -> sink.getSqlType(
+        new SinkRecordField(stringToStringMap(), "tags", false)));
+    assertTrue("message should name the field, but was: " + thrown.getMessage(),
+        thrown.getMessage().contains("tags"));
+    assertTrue("message should say how to install it, but was: " + thrown.getMessage(),
+        thrown.getMessage().contains("CREATE EXTENSION hstore"));
+
+    // An array element fails the same way, and must name its column rather than "a map value".
+    ConnectException fromArray = assertThrows(ConnectException.class,
+        () -> sink.bindField(mock(PreparedStatement.class), 1,
+            arraySchema(stringToStringMap()), Collections.singletonList(
+                Collections.singletonMap("env", "prod")),
+            mock(ColumnDefinition.class), "tags"));
+    assertTrue("array message should name the field, but was: " + fromArray.getMessage(),
+        fromArray.getMessage().contains("tags"));
+  }
+
+  /**
+   * A map is written as hstore text, so an existing column of any other type must be refused before
+   * the bind. Otherwise the statement carries that column's cast and PostgreSQL reports a syntax
+   * error that never mentions hstore.
+   */
+  @Test
+  public void shouldRefuseAMapBoundIntoANonHstoreColumn() {
+    PostgreSqlDatabaseDialect sink = complexTypesSinkDialect();
+
+    ConnectException thrown = assertThrows(ConnectException.class,
+        () -> sink.bindField(mock(PreparedStatement.class), 1, stringToStringMap(),
+            Collections.singletonMap("env", "prod"), columnOfType("jsonb"), "tags"));
+    assertTrue("must name the field, but was: " + thrown.getMessage(),
+        thrown.getMessage().contains("tags"));
+    assertTrue("must name the column type, but was: " + thrown.getMessage(),
+        thrown.getMessage().contains("jsonb"));
+
+    // The array element type is checked the same way.
+    assertThrows(ConnectException.class,
+        () -> sink.bindField(mock(PreparedStatement.class), 1, arraySchema(stringToStringMap()),
+            Collections.singletonList(Collections.singletonMap("env", "prod")),
+            columnOfType("_jsonb"), "tags"));
+
+    // An hstore column is accepted, wherever the extension lives.
+    for (String hstore : new String[]{"hstore", "\"ext\".\"hstore\""}) {
+      sinkBindMap(sink, hstore);
+    }
+  }
+
+  private void sinkBindMap(PostgreSqlDatabaseDialect sink, String columnType) {
+    try {
+      sink.bindField(mock(PreparedStatement.class), 1, stringToStringMap(),
+          Collections.singletonMap("env", "prod"), columnOfType(columnType), "tags");
+    } catch (SQLException e) {
+      throw new AssertionError("binding into a " + columnType + " column should succeed", e);
+    }
+  }
+
+  private ColumnDefinition columnOfType(String typeName) {
+    ColumnDefinition colDef = mock(ColumnDefinition.class);
+    when(colDef.typeName()).thenReturn(typeName);
+    return colDef;
+  }
+
+  /**
+   * Unresolved is not the same as absent. Before a connection exists, or after a catalog read
+   * failed, the bare type name is assumed rather than reporting the extension as missing — which
+   * would name the wrong cause and fail a write that PostgreSQL might well accept.
+   */
+  @Test
+  public void shouldAssumeTheBareHstoreTypeNameWhileUnresolved() {
+    PostgreSqlDatabaseDialect sink = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+    assertFalse("precondition: nothing has been resolved yet", sink.hstoreTypeResolved);
+
+    assertEquals("hstore",
+        sink.getSqlType(new SinkRecordField(stringToStringMap(), "tags", false)));
+  }
+
+  /** An hstore column off the search_path is reported qualified and must be cast by that name. */
+  @Test
+  public void shouldCastHstoreColumnsByTheirReportedTypeName() {
+    TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("myTable");
+    builder.withColumn("plain").type("hstore", JDBCType.OTHER, Object.class);
+    builder.withColumn("qualified").type("\"ext\".\"hstore\"", JDBCType.OTHER, Object.class);
+    TableDefinition tableDefn = builder.build();
+
+    assertEquals("::hstore",
+        dialect.valueTypeCast(tableDefn, tableDefn.definitionForColumn("plain").id()));
+    assertEquals("::\"ext\".\"hstore\"",
+        dialect.valueTypeCast(tableDefn, tableDefn.definitionForColumn("qualified").id()));
+  }
+
+  /** pgjdbc leaves embedded quotes unescaped, so the cast must requote the reported name. */
+  @Test
+  public void shouldRequoteAnHstoreTypeNameTheDriverLeftUnescaped() {
+    TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("myTable");
+    builder.withColumn("hs").type("\"e\"x\".\"hstore\"", JDBCType.OTHER, Object.class);
+    TableDefinition tableDefn = builder.build();
+
+    assertEquals("::\"e\"\"x\".\"hstore\"",
+        dialect.valueTypeCast(tableDefn, tableDefn.definitionForColumn("hs").id()));
   }
 
   private Schema stringToStringMap() {
@@ -1743,15 +2093,15 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   @Test
-  public void hstoreArrayShouldBindToJsonbArrayInBothModes() throws SQLException {
-    // map mode: each element serialized to JSON text, bound as jsonb[].
+  public void hstoreArrayShouldBindPerMode() throws SQLException {
+    // map mode: each element serialized to hstore text, bound as hstore[].
     verifyArrayBind(
         SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA).optional().build(),
         Arrays.asList(Collections.singletonMap("env", "prod"), null),
-        PostgreSqlDatabaseDialect.JSONB_TYPE_NAME,
-        new Object[]{"{\"env\":\"prod\"}", null});
+        PostgreSqlDatabaseDialect.HSTORE_TYPE_NAME,
+        new Object[]{"\"env\"=>\"prod\"", null});
 
-    // json mode: elements are already JSON text.
+    // json mode: elements are already JSON text, and stay a jsonb[] document array.
     verifyArrayBind(
         Json.optionalSchema(),
         Arrays.asList("{\"env\":\"prod\"}", null),
@@ -1766,15 +2116,18 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     assertNull(sourceFieldSchema(disabled, Types.ARRAY, "_hstore"));
   }
 
+  /**
+   * The array type is its own pg_type row in the same schema, so it is qualified exactly as the
+   * scalar type is, and is mapped the same way.
+   */
   @Test
-  public void offSearchPathHstoreArrayFailsWhenAMappingModeIsSelected() {
-    // The array type is its own pg_type row in the same schema, so it is qualified exactly as the
-    // scalar type is; hstore[] must therefore fail the task rather than vanish, as hstore does.
+  public void offSearchPathHstoreArrayIsMappedInEveryMode() {
     for (String mode : new String[]{"map", "json"}) {
-      ConnectException e = assertThrows(mode + " must fail", ConnectException.class,
-          () -> sourceFieldSchema(
-              hstoreDialect("true", mode), Types.ARRAY, "\"ext\".\"_hstore\""));
-      assertTrue("must name the cause", e.getMessage().contains("search_path"));
+      Schema schema = sourceFieldSchema(
+          hstoreDialect("true", mode), Types.ARRAY, "\"ext\".\"_hstore\"");
+      assertNotNull(mode + " must map the column", schema);
+      assertEquals(Type.ARRAY, schema.type());
+      assertEquals(hstoreDialect("true", mode).hstoreSchema(true), schema.valueSchema());
     }
 
     // none stays the escape hatch, and an unrelated array element type is untouched.

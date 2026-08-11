@@ -40,6 +40,7 @@ import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
 import org.junit.Test;
 
+import java.nio.ByteBuffer;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.JDBCType;
@@ -59,6 +60,7 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -359,6 +361,27 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     assertEquals("", dialect.valueTypeCast(tableDefn, dateColumn));
     // The cast that turns the bound JSON text into jsonb server-side.
     assertEquals("::jsonb", dialect.valueTypeCast(tableDefn, jsonbColumn));
+  }
+
+  /**
+   * The array of a cast type needs the same cast: a uuid[] source column becomes a Connect
+   * ARRAY&lt;STRING&gt; and binds as text[], which only reaches a uuid[] column through
+   * {@code ::uuid[]}.
+   */
+  @Test
+  public void shouldComputeValueTypeCastForArrayColumns() {
+    TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("myTable");
+    builder.withColumn("uuidArray").type("_uuid", JDBCType.ARRAY, Object.class);
+    builder.withColumn("jsonbArray").type("_jsonb", JDBCType.ARRAY, Object.class);
+    builder.withColumn("textArray").type("_text", JDBCType.ARRAY, Object.class);
+    TableDefinition tableDefn = builder.build();
+
+    assertEquals("::uuid[]",
+        dialect.valueTypeCast(tableDefn, tableDefn.definitionForColumn("uuidArray").id()));
+    assertEquals("::jsonb[]",
+        dialect.valueTypeCast(tableDefn, tableDefn.definitionForColumn("jsonbArray").id()));
+    assertEquals("",
+        dialect.valueTypeCast(tableDefn, tableDefn.definitionForColumn("textArray").id()));
   }
 
   @Test
@@ -1254,6 +1277,8 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     assertArrayElement("_float4", Type.FLOAT32, null);
     assertArrayElement("_float8", Type.FLOAT64, null);
     assertArrayElement("_bool", Type.BOOLEAN, null);
+    assertArrayElement("_bytea", Type.BYTES, null);
+    assertArrayElement("_uuid", Type.STRING, null);
     assertArrayElement("_numeric", Type.STRUCT, VariableScaleDecimal.LOGICAL_NAME);
     assertArrayElement("_json", Type.STRING, Json.LOGICAL_NAME);
     assertArrayElement("_jsonb", Type.STRING, Json.LOGICAL_NAME);
@@ -1278,8 +1303,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
   @Test
   public void shouldSkipUnsupportedArrayElementTypes() {
-    // uuid[]/inet[]/money[] are not in the supported element set, so the column is skipped.
-    assertNull(sourceFieldSchema(complexTypesDialect(), Types.ARRAY, "_uuid"));
+    // inet[]/money[] are not in the supported element set, so the column is skipped.
     assertNull(sourceFieldSchema(complexTypesDialect(), Types.ARRAY, "_inet"));
     assertNull(sourceFieldSchema(complexTypesDialect(), Types.ARRAY, "_money"));
   }
@@ -1425,12 +1449,9 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   public void shouldNotMapUnbindableArrayElementsToSqlType() {
     PostgreSqlDatabaseDialect sink = complexTypesSinkDialect();
     Schema nested = arraySchema(arraySchema(Schema.OPTIONAL_INT32_SCHEMA));
-    Schema bytes = arraySchema(Schema.OPTIONAL_BYTES_SCHEMA);
 
     assertThrows(ConnectException.class,
         () -> sink.getSqlType(new SinkRecordField(nested, "col", false)));
-    assertThrows(ConnectException.class,
-        () -> sink.getSqlType(new SinkRecordField(bytes, "col", false)));
     assertEquals("a named BYTES element that does bind is still mapped", "DECIMAL[]",
         sink.getSqlType(
             new SinkRecordField(arraySchema(Decimal.builder(2).optional().build()), "col", false)));
@@ -1541,6 +1562,109 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         mock(ColumnDefinition.class), "field");
 
     verify(statement).setObject(eq(1), any(Integer[].class), eq(Types.ARRAY));
+  }
+
+  /**
+   * A {@code bytea} element is itself a {@code byte[]}, so the multi-dimensional guard — which
+   * treats any array-valued element as nested — must not fire on it and null the whole column.
+   */
+  @Test
+  public void shouldReadByteaArrayElements() throws Exception {
+    byte[] first = new byte[]{1, 2};
+    byte[] second = new byte[]{3};
+    ResultSet rs = arrayResultSet(new byte[][]{first, null, second});
+
+    Object value = arrayColumnConverter("_bytea").convert(rs);
+
+    assertEquals(Arrays.asList(first, null, second), value);
+  }
+
+  /** Only a nested Object[] is multi-dimensional for bytea, i.e. a {@code bytea[][]} column. */
+  @Test
+  public void shouldSkipMultiDimensionalByteaArrayElements() throws Exception {
+    ResultSet rs = arrayResultSet(new byte[][][]{{{1, 2}}, {{3}}});
+
+    Object value = arrayColumnConverter("_bytea").convert(rs);
+
+    assertEquals(Arrays.asList(null, null), value);
+  }
+
+  /** pgjdbc yields java.util.UUID elements; the scalar path emits canonical text, so must this. */
+  @Test
+  public void shouldReadUuidArrayElementsAsText() throws Exception {
+    UUID uuid = UUID.fromString("0d3ec2e0-9c6a-4b1e-9f1a-7c3a2b5d6e7f");
+    ResultSet rs = arrayResultSet(new UUID[]{uuid, null});
+
+    Object value = arrayColumnConverter("_uuid").convert(rs);
+
+    assertEquals(Arrays.asList(uuid.toString(), null), value);
+  }
+
+  @Test
+  public void shouldBindByteaArrayAsNativeByteaArray() throws Exception {
+    byte[] first = new byte[]{1, 2};
+    verifyArrayBind(Schema.OPTIONAL_BYTES_SCHEMA, Arrays.asList(first, null), "bytea",
+        new Object[]{first, null});
+  }
+
+  /** Connect BYTES permits a ByteBuffer, which must be unwrapped without consuming the caller's. */
+  @Test
+  public void shouldBindByteBufferArrayAsNativeByteaArray() throws Exception {
+    PreparedStatement statement = mock(PreparedStatement.class);
+    Connection connection = mock(Connection.class);
+    when(statement.getConnection()).thenReturn(connection);
+    ByteBuffer buffer = ByteBuffer.wrap(new byte[]{7, 8});
+
+    complexTypesSinkDialect().bindField(statement, 7,
+        SchemaBuilder.array(Schema.OPTIONAL_BYTES_SCHEMA).optional().build(),
+        Collections.singletonList(buffer), mock(ColumnDefinition.class), "field");
+
+    ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
+    verify(connection).createArrayOf(eq("bytea"), captor.capture());
+    assertTrue("bytea[] must be bound as byte[][]", captor.getValue() instanceof byte[][]);
+    assertArrayEquals(new byte[]{7, 8}, (byte[]) captor.getValue()[0]);
+    assertEquals("the source buffer must not be drained", 2, buffer.remaining());
+  }
+
+  @Test
+  public void shouldMapByteaArrayToSqlType() {
+    Schema bytes = arraySchema(Schema.OPTIONAL_BYTES_SCHEMA);
+    assertEquals("BYTEA[]",
+        complexTypesSinkDialect().getSqlType(new SinkRecordField(bytes, "col", false)));
+
+    PostgreSqlDatabaseDialect disabled =
+        new PostgreSqlDatabaseDialect(sinkConfigWithUrl("jdbc:postgresql://something"));
+    assertThrows(ConnectException.class,
+        () -> disabled.getSqlType(new SinkRecordField(bytes, "col", false)));
+  }
+
+  /**
+   * A temporal element carries {@code java.util.Date} values, which the primitive fallback would
+   * try to store in a {@code Long[]}/{@code Integer[]} and fail with a bare ArrayStoreException.
+   * With the flag off the column must not be advertised at all, and a bind against a pre-existing
+   * column must name the config rather than surface the JVM error.
+   */
+  @Test
+  public void temporalArraysAreRejectedWhenComplexTypesDisabled() {
+    PostgreSqlDatabaseDialect disabled =
+        new PostgreSqlDatabaseDialect(sinkConfigWithUrl("jdbc:postgresql://something"));
+    List<Schema> elements = Arrays.asList(
+        Date.builder().optional().build(),
+        Time.builder().optional().build(),
+        Timestamp.builder().optional().build(),
+        Decimal.builder(2).optional().build());
+
+    for (Schema element : elements) {
+      assertThrows("no column type for " + element.name(), ConnectException.class,
+          () -> disabled.getSqlType(new SinkRecordField(arraySchema(element), "col", false)));
+
+      ConnectException thrown = assertThrows(ConnectException.class,
+          () -> disabled.bindField(mock(PreparedStatement.class), 1,
+              arraySchema(element), Collections.singletonList(new java.util.Date(0L)),
+              mock(ColumnDefinition.class), "col"));
+      assertTrue("message should name the config, but was: " + thrown.getMessage(),
+          thrown.getMessage().contains(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE));
+    }
   }
 
   /**
@@ -2149,6 +2273,11 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
     ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
     verify(connection).createArrayOf(eq(expectedPgType), captor.capture());
+    if ("bytea".equals(expectedPgType)) {
+      // The component type is the whole correctness condition: pgjdbc rejects a byte[] nested
+      // in an Object[], so comparing elements alone would pass on a byte[][] and an Object[].
+      assertTrue("bytea[] must be bound as byte[][]", captor.getValue() instanceof byte[][]);
+    }
     assertEquals(Arrays.asList(expectedElements), Arrays.asList(captor.getValue()));
     verify(statement).setArray(7, boundArray);
   }

@@ -19,6 +19,7 @@ import io.confluent.connect.jdbc.data.Json;
 import io.confluent.connect.jdbc.data.VariableScaleDecimal;
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.sink.TableAlterOrCreateException;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
@@ -135,23 +136,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           JSON_TYPE_NAME,
           JSONB_TYPE_NAME,
           UUID_TYPE_NAME
-      ))
-  );
-
-  /**
-   * Logical array element types that only {@link #arrayElementBinding(Schema)} can write. Their
-   * Connect values are {@code java.util.Date} or {@code BigDecimal}, neither of which matches the
-   * array the primitive fallback builds from the physical type; without the complex types they must
-   * fail rather than advertise an unwritable column. {@code Json} is excluded deliberately — it is
-   * STRING-based and degrades losslessly to {@code text[]} — as is {@code VariableScaleDecimal},
-   * which is STRUCT-typed and so already refused by both paths.
-   */
-  private static final Set<String> COMPLEX_ARRAY_ELEMENT_TYPES = Collections.unmodifiableSet(
-      new HashSet<>(Arrays.asList(
-          Decimal.LOGICAL_NAME,
-          Date.LOGICAL_NAME,
-          Time.LOGICAL_NAME,
-          Timestamp.LOGICAL_NAME
       ))
   );
 
@@ -877,7 +861,13 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * auto-create build a column every insert then fails on.
    */
   private boolean isUnbindableArrayElement(SinkRecordField field) {
-    if (field.schema().valueSchema().type() == Schema.Type.ARRAY) {
+    Schema element = field.schema().valueSchema();
+    if (element.type() == Schema.Type.ARRAY) {
+      return true;
+    }
+    // BYTES binds only through the complex-types path, so a named one no binding claims — a custom
+    // logical type, say — would otherwise advertise a bytea[] column every insert then fails on.
+    if (element.type() == Schema.Type.BYTES && arrayElementBinding(element) == null) {
       return true;
     }
     return config instanceof JdbcSinkConfig
@@ -886,11 +876,13 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
   /**
    * Whether an element is written only by {@link #arrayElementBinding(Schema)}: a bytea-bound plain
-   * BYTES element, or one of the {@link #COMPLEX_ARRAY_ELEMENT_TYPES} logical types.
+   * element the complex-types path would bind, other than Json.
    */
-  private static boolean isComplexArrayElement(Schema element) {
-    return (element.type() == Schema.Type.BYTES && element.name() == null)
-        || COMPLEX_ARRAY_ELEMENT_TYPES.contains(element.name());
+  private boolean isComplexArrayElement(Schema element) {
+    // Derived from the binding rather than an enumerated name list, so any element the complex
+    // types would write is refused when they are off. Json is the deliberate exception: it is
+    // STRING-based and degrades losslessly to text[].
+    return !Json.LOGICAL_NAME.equals(element.name()) && arrayElementBinding(element) != null;
   }
 
   /**
@@ -898,8 +890,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * from both the DDL and the bind path so an operator sees the same actionable message either way,
    * rather than an unwritable column or a driver-level type error.
    */
-  private static ConnectException complexArrayElementDisabled(Schema element, String fieldName) {
-    return new ConnectException(String.format(COMPLEX_ARRAY_ELEMENT_DISABLED,
+  private static TableAlterOrCreateException complexArrayElementDisabled(
+      Schema element, String fieldName) {
+    return new TableAlterOrCreateException(String.format(COMPLEX_ARRAY_ELEMENT_DISABLED,
         element.name() == null ? element.type() : element.name(),
         fieldName, JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE));
   }
@@ -978,11 +971,13 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         return "BYTEA";
       case ARRAY: {
         Schema element = field.schema().valueSchema();
-        if (!complexTypesEnabled() && isComplexArrayElement(element)) {
-          throw complexArrayElementDisabled(element, field.name());
-        }
+        // Unbindable first: enabling the feature cannot help an element nothing can write, so
+        // advising it would only lead to a second and less helpful failure.
         if (isUnbindableArrayElement(field)) {
           return super.getSqlType(field);
+        }
+        if (!complexTypesEnabled() && isComplexArrayElement(element)) {
+          throw complexArrayElementDisabled(element, field.name());
         }
         SinkRecordField childField = new SinkRecordField(
             element,

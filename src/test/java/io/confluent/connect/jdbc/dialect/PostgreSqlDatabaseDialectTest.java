@@ -1621,6 +1621,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
     ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
     verify(connection).createArrayOf(eq("bytea"), captor.capture());
+    assertTrue("bytea[] must be bound as byte[][]", captor.getValue() instanceof byte[][]);
     assertArrayEquals(new byte[]{7, 8}, (byte[]) captor.getValue()[0]);
     assertEquals("the source buffer must not be drained", 2, buffer.remaining());
   }
@@ -2272,6 +2273,11 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
     ArgumentCaptor<Object[]> captor = ArgumentCaptor.forClass(Object[].class);
     verify(connection).createArrayOf(eq(expectedPgType), captor.capture());
+    if ("bytea".equals(expectedPgType)) {
+      // The component type is the whole correctness condition: pgjdbc rejects a byte[] nested
+      // in an Object[], so comparing elements alone would pass on a byte[][] and an Object[].
+      assertTrue("bytea[] must be bound as byte[][]", captor.getValue() instanceof byte[][]);
+    }
     assertEquals(Arrays.asList(expectedElements), Arrays.asList(captor.getValue()));
     verify(statement).setArray(7, boundArray);
   }

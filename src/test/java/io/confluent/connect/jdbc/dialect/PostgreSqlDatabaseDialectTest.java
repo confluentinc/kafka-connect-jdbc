@@ -67,8 +67,10 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.startsWith;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import io.confluent.connect.jdbc.data.VariableScaleDecimal;
@@ -1340,6 +1342,12 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     assertThrows(DataException.class, () -> HstoreConverter.connectMapToHstore("not a map"));
     assertThrows(DataException.class,
         () -> HstoreConverter.connectMapToHstore(Collections.singletonMap(null, "v")));
+    // A non-String key or value fails rather than being coerced through toString, so a schema and
+    // value that disagree surface here instead of silently reaching the database.
+    assertThrows(DataException.class,
+        () -> HstoreConverter.connectMapToHstore(Collections.singletonMap("k", 1)));
+    assertThrows(DataException.class,
+        () -> HstoreConverter.connectMapToHstore(Collections.singletonMap(1, "v")));
   }
 
   /**
@@ -1357,6 +1365,57 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     assertEquals("\"ext\".hstore", sink.getSqlType(field));
     assertEquals("\"ext\".hstore[]",
         sink.getSqlType(new SinkRecordField(arraySchema(stringToStringMap()), "col", false)));
+  }
+
+  /**
+   * A schema name is user-chosen and may legally contain a double quote, which has to be doubled
+   * for the qualified type name to parse. Without escaping, a schema named {@code my"schema}
+   * produces {@code "my"schema".hstore}, which terminates the identifier early.
+   */
+  @Test
+  public void shouldEscapeQuotesInTheResolvedHstoreSchemaName() throws Exception {
+    ResultSet searchPath = mock(ResultSet.class);
+    when(searchPath.next()).thenReturn(true);
+    when(searchPath.getBoolean(1)).thenReturn(false);
+
+    ResultSet extension = mock(ResultSet.class);
+    when(extension.next()).thenReturn(true);
+    when(extension.getString(1)).thenReturn("my\"schema");
+
+    Statement statement = mock(Statement.class);
+    when(statement.executeQuery("SELECT to_regtype('hstore') IS NOT NULL")).thenReturn(searchPath);
+    when(statement.executeQuery(startsWith("SELECT n.nspname"))).thenReturn(extension);
+
+    Connection connection = mock(Connection.class);
+    when(connection.createStatement()).thenReturn(statement);
+
+    assertEquals("\"my\"\"schema\".hstore",
+        PostgreSqlDatabaseDialect.resolveHstoreTypeName(connection));
+  }
+
+  /**
+   * A catalog read that fails is attempted once, not once per connection: a persistent failure
+   * would otherwise cost a round-trip and a WARN on every batch. It still leaves the type
+   * unresolved, so the bare name is assumed rather than the extension reported as missing.
+   */
+  @Test
+  public void shouldNotRetryTheHstoreLookupAfterACatalogFailure() throws Exception {
+    Statement statement = mock(Statement.class);
+    when(statement.executeQuery(any(String.class)))
+        .thenThrow(new SQLException("permission denied for table pg_extension"));
+    Connection connection = mock(Connection.class);
+    when(connection.createStatement()).thenReturn(statement);
+
+    PostgreSqlDatabaseDialect sink = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+
+    sink.maybeResolveHstoreType(connection);
+    sink.maybeResolveHstoreType(connection);
+
+    assertFalse("a failed read is not a resolution", sink.hstoreTypeResolved);
+    assertEquals("the bare name is assumed while unresolved", "hstore",
+        sink.getSqlType(new SinkRecordField(stringToStringMap(), "tags", false)));
+    verify(statement, times(1)).executeQuery("SELECT to_regtype('hstore') IS NOT NULL");
   }
 
   /** Selected but unavailable must fail, naming the field and how to install the extension. */

@@ -99,6 +99,13 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   volatile boolean hstoreTypeResolved;
 
   /**
+   * Set when the catalog could not be read, so the lookup is attempted once rather than on every
+   * connection. Kept separate from {@link #hstoreTypeResolved}, which stays false: an unreadable
+   * catalog is not a confirmed absence, and must not be reported as one.
+   */
+  private volatile boolean hstoreTypeLookupFailed;
+
+  /**
    * The provider for {@link PostgreSqlDatabaseDialect}.
    */
   public static class Provider extends SubprotocolBasedProvider {
@@ -218,20 +225,35 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         maxIdentifierLength = computeMaxIdentifierLength(result);
       }
       // Only the sink writes hstore columns, so a source task never pays for the lookup.
-      if (!hstoreTypeResolved && complexTypesEnabled() && config instanceof JdbcSinkConfig) {
-        try {
-          hstoreTypeName = resolveHstoreTypeName(result);
-          // Written last: see the ordering note on hstoreTypeResolved.
-          hstoreTypeResolved = true;
-        } catch (SQLException e) {
-          // Leave it unresolved rather than report the extension as missing, which would name the
-          // wrong cause. A write then assumes the bare type name and lets PostgreSQL say why.
-          log.warn("Unable to determine where the hstore extension is installed; hstore columns "
-              + "will be written as the unqualified type", e);
-        }
+      if (complexTypesEnabled() && config instanceof JdbcSinkConfig) {
+        maybeResolveHstoreType(result);
       }
     }
     return result;
+  }
+
+  /**
+   * Resolve the hstore type name at most once, whether the catalog answers or refuses. A refusal
+   * leaves it unresolved so the bare name is still assumed, but is not retried: {@link
+   * #getConnection()} runs per batch, so a persistent failure — a user without permission on
+   * {@code pg_extension}, say — would otherwise cost a round-trip and a WARN on every one of them.
+   * Visible for testing.
+   */
+  void maybeResolveHstoreType(Connection connection) {
+    if (hstoreTypeResolved || hstoreTypeLookupFailed) {
+      return;
+    }
+    try {
+      hstoreTypeName = resolveHstoreTypeName(connection);
+      // Written last: see the ordering note on hstoreTypeResolved.
+      hstoreTypeResolved = true;
+    } catch (SQLException e) {
+      // Leave it unresolved rather than report the extension as missing, which would name the
+      // wrong cause. A write then assumes the bare type name and lets PostgreSQL say why.
+      hstoreTypeLookupFailed = true;
+      log.warn("Unable to determine where the hstore extension is installed; hstore columns "
+          + "will be written as the unqualified type", e);
+    }
   }
 
   /**
@@ -250,9 +272,17 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       try (ResultSet rs = stmt.executeQuery(
           "SELECT n.nspname FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace"
               + " WHERE e.extname = 'hstore'")) {
-        return rs.next() ? "\"" + rs.getString(1) + "\"." + HSTORE_TYPE_NAME : null;
+        return rs.next() ? quoteIdentifier(rs.getString(1)) + "." + HSTORE_TYPE_NAME : null;
       }
     }
+  }
+
+  /**
+   * Quote a PostgreSQL identifier, doubling any embedded quote. Schema names come from the
+   * catalog rather than from config, but they are user-chosen and may legally contain one.
+   */
+  private static String quoteIdentifier(String identifier) {
+    return "\"" + identifier.replace("\"", "\"\"") + "\"";
   }
 
   /**

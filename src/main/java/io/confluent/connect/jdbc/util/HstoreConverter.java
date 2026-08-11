@@ -91,7 +91,7 @@ public final class HstoreConverter {
    *
    * @param value the map to serialize; null yields null
    * @return the hstore text, or null when the value is null
-   * @throws DataException if the value is not a map, or has a null key
+   * @throws DataException if the value is not a map of strings, or has a null key
    */
   public static String connectMapToHstore(Object value) {
     if (value == null) {
@@ -108,15 +108,28 @@ public final class HstoreConverter {
       if (out.length() > 0) {
         out.append(',');
       }
-      appendQuoted(out, entry.getKey().toString());
+      appendQuoted(out, asString(entry.getKey(), "key"));
       out.append("=>");
       if (entry.getValue() == null) {
         out.append(NULL_VALUE);
       } else {
-        appendQuoted(out, entry.getValue().toString());
+        appendQuoted(out, asString(entry.getValue(), "value"));
       }
     }
     return out.toString();
+  }
+
+  /**
+   * Rejects a non-String rather than coercing it through {@code toString}, so a schema and value
+   * that disagree fail here instead of reaching the database. {@link JsonConverter} makes the same
+   * choice for jsonb, through a typed writer.
+   */
+  private static String asString(Object entry, String part) {
+    if (!(entry instanceof String)) {
+      throw new DataException(
+          "An hstore " + part + " must be a string but was " + entry.getClass());
+    }
+    return (String) entry;
   }
 
   private static void appendQuoted(StringBuilder out, String text) {

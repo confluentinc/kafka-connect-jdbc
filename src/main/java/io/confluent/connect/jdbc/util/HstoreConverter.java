@@ -23,13 +23,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Converts between a Connect {@code MAP<STRING, STRING>} and the PostgreSQL {@code hstore} text
- * form, {@code "key"=>"value"} — writing it for a bind through a cast, and reading it back for the
- * columns the driver hands over as text rather than as a decoded map.
- *
- * <p>pgjdbc's own {@code org.postgresql.util.HStoreConverter} is not usable here: the driver is a
- * runtime-scope dependency so that it ships with the connector without any dialect compiling
- * against it, which keeps the dialects on JDBC APIs alone.
+ * Converts between a Connect {@code MAP<STRING, STRING>} and PostgreSQL {@code hstore} text,
+ * {@code "key"=>"value"} — written for a bind through a cast, and read back for the columns the
+ * driver hands over as text rather than as a decoded map. pgjdbc's own
+ * {@code org.postgresql.util.HStoreConverter} is unusable here: the driver is runtime-scope so that
+ * it ships with the connector without any dialect compiling against it.
  */
 public final class HstoreConverter {
 
@@ -38,9 +36,7 @@ public final class HstoreConverter {
   /** A quoted token: any run of characters that are neither a quote nor an escape lead-in. */
   private static final String QUOTED = "\"((?:[^\"\\\\]|\\\\.)*)\"";
 
-  /**
-   * One {@code "key"=>"value"} or {@code "key"=>NULL} pair, and the separator that follows it.
-   */
+  /** One "key"=>"value" or "key"=>NULL pair, and the separator that follows it. */
   private static final Pattern HSTORE_PAIR =
       Pattern.compile(QUOTED + "\\s*=>\\s*(?:" + NULL_VALUE + "|" + QUOTED + ")\\s*(?:,\\s*|$)");
 
@@ -50,17 +46,11 @@ public final class HstoreConverter {
   }
 
   /**
-   * Parse PostgreSQL {@code hstore} text into a map. The driver hands back this form instead of a
-   * decoded map whenever it cannot resolve the extension's type OID, which is the case for any
-   * hstore that is not on the connection's {@code search_path}.
-   *
-   * <p>Only what {@code hstore_out} emits is accepted: {@code "key"=>"value"} pairs separated by
-   * {@code ", "}, with both sides always quoted apart from a bare {@code NULL} value. Anything else
-   * did not come from PostgreSQL and is rejected rather than guessed at.
-   *
-   * @param text the hstore text; null yields null
-   * @return the parsed map, preserving pair order; empty text yields an empty map
-   * @throws DataException if the text is not well-formed hstore
+   * Parse PostgreSQL {@code hstore} text into a map, preserving order; null and empty text yield
+   * null and an empty map. The driver returns text rather than a decoded map when it cannot resolve
+   * the type OID — any hstore off the {@code search_path}. Only what {@code hstore_out} emits is
+   * accepted: pairs separated by {@code ", "}, both sides quoted apart from a bare {@code NULL};
+   * anything else throws rather than being guessed at.
    */
   public static Map<String, String> hstoreToConnectMap(String text) {
     if (text == null) {
@@ -86,12 +76,9 @@ public final class HstoreConverter {
   }
 
   /**
-   * Serialize a map of strings into hstore text. Every key and value is quoted, so no value can be
-   * read back as the unquoted {@code NULL} literal; a null value is written as that literal.
-   *
-   * @param value the map to serialize; null yields null
-   * @return the hstore text, or null when the value is null
-   * @throws DataException if the value is not a map of strings, or has a null key
+   * Serialize a map of strings into hstore text; null yields null. Keys and values are always
+   * quoted, so none reads back as the unquoted {@code NULL} that a null value is written as.
+   * Throws unless the value is a map of strings with no null key.
    */
   public static String connectMapToHstore(Object value) {
     if (value == null) {
@@ -119,11 +106,7 @@ public final class HstoreConverter {
     return out.toString();
   }
 
-  /**
-   * Rejects a non-String rather than coercing it through {@code toString}, so a schema and value
-   * that disagree fail here instead of reaching the database. {@link JsonConverter} makes the same
-   * choice for jsonb, through a typed writer.
-   */
+  /** Rejects a non-String rather than coercing it, as JsonConverter does for jsonb. */
   private static String asString(Object entry, String part) {
     if (!(entry instanceof String)) {
       throw new DataException(

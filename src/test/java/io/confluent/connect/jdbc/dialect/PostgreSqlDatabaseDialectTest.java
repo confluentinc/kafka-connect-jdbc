@@ -17,6 +17,7 @@ package io.confluent.connect.jdbc.dialect;
 
 import io.confluent.connect.jdbc.data.Json;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.sink.TableAlterOrCreateException;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
@@ -999,7 +1000,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
 
   @Test
   public void shouldRejectMapShapesOtherThanStringToString() {
-    // Only MAP<STRING,STRING> — the shape hstore produces — maps to JSONB. Every other map shape
+    // Only MAP<STRING,STRING> — the shape hstore produces — maps to hstore. Every other map shape
     // must fall through to the generic dialect and fail rather than silently become jsonb.
     List<Schema> unsupported = Arrays.asList(
         SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.INT32_SCHEMA).optional().build(),
@@ -1399,10 +1400,15 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
    * unresolved, so the bare name is assumed rather than the extension reported as missing.
    */
   @Test
-  public void shouldNotRetryTheHstoreLookupAfterACatalogFailure() throws Exception {
+  public void shouldRetryTheHstoreLookupAfterACatalogFailure() throws Exception {
+    ResultSet resolved = mock(ResultSet.class);
+    when(resolved.next()).thenReturn(true);
+    when(resolved.getBoolean(1)).thenReturn(true);
+
     Statement statement = mock(Statement.class);
-    when(statement.executeQuery(any(String.class)))
-        .thenThrow(new SQLException("permission denied for table pg_extension"));
+    when(statement.executeQuery("SELECT to_regtype('hstore') IS NOT NULL"))
+        .thenThrow(new SQLException("permission denied for table pg_extension"))
+        .thenReturn(resolved);
     Connection connection = mock(Connection.class);
     when(connection.createStatement()).thenReturn(statement);
 
@@ -1410,12 +1416,66 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
 
     sink.maybeResolveHstoreType(connection);
-    sink.maybeResolveHstoreType(connection);
-
     assertFalse("a failed read is not a resolution", sink.hstoreTypeResolved);
     assertEquals("the bare name is assumed while unresolved", "hstore",
         sink.getSqlType(new SinkRecordField(stringToStringMap(), "tags", false)));
-    verify(statement, times(1)).executeQuery("SELECT to_regtype('hstore') IS NOT NULL");
+
+    // The next connection retries, so a transient failure heals.
+    sink.maybeResolveHstoreType(connection);
+    assertTrue("the retry should resolve", sink.hstoreTypeResolved);
+    verify(statement, times(2)).executeQuery("SELECT to_regtype('hstore') IS NOT NULL");
+  }
+
+  /**
+   * An unparseable array element degrades to null, as the scalar path does for an optional column,
+   * rather than failing the whole source task on one bad element.
+   */
+  @Test
+  public void shouldEmitNullForAnUnparseableHstoreArrayElement() throws Exception {
+    PostgreSqlDatabaseDialect dialect = complexTypesDialect(
+        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "map");
+    ColumnDefinition column = column(Types.ARRAY, "_hstore");
+    ColumnMapping mapping = new ColumnMapping(
+        column, 1, new Field("col", 0, arraySchema(stringToStringMap())));
+    DatabaseDialect.ColumnConverter converter =
+        dialect.columnConverterFor(mapping, column, 1, true);
+    assertNotNull(converter);
+
+    ResultSet resultSet = mock(ResultSet.class);
+    Array array = mock(Array.class);
+    ResultSet elementRs = mock(ResultSet.class);
+    when(resultSet.getArray(1)).thenReturn(array);
+    when(array.getArray()).thenReturn(new Object[]{"not hstore at all"});
+    when(array.getResultSet()).thenReturn(elementRs);
+    when(elementRs.next()).thenReturn(true, false);
+    when(elementRs.getObject(2)).thenReturn("not hstore at all");
+
+    assertEquals(Collections.singletonList(null), converter.convert(resultSet));
+  }
+
+  /**
+   * Both refusals must be {@link TableAlterOrCreateException}: that is what the writer rolls the
+   * batch back on and what the task routes to a reporter, so a plain ConnectException would leak
+   * an open transaction and bypass the DLQ.
+   */
+  @Test
+  public void shouldRaiseHstoreRefusalsAsTableAlterOrCreate() {
+    PostgreSqlDatabaseDialect sink = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
+        "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
+    sink.hstoreTypeName = null;
+    sink.hstoreTypeResolved = true;
+    assertThrows("a missing extension must roll back and be reportable",
+        TableAlterOrCreateException.class,
+        () -> sink.getSqlType(new SinkRecordField(stringToStringMap(), "tags", false)));
+
+    TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("t");
+    builder.withColumn("tags").type("jsonb", JDBCType.OTHER, Object.class);
+    TableDefinition tableDefn = builder.build();
+    assertThrows("a wrong column type must roll back and be reportable",
+        TableAlterOrCreateException.class,
+        () -> sinkDialect().bindField(mock(PreparedStatement.class), 1, stringToStringMap(),
+            Collections.singletonMap("k", "v"),
+            tableDefn.definitionForColumn("tags"), "tags"));
   }
 
   /** Selected but unavailable must fail, naming the field and how to install the extension. */
@@ -1514,6 +1574,17 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         dialect.valueTypeCast(tableDefn, tableDefn.definitionForColumn("plain").id()));
     assertEquals("::\"ext\".\"hstore\"",
         dialect.valueTypeCast(tableDefn, tableDefn.definitionForColumn("qualified").id()));
+  }
+
+  /** pgjdbc leaves embedded quotes unescaped, so the cast must requote the reported name. */
+  @Test
+  public void shouldRequoteAnHstoreTypeNameTheDriverLeftUnescaped() {
+    TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("myTable");
+    builder.withColumn("hs").type("\"e\"x\".\"hstore\"", JDBCType.OTHER, Object.class);
+    TableDefinition tableDefn = builder.build();
+
+    assertEquals("::\"e\"\"x\".\"hstore\"",
+        dialect.valueTypeCast(tableDefn, tableDefn.definitionForColumn("hs").id()));
   }
 
   private Schema stringToStringMap() {

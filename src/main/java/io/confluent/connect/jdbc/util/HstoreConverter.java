@@ -23,11 +23,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Converts between a Connect {@code MAP<STRING, STRING>} and PostgreSQL {@code hstore} text,
- * {@code "key"=>"value"} — written for a bind through a cast, and read back for the columns the
- * driver hands over as text rather than as a decoded map. pgjdbc's own
- * {@code org.postgresql.util.HStoreConverter} is unusable here: the driver is runtime-scope so that
- * it ships with the connector without any dialect compiling against it.
+ * Converts a Connect {@code MAP<STRING, STRING>} to and from PostgreSQL {@code hstore} text,
+ * {@code "key"=>"value"}. pgjdbc's own converter is unusable here: the driver is runtime-scope, so
+ * no dialect compiles against it.
  */
 public final class HstoreConverter {
 
@@ -46,11 +44,10 @@ public final class HstoreConverter {
   }
 
   /**
-   * Parse PostgreSQL {@code hstore} text into a map, preserving order; null and empty text yield
-   * null and an empty map. The driver returns text rather than a decoded map when it cannot resolve
-   * the type OID — any hstore off the {@code search_path}. Only what {@code hstore_out} emits is
-   * accepted: pairs separated by {@code ", "}, both sides quoted apart from a bare {@code NULL};
-   * anything else throws rather than being guessed at.
+   * Parse {@code hstore} text into a map, preserving order; null and empty text yield null and an
+   * empty map. The driver returns text when it cannot resolve the type OID. Accepts quoted pairs —
+   * what {@code hstore_out} emits, plus the surrounding whitespace and trailing comma
+   * {@code hstore_in} also allows; anything else throws rather than being guessed at.
    */
   public static Map<String, String> hstoreToConnectMap(String text) {
     if (text == null) {

@@ -22,6 +22,7 @@ import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig.PrimaryKeyMode;
 import io.confluent.connect.jdbc.sink.PreparedStatementBinder;
+import io.confluent.connect.jdbc.sink.TableAlterOrCreateException;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
@@ -92,10 +93,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    */
   volatile String hstoreTypeName;
   volatile boolean hstoreTypeResolved;
-
-  /** Set when the catalog is unreadable, so the lookup runs once. Not an absence
-   * and on every connection */
-  private volatile boolean hstoreTypeLookupFailed;
 
   /**
    * The provider for {@link PostgreSqlDatabaseDialect}.
@@ -225,12 +222,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * Resolve the type name at most once. A refusal leaves it unresolved so the bare name is assumed,
-   * but is not retried: getConnection runs per batch, so a persistent failure would cost a query
-   * and a WARN on each. Visible for testing.
+   * Resolve the type name once per connection. A failed read leaves it unresolved, not absent, so
+   * the next connection retries and a transient failure heals. Visible for testing.
    */
   void maybeResolveHstoreType(Connection connection) {
-    if (hstoreTypeResolved || hstoreTypeLookupFailed) {
+    if (hstoreTypeResolved) {
       return;
     }
     try {
@@ -238,16 +234,14 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       hstoreTypeResolved = true;
     } catch (SQLException e) {
       // Unresolved, not absent: a write assumes the bare name and lets PostgreSQL say why.
-      hstoreTypeLookupFailed = true;
-      log.warn("Could not locate the hstore extension; assuming the bare type name and not "
-          + "retrying. Writes fail if it is installed off the search_path.");
+      log.warn("Could not locate the hstore extension; assuming the bare type name. Writes fail "
+          + "if it is installed off the search_path.", e);
     }
   }
 
   /**
-   * Locate the extension: bare name when search_path resolves it, else its schema, so CREATE
-   * EXTENSION hstore SCHEMA ext works unchanged. Null when not installed; throws when the catalog
-   * cannot be read — distinct cases that must not be conflated.
+   * Locate the extension: bare name when search_path resolves it, else its schema. Null when not
+   * installed; throws when the catalog cannot be read — cases that must not be conflated.
    */
   static String resolveHstoreTypeName(Connection connection) throws SQLException {
     try (Statement stmt = connection.createStatement()) {
@@ -269,10 +263,27 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return "\"" + identifier.replace("\"", "\"\"") + "\"";
   }
 
-  /** Type name, or a failure naming the field when absent. Unresolved assumes the bare name. */
+  /** Requote a reported type name, doubling any embedded quote the driver left as-is. */
+  private static String requoteTypeName(String typeName) {
+    int lastDot = typeName.lastIndexOf('.');
+    if (lastDot < 0) {
+      return typeName;
+    }
+    return quoteIdentifier(unquoteOuter(typeName.substring(0, lastDot)))
+        + "." + quoteIdentifier(unquoteOuter(typeName.substring(lastDot + 1)));
+  }
+
+  /** Strip only the delimiting quotes; stripping every quote would drop an embedded one. */
+  private static String unquoteOuter(String part) {
+    return part.length() > 1 && part.startsWith("\"") && part.endsWith("\"")
+        ? part.substring(1, part.length() - 1)
+        : part;
+  }
+
+  /** Type name, or a rollback-and-reportable failure when absent. Unresolved assumes bare. */
   private String requireHstoreTypeName(String fieldName) {
     if (hstoreTypeResolved && hstoreTypeName == null) {
-      throw new ConnectException(String.format(HSTORE_EXTENSION_MISSING,
+      throw new TableAlterOrCreateException(String.format(HSTORE_EXTENSION_MISSING,
           fieldName == null ? "a map value" : "field " + fieldName));
     }
     return hstoreTypeName == null ? HSTORE_TYPE_NAME : hstoreTypeName;
@@ -518,7 +529,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     } catch (DataException e) {
       if (columnDefn.isOptional()) {
         log.warn("Unparseable value for hstore column {}: class={}; emitting null",
-            columnDefn.id(), value.getClass().getName(), e);
+            columnDefn.id(), value.getClass().getName());
         return null;
       }
       throw new DataException("Unparseable value for hstore column " + columnDefn.id()
@@ -733,9 +744,17 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     if (value == null) {
       return null;
     }
-    Map<String, String> map = value instanceof Map
-        ? asStringMap(value)
-        : HstoreConverter.hstoreToConnectMap(value.toString());
+    Map<String, String> map;
+    try {
+      map = value instanceof Map
+          ? asStringMap(value)
+          : HstoreConverter.hstoreToConnectMap(value.toString());
+    } catch (DataException | ClassCastException e) {
+      // Element schemas are always optional, so degrade as the scalar path does.
+      log.warn("Unparseable hstore array element: class={}; emitting null",
+          value.getClass().getName());
+      return null;
+    }
     return hstoreHandlingMode() == HstoreHandlingMode.JSON
         ? JsonConverter.connectMapToJson(map)
         : map;
@@ -802,10 +821,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * {@inheritDoc} Overridden only to carry the table definition into the binder: the interface
-   * default drops it, leaving every column definition null at bind time. SQL Server, Oracle and
-   * Sybase override it for the same mechanical reason, though they read the definition to choose a
-   * better bind rather than to reject one.
+   * {@inheritDoc} Overridden only to carry the table definition into the binder, which the
+   * interface default drops — leaving every column definition null at bind time. SQL Server,
+   * Oracle and Sybase override it for the same mechanical reason.
    */
   @Override
   public StatementBinder statementBinder(
@@ -831,8 +849,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
   /**
    * {@inheritDoc} A map is written as hstore text, so the column must be an hstore. Checked here
-   * because this is the only bind entry point given the column definition; otherwise PostgreSQL
-   * reports a syntax error that never mentions hstore.
+   * as the only bind entry point given the column definition.
    */
   @Override
   public void bindField(
@@ -853,14 +870,14 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     super.bindField(statement, index, schema, value, colDef, fieldName);
   }
 
-  /** Fail unless an existing column can hold hstore text; an unknown column or type is skipped. */
+  /** Fail unless an existing column can hold hstore text; unknown column or type is skipped. */
   private void requireHstoreColumn(ColumnDefinition colDef, String fieldName, String expected) {
     String actual = colDef == null ? null : localTypeName(colDef.typeName());
     if (actual == null) {
       return;
     }
     if (!expected.equalsIgnoreCase(actual)) {
-      throw new ConnectException(
+      throw new TableAlterOrCreateException(
           String.format(HSTORE_COLUMN_REQUIRED, fieldName, actual, expected));
     }
   }
@@ -917,7 +934,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * The on-topic schema for an hstore value under {@code hstore.handling.mode}: a {@code Json}
    * STRING, or a {@code MAP<STRING, STRING>} whose values are optional since an hstore value may
    * be NULL. Shared so a scalar column (optionality from the column) and an array element (always
-   * optional) cannot drift apart. Only valid once {@link #hstoreMappingEnabled()} holds; the map
+   * optional) cannot drift apart. Only valid once {@link #hstoreMappingSelected()} holds; the map
    * branch is the fallback, so {@code none} would otherwise be read as {@code map}.
    */
   protected Schema hstoreSchema(boolean optional) {
@@ -1482,8 +1499,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         String typeName = defn.typeName(); // database-specific
         String localName = localTypeName(typeName).toLowerCase();
         if (HSTORE_TYPE_NAME.equals(localName)) {
-          // The reported name, so an extension off the search_path stays schema-qualified.
-          return "::" + typeName;
+          // Requoted, not interpolated: pgjdbc builds the qualified name without escaping.
+          return "::" + requoteTypeName(typeName);
         }
         if (CAST_TYPES.contains(localName)) {
           return "::" + localName;

@@ -1454,12 +1454,12 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   /**
-   * Both refusals must be {@link TableAlterOrCreateException}: that is what the writer rolls the
-   * batch back on and what the task routes to a reporter, so a plain ConnectException would leak
-   * an open transaction and bypass the DLQ.
+   * A missing extension surfaces from {@code getSqlType} while the table is being built, so it
+   * keeps {@link TableAlterOrCreateException}: the writer rolls back and unrolls, which can still
+   * place the records that do not need the column.
    */
   @Test
-  public void shouldRaiseHstoreRefusalsAsTableAlterOrCreate() {
+  public void shouldRaiseAMissingHstoreExtensionAsTableAlterOrCreate() {
     PostgreSqlDatabaseDialect sink = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
         "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
     sink.hstoreTypeName = null;
@@ -1467,15 +1467,25 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     assertThrows("a missing extension must roll back and be reportable",
         TableAlterOrCreateException.class,
         () -> sink.getSqlType(new SinkRecordField(stringToStringMap(), "tags", false)));
+  }
 
+  /**
+   * A wrong column type is refused at bind time, where the mismatch holds for every record, so it
+   * fails the task as any unbindable value does instead of inheriting the DDL unroll. Asserted on
+   * the exact class: {@link TableAlterOrCreateException} would also satisfy a ConnectException
+   * check, leaving a regression to the DDL type invisible.
+   */
+  @Test
+  public void shouldRaiseAWrongHstoreColumnTypeAsConnectException() {
     TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("t");
     builder.withColumn("tags").type("jsonb", JDBCType.OTHER, Object.class);
     TableDefinition tableDefn = builder.build();
-    assertThrows("a wrong column type must roll back and be reportable",
-        TableAlterOrCreateException.class,
+    ConnectException e = assertThrows(ConnectException.class,
         () -> sinkDialect().bindField(mock(PreparedStatement.class), 1, stringToStringMap(),
             Collections.singletonMap("k", "v"),
             tableDefn.definitionForColumn("tags"), "tags"));
+    assertEquals("a bind refusal must not carry the DDL exception",
+        ConnectException.class, e.getClass());
   }
 
   /** Selected but unavailable must fail, naming the field and how to install the extension. */
@@ -1515,16 +1525,9 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     ConnectException thrown = assertThrows(ConnectException.class,
         () -> sink.bindField(mock(PreparedStatement.class), 1, stringToStringMap(),
             Collections.singletonMap("env", "prod"), columnOfType("jsonb"), "tags"));
-    assertTrue("must name the field, but was: " + thrown.getMessage(),
-        thrown.getMessage().contains("tags"));
-    assertTrue("must name the column type, but was: " + thrown.getMessage(),
-        thrown.getMessage().contains("jsonb"));
-
-    // The array element type is checked the same way.
-    assertThrows(ConnectException.class,
-        () -> sink.bindField(mock(PreparedStatement.class), 1, arraySchema(stringToStringMap()),
-            Collections.singletonList(Collections.singletonMap("env", "prod")),
-            columnOfType("_jsonb"), "tags"));
+    assertEquals("Cannot write field tags as hstore: column type is jsonb, not hstore. "
+            + "Recreate the column as hstore, or set sql.complex.types.enable=false.",
+        thrown.getMessage());
 
     // An hstore column is accepted, wherever the extension lives.
     for (String hstore : new String[]{"hstore", "\"ext\".\"hstore\""}) {
@@ -1532,10 +1535,60 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     }
   }
 
+  /**
+   * The array branch must name {@code hstore[]}, not pgjdbc's internal {@code _hstore}. This
+   * dialect writes maps to native hstore where an earlier build wrote jsonb, so an upgrade over an
+   * existing {@code jsonb[]} column lands here — and a remediation reading "recreate the column as
+   * hstore" would produce a scalar that fails the very next batch.
+   */
+  @Test
+  public void shouldNameTheArrayFormWhenRefusingAnHstoreArrayColumn() {
+    PostgreSqlDatabaseDialect sink = complexTypesSinkDialect();
+
+    ConnectException thrown = assertThrows(ConnectException.class,
+        () -> sink.bindField(mock(PreparedStatement.class), 1, arraySchema(stringToStringMap()),
+            Collections.singletonList(Collections.singletonMap("env", "prod")),
+            columnOfType("_jsonb"), "tags"));
+    assertEquals("Cannot write field tags as hstore: column type is jsonb[], not hstore[]. "
+            + "Recreate the column as hstore[], or set sql.complex.types.enable=false.",
+        thrown.getMessage());
+
+    // An hstore[] column is accepted, wherever the extension lives.
+    for (String hstoreArray : new String[]{"_hstore", "\"ext\".\"_hstore\""}) {
+      sinkBindMapArray(sink, hstoreArray);
+    }
+  }
+
+  /** A non-array column reported without the prefix is named as-is, with no {@code []} appended. */
+  @Test
+  public void shouldNameANonArrayColumnWithoutAnArraySuffix() {
+    PostgreSqlDatabaseDialect sink = complexTypesSinkDialect();
+
+    ConnectException thrown = assertThrows(ConnectException.class,
+        () -> sink.bindField(mock(PreparedStatement.class), 1, stringToStringMap(),
+            Collections.singletonMap("env", "prod"), columnOfType("\"ext\".\"text\""), "tags"));
+    assertFalse("a scalar column must not be reported as an array: " + thrown.getMessage(),
+        thrown.getMessage().contains("[]"));
+  }
+
   private void sinkBindMap(PostgreSqlDatabaseDialect sink, String columnType) {
     try {
       sink.bindField(mock(PreparedStatement.class), 1, stringToStringMap(),
           Collections.singletonMap("env", "prod"), columnOfType(columnType), "tags");
+    } catch (SQLException e) {
+      throw new AssertionError("binding into a " + columnType + " column should succeed", e);
+    }
+  }
+
+  private void sinkBindMapArray(PostgreSqlDatabaseDialect sink, String columnType) {
+    try {
+      PreparedStatement statement = mock(PreparedStatement.class);
+      Connection connection = mock(Connection.class);
+      when(statement.getConnection()).thenReturn(connection);
+      when(connection.createArrayOf(any(), any())).thenReturn(mock(Array.class));
+      sink.bindField(statement, 1, arraySchema(stringToStringMap()),
+          Collections.singletonList(Collections.singletonMap("env", "prod")),
+          columnOfType(columnType), "tags");
     } catch (SQLException e) {
       throw new AssertionError("binding into a " + columnType + " column should succeed", e);
     }

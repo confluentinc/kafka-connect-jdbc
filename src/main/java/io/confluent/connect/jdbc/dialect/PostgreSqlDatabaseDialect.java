@@ -119,6 +119,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   static final String TIMESTAMP_TYPE_NAME = "timestamp";
   static final String TIMESTAMPTZ_TYPE_NAME = "timestamptz";
 
+  /** pgjdbc reports an array type as its element name with this prefix: hstore[] is _hstore. */
+  static final String ARRAY_TYPE_PREFIX = "_";
+
   // Array.getResultSet() yields two columns per element: 1 is the index, 2 the value.
   private static final int ELEMENT_VALUE_COLUMN = 2;
 
@@ -134,9 +137,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    */
   private final Set<ColumnId> multiDimensionalWarnedColumns = ConcurrentHashMap.newKeySet();
 
+  /** Names the expected type twice: the remediation must be a type the operator can create. */
   private static final String HSTORE_COLUMN_REQUIRED =
-      "Cannot write field %s as hstore: column type is %s, not %s. Recreate the column with the "
-          + "hstore type, or set " + JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE + "=false.";
+      "Cannot write field %1$s as hstore: column type is %2$s, not %3$s. Recreate the column as "
+          + "%3$s, or set " + JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE + "=false.";
 
   private static final String HSTORE_EXTENSION_MISSING =
       "Cannot write %s to an hstore column: the hstore extension is not installed on this "
@@ -222,8 +226,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * Resolve the type name once per connection. A failed read leaves it unresolved, not absent, so
-   * the next connection retries and a transient failure heals. Visible for testing.
+   * Resolve the type name once per dialect instance — once resolved it is not re-checked, so a
+   * reconnect keeps the first answer. A failed read leaves it unresolved rather than absent, so the
+   * next connection on this instance retries and a transient failure heals. Visible for testing.
    */
   void maybeResolveHstoreType(Connection connection) {
     if (hstoreTypeResolved) {
@@ -234,8 +239,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       hstoreTypeResolved = true;
     } catch (SQLException e) {
       // Unresolved, not absent: a write assumes the bare name and lets PostgreSQL say why.
-      log.warn("Could not locate the hstore extension; assuming the bare type name. Writes fail "
-          + "if it is installed off the search_path.", e);
+      log.warn("Could not read the catalog to find where the hstore extension is installed — this "
+          + "does not mean it is absent, which is reported separately when a write needs it. "
+          + "Assuming the bare type name; writes fail if it turns out to live off the search_path.",
+          e);
     }
   }
 
@@ -263,7 +270,15 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return "\"" + identifier.replace("\"", "\"\"") + "\"";
   }
 
-  /** Requote a reported type name, doubling any embedded quote the driver left as-is. */
+  /**
+   * Requote a qualified type name the driver reported, doubling any embedded quote it left as-is.
+   * pgjdbc builds {@code "schema"."type"} by concatenation without escaping, so a schema named
+   * {@code e"x} arrives as {@code "e"x"."hstore"} — where the stray quote closes the identifier
+   * early and the generated DML will not parse. Unquoting each half and quoting it again fixes
+   * that: {@code "e"x"."hstore"} becomes {@code "e""x"."hstore"}.
+   *
+   * <p>An unqualified name has nothing to requote and is returned unchanged.
+   */
   private static String requoteTypeName(String typeName) {
     int lastDot = typeName.lastIndexOf('.');
     if (lastDot < 0) {
@@ -605,7 +620,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     if (typeName == null) {
       return null;
     }
-    String base = typeName.startsWith("_") ? typeName.substring(1) : typeName;
+    String base = typeName.startsWith(ARRAY_TYPE_PREFIX)
+        ? typeName.substring(ARRAY_TYPE_PREFIX.length())
+        : typeName;
     return base.toLowerCase();
   }
 
@@ -749,7 +766,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       map = value instanceof Map
           ? asStringMap(value)
           : HstoreConverter.hstoreToConnectMap(value.toString());
-    } catch (DataException | ClassCastException e) {
+    } catch (DataException e) {
       // Element schemas are always optional, so degrade as the scalar path does.
       log.warn("Unparseable hstore array element: class={}; emitting null",
           value.getClass().getName());
@@ -864,22 +881,36 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       if (isStringToStringMap(schema)) {
         requireHstoreColumn(colDef, fieldName, HSTORE_TYPE_NAME);
       } else if (schema.type() == Schema.Type.ARRAY && isStringToStringMap(schema.valueSchema())) {
-        requireHstoreColumn(colDef, fieldName, "_" + HSTORE_TYPE_NAME);
+        requireHstoreColumn(colDef, fieldName, ARRAY_TYPE_PREFIX + HSTORE_TYPE_NAME);
       }
     }
     super.bindField(statement, index, schema, value, colDef, fieldName);
   }
 
-  /** Fail unless an existing column can hold hstore text; unknown column or type is skipped. */
+  /**
+   * Fail unless an existing column can hold hstore text; unknown column or type is skipped. Bind
+   * time, so this fails the task as any unbindable value does rather than reading as a DDL failure:
+   * the mismatch holds for every record, so unrolling the batch would only find it again.
+   */
   private void requireHstoreColumn(ColumnDefinition colDef, String fieldName, String expected) {
     String actual = colDef == null ? null : localTypeName(colDef.typeName());
     if (actual == null) {
       return;
     }
     if (!expected.equalsIgnoreCase(actual)) {
-      throw new TableAlterOrCreateException(
-          String.format(HSTORE_COLUMN_REQUIRED, fieldName, actual, expected));
+      throw new ConnectException(String.format(HSTORE_COLUMN_REQUIRED,
+          fieldName, writableTypeName(actual), writableTypeName(expected)));
     }
+  }
+
+  /**
+   * The form an operator would write in DDL: pgjdbc's {@code _hstore} becomes {@code hstore[]}.
+   * Both name the same type, but only the latter is what they would type to create the column.
+   */
+  private static String writableTypeName(String typeName) {
+    return typeName.startsWith(ARRAY_TYPE_PREFIX)
+        ? typeName.substring(ARRAY_TYPE_PREFIX.length()) + "[]"
+        : typeName;
   }
 
   /** Bind a map as hstore text for the ::hstore cast to parse; false if the shape differs. */

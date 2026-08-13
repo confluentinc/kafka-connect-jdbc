@@ -761,10 +761,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     if (value == null) {
       return null;
     }
-    Map<String, String> map;
+    Map<?, ?> map;
     try {
       map = value instanceof Map
-          ? asStringMap(value)
+          ? (Map<?, ?>) value
           : HstoreConverter.hstoreToConnectMap(value.toString());
     } catch (DataException e) {
       // Element schemas are always optional, so degrade as the scalar path does.
@@ -775,11 +775,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return hstoreHandlingMode() == HstoreHandlingMode.JSON
         ? JsonConverter.connectMapToJson(map)
         : map;
-  }
-
-  @SuppressWarnings("unchecked")
-  private static Map<String, String> asStringMap(Object value) {
-    return (Map<String, String>) value;
   }
 
   /**

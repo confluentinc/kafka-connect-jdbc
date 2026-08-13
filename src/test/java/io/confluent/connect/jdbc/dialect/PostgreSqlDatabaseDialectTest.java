@@ -1454,27 +1454,26 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   }
 
   /**
-   * A missing extension surfaces from {@code getSqlType} while the table is being built, so it
-   * keeps {@link TableAlterOrCreateException}: the writer rolls back and unrolls, which can still
-   * place the records that do not need the column.
+   * Neither hstore refusal is a DDL failure, so neither carries {@link TableAlterOrCreateException}
+   * and its batch-splitting handling. A missing extension is a property of the database and a wrong
+   * column type holds for every record, so no split can find a record that fits: both fail the task
+   * as {@link GenericDatabaseDialect} does for any value it cannot bind.
+   *
+   * <p>Both assert the exact class. {@code TableAlterOrCreateException} extends ConnectException, so
+   * a subclass check would pass either way and leave a regression to the DDL type invisible.
    */
   @Test
-  public void shouldRaiseAMissingHstoreExtensionAsTableAlterOrCreate() {
+  public void shouldRaiseAMissingHstoreExtensionAsConnectException() {
     PostgreSqlDatabaseDialect sink = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
         "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
     sink.hstoreTypeName = null;
     sink.hstoreTypeResolved = true;
-    assertThrows("a missing extension must roll back and be reportable",
-        TableAlterOrCreateException.class,
+    ConnectException e = assertThrows(ConnectException.class,
         () -> sink.getSqlType(new SinkRecordField(stringToStringMap(), "tags", false)));
+    assertEquals("a missing extension must not carry the DDL exception",
+        ConnectException.class, e.getClass());
   }
 
-  /**
-   * A wrong column type is refused at bind time, where the mismatch holds for every record, so it
-   * fails the task as any unbindable value does instead of inheriting the DDL unroll. Asserted on
-   * the exact class: {@link TableAlterOrCreateException} would also satisfy a ConnectException
-   * check, leaving a regression to the DDL type invisible.
-   */
   @Test
   public void shouldRaiseAWrongHstoreColumnTypeAsConnectException() {
     TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("t");

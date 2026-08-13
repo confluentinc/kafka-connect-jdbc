@@ -1074,7 +1074,53 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
         .put("name", "web-1")
         .put("tags", Collections.singletonMap("env", "prod")));
 
-    assertTasksFailedWithTrace("jdbc-sink-connector", 1, "not hstore");
+    // The remediation has to name a type the operator can create, not just report the mismatch.
+    assertTasksFailedWithTrace("jdbc-sink-connector", 1, "Recreate the column as hstore");
+  }
+
+  /**
+   * The array form of the same refusal. This is the upgrade path: an earlier build wrote maps to
+   * jsonb, so a pipeline that predates native hstore already has a {@code jsonb[]} column here. The
+   * message must name {@code hstore[]} — pgjdbc reports these types as {@code _jsonb} and
+   * {@code _hstore}, and telling an operator to recreate the column "as hstore" would give them a
+   * scalar that fails the very next batch.
+   */
+  @Test
+  public void testMapArrayIntoNonHstoreArrayColumnIsRefused() throws Exception {
+    execute("CREATE EXTENSION IF NOT EXISTS hstore",
+        "CREATE TABLE " + tableName + "(name text, tags jsonb[])");
+    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
+    props.put(MAX_RETRIES, "0");
+    connect.configureConnector("jdbc-sink-connector", props);
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+
+    produceRecord(HSTORE_ARRAY_SINK_SCHEMA, new Struct(HSTORE_ARRAY_SINK_SCHEMA)
+        .put("name", "web-1")
+        .put("tags", Collections.singletonList(Collections.singletonMap("env", "prod"))));
+
+    assertTasksFailedWithTrace("jdbc-sink-connector", 1, "Recreate the column as hstore[]");
+  }
+
+  /**
+   * A missing extension is a property of the database, so no record shape can succeed and the task
+   * fails rather than reporting records one at a time. Reached through the real catalog lookup: the
+   * database is created without the extension rather than the resolved state being forced.
+   */
+  @Test
+  public void testMapArrayFailsWhenExtensionIsNotInstalled() throws Exception {
+    execute("CREATE DATABASE nohstorearray");
+    props.put(JdbcSinkConfig.CONNECTION_URL, jdbcUrl("nohstorearray"));
+    props.put(JdbcSinkConfig.AUTO_CREATE, "true");
+    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
+    props.put(MAX_RETRIES, "0");
+    connect.configureConnector("jdbc-sink-connector", props);
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+
+    produceRecord(HSTORE_ARRAY_SINK_SCHEMA, new Struct(HSTORE_ARRAY_SINK_SCHEMA)
+        .put("name", "web-1")
+        .put("tags", Collections.singletonList(Collections.singletonMap("env", "prod"))));
+
+    assertTasksFailedWithTrace("jdbc-sink-connector", 1, "CREATE EXTENSION hstore");
   }
 
   /** Execute statements against a named database rather than the default one. */
@@ -1247,6 +1293,12 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
   private static final Schema HSTORE_SINK_SCHEMA = SchemaBuilder.struct().name("com.example.Server")
       .field("name", Schema.STRING_SCHEMA)
       .field("tags", HSTORE_MAP_SCHEMA)
+      .build();
+
+  private static final Schema HSTORE_ARRAY_SINK_SCHEMA = SchemaBuilder.struct()
+      .name("com.example.ServerTags")
+      .field("name", Schema.STRING_SCHEMA)
+      .field("tags", SchemaBuilder.array(HSTORE_MAP_SCHEMA).optional().build())
       .build();
 
   // ---------- hstore round trips: source -> Kafka -> sink ----------

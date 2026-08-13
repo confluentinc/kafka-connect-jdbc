@@ -22,7 +22,6 @@ import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig.PrimaryKeyMode;
 import io.confluent.connect.jdbc.sink.PreparedStatementBinder;
-import io.confluent.connect.jdbc.sink.TableAlterOrCreateException;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
 import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
@@ -295,10 +294,14 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         : part;
   }
 
-  /** Type name, or a rollback-and-reportable failure when absent. Unresolved assumes bare. */
+  /**
+   * Type name, or a failure when the extension is absent; unresolved assumes bare. Absence is a
+   * property of the database, not of a record, so no batch split could find a record that fits:
+   * this fails the task rather than carrying the DDL exception's per-record handling.
+   */
   private String requireHstoreTypeName(String fieldName) {
     if (hstoreTypeResolved && hstoreTypeName == null) {
-      throw new TableAlterOrCreateException(String.format(HSTORE_EXTENSION_MISSING,
+      throw new ConnectException(String.format(HSTORE_EXTENSION_MISSING,
           fieldName == null ? "a map value" : "field " + fieldName));
     }
     return hstoreTypeName == null ? HSTORE_TYPE_NAME : hstoreTypeName;

@@ -1268,8 +1268,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
     SinkRecordField field = new SinkRecordField(stringToStringMap(), "col", false);
 
-    sink.hstoreTypeName = "\"ext\".hstore";
-    sink.hstoreTypeResolved = true;
+    sink.hstoreType = PostgreSqlDatabaseDialect.HstoreType.installedAs("\"ext\".hstore");
     assertEquals("\"ext\".hstore", sink.getSqlType(field));
     assertEquals("\"ext\".hstore[]",
         sink.getSqlType(new SinkRecordField(arraySchema(stringToStringMap()), "col", false)));
@@ -1323,13 +1322,13 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
 
     sink.maybeResolveHstoreType(connection);
-    assertFalse("a failed read is not a resolution", sink.hstoreTypeResolved);
+    assertFalse("a failed read is not a resolution", sink.hstoreType.isResolved());
     assertEquals("the bare name is assumed while unresolved", "hstore",
         sink.getSqlType(new SinkRecordField(stringToStringMap(), "tags", false)));
 
     // The next connection retries, so a transient failure heals.
     sink.maybeResolveHstoreType(connection);
-    assertTrue("the retry should resolve", sink.hstoreTypeResolved);
+    assertTrue("the retry should resolve", sink.hstoreType.isResolved());
     verify(statement, times(2)).executeQuery("SELECT to_regtype('hstore') IS NOT NULL");
   }
 
@@ -1373,8 +1372,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   public void shouldRaiseAMissingHstoreExtensionAsConnectException() {
     PostgreSqlDatabaseDialect sink = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
         "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
-    sink.hstoreTypeName = null;
-    sink.hstoreTypeResolved = true;
+    sink.hstoreType = PostgreSqlDatabaseDialect.HstoreType.ABSENT;
     ConnectException e = assertThrows(ConnectException.class,
         () -> sink.getSqlType(new SinkRecordField(stringToStringMap(), "tags", false)));
     assertEquals("a missing extension must not carry the DDL exception",
@@ -1399,8 +1397,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   public void shouldFailWhenTheHstoreExtensionIsNotInstalled() {
     PostgreSqlDatabaseDialect sink = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
         "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
-    sink.hstoreTypeName = null;
-    sink.hstoreTypeResolved = true;
+    sink.hstoreType = PostgreSqlDatabaseDialect.HstoreType.ABSENT;
 
     ConnectException thrown = assertThrows(ConnectException.class, () -> sink.getSqlType(
         new SinkRecordField(stringToStringMap(), "tags", false)));
@@ -1515,7 +1512,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   public void shouldAssumeTheBareHstoreTypeNameWhileUnresolved() {
     PostgreSqlDatabaseDialect sink = new PostgreSqlDatabaseDialect(sinkConfigWithUrl(
         "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
-    assertFalse("precondition: nothing has been resolved yet", sink.hstoreTypeResolved);
+    assertFalse("precondition: nothing has been read yet", sink.hstoreType.isResolved());
 
     assertEquals("hstore",
         sink.getSqlType(new SinkRecordField(stringToStringMap(), "tags", false)));

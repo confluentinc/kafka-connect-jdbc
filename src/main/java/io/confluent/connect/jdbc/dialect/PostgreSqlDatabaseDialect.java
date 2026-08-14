@@ -86,12 +86,48 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   // Visible for testing
   volatile int maxIdentifierLength = 0;
 
+  // Visible for testing
+  volatile HstoreType hstoreType = HstoreType.UNRESOLVED;
+
   /**
-   * Type name for hstore columns: bare on the search_path, "schema".hstore elsewhere, null when not
-   * installed. Written before volatile hstoreTypeResolved, so a reader seeing that true sees this.
+   * What the catalog says about the hstore extension, as one value rather than a name plus a flag:
+   * unresolved until it is read, then absent, or installed under a name — bare while the extension
+   * is on the {@code search_path}, {@code "schema".hstore} when it is not. A single volatile
+   * reference also publishes the name and the state together.
    */
-  volatile String hstoreTypeName;
-  volatile boolean hstoreTypeResolved;
+  static final class HstoreType {
+
+    private enum State { UNRESOLVED, ABSENT, INSTALLED }
+
+    static final HstoreType UNRESOLVED = new HstoreType(State.UNRESOLVED, null);
+    static final HstoreType ABSENT = new HstoreType(State.ABSENT, null);
+
+    private final State state;
+    private final String name;
+
+    private HstoreType(State state, String name) {
+      this.state = state;
+      this.name = name;
+    }
+
+    /** The catalog answered; a null name means the extension is not installed. */
+    static HstoreType installedAs(String name) {
+      return name == null ? ABSENT : new HstoreType(State.INSTALLED, name);
+    }
+
+    boolean isResolved() {
+      return state != State.UNRESOLVED;
+    }
+
+    boolean isAbsent() {
+      return state == State.ABSENT;
+    }
+
+    /** The name to write, assuming the bare one until the catalog has been read. */
+    String nameOrBare() {
+      return name == null ? HSTORE_TYPE_NAME : name;
+    }
+  }
 
   /**
    * The provider for {@link PostgreSqlDatabaseDialect}.
@@ -225,17 +261,16 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * Resolve the type name once per dialect instance — once resolved it is not re-checked, so a
-   * reconnect keeps the first answer. A failed read leaves it unresolved rather than absent, so the
-   * next connection on this instance retries and a transient failure heals. Visible for testing.
+   * Read the catalog once per dialect instance — once read it is not re-checked, so a reconnect
+   * keeps the first answer. A failed read leaves it unread rather than absent, so the next
+   * connection on this instance retries and a transient failure heals. Visible for testing.
    */
   void maybeResolveHstoreType(Connection connection) {
-    if (hstoreTypeResolved) {
+    if (hstoreType.isResolved()) {
       return;
     }
     try {
-      hstoreTypeName = resolveHstoreTypeName(connection);
-      hstoreTypeResolved = true;
+      hstoreType = HstoreType.installedAs(resolveHstoreTypeName(connection));
     } catch (SQLException e) {
       // Unresolved, not absent: a write assumes the bare name and lets PostgreSQL say why.
       log.warn("Could not read the catalog to find where the hstore extension is installed — this "
@@ -295,16 +330,17 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * Type name, or a failure when the extension is absent; unresolved assumes bare. Absence is a
-   * property of the database, not of a record, so no batch split could find a record that fits:
-   * this fails the task rather than carrying the DDL exception's per-record handling.
+   * The type name to write — schema-qualified when the extension is off the search_path — failing
+   * when the catalog says it is absent. Absence is a property of the database, not of a record, so
+   * no batch split could find a record that fits: this fails the task rather than carrying the DDL
+   * exception's per-record handling.
    */
-  private String requireHstoreTypeName(String fieldName) {
-    if (hstoreTypeResolved && hstoreTypeName == null) {
+  private String hstoreTypeNameOrFail(String fieldName) {
+    if (hstoreType.isAbsent()) {
       throw new ConnectException(String.format(HSTORE_EXTENSION_MISSING,
           fieldName == null ? "a map value" : "field " + fieldName));
     }
-    return hstoreTypeName == null ? HSTORE_TYPE_NAME : hstoreTypeName;
+    return hstoreType.nameOrBare();
   }
 
   static int computeMaxIdentifierLength(Connection connection) {
@@ -879,7 +915,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       if (isStringToStringMap(schema)) {
         requireHstoreColumn(colDef, fieldName, HSTORE_TYPE_NAME);
       } else if (schema.type() == Schema.Type.ARRAY && isStringToStringMap(schema.valueSchema())) {
-        requireHstoreColumn(colDef, fieldName, ARRAY_TYPE_PREFIX + HSTORE_TYPE_NAME);
+        requireHstoreColumn(colDef, fieldName, HSTORE_TYPE_NAME + "[]");
       }
     }
     super.bindField(statement, index, schema, value, colDef, fieldName);
@@ -891,13 +927,14 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * the mismatch holds for every record, so unrolling the batch would only find it again.
    */
   private void requireHstoreColumn(ColumnDefinition colDef, String fieldName, String expected) {
-    String actual = colDef == null ? null : localTypeName(colDef.typeName());
-    if (actual == null) {
+    String reported = colDef == null ? null : localTypeName(colDef.typeName());
+    if (reported == null) {
       return;
     }
+    String actual = writableTypeName(reported);
     if (!expected.equalsIgnoreCase(actual)) {
-      throw new ConnectException(String.format(HSTORE_COLUMN_REQUIRED,
-          fieldName, writableTypeName(actual), writableTypeName(expected)));
+      throw new ConnectException(
+          String.format(HSTORE_COLUMN_REQUIRED, fieldName, actual, expected));
     }
   }
 
@@ -1090,7 +1127,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         return getSqlType(childField) + "[]";
       case MAP:
         if (isStringToStringMap(field.schema()) && complexTypesEnabled()) {
-          return requireHstoreTypeName(field.name());
+          return hstoreTypeNameOrFail(field.name());
         }
         return super.getSqlType(field);
       default:
@@ -1340,7 +1377,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     }
     if (isStringToStringMap(elementSchema)) {
       return new ArrayElementBinding(
-          requireHstoreTypeName(fieldName), PostgreSqlDatabaseDialect::hstoreArrayFor);
+          hstoreTypeNameOrFail(fieldName), PostgreSqlDatabaseDialect::hstoreArrayFor);
     }
     String elementName = elementSchema.name();
     if (elementName != null) {

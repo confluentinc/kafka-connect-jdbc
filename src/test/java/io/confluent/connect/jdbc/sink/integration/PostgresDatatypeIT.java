@@ -19,6 +19,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.sql.Array;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -38,7 +39,11 @@ import java.util.concurrent.atomic.AtomicReference;
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.jdbc.data.Json;
 import io.confluent.connect.jdbc.integration.BaseConnectorIT;
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.dialect.PostgreSqlDatabaseDialect;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.JdbcSourceConnector;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.source.JdbcSourceTask;
@@ -72,6 +77,7 @@ import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_NAM
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_REPLICATION_FACTOR_CONFIG;
 import static org.apache.kafka.test.TestUtils.waitForCondition;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
@@ -1266,6 +1272,55 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
         assertTrue(rs.next());
         assertEquals("prod", rs.getString(1));
       }
+    }
+  }
+
+  /**
+   * A catalog read that fails leaves the type name unresolved, and the fallback assumes the bare
+   * {@code hstore} rather than guessing a schema. That is only safe because PostgreSQL rejects the
+   * bare name when the extension is off the search_path, which nothing else exercises: the unit
+   * tests stop at the name, and every other search_path test runs with the lookup already resolved.
+   *
+   * <p>A dialect pointed at an unreachable database is the same state: the lookup cannot run, so it
+   * stays unresolved. A reachable one would not do — building DDL asks for identifier rules, which
+   * opens a connection, which resolves the type on the way past.
+   */
+  @Test
+  public void testUnresolvedHstoreAssumesTheBareNameAndTheWriteIsRejected() throws Exception {
+    final String database = "extunresolved";
+    execute("CREATE DATABASE " + database);
+    executeIn(database, "CREATE SCHEMA ext", "CREATE EXTENSION hstore SCHEMA ext");
+
+    Map<String, String> dialectProps = new HashMap<>(props);
+    dialectProps.put(JdbcSinkConfig.CONNECTION_URL, "jdbc:postgresql://localhost:1/unreachable");
+    dialectProps.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
+    DatabaseDialect unresolved =
+        new PostgreSqlDatabaseDialect(new JdbcSinkConfig(dialectProps));
+
+    String ddl = unresolved.buildCreateTableStatement(
+        new TableId(null, null, tableName),
+        Collections.singletonList(new SinkRecordField(HSTORE_MAP_SCHEMA, "tags", false)));
+    assertTrue("unresolved must assume the bare name, but was: " + ddl, ddl.contains("hstore"));
+    assertFalse("unresolved must not invent a schema, but was: " + ddl, ddl.contains("\"ext\""));
+
+    SQLException thrown = assertThrows("the bare name must not resolve here",
+        SQLException.class, () -> executeIn(database, ddl));
+    assertTrue("PostgreSQL should reject the bare type, but was: " + thrown.getMessage(),
+        thrown.getMessage().contains("hstore") && thrown.getMessage().contains("does not exist"));
+
+    // The same guess reaches createArrayOf, so a record write is refused as well as the DDL.
+    executeIn(database, "CREATE TABLE " + tableName + "(tags ext.hstore[])");
+    try (Connection c = pg.getEmbeddedPostgres().getDatabase("postgres", database).getConnection();
+         PreparedStatement insert =
+             c.prepareStatement("INSERT INTO " + tableName + " VALUES (?)")) {
+      SQLException fromBind = assertThrows("the bare element type must not resolve either",
+          SQLException.class,
+          () -> unresolved.bindField(insert, 1, arrayOf(HSTORE_MAP_SCHEMA),
+              Collections.singletonList(Collections.singletonMap("env", "prod")), null, "tags"));
+      assertTrue("the driver should fail resolving the array type, but was: "
+          + fromBind.getMessage(),
+          fromBind.getMessage().contains("hstore")
+              && fromBind.getMessage().contains("array type"));
     }
   }
 

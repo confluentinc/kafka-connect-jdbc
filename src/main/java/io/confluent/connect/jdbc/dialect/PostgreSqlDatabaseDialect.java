@@ -111,7 +111,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     }
 
     /** The catalog answered; a null name means the extension is not installed. */
-    static HstoreType installedAs(String name) {
+    static HstoreType fromTypeName(String name) {
       return name == null ? ABSENT : new HstoreType(State.INSTALLED, name);
     }
 
@@ -270,7 +270,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       return;
     }
     try {
-      hstoreType = HstoreType.installedAs(resolveHstoreTypeName(connection));
+      hstoreType = HstoreType.fromTypeName(resolveHstoreTypeName(connection));
     } catch (SQLException e) {
       // Unresolved, not absent: a write assumes the bare name and lets PostgreSQL say why.
       log.warn("Could not read the catalog to find where the hstore extension is installed — this "

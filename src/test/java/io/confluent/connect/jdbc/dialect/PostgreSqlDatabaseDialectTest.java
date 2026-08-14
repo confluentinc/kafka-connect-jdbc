@@ -1268,7 +1268,7 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         "jdbc:postgresql://something", JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
     SinkRecordField field = new SinkRecordField(stringToStringMap(), "col", false);
 
-    sink.hstoreType = PostgreSqlDatabaseDialect.HstoreType.installedAs("\"ext\".hstore");
+    sink.hstoreType = PostgreSqlDatabaseDialect.HstoreType.fromTypeName("\"ext\".hstore");
     assertEquals("\"ext\".hstore", sink.getSqlType(field));
     assertEquals("\"ext\".hstore[]",
         sink.getSqlType(new SinkRecordField(arraySchema(stringToStringMap()), "col", false)));

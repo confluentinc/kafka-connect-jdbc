@@ -1521,15 +1521,36 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   /** An hstore column off the search_path is reported qualified and must be cast by that name. */
   @Test
   public void shouldCastHstoreColumnsByTheirReportedTypeName() {
+    PostgreSqlDatabaseDialect enabled = complexTypesSinkDialect();
     TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("myTable");
     builder.withColumn("plain").type("hstore", JDBCType.OTHER, Object.class);
     builder.withColumn("qualified").type("\"ext\".\"hstore\"", JDBCType.OTHER, Object.class);
     TableDefinition tableDefn = builder.build();
 
     assertEquals("::hstore",
-        dialect.valueTypeCast(tableDefn, tableDefn.definitionForColumn("plain").id()));
+        enabled.valueTypeCast(tableDefn, tableDefn.definitionForColumn("plain").id()));
     assertEquals("::\"ext\".\"hstore\"",
+        enabled.valueTypeCast(tableDefn, tableDefn.definitionForColumn("qualified").id()));
+  }
+
+  /**
+   * The cast is behind the flag like the rest of the feature, so with it off an hstore column gets
+   * none and PostgreSQL rejects the uncast parameter exactly as it did before the feature. The
+   * built-in cast types are untouched, since those pre-date it.
+   */
+  @Test
+  public void shouldNotCastHstoreColumnsWhenComplexTypesDisabled() {
+    TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("myTable");
+    builder.withColumn("plain").type("hstore", JDBCType.OTHER, Object.class);
+    builder.withColumn("qualified").type("\"ext\".\"hstore\"", JDBCType.OTHER, Object.class);
+    builder.withColumn("u").type("uuid", JDBCType.OTHER, Object.class);
+    TableDefinition tableDefn = builder.build();
+
+    assertEquals("", dialect.valueTypeCast(tableDefn, tableDefn.definitionForColumn("plain").id()));
+    assertEquals("",
         dialect.valueTypeCast(tableDefn, tableDefn.definitionForColumn("qualified").id()));
+    assertEquals("a pre-feature cast type must still be cast with the flag off", "::uuid",
+        dialect.valueTypeCast(tableDefn, tableDefn.definitionForColumn("u").id()));
   }
 
   /** pgjdbc leaves embedded quotes unescaped, so the cast must requote the reported name. */
@@ -1540,7 +1561,8 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     TableDefinition tableDefn = builder.build();
 
     assertEquals("::\"e\"\"x\".\"hstore\"",
-        dialect.valueTypeCast(tableDefn, tableDefn.definitionForColumn("hs").id()));
+        complexTypesSinkDialect().valueTypeCast(
+            tableDefn, tableDefn.definitionForColumn("hs").id()));
   }
 
   private Schema stringToStringMap() {

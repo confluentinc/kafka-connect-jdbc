@@ -1325,6 +1325,59 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
   }
 
   /**
+   * The {@code ::hstore} cast is behind {@code sql.complex.types.enable} like the rest of the
+   * feature, so with it off a STRING field is offered to a pre-existing hstore column uncast and
+   * PostgreSQL refuses it — the pre-feature behaviour. Paired with the flag-on case below, this is
+   * what keeps an upgrade from changing anything an existing pipeline can observe.
+   */
+  @Test
+  public void testStringIntoHstoreColumnIsRefusedWhenComplexTypesDisabled() throws Exception {
+    execute("CREATE EXTENSION IF NOT EXISTS hstore",
+        "CREATE TABLE " + tableName + "(name text, tags hstore)");
+    props.put(JdbcSinkConfig.AUTO_CREATE, "false");
+    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "false");
+    props.put(MAX_RETRIES, "0");
+    connect.configureConnector("jdbc-sink-connector", props);
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+
+    produceRecord(TEXT_TAGS_SCHEMA, new Struct(TEXT_TAGS_SCHEMA)
+        .put("name", "web-1")
+        .put("tags", "\"env\"=>\"prod\""));
+
+    // PostgreSQL's own rejection, because no cast was emitted.
+    assertTasksFailedWithTrace("jdbc-sink-connector", 1, "is of type hstore");
+  }
+
+  /** With the feature on the same record is cast and lands as a real hstore. */
+  @Test
+  public void testStringIsCastIntoHstoreColumnWhenComplexTypesEnabled() throws Exception {
+    execute("CREATE EXTENSION IF NOT EXISTS hstore",
+        "CREATE TABLE " + tableName + "(name text, tags hstore)");
+    props.put(JdbcSinkConfig.AUTO_CREATE, "false");
+    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
+    connect.configureConnector("jdbc-sink-connector", props);
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+
+    produceRecord(TEXT_TAGS_SCHEMA, new Struct(TEXT_TAGS_SCHEMA)
+        .put("name", "web-1")
+        .put("tags", "\"env\"=>\"prod\""));
+
+    waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 1, 1,
+        TimeUnit.MINUTES.toMillis(2));
+    assertEquals("hstore", queryOne("postgres",
+        "SELECT udt_name FROM information_schema.columns WHERE table_name = '" + tableName
+            + "' AND column_name = 'tags'"));
+    assertEquals("prod", queryOne("postgres", "SELECT tags -> 'env' FROM " + tableName));
+  }
+
+  private static final Schema TEXT_TAGS_SCHEMA = SchemaBuilder.struct()
+      .name("com.example.ServerText")
+      .field("name", Schema.STRING_SCHEMA)
+      .field("tags", Schema.STRING_SCHEMA)
+      .build();
+
+
+  /**
    * Selected but unavailable must fail loudly: without the extension there is no column type that
    * could hold the map, so the task fails with an actionable message rather than inventing one.
    */

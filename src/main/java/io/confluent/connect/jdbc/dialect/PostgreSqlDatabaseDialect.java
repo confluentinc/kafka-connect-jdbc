@@ -1563,6 +1563,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       ColumnDefinition defn = tableDefn.definitionForColumn(columnId.name());
       if (defn != null && defn.typeName() != null) {
         String typeName = defn.typeName(); // database-specific
+        if (!complexTypesEnabled()) {
+          // The hstore cast and the local-name match are both new, so off is the pre-feature form.
+          String rawName = typeName.toLowerCase();
+          return CAST_TYPES.contains(rawName) ? "::" + rawName : "";
+        }
         String localName = localTypeName(typeName).toLowerCase();
         if (HSTORE_TYPE_NAME.equals(localName)) {
           // Requoted, not interpolated: pgjdbc builds the qualified name without escaping.

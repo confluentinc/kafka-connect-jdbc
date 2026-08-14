@@ -370,18 +370,41 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
    */
   @Test
   public void shouldComputeValueTypeCastForArrayColumns() {
+    PostgreSqlDatabaseDialect enabled = complexTypesSinkDialect();
+    TableDefinition tableDefn = arrayCastColumns();
+
+    assertEquals("::uuid[]",
+        enabled.valueTypeCast(tableDefn, tableDefn.definitionForColumn("uuidArray").id()));
+    assertEquals("::jsonb[]",
+        enabled.valueTypeCast(tableDefn, tableDefn.definitionForColumn("jsonbArray").id()));
+    assertEquals("",
+        enabled.valueTypeCast(tableDefn, tableDefn.definitionForColumn("textArray").id()));
+  }
+
+  /**
+   * The array cast is behind the flag like the rest of the feature, so with it off a text[] reaches
+   * a uuid[] column uncast and PostgreSQL rejects it, exactly as before the feature. The scalar
+   * cast types are untouched, since those pre-date it.
+   */
+  @Test
+  public void shouldNotCastArrayColumnsWhenComplexTypesDisabled() {
+    TableDefinition tableDefn = arrayCastColumns();
+
+    assertEquals("",
+        dialect.valueTypeCast(tableDefn, tableDefn.definitionForColumn("uuidArray").id()));
+    assertEquals("",
+        dialect.valueTypeCast(tableDefn, tableDefn.definitionForColumn("jsonbArray").id()));
+    assertEquals("a pre-feature scalar cast type must still be cast with the flag off", "::uuid",
+        dialect.valueTypeCast(tableDefn, tableDefn.definitionForColumn("uuidScalar").id()));
+  }
+
+  private TableDefinition arrayCastColumns() {
     TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("myTable");
     builder.withColumn("uuidArray").type("_uuid", JDBCType.ARRAY, Object.class);
     builder.withColumn("jsonbArray").type("_jsonb", JDBCType.ARRAY, Object.class);
     builder.withColumn("textArray").type("_text", JDBCType.ARRAY, Object.class);
-    TableDefinition tableDefn = builder.build();
-
-    assertEquals("::uuid[]",
-        dialect.valueTypeCast(tableDefn, tableDefn.definitionForColumn("uuidArray").id()));
-    assertEquals("::jsonb[]",
-        dialect.valueTypeCast(tableDefn, tableDefn.definitionForColumn("jsonbArray").id()));
-    assertEquals("",
-        dialect.valueTypeCast(tableDefn, tableDefn.definitionForColumn("textArray").id()));
+    builder.withColumn("uuidScalar").type("uuid", JDBCType.OTHER, Object.class);
+    return builder.build();
   }
 
   @Test

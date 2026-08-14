@@ -1454,8 +1454,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           if (CAST_TYPES.contains(typeName)) {
             return "::" + typeName;
           }
-          // The array of a cast type needs the same cast, e.g. text[] into a uuid[] column.
-          if (typeName.startsWith("_") && CAST_TYPES.contains(typeName.substring(1))) {
+          // Behind the flag: the array form is new, the scalar cast above pre-dates the feature.
+          if (complexTypesEnabled()
+              && typeName.startsWith("_") && CAST_TYPES.contains(typeName.substring(1))) {
             return "::" + typeName.substring(1) + "[]";
           }
         }

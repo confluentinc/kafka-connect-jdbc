@@ -2265,6 +2265,63 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
   }
 
   /**
+   * The array cast is behind {@code sql.complex.types.enable} like the rest of the feature, so with
+   * it off an ARRAY&lt;STRING&gt; is offered to a pre-existing {@code uuid[]} column uncast and
+   * PostgreSQL refuses it — the pre-feature behaviour. Paired with the flag-on case below, this is
+   * what keeps an upgrade from changing anything an existing pipeline can observe.
+   */
+  @Test
+  public void testStringArrayIntoUuidArrayColumnIsRefusedWhenComplexTypesDisabled()
+      throws Exception {
+    execute("CREATE TABLE " + tableName + "(name text, ids uuid[])");
+    props.put(JdbcSinkConfig.AUTO_CREATE, "false");
+    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "false");
+    props.put(MAX_RETRIES, "0");
+    connect.configureConnector("jdbc-sink-connector", props);
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+
+    produceRecord(TEXT_IDS_SCHEMA, new Struct(TEXT_IDS_SCHEMA)
+        .put("name", "web-1")
+        .put("ids", Collections.singletonList(CAST_UUID)));
+
+    // PostgreSQL's own rejection, because no cast was emitted.
+    assertTasksFailedWithTrace("jdbc-sink-connector", 1, "is of type uuid[]");
+  }
+
+  /** With the feature on the same record is cast and lands as real uuids. */
+  @Test
+  public void testStringArrayIsCastIntoUuidArrayColumnWhenComplexTypesEnabled() throws Exception {
+    execute("CREATE TABLE " + tableName + "(name text, ids uuid[])");
+    props.put(JdbcSinkConfig.AUTO_CREATE, "false");
+    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
+    connect.configureConnector("jdbc-sink-connector", props);
+    waitForConnectorToStart("jdbc-sink-connector", 1);
+
+    produceRecord(TEXT_IDS_SCHEMA, new Struct(TEXT_IDS_SCHEMA)
+        .put("name", "web-1")
+        .put("ids", Collections.singletonList(CAST_UUID)));
+
+    waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 1, 1,
+        TimeUnit.MINUTES.toMillis(2));
+
+    assertEquals("_uuid", columnUdtName(tableName, "ids"));
+    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
+         Statement st = c.createStatement();
+         ResultSet rs = st.executeQuery("SELECT ids::text FROM " + tableName)) {
+      assertTrue("destination table has no rows", rs.next());
+      assertEquals("{" + CAST_UUID + "}", rs.getString(1));
+    }
+  }
+
+  private static final String CAST_UUID = "0d3ec2e0-9c6a-4b1e-9f1a-7c3a2b5d6e7f";
+
+  private static final Schema TEXT_IDS_SCHEMA = SchemaBuilder.struct()
+      .name("com.example.CastArrays")
+      .field("name", Schema.STRING_SCHEMA)
+      .field("ids", arrayOf(Schema.OPTIONAL_STRING_SCHEMA))
+      .build();
+
+  /**
    * {@code uuid[]} has no Connect logical type, so it travels as ARRAY&lt;STRING&gt; and would
    * auto-create text[]. Into a pre-existing uuid[] column it must still land as real uuids, which
    * only the {@code ::uuid[]} cast makes possible.

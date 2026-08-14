@@ -20,7 +20,21 @@ blocks:
       jobs:
         - name: Release
           commands:
-            - ci-tools ci-update-version
+            - git fetch --tags -q || true
+            - |
+              # Base the incremental on the last released version reachable from this branch.
+              # ci-update-version would otherwise derive it from the pom's in-development
+              # version, giving e.g. 10.9.7-1, which Maven orders *after* the real 10.9.7.
+              BASE=$(git tag -l --merged HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed 's/^v//' | sort -V | tail -1)
+              if [ -z "$BASE" ]; then
+                echo "No release tag (vX.Y.Z) reachable from HEAD; cannot derive an incremental base version"
+                exit 1
+              fi
+              # Incremental tags sit on dangling commits, so they are never --merged.
+              LAST=$(git tag -l "v${BASE}-*" | sed "s|^v${BASE}-||" | grep -E '^[0-9]+$' | sort -n | tail -1)
+              NEXT="${BASE}-$(( ${LAST:-0} + 1 ))"
+              echo "Latest release v${BASE}; releasing ${NEXT}"
+              ci-tools ci-update-version --version "${NEXT}"
             - ci-tools ci-push-tag
             - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 -Ddependency.check.skip=true --batch-mode --no-transfer-progress 
               -DaltDeploymentRepository=confluent-codeartifact-internal::default::https://confluent-519856050701.d.codeartifact.us-west-2.amazonaws.com/maven/maven-snapshots/ 

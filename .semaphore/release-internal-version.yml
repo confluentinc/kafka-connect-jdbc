@@ -20,7 +20,9 @@ blocks:
       jobs:
         - name: Release
           commands:
-            - git fetch --tags -q || true
+            # checkout is a shallow clone and incremental tags sit on dangling commits,
+            # so this fetch is the only source of the tags the version is computed from.
+            - git fetch --tags -q
             - |
               # An incremental builds on the latest release of this branch's own line. The
               # pom holds the next, unreleased version, so the base must come from tags.

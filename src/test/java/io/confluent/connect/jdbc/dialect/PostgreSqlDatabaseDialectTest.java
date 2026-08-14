@@ -1655,7 +1655,8 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         Decimal.builder(2).optional().build());
 
     for (Schema element : elements) {
-      assertThrows("no column type for " + element.name(), ConnectException.class,
+      ConnectException fromDdl = assertThrows("no column type for " + element.name(),
+          ConnectException.class,
           () -> disabled.getSqlType(new SinkRecordField(arraySchema(element), "col", false)));
 
       ConnectException thrown = assertThrows(ConnectException.class,
@@ -1664,6 +1665,15 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
               mock(ColumnDefinition.class), "col"));
       assertTrue("message should name the config, but was: " + thrown.getMessage(),
           thrown.getMessage().contains(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE));
+
+      // The flag is off for the whole connector, so no record can succeed and there is nothing for
+      // a batch split to find: both paths fail the task rather than carrying the DDL exception's
+      // per-record handling. Asserted on the exact class, since TableAlterOrCreateException
+      // extends ConnectException and would satisfy the checks above unnoticed.
+      assertEquals("the DDL path must not carry a table-alter exception",
+          ConnectException.class, fromDdl.getClass());
+      assertEquals("the bind path must not carry a table-alter exception",
+          ConnectException.class, thrown.getClass());
     }
   }
 

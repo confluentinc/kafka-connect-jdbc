@@ -19,7 +19,6 @@ import io.confluent.connect.jdbc.data.Json;
 import io.confluent.connect.jdbc.data.VariableScaleDecimal;
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
-import io.confluent.connect.jdbc.sink.TableAlterOrCreateException;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
@@ -886,13 +885,13 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   }
 
   /**
-   * The failure for an array element the complex types would bind but the feature is off. Raised
-   * from both the DDL and the bind path so an operator sees the same actionable message either way,
-   * rather than an unwritable column or a driver-level type error.
+   * The failure for an array element the complex types would bind while the feature is off.
+   * Shared by the DDL and bind paths for one actionable message. Not a DDL failure: the flag is
+   * off for the whole connector, so no record can succeed and a batch split would find nothing.
    */
-  private static TableAlterOrCreateException complexArrayElementDisabled(
+  private static ConnectException complexArrayElementDisabled(
       Schema element, String fieldName) {
-    return new TableAlterOrCreateException(String.format(COMPLEX_ARRAY_ELEMENT_DISABLED,
+    return new ConnectException(String.format(COMPLEX_ARRAY_ELEMENT_DISABLED,
         element.name() == null ? element.type() : element.name(),
         fieldName, JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE));
   }

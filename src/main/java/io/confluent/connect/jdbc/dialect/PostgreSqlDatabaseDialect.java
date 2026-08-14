@@ -580,7 +580,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
   /**
    * Read a PostgreSQL array column into a Connect list. The shared handling — SQL NULL, skipping
-   * multi-dimensional columns (see {@link #isMultiDimensional(Object[], String)}), and freeing the
+   * multi-dimensional columns (see {@link #isMultiDimensional(Object[])}), and freeing the
    * array — lives here. Temporal elements are decoded via the element {@link ResultSet} so each
    * can honor the configured {@code db.timezone}; all other elements come straight from
    * {@code getArray()}.
@@ -596,7 +596,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       if (raw == null) {
         return null;
       }
-      if (raw instanceof Object[] && isMultiDimensional((Object[]) raw, elementType)) {
+      if (raw instanceof Object[] && isMultiDimensional((Object[]) raw)) {
         if (multiDimensionalWarnedColumns.add(columnId)) {
           log.warn(MULTI_DIMENSIONAL_ARRAY_MESSAGE, columnId);
         } else {
@@ -724,14 +724,15 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * Postgres allows these, but JDBC reports the same type name as 1-D, so they are only
    * detectable from values; with no 1-D Connect ARRAY schema, callers skip them, returning null.
    *
-   * <p>A {@code bytea} element is legitimately a {@code byte[]}, so for that type only a nested
-   * {@code Object[]} — {@code byte[][][]}, from a {@code bytea[][]} column — is multi-dimensional.
+   * <p>Tested as an object array rather than any array: {@code bytea} is the one element type whose
+   * value is itself a {@code byte[]}, and its primitive component keeps it out of {@code Object[]}
+   * while a real {@code bytea[][]} still nests. Every other decoder yields a reference array, so
+   * the same question is correct for all of them.
    */
-  private static boolean isMultiDimensional(Object[] elements, String elementType) {
+  private static boolean isMultiDimensional(Object[] elements) {
     for (Object element : elements) {
       if (element != null) {
-        return BYTEA_TYPE_NAME.equals(elementType)
-            ? element instanceof Object[] : element.getClass().isArray();
+        return element instanceof Object[];
       }
     }
     return false;
@@ -889,7 +890,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * Shared by the DDL and bind paths for one actionable message. Not a DDL failure: the flag is
    * off for the whole connector, so no record can succeed and a batch split would find nothing.
    */
-  private static ConnectException complexArrayElementDisabled(
+  private static ConnectException complexArrayElementDisabledError(
       Schema element, String fieldName) {
     return new ConnectException(String.format(COMPLEX_ARRAY_ELEMENT_DISABLED,
         element.name() == null ? element.type() : element.name(),
@@ -976,7 +977,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           return super.getSqlType(field);
         }
         if (!complexTypesEnabled() && isComplexArrayElement(element)) {
-          throw complexArrayElementDisabled(element, field.name());
+          throw complexArrayElementDisabledError(element, field.name());
         }
         SinkRecordField childField = new SinkRecordField(
             element,
@@ -1191,7 +1192,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     Schema elementSchema = schema.valueSchema();
     if (!complexTypesEnabled() && isComplexArrayElement(elementSchema)) {
       // The primitive fallback would fail on the element's Java type rather than say why.
-      throw complexArrayElementDisabled(elementSchema, fieldName);
+      throw complexArrayElementDisabledError(elementSchema, fieldName);
     }
     ArrayElementBinding binding =
         complexTypesEnabled() ? arrayElementBinding(elementSchema) : null;

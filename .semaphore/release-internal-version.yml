@@ -20,7 +20,23 @@ blocks:
       jobs:
         - name: Release
           commands:
-            - ci-tools ci-update-version
+            # checkout is a shallow clone and incremental tags sit on dangling commits,
+            # so this fetch is the only source of the tags the version is computed from.
+            - git fetch --tags -q
+            - |
+              # An incremental builds on the latest release of this branch's own line. The
+              # pom holds the next, unreleased version, so the base must come from tags.
+              LINE="${SEMAPHORE_GIT_BRANCH%.x}"
+              BASE=$(git tag -l --merged HEAD | grep -E "^v${LINE//./\\.}\.[0-9]+$" | sed 's/^v//' | sort -V | tail -1)
+              if [ -z "$BASE" ]; then
+                echo "No ${LINE}.x release found; ${LINE}.0 must be released before an incremental can be cut"
+                exit 1
+              fi
+              # Incremental tags sit on dangling commits, so they are never --merged.
+              LAST=$(git tag -l | grep -E "^v${BASE//./\\.}-[0-9]+$" | sed "s|^v${BASE}-||" | sort -n | tail -1)
+              NEXT="${BASE}-$(( ${LAST:-0} + 1 ))"
+              echo "Latest ${LINE}.x release: v${BASE}; releasing ${NEXT}"
+              ci-tools ci-update-version --version "${NEXT}"
             - ci-tools ci-push-tag
             - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 -Ddependency.check.skip=true --batch-mode --no-transfer-progress 
               -DaltDeploymentRepository=confluent-codeartifact-internal::default::https://confluent-519856050701.d.codeartifact.us-west-2.amazonaws.com/maven/maven-snapshots/ 

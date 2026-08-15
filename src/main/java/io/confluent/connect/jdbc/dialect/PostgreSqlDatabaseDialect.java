@@ -54,6 +54,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
+import java.nio.ByteBuffer;
 import java.sql.Array;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -153,6 +154,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   static final String TIME_TYPE_NAME = "time";
   static final String TIMESTAMP_TYPE_NAME = "timestamp";
   static final String TIMESTAMPTZ_TYPE_NAME = "timestamptz";
+  static final String BYTEA_TYPE_NAME = "bytea";
 
   /** pgjdbc reports an array type as its element name with this prefix: hstore[] is _hstore. */
   static final String ARRAY_TYPE_PREFIX = "_";
@@ -191,6 +193,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           UUID_TYPE_NAME
       ))
   );
+
+  private static final String COMPLEX_ARRAY_ELEMENT_DISABLED =
+      "Cannot write an array of %s into column %s while %s is false; set it to true to map "
+          + "complex column types.";
 
   /**
    * Create a new dialect instance with the given connector configuration.
@@ -620,6 +626,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       case "bool":
       case "boolean":
         return Schema.OPTIONAL_BOOLEAN_SCHEMA;
+      case BYTEA_TYPE_NAME:
+        return Schema.OPTIONAL_BYTES_SCHEMA;
+      case UUID_TYPE_NAME:
+        // Rendered as text, matching the scalar uuid mapping.
+        return Schema.OPTIONAL_STRING_SCHEMA;
       case "numeric":
       case "decimal":
         // Per-value scale carried via VariableScaleDecimal (array typmod is -1 in JDBC metadata).
@@ -699,9 +710,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
   /**
    * Read a PostgreSQL array column into a Connect list. The shared handling — SQL NULL, skipping
-   * multi-dimensional columns (see {@link #isMultiDimensional(Object[])}), and freeing the array —
-   * lives here. Temporal elements are decoded via the element {@link ResultSet} so each can honor
-   * the configured {@code db.timezone}; all other elements come straight from {@code getArray()}.
+   * multi-dimensional columns (see {@link #isMultiDimensional(Object[])}), and freeing the
+   * array — lives here. Temporal elements are decoded via the element {@link ResultSet} so each
+   * can honor the configured {@code db.timezone}; all other elements come straight from
+   * {@code getArray()}.
    */
   private List<Object> readArray(ResultSet rs, int col, ColumnId columnId, String elementType)
       throws SQLException {
@@ -742,7 +754,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
   /**
    * Map elements the driver already returns as the target Java type into a Connect list (nulls
-   * preserved). Used for primitive, Json and VariableScaleDecimal elements.
+   * preserved). Used for primitive, bytea, uuid, Json and VariableScaleDecimal elements.
    */
   private static List<Object> readMappedElements(Object[] elements, String elementType) {
     List<Object> out = new ArrayList<>(elements.length);
@@ -754,7 +766,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
   /**
    * Convert a single non-temporal array element to its Connect value: VariableScaleDecimal structs
-   * from the element BigDecimal, Json from the raw JSON text, and primitives passed through as-is.
+   * from the element BigDecimal, raw text for Json and uuid, and primitives — including bytea,
+   * already a {@code byte[]} — passed through as-is.
    */
   private static Object mapArrayElement(String elementType, Object element) {
     switch (elementType) {
@@ -764,9 +777,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
             VariableScaleDecimal.optionalSchema(), (BigDecimal) element);
       case JSON_TYPE_NAME:
       case JSONB_TYPE_NAME:
-        // Raw JSON text; toString() covers both String and PGobject.
+      case UUID_TYPE_NAME:
         return element.toString();
       default:
+        // Primitives and bytea (already a byte[]) pass through.
         return element;
     }
   }
@@ -850,11 +864,16 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    * Whether the elements are themselves arrays — a multi-dimensional column like {@code int[][]}.
    * Postgres allows these, but JDBC reports the same type name as 1-D, so they are only
    * detectable from values; with no 1-D Connect ARRAY schema, callers skip them, returning null.
+   *
+   * <p>Tested as an object array rather than any array: {@code bytea} is the one element type whose
+   * value is itself a {@code byte[]}, and its primitive component keeps it out of {@code Object[]}
+   * while a real {@code bytea[][]} still nests. Every other decoder yields a reference array, so
+   * the same question is correct for all of them.
    */
   private static boolean isMultiDimensional(Object[] elements) {
     for (Object element : elements) {
       if (element != null) {
-        return element.getClass().isArray();
+        return element instanceof Object[];
       }
     }
     return false;
@@ -1027,20 +1046,46 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
   /**
    * Whether an array field's elements are ones {@link #bindArray} cannot write, so no column type
-   * is advertised: a nested array, a plain BYTES element, or any element under
-   * {@code timestamp.fields.list}, which selects TIMESTAMP by field name but has no binding for
-   * arrays. Advertising these would let auto-create build a column every insert then fails on.
+   * is advertised: a nested array, or any element under {@code timestamp.fields.list}, which
+   * selects TIMESTAMP by field name but has no binding for arrays. Advertising these would let
+   * auto-create build a column every insert then fails on.
    */
   private boolean isUnbindableArrayElement(SinkRecordField field) {
     Schema element = field.schema().valueSchema();
     if (element.type() == Schema.Type.ARRAY) {
       return true;
     }
-    if (element.type() == Schema.Type.BYTES && element.name() == null) {
+    // BYTES binds only through the complex-types path, so a named one no binding claims — a custom
+    // logical type, say — would otherwise advertise a bytea[] column every insert then fails on.
+    if (element.type() == Schema.Type.BYTES && arrayElementBinding(element, field.name()) == null) {
       return true;
     }
     return config instanceof JdbcSinkConfig
         && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name());
+  }
+
+  /**
+   * Whether an element is written only by {@link #arrayElementBinding(Schema, String)}: a
+   * bytea-bound plain element the complex-types path would bind, other than Json.
+   */
+  private boolean isComplexArrayElement(Schema element, String fieldName) {
+    // Derived from the binding rather than an enumerated name list, so any element the complex
+    // types would write is refused when they are off. Json is the deliberate exception: it is
+    // STRING-based and degrades losslessly to text[].
+    return !Json.LOGICAL_NAME.equals(element.name())
+        && arrayElementBinding(element, fieldName) != null;
+  }
+
+  /**
+   * The failure for an array element the complex types would bind while the feature is off.
+   * Shared by the DDL and bind paths for one actionable message. Not a DDL failure: the flag is
+   * off for the whole connector, so no record can succeed and a batch split would find nothing.
+   */
+  private static ConnectException complexArrayElementDisabledError(
+      Schema element, String fieldName) {
+    return new ConnectException(String.format(COMPLEX_ARRAY_ELEMENT_DISABLED,
+        element.name() == null ? element.type() : element.name(),
+        fieldName, JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE));
   }
 
   /**
@@ -1115,16 +1160,23 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         return "TEXT";
       case BYTES:
         return "BYTEA";
-      case ARRAY:
+      case ARRAY: {
+        Schema element = field.schema().valueSchema();
+        // Unbindable first: enabling the feature cannot help an element nothing can write, so
+        // advising it would only lead to a second and less helpful failure.
         if (isUnbindableArrayElement(field)) {
           return super.getSqlType(field);
         }
+        if (!complexTypesEnabled() && isComplexArrayElement(element, field.name())) {
+          throw complexArrayElementDisabledError(element, field.name());
+        }
         SinkRecordField childField = new SinkRecordField(
-            field.schema().valueSchema(),
+            element,
             field.name(),
             field.isPrimaryKey()
         );
         return getSqlType(childField) + "[]";
+      }
       case MAP:
         if (isStringToStringMap(field.schema()) && complexTypesEnabled()) {
           return hstoreTypeNameOrFail(field.name());
@@ -1315,8 +1367,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
   /**
    * Bind a Connect ARRAY value to a native PostgreSQL array parameter. When complex types are
-   * enabled, element types with a dedicated PostgreSQL array type (json, numeric and the
-   * temporals) are resolved by {@link #arrayElementBinding(Schema, String)} and bound via
+   * enabled, element types with a dedicated PostgreSQL array type (bytea, hstore, json, numeric and
+   * the temporals) are resolved by {@link #arrayElementBinding(Schema, String)} and bound via
    * {@code createArrayOf}; any other (primitive) element type falls back to the pre-existing
    * {@link #maybeBindPrimitiveArray}. Returns false if the element type is not handled here.
    */
@@ -1329,6 +1381,10 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   ) throws SQLException {
     Collection<?> values = arrayValueCollection(value);
     Schema elementSchema = schema.valueSchema();
+    if (!complexTypesEnabled() && isComplexArrayElement(elementSchema, fieldName)) {
+      // The primitive fallback would fail on the element's Java type rather than say why.
+      throw complexArrayElementDisabledError(elementSchema, fieldName);
+    }
     ArrayElementBinding binding =
         complexTypesEnabled() ? arrayElementBinding(elementSchema, fieldName) : null;
     if (binding == null) {
@@ -1378,6 +1434,9 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     if (isStringToStringMap(elementSchema)) {
       return new ArrayElementBinding(
           hstoreTypeNameOrFail(fieldName), PostgreSqlDatabaseDialect::hstoreArrayFor);
+    }
+    if (elementSchema.type() == Schema.Type.BYTES && elementSchema.name() == null) {
+      return new ArrayElementBinding(BYTEA_TYPE_NAME, PostgreSqlDatabaseDialect::byteArrayFor);
     }
     String elementName = elementSchema.name();
     if (elementName != null) {
@@ -1448,6 +1507,23 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
             : VariableScaleDecimal.toLogical(
                 (Struct) o))
         .toArray(BigDecimal[]::new);
+  }
+
+  /**
+   * Decode a collection of Connect BYTES elements into a {@code byte[][]} for binding into a native
+   * {@code bytea[]} column. Connect permits either representation. Null elements are preserved.
+   */
+  private static Object[] byteArrayFor(Collection<?> valueCollection) {
+    return valueCollection.stream()
+        .map(o -> o == null ? null : o instanceof ByteBuffer ? bytesOf((ByteBuffer) o) : (byte[]) o)
+        .toArray(byte[][]::new);
+  }
+
+  private static byte[] bytesOf(ByteBuffer buffer) {
+    ByteBuffer slice = buffer.slice();
+    byte[] bytes = new byte[slice.remaining()];
+    slice.get(bytes);
+    return bytes;
   }
 
   /**
@@ -1552,7 +1628,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    *
    * <p>This method returns a blank string except for those column types that require casting
    * when set with literal values. For example, a column of type {@code uuid} must be cast when
-   * being bound with with a {@code varchar} literal, since a UUID value cannot be bound directly.
+   * being bound with a {@code varchar} literal, since a UUID value cannot be bound directly. The
+   * array of such a type needs the same cast, so a {@code uuid[]} column yields {@code ::uuid[]}.
    *
    * @param tableDefn the table definition; may be null if unknown
    * @param columnId  the column within the table; may not be null
@@ -1564,7 +1641,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       if (defn != null && defn.typeName() != null) {
         String typeName = defn.typeName(); // database-specific
         if (!complexTypesEnabled()) {
-          // The hstore cast and the local-name match are both new, so off is the pre-feature form.
+          // Both gates off: the hstore cast, the array cast, and the local-name match are all new,
+          // so this is the pre-feature form — scalar cast types matched on the raw name only.
           String rawName = typeName.toLowerCase();
           return CAST_TYPES.contains(rawName) ? "::" + rawName : "";
         }
@@ -1575,6 +1653,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         }
         if (CAST_TYPES.contains(localName)) {
           return "::" + localName;
+        }
+        // The array of a cast type needs the same cast, e.g. text[] into a uuid[] column.
+        if (localName.startsWith(ARRAY_TYPE_PREFIX)
+            && CAST_TYPES.contains(localName.substring(ARRAY_TYPE_PREFIX.length()))) {
+          return "::" + localName.substring(ARRAY_TYPE_PREFIX.length()) + "[]";
         }
       }
     }

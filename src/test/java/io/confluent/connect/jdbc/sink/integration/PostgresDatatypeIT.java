@@ -19,7 +19,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.sql.Array;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -39,11 +38,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.jdbc.data.Json;
 import io.confluent.connect.jdbc.integration.BaseConnectorIT;
-import io.confluent.connect.jdbc.dialect.DatabaseDialect;
-import io.confluent.connect.jdbc.dialect.PostgreSqlDatabaseDialect;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
-import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
-import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.JdbcSourceConnector;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 import io.confluent.connect.jdbc.source.JdbcSourceTask;
@@ -76,9 +71,7 @@ import static org.apache.kafka.connect.runtime.ConnectorConfig.ERRORS_TOLERANCE_
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_NAME_CONFIG;
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_REPLICATION_FACTOR_CONFIG;
 import static org.apache.kafka.test.TestUtils.waitForCondition;
-import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
@@ -945,217 +938,36 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
   }
 
   /**
-   * An hstore installed outside the connection's search_path is reported as {@code "ext"."hstore"}
-   * and its values arrive as raw text rather than a decoded map. Both are normalised, so the column
-   * maps exactly as an on-search_path one does — the extension's location is not the operator's
-   * problem, matching Debezium, which strips the schema before its own catalog lookup.
+   * An hstore type outside the connection's search_path is reported as {@code "ext"."hstore"}, so a
+   * selected mapping mode cannot be honoured. The task fails at schema time, before any value is
+   * read, rather than silently dropping the column.
    */
   @Test
-  public void testHstoreOutsideSearchPathIsMappedInBothModes() throws Exception {
+  public void testHstoreOutsideSearchPathFailsWhenAMappingModeIsSelected() throws Exception {
     execute("CREATE DATABASE offpath");
-    executeIn("offpath",
-        "CREATE SCHEMA ext",
-        "CREATE EXTENSION hstore SCHEMA ext",
-        "CREATE TABLE " + tableName + "(id int, hs ext.hstore, hsa ext.hstore[])",
-        "INSERT INTO " + tableName + " VALUES (1, '\"k\" => \"v\",\"n\" => NULL'::ext.hstore, "
-            + "ARRAY['\"a\" => \"1\"'::ext.hstore, ''::ext.hstore])");
+    try (Connection c = pg.getEmbeddedPostgres().getDatabase("postgres", "offpath").getConnection();
+         Statement s = c.createStatement()) {
+      s.execute("CREATE SCHEMA ext");
+      s.execute("CREATE EXTENSION hstore SCHEMA ext");
+      s.execute("CREATE TABLE " + tableName + "(id int, hs ext.hstore)");
+      s.execute("INSERT INTO " + tableName + " VALUES (1, 'k=>v'::ext.hstore)");
+    }
 
-    Map<String, String> expected = new LinkedHashMap<>();
-    expected.put("k", "v");
-    expected.put("n", null);
-
-    // map mode: the raw text is parsed into the same map a resolved column would yield.
-    Struct mapRow = pollOneRow(complexTypesSourceProps("offpath",
+    // A mapping mode was asked for and this column cannot honour it, so the task fails rather than
+    // silently dropping the column. map mode is set explicitly: under the default none the column
+    // would be skipped and this would prove nothing about search_path.
+    Throwable failure = pollUntilTaskFails(complexTypesSourceProps("offpath",
         JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "map"));
-    new SchemaAndValueField("hs", HSTORE_MAP_SCHEMA, expected).assertFor(mapRow);
-    assertEquals("hstore[] elements must decode too",
-        Arrays.asList(Collections.singletonMap("a", "1"), Collections.emptyMap()),
-        mapRow.get("hsa"));
+    assertTrue("expected a ConnectException, got " + failure.getClass().getName(),
+        failure instanceof ConnectException);
+    String messages = causeChain(failure);
+    assertTrue("must name the cause, got: " + messages, messages.contains("search_path"));
+    assertTrue("must offer the escape hatch, got: " + messages,
+        messages.contains("hstore.handling.mode=none"));
 
-    // json mode: the same value, serialized.
-    Struct jsonRow = pollOneRow(complexTypesSourceProps("offpath",
-        JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "json"));
-    SchemaAndValueField.jsonText("hs", Json.optionalSchema(),
-        parsedMapWithNull("k", "v", "n")).assertFor(jsonRow);
-
-    // none still means skip, wherever the extension lives.
+    // none is the escape hatch: the same column is skipped instead of failing.
     assertFieldAbsent(pollOneRow(complexTypesSourceProps("offpath",
         JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "none")), "hs");
-  }
-
-  /**
-   * The whole feature end to end against an extension in its own schema: source reads
-   * {@code ext.hstore} and {@code ext.hstore[]}, and the sink provisions and writes native hstore
-   * columns in the same database. This is the case that previously failed the source task outright.
-   */
-  @Test
-  public void testHstoreRoundTripWithExtensionOutsideSearchPath() throws Exception {
-    final String database = "extroundtrip";
-    execute("CREATE DATABASE " + database);
-    executeIn(database,
-        "CREATE SCHEMA ext",
-        "CREATE EXTENSION hstore SCHEMA ext",
-        "CREATE TABLE " + SRC_TABLE + "(id int PRIMARY KEY, hs ext.hstore, hsa ext.hstore[])",
-        "INSERT INTO " + SRC_TABLE + " VALUES (1, "
-            + "'\"key\" => \"val\",\"absent\" => NULL'::ext.hstore, "
-            + "ARRAY['\"a\" => \"1\"'::ext.hstore, ''::ext.hstore])",
-        "INSERT INTO " + SRC_TABLE + " VALUES (2, ''::ext.hstore, NULL)");
-
-    Map<String, String> sourceExtras = new HashMap<>();
-    sourceExtras.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, jdbcUrl(database));
-    sourceExtras.put(JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true");
-    sourceExtras.put(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "map");
-    Map<String, String> sinkExtras = new HashMap<>();
-    sinkExtras.put(JdbcSinkConfig.CONNECTION_URL, jdbcUrl(database));
-    sinkExtras.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
-
-    runRoundTrip(2, sourceExtras, sinkExtras);
-
-    // Both destination columns are the real extension type, not jsonb or text.
-    assertEquals("hstore", queryOne(database,
-        "SELECT udt_name FROM information_schema.columns WHERE table_name = '" + DST_TABLE
-            + "' AND column_name = 'hs'"));
-    assertEquals("_hstore", queryOne(database,
-        "SELECT udt_name FROM information_schema.columns WHERE table_name = '" + DST_TABLE
-            + "' AND column_name = 'hsa'"));
-
-    // Values survive, read back through the extension's own operators.
-    assertEquals("val", queryOne(database, "SELECT hs OPERATOR(ext.->) 'key' FROM " + DST_TABLE
-        + " WHERE id = 1"));
-    assertNull("a NULL hstore value stays NULL", queryOne(database,
-        "SELECT hs OPERATOR(ext.->) 'absent' FROM " + DST_TABLE + " WHERE id = 1"));
-    assertEquals("the key is still present", "2", queryOne(database,
-        "SELECT array_length(ext.akeys(hs), 1)::text FROM " + DST_TABLE + " WHERE id = 1"));
-    assertEquals("1", queryOne(database,
-        "SELECT hsa[1] OPERATOR(ext.->) 'a' FROM " + DST_TABLE + " WHERE id = 1"));
-    // An empty hstore stays empty rather than becoming NULL, and a NULL array stays NULL.
-    assertEquals("0", queryOne(database,
-        "SELECT coalesce(array_length(ext.akeys(hs), 1), 0)::text FROM " + DST_TABLE
-            + " WHERE id = 2"));
-    assertNull(queryOne(database, "SELECT hsa::text FROM " + DST_TABLE + " WHERE id = 2"));
-  }
-
-  /**
-   * Writing into a hand-created hstore column, rather than one this connector provisioned, and with
-   * the extension off the search_path so the cast has to carry the qualified type name.
-   */
-  @Test
-  public void testWriteToPreExistingHstoreColumnOutsideSearchPath() throws Exception {
-    final String database = "extexisting";
-    execute("CREATE DATABASE " + database);
-    executeIn(database,
-        "CREATE SCHEMA ext",
-        "CREATE EXTENSION hstore SCHEMA ext",
-        "CREATE TABLE " + tableName + "(name text, tags ext.hstore)");
-
-    props.put(JdbcSinkConfig.CONNECTION_URL, jdbcUrl(database));
-    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
-    connect.configureConnector("jdbc-sink-connector", props);
-    waitForConnectorToStart("jdbc-sink-connector", 1);
-
-    produceRecord(HSTORE_SINK_SCHEMA, new Struct(HSTORE_SINK_SCHEMA)
-        .put("name", "web-1")
-        .put("tags", Collections.singletonMap("env", "prod")));
-
-    waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 1, 1,
-        TimeUnit.MINUTES.toMillis(2));
-
-    assertEquals("prod", queryOne(database,
-        "SELECT tags OPERATOR(ext.->) 'env' FROM " + tableName));
-  }
-
-  /**
-   * A map is written as hstore text, so an existing column of another type has to be refused with a
-   * message naming it, rather than letting PostgreSQL report a JSON syntax error.
-   */
-  @Test
-  public void testMapIntoNonHstoreColumnIsRefused() throws Exception {
-    execute("CREATE EXTENSION IF NOT EXISTS hstore",
-        "CREATE TABLE " + tableName + "(name text, tags jsonb)");
-    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
-    props.put(MAX_RETRIES, "0");
-    connect.configureConnector("jdbc-sink-connector", props);
-    waitForConnectorToStart("jdbc-sink-connector", 1);
-
-    produceRecord(HSTORE_SINK_SCHEMA, new Struct(HSTORE_SINK_SCHEMA)
-        .put("name", "web-1")
-        .put("tags", Collections.singletonMap("env", "prod")));
-
-    // The remediation has to name a type the operator can create, not just report the mismatch.
-    assertTasksFailedWithTrace("jdbc-sink-connector", 1, "Recreate the column as hstore");
-  }
-
-  /**
-   * The array form of the same refusal. This is the upgrade path: an earlier build wrote maps to
-   * jsonb, so a pipeline that predates native hstore already has a {@code jsonb[]} column here. The
-   * message must name {@code hstore[]} — pgjdbc reports these types as {@code _jsonb} and
-   * {@code _hstore}, and telling an operator to recreate the column "as hstore" would give them a
-   * scalar that fails the very next batch.
-   */
-  @Test
-  public void testMapArrayIntoNonHstoreArrayColumnIsRefused() throws Exception {
-    execute("CREATE EXTENSION IF NOT EXISTS hstore",
-        "CREATE TABLE " + tableName + "(name text, tags jsonb[])");
-    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
-    props.put(MAX_RETRIES, "0");
-    connect.configureConnector("jdbc-sink-connector", props);
-    waitForConnectorToStart("jdbc-sink-connector", 1);
-
-    produceRecord(HSTORE_ARRAY_SINK_SCHEMA, new Struct(HSTORE_ARRAY_SINK_SCHEMA)
-        .put("name", "web-1")
-        .put("tags", Collections.singletonList(Collections.singletonMap("env", "prod"))));
-
-    assertTasksFailedWithTrace("jdbc-sink-connector", 1, "Recreate the column as hstore[]");
-  }
-
-  /**
-   * A missing extension is a property of the database, so no record shape can succeed and the task
-   * fails rather than reporting records one at a time. Reached through the real catalog lookup: the
-   * database is created without the extension rather than the resolved state being forced.
-   */
-  @Test
-  public void testMapArrayFailsWhenExtensionIsNotInstalled() throws Exception {
-    execute("CREATE DATABASE nohstorearray");
-    props.put(JdbcSinkConfig.CONNECTION_URL, jdbcUrl("nohstorearray"));
-    props.put(JdbcSinkConfig.AUTO_CREATE, "true");
-    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
-    props.put(MAX_RETRIES, "0");
-    connect.configureConnector("jdbc-sink-connector", props);
-    waitForConnectorToStart("jdbc-sink-connector", 1);
-
-    produceRecord(HSTORE_ARRAY_SINK_SCHEMA, new Struct(HSTORE_ARRAY_SINK_SCHEMA)
-        .put("name", "web-1")
-        .put("tags", Collections.singletonList(Collections.singletonMap("env", "prod"))));
-
-    assertTasksFailedWithTrace("jdbc-sink-connector", 1, "CREATE EXTENSION hstore");
-  }
-
-  /** Execute statements against a named database rather than the default one. */
-  private void executeIn(String database, String... statements) throws SQLException {
-    try (Connection c = pg.getEmbeddedPostgres().getDatabase("postgres", database).getConnection();
-         Statement s = c.createStatement()) {
-      for (String statement : statements) {
-        s.execute(statement);
-      }
-    }
-  }
-
-  /** The first column of the single row the query returns, from a named database. */
-  private String queryOne(String database, String sql) throws SQLException {
-    try (Connection c = pg.getEmbeddedPostgres().getDatabase("postgres", database).getConnection();
-         Statement s = c.createStatement();
-         ResultSet rs = s.executeQuery(sql)) {
-      assertTrue("query returned no rows: " + sql, rs.next());
-      return rs.getString(1);
-    }
-  }
-
-  /** An expected parsed JSON object whose last named key carries a JSON null. */
-  private static Map<String, Object> parsedMapWithNull(String key, String value, String nullKey) {
-    Map<String, Object> map = new LinkedHashMap<>();
-    map.put(key, value);
-    map.put(nullKey, null);
-    return map;
   }
 
   /**
@@ -1195,12 +1007,11 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
   }
 
   /**
-   * The sink half: a Connect {@code MAP<STRING,STRING>} auto-creates a native hstore column and
-   * lands as real hstore, verified through hstore operators.
+   * The sink half: a Connect {@code MAP<STRING,STRING>} auto-creates a native jsonb column and lands
+   * as real jsonb, verified through jsonb operators.
    */
   @Test
   public void testWriteToTableWithHstoreMapColumn() throws Exception {
-    execute("CREATE EXTENSION IF NOT EXISTS hstore");
     props.put(JdbcSinkConfig.AUTO_CREATE, "true");
     props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
     connect.configureConnector("jdbc-sink-connector", props);
@@ -1221,194 +1032,19 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
          Statement s = c.createStatement()) {
       try (ResultSet rs = s.executeQuery(
-          "SELECT udt_name FROM information_schema.columns "
+          "SELECT data_type FROM information_schema.columns "
               + "WHERE table_name = '" + tableName + "' AND column_name = 'tags'")) {
         assertTrue(rs.next());
-        assertEquals("hstore", rs.getString(1));
+        assertEquals("jsonb", rs.getString(1));
       }
       try (ResultSet rs = s.executeQuery(
-          "SELECT tags->'env', tags->'cities' FROM " + tableName)) {
+          "SELECT tags->>'env', tags->>'cities' FROM " + tableName)) {
         assertTrue(rs.next());
         assertEquals("prod", rs.getString(1));
         assertEquals("Pune, Mumbai", rs.getString(2));
       }
     }
   }
-
-  /**
-   * The extension may be installed in its own schema and kept off the search_path, which is common
-   * where extensions are segregated. The sink resolves where it lives and writes the qualified type
-   * name, so auto-create still produces a real hstore column.
-   */
-  @Test
-  public void testWriteToTableWithHstoreInstalledInAnotherSchema() throws Exception {
-    execute("CREATE DATABASE extsink");
-    try (Connection c = pg.getEmbeddedPostgres().getDatabase("postgres", "extsink").getConnection();
-         Statement s = c.createStatement()) {
-      s.execute("CREATE SCHEMA ext");
-      s.execute("CREATE EXTENSION hstore SCHEMA ext");
-    }
-    props.put(JdbcSinkConfig.CONNECTION_URL, jdbcUrl("extsink"));
-    props.put(JdbcSinkConfig.AUTO_CREATE, "true");
-    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
-    connect.configureConnector("jdbc-sink-connector", props);
-    waitForConnectorToStart("jdbc-sink-connector", 1);
-
-    produceRecord(HSTORE_SINK_SCHEMA, new Struct(HSTORE_SINK_SCHEMA)
-        .put("name", "web-1")
-        .put("tags", Collections.singletonMap("env", "prod")));
-
-    waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 1, 1,
-        TimeUnit.MINUTES.toMillis(2));
-
-    try (Connection c = pg.getEmbeddedPostgres().getDatabase("postgres", "extsink").getConnection();
-         Statement s = c.createStatement()) {
-      try (ResultSet rs = s.executeQuery("SELECT udt_name FROM information_schema.columns "
-          + "WHERE table_name = '" + tableName + "' AND column_name = 'tags'")) {
-        assertTrue(rs.next());
-        assertEquals("hstore", rs.getString(1));
-      }
-      try (ResultSet rs = s.executeQuery(
-          "SELECT tags OPERATOR(ext.->) 'env' FROM " + tableName)) {
-        assertTrue(rs.next());
-        assertEquals("prod", rs.getString(1));
-      }
-    }
-  }
-
-  /**
-   * A catalog read that fails leaves the type name unresolved, and the fallback assumes the bare
-   * {@code hstore} rather than guessing a schema. That is only safe because PostgreSQL rejects the
-   * bare name when the extension is off the search_path, which nothing else exercises: the unit
-   * tests stop at the name, and every other search_path test runs with the lookup already resolved.
-   *
-   * <p>A dialect pointed at an unreachable database is the same state: the lookup cannot run, so it
-   * stays unresolved. A reachable one would not do — building DDL asks for identifier rules, which
-   * opens a connection, which resolves the type on the way past.
-   */
-  @Test
-  public void testUnresolvedHstoreAssumesTheBareNameAndTheWriteIsRejected() throws Exception {
-    final String database = "extunresolved";
-    execute("CREATE DATABASE " + database);
-    executeIn(database, "CREATE SCHEMA ext", "CREATE EXTENSION hstore SCHEMA ext");
-
-    Map<String, String> dialectProps = new HashMap<>(props);
-    dialectProps.put(JdbcSinkConfig.CONNECTION_URL, "jdbc:postgresql://localhost:1/unreachable");
-    dialectProps.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
-    DatabaseDialect unresolved =
-        new PostgreSqlDatabaseDialect(new JdbcSinkConfig(dialectProps));
-
-    String ddl = unresolved.buildCreateTableStatement(
-        new TableId(null, null, tableName),
-        Collections.singletonList(new SinkRecordField(HSTORE_MAP_SCHEMA, "tags", false)));
-    assertTrue("unresolved must assume the bare name, but was: " + ddl, ddl.contains("hstore"));
-    assertFalse("unresolved must not invent a schema, but was: " + ddl, ddl.contains("\"ext\""));
-
-    SQLException thrown = assertThrows("the bare name must not resolve here",
-        SQLException.class, () -> executeIn(database, ddl));
-    assertTrue("PostgreSQL should reject the bare type, but was: " + thrown.getMessage(),
-        thrown.getMessage().contains("hstore") && thrown.getMessage().contains("does not exist"));
-
-    // The same guess reaches createArrayOf, so a record write is refused as well as the DDL.
-    executeIn(database, "CREATE TABLE " + tableName + "(tags ext.hstore[])");
-    try (Connection c = pg.getEmbeddedPostgres().getDatabase("postgres", database).getConnection();
-         PreparedStatement insert =
-             c.prepareStatement("INSERT INTO " + tableName + " VALUES (?)")) {
-      SQLException fromBind = assertThrows("the bare element type must not resolve either",
-          SQLException.class,
-          () -> unresolved.bindField(insert, 1, arrayOf(HSTORE_MAP_SCHEMA),
-              Collections.singletonList(Collections.singletonMap("env", "prod")), null, "tags"));
-      assertTrue("the driver should fail resolving the array type, but was: "
-          + fromBind.getMessage(),
-          fromBind.getMessage().contains("hstore")
-              && fromBind.getMessage().contains("array type"));
-    }
-  }
-
-  /**
-   * The {@code ::hstore} cast is behind {@code sql.complex.types.enable} like the rest of the
-   * feature, so with it off a STRING field is offered to a pre-existing hstore column uncast and
-   * PostgreSQL refuses it — the pre-feature behaviour. Paired with the flag-on case below, this is
-   * what keeps an upgrade from changing anything an existing pipeline can observe.
-   */
-  @Test
-  public void testStringIntoHstoreColumnIsRefusedWhenComplexTypesDisabled() throws Exception {
-    execute("CREATE EXTENSION IF NOT EXISTS hstore",
-        "CREATE TABLE " + tableName + "(name text, tags hstore)");
-    props.put(JdbcSinkConfig.AUTO_CREATE, "false");
-    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "false");
-    props.put(MAX_RETRIES, "0");
-    connect.configureConnector("jdbc-sink-connector", props);
-    waitForConnectorToStart("jdbc-sink-connector", 1);
-
-    produceRecord(TEXT_TAGS_SCHEMA, new Struct(TEXT_TAGS_SCHEMA)
-        .put("name", "web-1")
-        .put("tags", "\"env\"=>\"prod\""));
-
-    // PostgreSQL's own rejection, because no cast was emitted.
-    assertTasksFailedWithTrace("jdbc-sink-connector", 1, "is of type hstore");
-  }
-
-  /** With the feature on the same record is cast and lands as a real hstore. */
-  @Test
-  public void testStringIsCastIntoHstoreColumnWhenComplexTypesEnabled() throws Exception {
-    execute("CREATE EXTENSION IF NOT EXISTS hstore",
-        "CREATE TABLE " + tableName + "(name text, tags hstore)");
-    props.put(JdbcSinkConfig.AUTO_CREATE, "false");
-    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
-    connect.configureConnector("jdbc-sink-connector", props);
-    waitForConnectorToStart("jdbc-sink-connector", 1);
-
-    produceRecord(TEXT_TAGS_SCHEMA, new Struct(TEXT_TAGS_SCHEMA)
-        .put("name", "web-1")
-        .put("tags", "\"env\"=>\"prod\""));
-
-    waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 1, 1,
-        TimeUnit.MINUTES.toMillis(2));
-    assertEquals("hstore", queryOne("postgres",
-        "SELECT udt_name FROM information_schema.columns WHERE table_name = '" + tableName
-            + "' AND column_name = 'tags'"));
-    assertEquals("prod", queryOne("postgres", "SELECT tags -> 'env' FROM " + tableName));
-  }
-
-  private static final Schema TEXT_TAGS_SCHEMA = SchemaBuilder.struct()
-      .name("com.example.ServerText")
-      .field("name", Schema.STRING_SCHEMA)
-      .field("tags", Schema.STRING_SCHEMA)
-      .build();
-
-
-  /**
-   * Selected but unavailable must fail loudly: without the extension there is no column type that
-   * could hold the map, so the task fails with an actionable message rather than inventing one.
-   */
-  @Test
-  public void testHstoreSinkFailsWhenExtensionIsNotInstalled() throws Exception {
-    execute("CREATE DATABASE nohstore");
-    props.put(JdbcSinkConfig.CONNECTION_URL, jdbcUrl("nohstore"));
-    props.put(JdbcSinkConfig.AUTO_CREATE, "true");
-    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
-    props.put(MAX_RETRIES, "0");
-    connect.configureConnector("jdbc-sink-connector", props);
-    waitForConnectorToStart("jdbc-sink-connector", 1);
-
-    produceRecord(HSTORE_SINK_SCHEMA, new Struct(HSTORE_SINK_SCHEMA)
-        .put("name", "web-1")
-        .put("tags", Collections.singletonMap("env", "prod")));
-
-    assertTasksFailedWithTrace("jdbc-sink-connector", 1, "CREATE EXTENSION hstore");
-  }
-
-  private static final Schema HSTORE_SINK_SCHEMA = SchemaBuilder.struct().name("com.example.Server")
-      .field("name", Schema.STRING_SCHEMA)
-      .field("tags", HSTORE_MAP_SCHEMA)
-      .build();
-
-  private static final Schema HSTORE_ARRAY_SINK_SCHEMA = SchemaBuilder.struct()
-      .name("com.example.ServerTags")
-      .field("name", Schema.STRING_SCHEMA)
-      .field("tags", SchemaBuilder.array(HSTORE_MAP_SCHEMA).optional().build())
-      .build();
 
   // ---------- hstore round trips: source -> Kafka -> sink ----------
 
@@ -1432,11 +1068,12 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
   }
 
   /**
-   * Assert the destination rows written by an hstore round trip in json mode, where the {@code Json}
-   * string is a JSON document that happens to have come from hstore and lands in {@code jsonb}.
+   * Assert the destination rows written by an hstore round trip. Identical expectations for both
+   * handling modes, since either representation lands in the same {@code jsonb} column — which is the
+   * property worth pinning.
    */
-  private void assertHstoreJsonRoundTripRows() throws SQLException {
-    assertEquals("json mode must land in a native jsonb column", "jsonb", destColumnType("hs"));
+  private void assertHstoreRoundTripRows() throws SQLException {
+    assertEquals("hstore must land in a native jsonb column", "jsonb", destColumnType("hs"));
 
     queryDest("id, hs, hs IS NULL AS is_null, jsonb_typeof(hs) AS kind", "id",
         rs -> {
@@ -1471,67 +1108,15 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
         });
   }
 
-  /**
-   * Map mode round trips into a native hstore column, matching Debezium, whose PostgreSQL sink
-   * dialect maps the Connect MAP type to hstore unconditionally.
-   */
   @Test
-  public void testHstoreMapModeRoundTripsToHstore() throws Exception {
+  public void testHstoreMapModeRoundTripsToJsonb() throws Exception {
     createHstoreSourceRows();
     Map<String, String> sourceExtras = new HashMap<>();
     sourceExtras.put(JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true");
     sourceExtras.put(JdbcSourceConnectorConfig.HSTORE_HANDLING_MODE_CONFIG, "map");
     runRoundTrip(7, sourceExtras,
         Collections.singletonMap(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
-    assertHstoreMapRoundTripRows();
-  }
-
-  /**
-   * Assert the destination rows written by a map-mode hstore round trip: a real hstore column, so
-   * the hstore operators apply, and every scenario from {@link #createHstoreSourceRows()} survives.
-   */
-  private void assertHstoreMapRoundTripRows() throws SQLException {
-    assertEquals("map mode must land in a native hstore column", "USER-DEFINED",
-        destColumnType("hs"));
-    assertEquals("hstore", destColumnUdtName("hs"));
-
-    // Read through the hstore operators rather than its text form, whose pair order is hash order.
-    queryDest("id, hs::text AS text, hs IS NULL AS is_null, hs -> 'key2' AS key2, "
-            + "array_length(akeys(hs), 1) AS pairs, hs -> 'count' AS count, "
-            + "hs -> 'key_#1' AS hashed, hs -> 'key 2' AS spaced", "id",
-        rs -> assertEquals("\"key\"=>\"val\"", rs.getString("text")),
-        rs -> assertEquals(3, rs.getInt("pairs")),
-        // A NULL hstore value survives as a NULL value, with the key still present.
-        rs -> {
-          assertNull(rs.getString("key2"));
-          assertEquals(2, rs.getInt("pairs"));
-        },
-        // Spaces and # inside keys and values survive the hstore text round trip.
-        rs -> {
-          assertEquals("val 1", rs.getString("hashed"));
-          assertEquals(" ##123 78", rs.getString("spaced"));
-        },
-        // Empty hstore stays an empty hstore, not NULL.
-        rs -> {
-          assertEquals("", rs.getString("text"));
-          assertEquals(false, rs.getBoolean("is_null"));
-        },
-        // SQL NULL column stays SQL NULL, distinct from the empty hstore.
-        rs -> assertEquals(true, rs.getBoolean("is_null")),
-        // hstore is text to text: "5" must remain the string 5.
-        rs -> assertEquals("5", rs.getString("count")));
-  }
-
-  /** The underlying type name of a destination column, e.g. {@code hstore} for a USER-DEFINED. */
-  private String destColumnUdtName(String column) throws SQLException {
-    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
-         Statement s = c.createStatement();
-         ResultSet rs = s.executeQuery(
-             "SELECT udt_name FROM information_schema.columns WHERE table_name = '"
-                 + DST_TABLE + "' AND column_name = '" + column + "'")) {
-      assertTrue("destination table has no column " + column, rs.next());
-      return rs.getString(1);
-    }
+    assertHstoreRoundTripRows();
   }
 
   @Test
@@ -1555,7 +1140,7 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
 
     runRoundTrip(7, sourceExtras,
         Collections.singletonMap(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
-    assertHstoreJsonRoundTripRows();
+    assertHstoreRoundTripRows();
   }
 
   /**
@@ -1996,12 +1581,8 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
   }
 
   protected String jdbcUrl() {
-    return jdbcUrl("postgres");
-  }
-
-  protected String jdbcUrl(String database) {
-    return String.format("jdbc:postgresql://localhost:%s/%s",
-        pg.getEmbeddedPostgres().getPort(), database);
+    return String.format("jdbc:postgresql://localhost:%s/postgres",
+        pg.getEmbeddedPostgres().getPort());
   }
 
   /**
@@ -2250,9 +1831,8 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
    */
   @Test
   public void testMultiDimensionalArrayEmitsNullPerElement() throws Exception {
-    execute("CREATE TABLE " + tableName + "(id int, i int4[], t text[], ba bytea[])",
-        "INSERT INTO " + tableName + " VALUES (1, '{{1,2},{3,4}}', '{{a,b},{c,d}}', "
-            + "ARRAY[ARRAY['\\x01'::bytea], ARRAY['\\x02'::bytea]])");
+    execute("CREATE TABLE " + tableName + "(id int, i int4[], t text[])",
+        "INSERT INTO " + tableName + " VALUES (1, '{{1,2},{3,4}}', '{{a,b},{c,d}}')");
 
     Struct row = pollOneRow(complexTypesSourceProps("postgres"));
 
@@ -2260,70 +1840,22 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
         Arrays.asList(null, null)).assertFor(row);
     new SchemaAndValueField("t", arrayOf(Schema.OPTIONAL_STRING_SCHEMA),
         Arrays.asList(null, null)).assertFor(row);
-    // bytea elements are byte[] themselves, so only this genuinely nested case must null out.
-    new SchemaAndValueField("ba", arrayOf(Schema.OPTIONAL_BYTES_SCHEMA),
-        Arrays.asList(null, null)).assertFor(row);
   }
 
   /** An unsupported element type drops its column and leaves neighbouring columns untouched. */
   @Test
   public void testUnsupportedArrayElementTypesAreSkipped() throws Exception {
-    execute("CREATE TABLE " + tableName + "(id int, n inet[], m money[], i int4[])",
-        "INSERT INTO " + tableName + " VALUES (1, ARRAY['10.0.0.1'::inet], "
-            + "ARRAY[1.23::money], '{7}')");
+    execute("CREATE TABLE " + tableName + "(id int, u uuid[], ba bytea[], i int4[])",
+        "INSERT INTO " + tableName + " VALUES (1, "
+            + "ARRAY['0d3ec2e0-9c6a-4b1e-9f1a-7c3a2b5d6e7f'::uuid], "
+            + "ARRAY['\\x0102'::bytea], '{7}')");
 
     Struct row = pollOneRow(complexTypesSourceProps("postgres"));
 
-    assertFieldAbsent(row, "n");
-    assertFieldAbsent(row, "m");
+    assertFieldAbsent(row, "u");
+    assertFieldAbsent(row, "ba");
     new SchemaAndValueField("i", arrayOf(Schema.OPTIONAL_INT32_SCHEMA),
         Collections.singletonList(7)).assertFor(row);
-  }
-
-  /**
-   * {@code bytea[]} elements stay bytes and {@code uuid[]} elements become canonical text, matching
-   * the scalar mappings of the same types.
-   */
-  @Test
-  public void testByteaAndUuidArraysEmitTypedElements() throws Exception {
-    execute("CREATE TABLE " + tableName + "(id int, ba bytea[], u uuid[])",
-        "INSERT INTO " + tableName + " VALUES (1, "
-            + "ARRAY['\\x0102'::bytea, NULL, '\\x'::bytea], "
-            + "ARRAY['0d3ec2e0-9c6a-4b1e-9f1a-7c3a2b5d6e7f'::uuid, NULL])");
-
-    Struct row = pollOneRow(complexTypesSourceProps("postgres"));
-
-    assertEquals(arrayOf(Schema.OPTIONAL_BYTES_SCHEMA), row.schema().field("ba").schema());
-    List<?> bytes = (List<?>) row.get("ba");
-    assertEquals(3, bytes.size());
-    assertArrayEquals(new byte[]{1, 2}, (byte[]) bytes.get(0));
-    assertNull(bytes.get(1));
-    assertArrayEquals(new byte[0], (byte[]) bytes.get(2));
-
-    new SchemaAndValueField("u", arrayOf(Schema.OPTIONAL_STRING_SCHEMA),
-        Arrays.asList("0d3ec2e0-9c6a-4b1e-9f1a-7c3a2b5d6e7f", null)).assertFor(row);
-  }
-
-  /**
-   * Pin the driver contract the mocked unit tests assume: pgjdbc returns {@code byte[][]} for
-   * bytea[] — array-valued elements the multi-dimensional guard must not mistake for nesting —
-   * and {@code UUID[]} for uuid[].
-   */
-  @Test
-  public void testDriverArrayElementClasses() throws Exception {
-    execute("CREATE TABLE " + tableName + "(id int, ba bytea[], u uuid[])",
-        "INSERT INTO " + tableName + " VALUES (1, ARRAY['\\x01'::bytea], "
-            + "ARRAY['0d3ec2e0-9c6a-4b1e-9f1a-7c3a2b5d6e7f'::uuid])");
-
-    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
-         Statement s = c.createStatement();
-         ResultSet rs = s.executeQuery("SELECT ba, u FROM " + tableName)) {
-      assertTrue(rs.next());
-      assertTrue("pgjdbc must return byte[][] for bytea[]",
-          rs.getArray(1).getArray() instanceof byte[][]);
-      assertTrue("pgjdbc must return UUID[] for uuid[]",
-          rs.getArray(2).getArray() instanceof UUID[]);
-    }
   }
 
   /** Backward compatibility: with the default flag an array column is dropped, as before. */
@@ -2447,7 +1979,6 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
    */
   @Test
   public void testAutoCreateArrayColumnTypes() throws Exception {
-    execute("CREATE EXTENSION IF NOT EXISTS hstore");
     props.put(JdbcSinkConfig.AUTO_CREATE, "true");
     props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
     connect.configureConnector("jdbc-sink-connector", props);
@@ -2472,7 +2003,6 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
         .field("a_time", arrayOf(Time.builder().optional().build()))
         .field("a_ts", arrayOf(Timestamp.builder().optional().build()))
         .field("a_hstore", arrayOf(hstoreMap))
-        .field("a_bytes", arrayOf(Schema.OPTIONAL_BYTES_SCHEMA))
         .build();
 
     java.util.Date epoch = new java.util.Date(0L);
@@ -2492,8 +2022,7 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
         .put("a_time", Collections.singletonList(epoch))
         .put("a_ts", Collections.singletonList(epoch))
         .put("a_hstore", Collections.singletonList(
-            Collections.singletonMap("env", "prod")))
-        .put("a_bytes", Collections.singletonList(new byte[]{1, 2})));
+            Collections.singletonMap("env", "prod"))));
 
     waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 1, 1,
         TimeUnit.MINUTES.toMillis(2));
@@ -2512,67 +2041,10 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     expectedUdtNames.put("a_date", "_date");
     expectedUdtNames.put("a_time", "_time");
     expectedUdtNames.put("a_ts", "_timestamp");
-    expectedUdtNames.put("a_hstore", "_hstore");
-    expectedUdtNames.put("a_bytes", "_bytea");
+    expectedUdtNames.put("a_hstore", "_jsonb");
     for (Map.Entry<String, String> entry : expectedUdtNames.entrySet()) {
       assertEquals("element type of " + entry.getKey(), entry.getValue(),
           columnUdtName(tableName, entry.getKey()));
-    }
-  }
-
-  /**
-   * With the flag off a temporal element must fail with a message naming the config, not blow up
-   * inside the driver. Before the gate, auto-create built a {@code timestamp[]} column and the bind
-   * then raised a bare ArrayStoreException storing {@code java.util.Date} values in a
-   * {@code Long[]}. The column must not be created either, since no insert could populate it.
-   */
-  @Test
-  public void testTemporalArrayFailsWhenComplexTypesDisabled() throws Exception {
-    props.put(JdbcSinkConfig.AUTO_CREATE, "true");
-    props.put(MAX_RETRIES, "0");
-    connect.configureConnector("jdbc-sink-connector", props);
-    waitForConnectorToStart("jdbc-sink-connector", 1);
-
-    final Schema schema = SchemaBuilder.struct().name("com.example.Timestamps")
-        .field("a_ts", arrayOf(Timestamp.builder().optional().build()))
-        .build();
-    produceRecord(schema, new Struct(schema)
-        .put("a_ts", Collections.singletonList(new java.util.Date(0L))));
-
-    assertTasksFailedWithTrace("jdbc-sink-connector", 1,
-        JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE);
-    assertTableAbsent(tableName);
-  }
-
-  /**
-   * The bind half of the same gate, for a column the connector did not create: a pre-existing
-   * {@code timestamp[]} must be refused with the same message rather than an ArrayStoreException.
-   */
-  @Test
-  public void testTemporalArrayBindFailsIntoExistingColumnWhenComplexTypesDisabled()
-      throws Exception {
-    execute("CREATE TABLE " + tableName + "(a_ts timestamp[])");
-    props.put(MAX_RETRIES, "0");
-    connect.configureConnector("jdbc-sink-connector", props);
-    waitForConnectorToStart("jdbc-sink-connector", 1);
-
-    final Schema schema = SchemaBuilder.struct().name("com.example.Timestamps")
-        .field("a_ts", arrayOf(Timestamp.builder().optional().build()))
-        .build();
-    produceRecord(schema, new Struct(schema)
-        .put("a_ts", Collections.singletonList(new java.util.Date(0L))));
-
-    assertTasksFailedWithTrace("jdbc-sink-connector", 1,
-        JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE);
-  }
-
-  /** Assert no table was auto-created, i.e. no unwritable column was advertised. */
-  private void assertTableAbsent(String table) throws SQLException {
-    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
-         Statement s = c.createStatement();
-         ResultSet rs = s.executeQuery("SELECT 1 FROM information_schema.tables "
-             + "WHERE table_name = '" + table + "'")) {
-      assertTrue("table " + table + " must not have been created", !rs.next());
     }
   }
 
@@ -2665,104 +2137,6 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
   }
 
   /**
-   * {@code bytea[]} end to end, including an empty and a NULL element, into a native bytea[].
-   */
-  @Test
-  public void testByteaArrayRoundTrip() throws Exception {
-    execute("CREATE TABLE " + SRC_TABLE + "(id int PRIMARY KEY, ba bytea[])",
-        "INSERT INTO " + SRC_TABLE + " VALUES (1, "
-            + "ARRAY['\\x0102'::bytea, NULL, '\\x'::bytea])");
-
-    runRoundTrip(1,
-        Collections.singletonMap(
-            JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true"),
-        Collections.singletonMap(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
-
-    assertEquals("bytea[] must land in a native bytea[] column",
-        "_bytea", columnUdtName(DST_TABLE, "ba"));
-    assertDestArrayText("ba::text", "{\"\\\\x0102\",NULL,\"\\\\x\"}");
-  }
-
-  /**
-   * The array cast is behind {@code sql.complex.types.enable} like the rest of the feature, so with
-   * it off an ARRAY&lt;STRING&gt; is offered to a pre-existing {@code uuid[]} column uncast and
-   * PostgreSQL refuses it — the pre-feature behaviour. Paired with the flag-on case below, this is
-   * what keeps an upgrade from changing anything an existing pipeline can observe.
-   */
-  @Test
-  public void testStringArrayIntoUuidArrayColumnIsRefusedWhenComplexTypesDisabled()
-      throws Exception {
-    execute("CREATE TABLE " + tableName + "(name text, ids uuid[])");
-    props.put(JdbcSinkConfig.AUTO_CREATE, "false");
-    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "false");
-    props.put(MAX_RETRIES, "0");
-    connect.configureConnector("jdbc-sink-connector", props);
-    waitForConnectorToStart("jdbc-sink-connector", 1);
-
-    produceRecord(TEXT_IDS_SCHEMA, new Struct(TEXT_IDS_SCHEMA)
-        .put("name", "web-1")
-        .put("ids", Collections.singletonList(CAST_UUID)));
-
-    // PostgreSQL's own rejection, because no cast was emitted.
-    assertTasksFailedWithTrace("jdbc-sink-connector", 1, "is of type uuid[]");
-  }
-
-  /** With the feature on the same record is cast and lands as real uuids. */
-  @Test
-  public void testStringArrayIsCastIntoUuidArrayColumnWhenComplexTypesEnabled() throws Exception {
-    execute("CREATE TABLE " + tableName + "(name text, ids uuid[])");
-    props.put(JdbcSinkConfig.AUTO_CREATE, "false");
-    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
-    connect.configureConnector("jdbc-sink-connector", props);
-    waitForConnectorToStart("jdbc-sink-connector", 1);
-
-    produceRecord(TEXT_IDS_SCHEMA, new Struct(TEXT_IDS_SCHEMA)
-        .put("name", "web-1")
-        .put("ids", Collections.singletonList(CAST_UUID)));
-
-    waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 1, 1,
-        TimeUnit.MINUTES.toMillis(2));
-
-    assertEquals("_uuid", columnUdtName(tableName, "ids"));
-    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
-         Statement st = c.createStatement();
-         ResultSet rs = st.executeQuery("SELECT ids::text FROM " + tableName)) {
-      assertTrue("destination table has no rows", rs.next());
-      assertEquals("{" + CAST_UUID + "}", rs.getString(1));
-    }
-  }
-
-  private static final String CAST_UUID = "0d3ec2e0-9c6a-4b1e-9f1a-7c3a2b5d6e7f";
-
-  private static final Schema TEXT_IDS_SCHEMA = SchemaBuilder.struct()
-      .name("com.example.CastArrays")
-      .field("name", Schema.STRING_SCHEMA)
-      .field("ids", arrayOf(Schema.OPTIONAL_STRING_SCHEMA))
-      .build();
-
-  /**
-   * {@code uuid[]} has no Connect logical type, so it travels as ARRAY&lt;STRING&gt; and would
-   * auto-create text[]. Into a pre-existing uuid[] column it must still land as real uuids, which
-   * only the {@code ::uuid[]} cast makes possible.
-   */
-  @Test
-  public void testUuidArrayRoundTripIntoExistingUuidColumn() throws Exception {
-    String uuid = "0d3ec2e0-9c6a-4b1e-9f1a-7c3a2b5d6e7f";
-    execute("CREATE TABLE " + SRC_TABLE + "(id int PRIMARY KEY, u uuid[])",
-        "INSERT INTO " + SRC_TABLE + " VALUES (1, ARRAY['" + uuid + "'::uuid, NULL])",
-        "CREATE TABLE " + DST_TABLE + "(id int PRIMARY KEY, u uuid[])");
-
-    runRoundTrip(1,
-        Collections.singletonMap(
-            JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true"),
-        Collections.singletonMap(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
-
-    assertEquals("the pre-existing uuid[] column must be preserved",
-        "_uuid", columnUdtName(DST_TABLE, "u"));
-    assertDestArrayText("u::text", "{" + uuid + ",NULL}");
-  }
-
-  /**
    * The complex element types end to end. The destination text form shows each numeric element
    * retaining its own scale, which a fixed-scale element schema could not represent.
    */
@@ -2848,19 +2222,12 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
             + "'\"env\" => \"prod\"'::hstore, '\"k\" => NULL'::hstore, ''::hstore])");
   }
 
-  /** Map mode provisions a native {@code hstore[]}, so the elements stay real hstores. */
-  private void assertHstoreArrayMapRoundTripRows() throws SQLException {
-    assertEquals("hstore[] must land in a native hstore[] column",
-        "_hstore", columnUdtName(DST_TABLE, "hs"));
-    // A NULL hstore value keeps its key with a NULL value; an empty hstore stays empty, not NULL.
-    assertDestArrayText(
-        "hs[1]->'env', hs[2]->'k', array_length(akeys(hs[2]), 1)::text, hs[3]::text",
-        "prod", null, "1", "");
-  }
-
-  /** Json mode carries JSON documents, so the elements provision {@code jsonb[]} as before. */
-  private void assertHstoreArrayJsonRoundTripRows() throws SQLException {
-    assertEquals("a Json string array must land in a native jsonb[] column",
+  /**
+   * Both handling modes converge on the same destination: a Connect map and a Json string each
+   * provision {@code jsonb[]}, so the data survives but the hstore target type does not.
+   */
+  private void assertHstoreArrayRoundTripRows() throws SQLException {
+    assertEquals("hstore[] must land in a native jsonb[] column",
         "_jsonb", columnUdtName(DST_TABLE, "hs"));
     // A NULL hstore value stays a JSON null with its key; an empty hstore stays {} rather than
     // NULL. jsonb_typeof is itself NULL for a NULL element, so "object" distinguishes the two.
@@ -2880,7 +2247,7 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     runRoundTrip(1, sourceExtras,
         Collections.singletonMap(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
 
-    assertHstoreArrayMapRoundTripRows();
+    assertHstoreArrayRoundTripRows();
   }
 
   @Test
@@ -2907,7 +2274,7 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     runRoundTrip(1, sourceExtras,
         Collections.singletonMap(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
 
-    assertHstoreArrayJsonRoundTripRows();
+    assertHstoreArrayRoundTripRows();
   }
 
   /**

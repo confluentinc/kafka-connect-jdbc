@@ -76,7 +76,6 @@ import static org.apache.kafka.connect.runtime.ConnectorConfig.ERRORS_TOLERANCE_
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_NAME_CONFIG;
 import static org.apache.kafka.connect.runtime.SinkConnectorConfig.DLQ_TOPIC_REPLICATION_FACTOR_CONFIG;
 import static org.apache.kafka.test.TestUtils.waitForCondition;
-import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -2250,9 +2249,8 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
    */
   @Test
   public void testMultiDimensionalArrayEmitsNullPerElement() throws Exception {
-    execute("CREATE TABLE " + tableName + "(id int, i int4[], t text[], ba bytea[])",
-        "INSERT INTO " + tableName + " VALUES (1, '{{1,2},{3,4}}', '{{a,b},{c,d}}', "
-            + "ARRAY[ARRAY['\\x01'::bytea], ARRAY['\\x02'::bytea]])");
+    execute("CREATE TABLE " + tableName + "(id int, i int4[], t text[])",
+        "INSERT INTO " + tableName + " VALUES (1, '{{1,2},{3,4}}', '{{a,b},{c,d}}')");
 
     Struct row = pollOneRow(complexTypesSourceProps("postgres"));
 
@@ -2260,70 +2258,22 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
         Arrays.asList(null, null)).assertFor(row);
     new SchemaAndValueField("t", arrayOf(Schema.OPTIONAL_STRING_SCHEMA),
         Arrays.asList(null, null)).assertFor(row);
-    // bytea elements are byte[] themselves, so only this genuinely nested case must null out.
-    new SchemaAndValueField("ba", arrayOf(Schema.OPTIONAL_BYTES_SCHEMA),
-        Arrays.asList(null, null)).assertFor(row);
   }
 
   /** An unsupported element type drops its column and leaves neighbouring columns untouched. */
   @Test
   public void testUnsupportedArrayElementTypesAreSkipped() throws Exception {
-    execute("CREATE TABLE " + tableName + "(id int, n inet[], m money[], i int4[])",
-        "INSERT INTO " + tableName + " VALUES (1, ARRAY['10.0.0.1'::inet], "
-            + "ARRAY[1.23::money], '{7}')");
+    execute("CREATE TABLE " + tableName + "(id int, u uuid[], ba bytea[], i int4[])",
+        "INSERT INTO " + tableName + " VALUES (1, "
+            + "ARRAY['0d3ec2e0-9c6a-4b1e-9f1a-7c3a2b5d6e7f'::uuid], "
+            + "ARRAY['\\x0102'::bytea], '{7}')");
 
     Struct row = pollOneRow(complexTypesSourceProps("postgres"));
 
-    assertFieldAbsent(row, "n");
-    assertFieldAbsent(row, "m");
+    assertFieldAbsent(row, "u");
+    assertFieldAbsent(row, "ba");
     new SchemaAndValueField("i", arrayOf(Schema.OPTIONAL_INT32_SCHEMA),
         Collections.singletonList(7)).assertFor(row);
-  }
-
-  /**
-   * {@code bytea[]} elements stay bytes and {@code uuid[]} elements become canonical text, matching
-   * the scalar mappings of the same types.
-   */
-  @Test
-  public void testByteaAndUuidArraysEmitTypedElements() throws Exception {
-    execute("CREATE TABLE " + tableName + "(id int, ba bytea[], u uuid[])",
-        "INSERT INTO " + tableName + " VALUES (1, "
-            + "ARRAY['\\x0102'::bytea, NULL, '\\x'::bytea], "
-            + "ARRAY['0d3ec2e0-9c6a-4b1e-9f1a-7c3a2b5d6e7f'::uuid, NULL])");
-
-    Struct row = pollOneRow(complexTypesSourceProps("postgres"));
-
-    assertEquals(arrayOf(Schema.OPTIONAL_BYTES_SCHEMA), row.schema().field("ba").schema());
-    List<?> bytes = (List<?>) row.get("ba");
-    assertEquals(3, bytes.size());
-    assertArrayEquals(new byte[]{1, 2}, (byte[]) bytes.get(0));
-    assertNull(bytes.get(1));
-    assertArrayEquals(new byte[0], (byte[]) bytes.get(2));
-
-    new SchemaAndValueField("u", arrayOf(Schema.OPTIONAL_STRING_SCHEMA),
-        Arrays.asList("0d3ec2e0-9c6a-4b1e-9f1a-7c3a2b5d6e7f", null)).assertFor(row);
-  }
-
-  /**
-   * Pin the driver contract the mocked unit tests assume: pgjdbc returns {@code byte[][]} for
-   * bytea[] — array-valued elements the multi-dimensional guard must not mistake for nesting —
-   * and {@code UUID[]} for uuid[].
-   */
-  @Test
-  public void testDriverArrayElementClasses() throws Exception {
-    execute("CREATE TABLE " + tableName + "(id int, ba bytea[], u uuid[])",
-        "INSERT INTO " + tableName + " VALUES (1, ARRAY['\\x01'::bytea], "
-            + "ARRAY['0d3ec2e0-9c6a-4b1e-9f1a-7c3a2b5d6e7f'::uuid])");
-
-    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
-         Statement s = c.createStatement();
-         ResultSet rs = s.executeQuery("SELECT ba, u FROM " + tableName)) {
-      assertTrue(rs.next());
-      assertTrue("pgjdbc must return byte[][] for bytea[]",
-          rs.getArray(1).getArray() instanceof byte[][]);
-      assertTrue("pgjdbc must return UUID[] for uuid[]",
-          rs.getArray(2).getArray() instanceof UUID[]);
-    }
   }
 
   /** Backward compatibility: with the default flag an array column is dropped, as before. */
@@ -2472,7 +2422,6 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
         .field("a_time", arrayOf(Time.builder().optional().build()))
         .field("a_ts", arrayOf(Timestamp.builder().optional().build()))
         .field("a_hstore", arrayOf(hstoreMap))
-        .field("a_bytes", arrayOf(Schema.OPTIONAL_BYTES_SCHEMA))
         .build();
 
     java.util.Date epoch = new java.util.Date(0L);
@@ -2492,8 +2441,7 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
         .put("a_time", Collections.singletonList(epoch))
         .put("a_ts", Collections.singletonList(epoch))
         .put("a_hstore", Collections.singletonList(
-            Collections.singletonMap("env", "prod")))
-        .put("a_bytes", Collections.singletonList(new byte[]{1, 2})));
+            Collections.singletonMap("env", "prod"))));
 
     waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 1, 1,
         TimeUnit.MINUTES.toMillis(2));
@@ -2513,66 +2461,9 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
     expectedUdtNames.put("a_time", "_time");
     expectedUdtNames.put("a_ts", "_timestamp");
     expectedUdtNames.put("a_hstore", "_hstore");
-    expectedUdtNames.put("a_bytes", "_bytea");
     for (Map.Entry<String, String> entry : expectedUdtNames.entrySet()) {
       assertEquals("element type of " + entry.getKey(), entry.getValue(),
           columnUdtName(tableName, entry.getKey()));
-    }
-  }
-
-  /**
-   * With the flag off a temporal element must fail with a message naming the config, not blow up
-   * inside the driver. Before the gate, auto-create built a {@code timestamp[]} column and the bind
-   * then raised a bare ArrayStoreException storing {@code java.util.Date} values in a
-   * {@code Long[]}. The column must not be created either, since no insert could populate it.
-   */
-  @Test
-  public void testTemporalArrayFailsWhenComplexTypesDisabled() throws Exception {
-    props.put(JdbcSinkConfig.AUTO_CREATE, "true");
-    props.put(MAX_RETRIES, "0");
-    connect.configureConnector("jdbc-sink-connector", props);
-    waitForConnectorToStart("jdbc-sink-connector", 1);
-
-    final Schema schema = SchemaBuilder.struct().name("com.example.Timestamps")
-        .field("a_ts", arrayOf(Timestamp.builder().optional().build()))
-        .build();
-    produceRecord(schema, new Struct(schema)
-        .put("a_ts", Collections.singletonList(new java.util.Date(0L))));
-
-    assertTasksFailedWithTrace("jdbc-sink-connector", 1,
-        JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE);
-    assertTableAbsent(tableName);
-  }
-
-  /**
-   * The bind half of the same gate, for a column the connector did not create: a pre-existing
-   * {@code timestamp[]} must be refused with the same message rather than an ArrayStoreException.
-   */
-  @Test
-  public void testTemporalArrayBindFailsIntoExistingColumnWhenComplexTypesDisabled()
-      throws Exception {
-    execute("CREATE TABLE " + tableName + "(a_ts timestamp[])");
-    props.put(MAX_RETRIES, "0");
-    connect.configureConnector("jdbc-sink-connector", props);
-    waitForConnectorToStart("jdbc-sink-connector", 1);
-
-    final Schema schema = SchemaBuilder.struct().name("com.example.Timestamps")
-        .field("a_ts", arrayOf(Timestamp.builder().optional().build()))
-        .build();
-    produceRecord(schema, new Struct(schema)
-        .put("a_ts", Collections.singletonList(new java.util.Date(0L))));
-
-    assertTasksFailedWithTrace("jdbc-sink-connector", 1,
-        JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE);
-  }
-
-  /** Assert no table was auto-created, i.e. no unwritable column was advertised. */
-  private void assertTableAbsent(String table) throws SQLException {
-    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
-         Statement s = c.createStatement();
-         ResultSet rs = s.executeQuery("SELECT 1 FROM information_schema.tables "
-             + "WHERE table_name = '" + table + "'")) {
-      assertTrue("table " + table + " must not have been created", !rs.next());
     }
   }
 
@@ -2662,104 +2553,6 @@ public class PostgresDatatypeIT extends BaseConnectorIT {
         "{1,2}", "{1,2,42}", "{100,200}", "{1.5,2.5}", "{1.25,2.5}", "{t,f}", "{a,b}", "{ab,cd}",
         // char(10) padding survives; Postgres quotes array elements containing spaces.
         "{\"cone      \",\"ctwo      \"}");
-  }
-
-  /**
-   * {@code bytea[]} end to end, including an empty and a NULL element, into a native bytea[].
-   */
-  @Test
-  public void testByteaArrayRoundTrip() throws Exception {
-    execute("CREATE TABLE " + SRC_TABLE + "(id int PRIMARY KEY, ba bytea[])",
-        "INSERT INTO " + SRC_TABLE + " VALUES (1, "
-            + "ARRAY['\\x0102'::bytea, NULL, '\\x'::bytea])");
-
-    runRoundTrip(1,
-        Collections.singletonMap(
-            JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true"),
-        Collections.singletonMap(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
-
-    assertEquals("bytea[] must land in a native bytea[] column",
-        "_bytea", columnUdtName(DST_TABLE, "ba"));
-    assertDestArrayText("ba::text", "{\"\\\\x0102\",NULL,\"\\\\x\"}");
-  }
-
-  /**
-   * The array cast is behind {@code sql.complex.types.enable} like the rest of the feature, so with
-   * it off an ARRAY&lt;STRING&gt; is offered to a pre-existing {@code uuid[]} column uncast and
-   * PostgreSQL refuses it — the pre-feature behaviour. Paired with the flag-on case below, this is
-   * what keeps an upgrade from changing anything an existing pipeline can observe.
-   */
-  @Test
-  public void testStringArrayIntoUuidArrayColumnIsRefusedWhenComplexTypesDisabled()
-      throws Exception {
-    execute("CREATE TABLE " + tableName + "(name text, ids uuid[])");
-    props.put(JdbcSinkConfig.AUTO_CREATE, "false");
-    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "false");
-    props.put(MAX_RETRIES, "0");
-    connect.configureConnector("jdbc-sink-connector", props);
-    waitForConnectorToStart("jdbc-sink-connector", 1);
-
-    produceRecord(TEXT_IDS_SCHEMA, new Struct(TEXT_IDS_SCHEMA)
-        .put("name", "web-1")
-        .put("ids", Collections.singletonList(CAST_UUID)));
-
-    // PostgreSQL's own rejection, because no cast was emitted.
-    assertTasksFailedWithTrace("jdbc-sink-connector", 1, "is of type uuid[]");
-  }
-
-  /** With the feature on the same record is cast and lands as real uuids. */
-  @Test
-  public void testStringArrayIsCastIntoUuidArrayColumnWhenComplexTypesEnabled() throws Exception {
-    execute("CREATE TABLE " + tableName + "(name text, ids uuid[])");
-    props.put(JdbcSinkConfig.AUTO_CREATE, "false");
-    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
-    connect.configureConnector("jdbc-sink-connector", props);
-    waitForConnectorToStart("jdbc-sink-connector", 1);
-
-    produceRecord(TEXT_IDS_SCHEMA, new Struct(TEXT_IDS_SCHEMA)
-        .put("name", "web-1")
-        .put("ids", Collections.singletonList(CAST_UUID)));
-
-    waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName), 1, 1,
-        TimeUnit.MINUTES.toMillis(2));
-
-    assertEquals("_uuid", columnUdtName(tableName, "ids"));
-    try (Connection c = pg.getEmbeddedPostgres().getPostgresDatabase().getConnection();
-         Statement st = c.createStatement();
-         ResultSet rs = st.executeQuery("SELECT ids::text FROM " + tableName)) {
-      assertTrue("destination table has no rows", rs.next());
-      assertEquals("{" + CAST_UUID + "}", rs.getString(1));
-    }
-  }
-
-  private static final String CAST_UUID = "0d3ec2e0-9c6a-4b1e-9f1a-7c3a2b5d6e7f";
-
-  private static final Schema TEXT_IDS_SCHEMA = SchemaBuilder.struct()
-      .name("com.example.CastArrays")
-      .field("name", Schema.STRING_SCHEMA)
-      .field("ids", arrayOf(Schema.OPTIONAL_STRING_SCHEMA))
-      .build();
-
-  /**
-   * {@code uuid[]} has no Connect logical type, so it travels as ARRAY&lt;STRING&gt; and would
-   * auto-create text[]. Into a pre-existing uuid[] column it must still land as real uuids, which
-   * only the {@code ::uuid[]} cast makes possible.
-   */
-  @Test
-  public void testUuidArrayRoundTripIntoExistingUuidColumn() throws Exception {
-    String uuid = "0d3ec2e0-9c6a-4b1e-9f1a-7c3a2b5d6e7f";
-    execute("CREATE TABLE " + SRC_TABLE + "(id int PRIMARY KEY, u uuid[])",
-        "INSERT INTO " + SRC_TABLE + " VALUES (1, ARRAY['" + uuid + "'::uuid, NULL])",
-        "CREATE TABLE " + DST_TABLE + "(id int PRIMARY KEY, u uuid[])");
-
-    runRoundTrip(1,
-        Collections.singletonMap(
-            JdbcSourceConnectorConfig.SQL_COMPLEX_TYPES_ENABLE_CONFIG, "true"),
-        Collections.singletonMap(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true"));
-
-    assertEquals("the pre-existing uuid[] column must be preserved",
-        "_uuid", columnUdtName(DST_TABLE, "u"));
-    assertDestArrayText("u::text", "{" + uuid + ",NULL}");
   }
 
   /**

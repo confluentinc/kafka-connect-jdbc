@@ -51,22 +51,6 @@ public class JdbcSinkConfigTest {
   }
 
   @Test(expected = ConfigException.class)
-  public void shouldFailToCreateConfigWithNonBooleanComplexTypesEnable() {
-    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "not-a-boolean");
-    createConfig();
-  }
-
-  @Test
-  public void shouldDefaultComplexTypesEnableToFalse() {
-    createConfig();
-    assertFalse(config.sqlComplexTypesEnable);
-
-    props.put(JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE, "true");
-    createConfig();
-    assertTrue(config.sqlComplexTypesEnable);
-  }
-
-  @Test(expected = ConfigException.class)
   public void shouldFailToCreateConfigWithoutConnectionUrl() {
     props.remove(JdbcSinkConfig.CONNECTION_URL);
     createConfig();

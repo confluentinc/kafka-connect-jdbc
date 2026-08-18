@@ -15,28 +15,16 @@
 
 package io.confluent.connect.jdbc.dialect;
 
-import io.confluent.connect.jdbc.data.Json;
-import io.confluent.connect.jdbc.data.VariableScaleDecimal;
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
-import io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode;
-import io.confluent.connect.jdbc.sink.JdbcSinkConfig.PrimaryKeyMode;
-import io.confluent.connect.jdbc.sink.PreparedStatementBinder;
-import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
-import io.confluent.connect.jdbc.sink.metadata.SchemaPair;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
 import io.confluent.connect.jdbc.source.ColumnMapping;
-import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
-import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.HstoreHandlingMode;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
-import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
-import io.confluent.connect.jdbc.util.HstoreConverter;
 import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.JdbcCredentials;
-import io.confluent.connect.jdbc.util.JsonConverter;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
@@ -45,7 +33,6 @@ import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
-import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -53,27 +40,19 @@ import org.apache.kafka.connect.errors.DataException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.math.BigDecimal;
-import java.nio.ByteBuffer;
-import java.sql.Array;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.sql.Types;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Calendar;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Properties;
 
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG;
 
@@ -86,49 +65,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
   // Visible for testing
   volatile int maxIdentifierLength = 0;
-
-  // Visible for testing
-  volatile HstoreType hstoreType = HstoreType.UNRESOLVED;
-
-  /**
-   * What the catalog says about the hstore extension, as one value rather than a name plus a flag:
-   * unresolved until it is read, then absent, or installed under a name — bare while the extension
-   * is on the {@code search_path}, {@code "schema".hstore} when it is not. A single volatile
-   * reference also publishes the name and the state together.
-   */
-  static final class HstoreType {
-
-    private enum State { UNRESOLVED, ABSENT, INSTALLED }
-
-    static final HstoreType UNRESOLVED = new HstoreType(State.UNRESOLVED, null);
-    static final HstoreType ABSENT = new HstoreType(State.ABSENT, null);
-
-    private final State state;
-    private final String name;
-
-    private HstoreType(State state, String name) {
-      this.state = state;
-      this.name = name;
-    }
-
-    /** The catalog answered; a null name means the extension is not installed. */
-    static HstoreType fromTypeName(String name) {
-      return name == null ? ABSENT : new HstoreType(State.INSTALLED, name);
-    }
-
-    boolean isResolved() {
-      return state != State.UNRESOLVED;
-    }
-
-    boolean isAbsent() {
-      return state == State.ABSENT;
-    }
-
-    /** The name to write, assuming the bare one until the catalog has been read. */
-    String nameOrBare() {
-      return name == null ? HSTORE_TYPE_NAME : name;
-    }
-  }
 
   /**
    * The provider for {@link PostgreSqlDatabaseDialect}.
@@ -147,41 +83,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   static final String JSON_TYPE_NAME = "json";
   static final String JSONB_TYPE_NAME = "jsonb";
   static final String UUID_TYPE_NAME = "uuid";
-  static final String HSTORE_TYPE_NAME = "hstore";
-  static final String NUMERIC_TYPE_NAME = "numeric";
-  static final String DECIMAL_TYPE_NAME = "decimal";
-  static final String DATE_TYPE_NAME = "date";
-  static final String TIME_TYPE_NAME = "time";
-  static final String TIMESTAMP_TYPE_NAME = "timestamp";
-  static final String TIMESTAMPTZ_TYPE_NAME = "timestamptz";
-  static final String BYTEA_TYPE_NAME = "bytea";
-
-  /** pgjdbc reports an array type as its element name with this prefix: hstore[] is _hstore. */
-  static final String ARRAY_TYPE_PREFIX = "_";
-
-  // Array.getResultSet() yields two columns per element: 1 is the index, 2 the value.
-  private static final int ELEMENT_VALUE_COLUMN = 2;
-
-  private static final String MULTI_DIMENSIONAL_ARRAY_MESSAGE =
-      "Multi-dimensional array in column {}; nested elements cannot be represented by the "
-          + "single-dimension element schema and are emitted as null";
-
-  /**
-   * Columns already warned about for {@link #MULTI_DIMENSIONAL_ARRAY_MESSAGE}. Multi-dimensionality
-   * is only detectable per value, so the warning would otherwise repeat for every row of every
-   * poll. Scoped to the dialect, i.e. to the task, so a restart warns again — which is wanted,
-   * since the emitted nulls are silent in the schema and a fresh log should show the loss.
-   */
-  private final Set<ColumnId> multiDimensionalWarnedColumns = ConcurrentHashMap.newKeySet();
-
-  /** Names the expected type twice: the remediation must be a type the operator can create. */
-  private static final String HSTORE_COLUMN_REQUIRED =
-      "Cannot write field %1$s as hstore: column type is %2$s, not %3$s. Recreate the column as "
-          + "%3$s, or set " + JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE + "=false.";
-
-  private static final String HSTORE_EXTENSION_MISSING =
-      "Cannot write %s to an hstore column: the hstore extension is not installed on this "
-          + "database. Install it with CREATE EXTENSION hstore, in any schema.";
 
   /**
    * Define the PG datatypes that require casting upon insert/update statements.
@@ -193,10 +94,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           UUID_TYPE_NAME
       ))
   );
-
-  private static final String COMPLEX_ARRAY_ELEMENT_DISABLED =
-      "Cannot write an array of %s into column %s while %s is false; set it to true to map "
-          + "complex column types.";
 
   /**
    * Create a new dialect instance with the given connector configuration.
@@ -258,95 +155,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       if (maxIdentifierLength <= 0) {
         maxIdentifierLength = computeMaxIdentifierLength(result);
       }
-      // Only the sink writes hstore columns, so a source task never pays for the lookup.
-      if (complexTypesEnabled() && config instanceof JdbcSinkConfig) {
-        maybeResolveHstoreType(result);
-      }
     }
     return result;
-  }
-
-  /**
-   * Read the catalog once per dialect instance — once read it is not re-checked, so a reconnect
-   * keeps the first answer. A failed read leaves it unread rather than absent, so the next
-   * connection on this instance retries and a transient failure heals. Visible for testing.
-   */
-  void maybeResolveHstoreType(Connection connection) {
-    if (hstoreType.isResolved()) {
-      return;
-    }
-    try {
-      hstoreType = HstoreType.fromTypeName(resolveHstoreTypeName(connection));
-    } catch (SQLException e) {
-      // Unresolved, not absent: a write assumes the bare name and lets PostgreSQL say why.
-      log.warn("Could not read the catalog to find where the hstore extension is installed — this "
-          + "does not mean it is absent, which is reported separately when a write needs it. "
-          + "Assuming the bare type name; writes fail if it turns out to live off the search_path.",
-          e);
-    }
-  }
-
-  /**
-   * Locate the extension: bare name when search_path resolves it, else its schema. Null when not
-   * installed; throws when the catalog cannot be read — cases that must not be conflated.
-   */
-  static String resolveHstoreTypeName(Connection connection) throws SQLException {
-    try (Statement stmt = connection.createStatement()) {
-      try (ResultSet rs = stmt.executeQuery("SELECT to_regtype('hstore') IS NOT NULL")) {
-        if (rs.next() && rs.getBoolean(1)) {
-          return HSTORE_TYPE_NAME;
-        }
-      }
-      try (ResultSet rs = stmt.executeQuery(
-          "SELECT n.nspname FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace"
-              + " WHERE e.extname = 'hstore'")) {
-        return rs.next() ? quoteIdentifier(rs.getString(1)) + "." + HSTORE_TYPE_NAME : null;
-      }
-    }
-  }
-
-  /** Quote an identifier, doubling embedded quotes: a schema name may legally contain one. */
-  private static String quoteIdentifier(String identifier) {
-    return "\"" + identifier.replace("\"", "\"\"") + "\"";
-  }
-
-  /**
-   * Requote a qualified type name the driver reported, doubling any embedded quote it left as-is.
-   * pgjdbc builds {@code "schema"."type"} by concatenation without escaping, so a schema named
-   * {@code e"x} arrives as {@code "e"x"."hstore"} — where the stray quote closes the identifier
-   * early and the generated DML will not parse. Unquoting each half and quoting it again fixes
-   * that: {@code "e"x"."hstore"} becomes {@code "e""x"."hstore"}.
-   *
-   * <p>An unqualified name has nothing to requote and is returned unchanged.
-   */
-  private static String requoteTypeName(String typeName) {
-    int lastDot = typeName.lastIndexOf('.');
-    if (lastDot < 0) {
-      return typeName;
-    }
-    return quoteIdentifier(unquoteOuter(typeName.substring(0, lastDot)))
-        + "." + quoteIdentifier(unquoteOuter(typeName.substring(lastDot + 1)));
-  }
-
-  /** Strip only the delimiting quotes; stripping every quote would drop an embedded one. */
-  private static String unquoteOuter(String part) {
-    return part.length() > 1 && part.startsWith("\"") && part.endsWith("\"")
-        ? part.substring(1, part.length() - 1)
-        : part;
-  }
-
-  /**
-   * The type name to write — schema-qualified when the extension is off the search_path — failing
-   * when the catalog says it is absent. Absence is a property of the database, not of a record, so
-   * no batch split could find a record that fits: this fails the task rather than carrying the DDL
-   * exception's per-record handling.
-   */
-  private String hstoreTypeNameOrFail(String fieldName) {
-    if (hstoreType.isAbsent()) {
-      throw new ConnectException(String.format(HSTORE_EXTENSION_MISSING,
-          fieldName == null ? "a map value" : "field " + fieldName));
-    }
-    return hstoreType.nameOrBare();
   }
 
   static int computeMaxIdentifierLength(Connection connection) {
@@ -460,14 +270,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       case Types.OTHER: {
         // Some of these types will have fixed size, but we drop this from the schema conversion
         // since only fixed byte arrays can have a fixed size
-        // hstore.handling.mode=none falls through: the column is skipped, as it was before.
-        if (complexTypesEnabled() && hstoreMappingSelected() && isHstoreType(columnDefn)) {
-          builder.field(fieldName, hstoreSchema(columnDefn.isOptional()));
-          return fieldName;
-        }
-
         if (isJsonType(columnDefn)) {
-          builder.field(fieldName, jsonSchema(columnDefn));
+          builder.field(
+              fieldName,
+              columnDefn.isOptional() ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA
+          );
           return fieldName;
         }
 
@@ -482,18 +289,6 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           return fieldName;
         }
 
-        break;
-      }
-      case Types.ARRAY: {
-        if (complexTypesEnabled()) {
-          Schema elementSchema = arrayElementSchemaFor(columnDefn);
-          if (elementSchema != null) {
-            // Always optional: a multi-dim array (e.g. int[][]) reports the same type name as 1-D
-            // but is skipped to null at read time, so it must allow null on a NOT NULL column.
-            builder.field(fieldName, SchemaBuilder.array(elementSchema).optional().build());
-            return fieldName;
-          }
-        }
         break;
       }
       default:
@@ -532,27 +327,8 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           return rs -> rs.getString(col);
         }
 
-        if (complexTypesEnabled() && hstoreMappingSelected() && isHstoreType(columnDefn)) {
-          if (hstoreHandlingMode() == HstoreHandlingMode.JSON) {
-            return rs -> {
-              Object value = hstoreValue(columnDefn, rs.getObject(col));
-              return value == null ? null : JsonConverter.connectMapToJson(value);
-            };
-          }
-          return rs -> hstoreValue(columnDefn, rs.getObject(col));
-        }
-
         if (UUID.class.getName().equals(columnDefn.classNameForType())) {
           return rs -> rs.getString(col);
-        }
-        break;
-      }
-      case Types.ARRAY: {
-        if (complexTypesEnabled()) {
-          ColumnConverter arrayConverter = arrayColumnConverter(columnDefn, col);
-          if (arrayConverter != null) {
-            return arrayConverter;
-          }
         }
         break;
       }
@@ -569,570 +345,21 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return JSON_TYPE_NAME.equalsIgnoreCase(typeName) || JSONB_TYPE_NAME.equalsIgnoreCase(typeName);
   }
 
-  /** An hstore wherever installed: pgjdbc qualifies it off search_path, so local name decides. */
-  protected boolean isHstoreType(ColumnDefinition columnDefn) {
-    return HSTORE_TYPE_NAME.equalsIgnoreCase(localTypeName(columnDefn.typeName()));
-  }
-
-  /**
-   * The driver's value for an hstore column, as the map both modes require. pgjdbc decodes one only
-   * when it can resolve the type OID; off the {@code search_path} it returns raw {@code "k"=>"v"}
-   * text, parsed here as Debezium does. Anything else follows its {@code handleUnknownData}: a
-   * nullable column degrades to null, a NOT NULL column fails. The value is never logged.
-   */
-  private Object hstoreValue(ColumnDefinition columnDefn, Object value) {
-    if (value == null || value instanceof Map) {
-      return value;
-    }
-    try {
-      return HstoreConverter.hstoreToConnectMap(value.toString());
-    } catch (DataException e) {
-      if (columnDefn.isOptional()) {
-        log.warn("Unparseable value for hstore column {}: class={}; emitting null",
-            columnDefn.id(), value.getClass().getName());
-        return null;
-      }
-      throw new DataException("Unparseable value for hstore column " + columnDefn.id()
-          + ": class=" + value.getClass().getName(), e);
-    }
-  }
-
-  /**
-   * Map a PostgreSQL array column's element JDBC type to a Connect element {@link Schema}.
-   * Returns null when the element type isn't covered by this MVP (callers fall through to the
-   * generic dialect, which will skip the column with a WARN).
-   */
-  private Schema arrayElementSchemaFor(ColumnDefinition columnDefn) {
-    String base = arrayElementBaseType(columnDefn);
-    if (base == null) {
-      return null;
-    }
-    switch (base) {
-      case "text":
-      case "varchar":
-      case "bpchar":
-      case "char":
-        return Schema.OPTIONAL_STRING_SCHEMA;
-      case "int2":
-        return Schema.OPTIONAL_INT16_SCHEMA;
-      case "int4":
-        return Schema.OPTIONAL_INT32_SCHEMA;
-      case "int8":
-        return Schema.OPTIONAL_INT64_SCHEMA;
-      case "float4":
-        return Schema.OPTIONAL_FLOAT32_SCHEMA;
-      case "float8":
-        return Schema.OPTIONAL_FLOAT64_SCHEMA;
-      case "bool":
-      case "boolean":
-        return Schema.OPTIONAL_BOOLEAN_SCHEMA;
-      case BYTEA_TYPE_NAME:
-        return Schema.OPTIONAL_BYTES_SCHEMA;
-      case UUID_TYPE_NAME:
-        // Rendered as text, matching the scalar uuid mapping.
-        return Schema.OPTIONAL_STRING_SCHEMA;
-      case "numeric":
-      case "decimal":
-        // Per-value scale carried via VariableScaleDecimal (array typmod is -1 in JDBC metadata).
-        return VariableScaleDecimal.optionalSchema();
-      case "json":
-      case "jsonb":
-        // Raw JSON text via the Json logical type; round-trips to a native jsonb[] sink column.
-        return Json.optionalSchema();
-      case HSTORE_TYPE_NAME:
-        if (!hstoreMappingSelected()) {
-          // hstore.handling.mode=none: skipped exactly as a scalar hstore column is.
-          return null;
-        }
-        // Shared with the scalar hstore path; array elements are always optional.
-        return hstoreSchema(true);
-      case "date":
-        return Date.builder().optional().build();
-      case "time":
-        return Time.builder().optional().build();
-      case "timestamp":
-      case "timestamptz":
-        // Precision-aware timestamp schema, honoring timestamp.granularity. timestamptz drops
-        // the zone and is stored as a plain timestamp, matching the scalar timestamp/timestamptz.
-        return timestampGranularity().schemaFunction.apply(true);
-      default:
-        return null;
-    }
-  }
-
-  /**
-   * Lowercased element type name of a PostgreSQL array column (strips the leading {@code _}). The
-   * name is unqualified first, since pgjdbc schema-qualifies an extension type that is off the
-   * connection's {@code search_path} and {@code "ext"."_hstore"} would otherwise match nothing.
-   */
-  private static String arrayElementBaseType(ColumnDefinition columnDefn) {
-    String typeName = localTypeName(columnDefn.typeName());
-    if (typeName == null) {
-      return null;
-    }
-    String base = typeName.startsWith(ARRAY_TYPE_PREFIX)
-        ? typeName.substring(ARRAY_TYPE_PREFIX.length())
-        : typeName;
-    return base.toLowerCase();
-  }
-
-  /**
-   * Select the value converter for a PostgreSQL array column. Returns null when the element type is
-   * not supported by {@link #arrayElementSchemaFor}; otherwise {@link #readArray} decodes the
-   * elements.
-   */
-  private ColumnConverter arrayColumnConverter(ColumnDefinition columnDefn, int col) {
-    if (arrayElementSchemaFor(columnDefn) == null) {
-      return null;
-    }
-    final String elementType = arrayElementBaseType(columnDefn);
-    final ColumnId columnId = columnDefn.id();
-    return rs -> readArray(rs, col, columnId, elementType);
-  }
-
-  /**
-   * Whether an element type is decoded through the array's element {@link ResultSet} rather than
-   * {@code getArray()}: temporal elements so an explicit calendar applies, and hstore because only
-   * that route yields a Map ({@code getArray()} gives an opaque {@code PGobject}). Routing on the
-   * PostgreSQL type rather than the Connect schema name keeps working under the precision modes
-   * where the timestamp element schema is unnamed.
-   */
-  private static boolean readsViaElementResultSet(String elementType) {
-    return isTemporalElementType(elementType) || HSTORE_TYPE_NAME.equals(elementType);
-  }
-
-  private static boolean isTemporalElementType(String elementType) {
-    return DATE_TYPE_NAME.equals(elementType)
-        || TIME_TYPE_NAME.equals(elementType)
-        || TIMESTAMP_TYPE_NAME.equals(elementType)
-        || TIMESTAMPTZ_TYPE_NAME.equals(elementType);
-  }
-
-  /**
-   * Read a PostgreSQL array column into a Connect list. The shared handling — SQL NULL, skipping
-   * multi-dimensional columns (see {@link #isMultiDimensional(Object[])}), and freeing the
-   * array — lives here. Temporal elements are decoded via the element {@link ResultSet} so each
-   * can honor the configured {@code db.timezone}; all other elements come straight from
-   * {@code getArray()}.
-   */
-  private List<Object> readArray(ResultSet rs, int col, ColumnId columnId, String elementType)
-      throws SQLException {
-    Array arr = rs.getArray(col);
-    if (arr == null) {
-      return null;
-    }
-    try {
-      Object raw = arr.getArray();
-      if (raw == null) {
-        return null;
-      }
-      if (raw instanceof Object[] && isMultiDimensional((Object[]) raw)) {
-        if (multiDimensionalWarnedColumns.add(columnId)) {
-          log.warn(MULTI_DIMENSIONAL_ARRAY_MESSAGE, columnId);
-        } else {
-          log.debug(MULTI_DIMENSIONAL_ARRAY_MESSAGE, columnId);
-        }
-        return nullElements(((Object[]) raw).length);
-      }
-      if (readsViaElementResultSet(elementType)) {
-        return readElementResultSet(arr, elementType);
-      }
-      return readMappedElements((Object[]) raw, elementType);
-    } finally {
-      arr.free();
-    }
-  }
-
-  /**
-   * A list of nulls, one per element. Nested elements cannot be represented by the single-dimension
-   * element schema, so each is emitted as null rather than dropping the whole column, matching
-   * Debezium's per-element {@code handleUnknownData} outcome for multi-dimensional arrays.
-   */
-  private static List<Object> nullElements(int length) {
-    return new ArrayList<>(Collections.nCopies(length, null));
-  }
-
-  /**
-   * Map elements the driver already returns as the target Java type into a Connect list (nulls
-   * preserved). Used for primitive, bytea, uuid, Json and VariableScaleDecimal elements.
-   */
-  private static List<Object> readMappedElements(Object[] elements, String elementType) {
-    List<Object> out = new ArrayList<>(elements.length);
-    for (Object element : elements) {
-      out.add(element == null ? null : mapArrayElement(elementType, element));
-    }
-    return out;
-  }
-
-  /**
-   * Convert a single non-temporal array element to its Connect value: VariableScaleDecimal structs
-   * from the element BigDecimal, raw text for Json and uuid, and primitives — including bytea,
-   * already a {@code byte[]} — passed through as-is.
-   */
-  private static Object mapArrayElement(String elementType, Object element) {
-    switch (elementType) {
-      case NUMERIC_TYPE_NAME:
-      case DECIMAL_TYPE_NAME:
-        return VariableScaleDecimal.fromLogical(
-            VariableScaleDecimal.optionalSchema(), (BigDecimal) element);
-      case JSON_TYPE_NAME:
-      case JSONB_TYPE_NAME:
-      case UUID_TYPE_NAME:
-        return element.toString();
-      default:
-        // Primitives and bytea (already a byte[]) pass through.
-        return element;
-    }
-  }
-
-  /**
-   * Read elements via the array's element {@link ResultSet}, which lets temporal values be decoded
-   * with an explicit calendar ({@code getArray()} would parse in the JVM default zone) and gives
-   * hstore elements as Maps. Mirrors the scalar path: {@code date} uses the date time zone (UTC on
-   * the source) while {@code time}/{@code timestamp} honor {@code db.timezone}.
-   */
-  private List<Object> readElementResultSet(Array arr, String elementType) throws SQLException {
-    Calendar dateCal = DateTimeUtils.getZoneIdCalendar(dateTimeZoneId());
-    Calendar timeCal = DateTimeUtils.getZoneIdCalendar(zoneId());
-    try (ResultSet elementRs = arr.getResultSet()) {
-      List<Object> out = new ArrayList<>();
-      while (elementRs.next()) {
-        out.add(isTemporalElementType(elementType)
-            ? decodeTemporalElement(elementRs, elementType, dateCal, timeCal)
-            : decodeHstoreElement(elementRs));
-      }
-      return out;
-    }
-  }
-
-  /**
-   * Decode one hstore array element. The element {@link ResultSet} yields a Map or raw text, so
-   * both are normalised as the scalar path does; json mode then serializes the result.
-   */
-  private Object decodeHstoreElement(ResultSet elementRs) throws SQLException {
-    Object value = elementRs.getObject(ELEMENT_VALUE_COLUMN);
-    if (value == null) {
-      return null;
-    }
-    Map<?, ?> map;
-    try {
-      map = value instanceof Map
-          ? (Map<?, ?>) value
-          : HstoreConverter.hstoreToConnectMap(value.toString());
-    } catch (DataException e) {
-      // Element schemas are always optional, so degrade as the scalar path does.
-      log.warn("Unparseable hstore array element: class={}; emitting null",
-          value.getClass().getName());
-      return null;
-    }
-    return hstoreHandlingMode() == HstoreHandlingMode.JSON
-        ? JsonConverter.connectMapToJson(map)
-        : map;
-  }
-
-  /**
-   * Decode a single temporal array element, mirroring the scalar read path in
-   * {@link GenericDatabaseDialect}: apply the {@code date.calendar.system} and, for timestamps,
-   * the configured {@code timestamp.granularity}.
-   */
-  private Object decodeTemporalElement(
-      ResultSet elementRs, String elementType, Calendar dateCal, Calendar timeCal)
-      throws SQLException {
-    if (DATE_TYPE_NAME.equals(elementType)) {
-      java.sql.Date date = elementRs.getDate(ELEMENT_VALUE_COLUMN, dateCal);
-      if (elementRs.wasNull()) {
-        return null;
-      }
-      return dateCalendarSystem().isModern()
-          ? DateTimeUtils.convertToModernDate(date, dateTimeZoneId()) : date;
-    }
-    if (TIME_TYPE_NAME.equals(elementType)) {
-      java.sql.Time time = elementRs.getTime(ELEMENT_VALUE_COLUMN, timeCal);
-      return elementRs.wasNull() ? null : time;
-    }
-    java.sql.Timestamp ts = elementRs.getTimestamp(ELEMENT_VALUE_COLUMN, timeCal);
-    if (elementRs.wasNull()) {
-      return null;
-    }
-    if (dateCalendarSystem().isModern()) {
-      ts = DateTimeUtils.convertToModernTimestamp(ts, zoneId());
-    }
-    return timestampGranularity().fromTimestamp.apply(ts, zoneId());
-  }
-
-  /**
-   * Whether the elements are themselves arrays — a multi-dimensional column like {@code int[][]}.
-   * Postgres allows these, but JDBC reports the same type name as 1-D, so they are only
-   * detectable from values; with no 1-D Connect ARRAY schema, callers skip them, returning null.
-   *
-   * <p>Tested as an object array rather than any array: {@code bytea} is the one element type whose
-   * value is itself a {@code byte[]}, and its primitive component keeps it out of {@code Object[]}
-   * while a real {@code bytea[][]} still nests. Every other decoder yields a reference array, so
-   * the same question is correct for all of them.
-   */
-  private static boolean isMultiDimensional(Object[] elements) {
-    for (Object element : elements) {
-      if (element != null) {
-        return element instanceof Object[];
-      }
-    }
-    return false;
-  }
-
-  /**
-   * Whether the schema is a {@code MAP<STRING, STRING>}, the only Connect container mapped to a
-   * native {@code hstore} column. That is the shape a PostgreSQL {@code hstore} column takes on the
-   * topic; STRUCT values and other map shapes are not supported.
-   */
-  private static boolean isStringToStringMap(Schema schema) {
-    return schema.type() == Schema.Type.MAP
-        && schema.keySchema().type() == Schema.Type.STRING
-        && schema.valueSchema().type() == Schema.Type.STRING;
-  }
-
-  /**
-   * {@inheritDoc} Overridden only to carry the table definition into the binder, which the
-   * interface default drops — leaving every column definition null at bind time. SQL Server,
-   * Oracle and Sybase override it for the same mechanical reason.
-   */
-  @Override
-  public StatementBinder statementBinder(
-      PreparedStatement statement,
-      PrimaryKeyMode pkMode,
-      SchemaPair schemaPair,
-      FieldsMetadata fieldsMetadata,
-      TableDefinition tableDefinition,
-      InsertMode insertMode,
-      boolean replaceNullWithDefault
-  ) {
-    return new PreparedStatementBinder(
-        this,
-        statement,
-        pkMode,
-        schemaPair,
-        fieldsMetadata,
-        tableDefinition,
-        insertMode,
-        replaceNullWithDefault
-    );
-  }
-
-  /**
-   * {@inheritDoc} A map is written as hstore text, so the column must be an hstore. Checked here
-   * as the only bind entry point given the column definition.
-   */
-  @Override
-  public void bindField(
-      PreparedStatement statement,
-      int index,
-      Schema schema,
-      Object value,
-      ColumnDefinition colDef,
-      String fieldName
-  ) throws SQLException {
-    if (value != null && complexTypesEnabled()) {
-      if (isStringToStringMap(schema)) {
-        requireHstoreColumn(colDef, fieldName, HSTORE_TYPE_NAME);
-      } else if (schema.type() == Schema.Type.ARRAY && isStringToStringMap(schema.valueSchema())) {
-        requireHstoreColumn(colDef, fieldName, HSTORE_TYPE_NAME + "[]");
-      }
-    }
-    super.bindField(statement, index, schema, value, colDef, fieldName);
-  }
-
-  /**
-   * Fail unless an existing column can hold hstore text; unknown column or type is skipped. Bind
-   * time, so this fails the task as any unbindable value does rather than reading as a DDL failure:
-   * the mismatch holds for every record, so unrolling the batch would only find it again.
-   */
-  private void requireHstoreColumn(ColumnDefinition colDef, String fieldName, String expected) {
-    String reported = colDef == null ? null : localTypeName(colDef.typeName());
-    if (reported == null) {
-      return;
-    }
-    String actual = writableTypeName(reported);
-    if (!expected.equalsIgnoreCase(actual)) {
-      throw new ConnectException(
-          String.format(HSTORE_COLUMN_REQUIRED, fieldName, actual, expected));
-    }
-  }
-
-  /**
-   * The form an operator would write in DDL: pgjdbc's {@code _hstore} becomes {@code hstore[]}.
-   * Both name the same type, but only the latter is what they would type to create the column.
-   */
-  private static String writableTypeName(String typeName) {
-    return typeName.startsWith(ARRAY_TYPE_PREFIX)
-        ? typeName.substring(ARRAY_TYPE_PREFIX.length()) + "[]"
-        : typeName;
-  }
-
-  /** Bind a map as hstore text for the ::hstore cast to parse; false if the shape differs. */
-  private boolean maybeBindHstore(
-      PreparedStatement statement,
-      int index,
-      Schema schema,
-      Object value
-  ) throws SQLException {
-    if (!isStringToStringMap(schema) || !complexTypesEnabled()) {
-      return false;
-    }
-    statement.setString(index, HstoreConverter.connectMapToHstore(value));
-    return true;
-  }
-
-  /**
-   * The configured {@code hstore.handling.mode}. Only the source connector selects a
-   * representation; the sink reads whichever shape arrives on the topic.
-   */
-  protected HstoreHandlingMode hstoreHandlingMode() {
-    return config instanceof JdbcSourceConnectorConfig
-        ? ((JdbcSourceConnectorConfig) config).hstoreHandlingMode()
-        : HstoreHandlingMode.MAP;
-  }
-
-  /**
-   * Whether {@code hstore.handling.mode} selects a representation, i.e. is not {@code none}, the
-   * default. Paired with the complex types flag at every hstore call site, so hstore is opted into
-   * independently of json/jsonb and arrays and {@link #hstoreSchema(boolean)} is only ever reached
-   * for a real representation.
-   */
-  protected boolean hstoreMappingSelected() {
-    return hstoreHandlingMode() != HstoreHandlingMode.NONE;
-  }
-
-  /**
-   * The local, unquoted PostgreSQL type name: {@code hstore} and {@code "ext"."hstore"} both yield
-   * {@code hstore}, and {@code "ext"."_hstore"} yields {@code _hstore}. pgjdbc renders an extension
-   * type bare only while its schema is on the connection's {@code search_path}, and
-   * schema-qualifies it otherwise.
-   */
-  protected static String localTypeName(String typeName) {
-    if (typeName == null) {
-      return null;
-    }
-    int lastDot = typeName.lastIndexOf('.');
-    return (lastDot < 0 ? typeName : typeName.substring(lastDot + 1)).replace("\"", "");
-  }
-
-  /**
-   * The on-topic schema for an hstore value under {@code hstore.handling.mode}: a {@code Json}
-   * STRING, or a {@code MAP<STRING, STRING>} whose values are optional since an hstore value may
-   * be NULL. Shared so a scalar column (optionality from the column) and an array element (always
-   * optional) cannot drift apart. Only valid once {@link #hstoreMappingSelected()} holds; the map
-   * branch is the fallback, so {@code none} would otherwise be read as {@code map}.
-   */
-  protected Schema hstoreSchema(boolean optional) {
-    if (hstoreHandlingMode() == HstoreHandlingMode.JSON) {
-      return optional ? Json.optionalSchema() : Json.schema();
-    }
-    SchemaBuilder mapBuilder =
-        SchemaBuilder.map(Schema.STRING_SCHEMA, Schema.OPTIONAL_STRING_SCHEMA);
-    if (optional) {
-      mapBuilder.optional();
-    }
-    return mapBuilder.build();
-  }
-
-  private boolean complexTypesEnabled() {
-    if (config instanceof JdbcSinkConfig) {
-      return ((JdbcSinkConfig) config).sqlComplexTypesEnable;
-    }
-    if (config instanceof JdbcSourceConnectorConfig) {
-      return ((JdbcSourceConnectorConfig) config).sqlComplexTypesEnabled();
-    }
-    return false;
-  }
-
-  /**
-   * Whether an array field's elements are ones {@link #bindArray} cannot write, so no column type
-   * is advertised: a nested array, or any element under {@code timestamp.fields.list}, which
-   * selects TIMESTAMP by field name but has no binding for arrays. Advertising these would let
-   * auto-create build a column every insert then fails on.
-   */
-  private boolean isUnbindableArrayElement(SinkRecordField field) {
-    Schema element = field.schema().valueSchema();
-    if (element.type() == Schema.Type.ARRAY) {
-      return true;
-    }
-    // BYTES binds only through the complex-types path, so a named one no binding claims — a custom
-    // logical type, say — would otherwise advertise a bytea[] column every insert then fails on.
-    if (element.type() == Schema.Type.BYTES && arrayElementBinding(element, field.name()) == null) {
-      return true;
-    }
-    return config instanceof JdbcSinkConfig
-        && config.getList(JdbcSinkConfig.TIMESTAMP_FIELDS_LIST).contains(field.name());
-  }
-
-  /**
-   * Whether an element is written only by {@link #arrayElementBinding(Schema, String)}: a
-   * bytea-bound plain element the complex-types path would bind, other than Json.
-   */
-  private boolean isComplexArrayElement(Schema element, String fieldName) {
-    // Derived from the binding rather than an enumerated name list, so any element the complex
-    // types would write is refused when they are off. Json is the deliberate exception: it is
-    // STRING-based and degrades losslessly to text[].
-    return !Json.LOGICAL_NAME.equals(element.name())
-        && arrayElementBinding(element, fieldName) != null;
-  }
-
-  /**
-   * The failure for an array element the complex types would bind while the feature is off.
-   * Shared by the DDL and bind paths for one actionable message. Not a DDL failure: the flag is
-   * off for the whole connector, so no record can succeed and a batch split would find nothing.
-   */
-  private static ConnectException complexArrayElementDisabledError(
-      Schema element, String fieldName) {
-    return new ConnectException(String.format(COMPLEX_ARRAY_ELEMENT_DISABLED,
-        element.name() == null ? element.type() : element.name(),
-        fieldName, JdbcSinkConfig.SQL_COMPLEX_TYPES_ENABLE));
-  }
-
-  /**
-   * The column type for a Connect logical type, or null when the schema has no name or the name is
-   * not one this dialect maps. The complex types are additionally gated on
-   * {@code sql.complex.types.enable}, so a connector with the feature off keeps its previous types.
-   */
-  private String logicalSqlType(String schemaName) {
-    if (schemaName == null) {
-      return null;
-    }
-    switch (schemaName) {
-      case Decimal.LOGICAL_NAME:
-        return "DECIMAL";
-      case Date.LOGICAL_NAME:
-        return "DATE";
-      case Time.LOGICAL_NAME:
-        return "TIME";
-      case Timestamp.LOGICAL_NAME:
-        return "TIMESTAMP";
-      case Json.LOGICAL_NAME:
-        return complexTypesEnabled() ? JSONB_TYPE_NAME.toUpperCase() : null;
-      case VariableScaleDecimal.LOGICAL_NAME:
-        return complexTypesEnabled() ? NUMERIC_TYPE_NAME.toUpperCase() : null;
-      default:
-        return null;
-    }
-  }
-
-  /**
-   * Build the Connect schema for a PostgreSQL json/jsonb column. When complex types are disabled
-   * the column stays a plain STRING; when enabled it is a logical JSON STRING (raw text, aligned
-   * with Debezium's {@code io.debezium.data.Json}).
-   */
-  private Schema jsonSchema(ColumnDefinition columnDefn) {
-    boolean optional = columnDefn.isOptional();
-    if (!complexTypesEnabled()) {
-      return optional ? Schema.OPTIONAL_STRING_SCHEMA : Schema.STRING_SCHEMA;
-    }
-    return optional ? Json.optionalSchema() : Json.schema();
-  }
-
   @Override
   protected String getSqlType(SinkRecordField field) {
-    String logicalType = logicalSqlType(field.schemaName());
-    if (logicalType != null) {
-      return logicalType;
+    if (field.schemaName() != null) {
+      switch (field.schemaName()) {
+        case Decimal.LOGICAL_NAME:
+          return "DECIMAL";
+        case Date.LOGICAL_NAME:
+          return "DATE";
+        case Time.LOGICAL_NAME:
+          return "TIME";
+        case Timestamp.LOGICAL_NAME:
+          return "TIMESTAMP";
+        default:
+          // fall through to normal types
+      }
     }
     switch (field.schemaType()) {
       case INT8:
@@ -1160,28 +387,13 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
         return "TEXT";
       case BYTES:
         return "BYTEA";
-      case ARRAY: {
-        Schema element = field.schema().valueSchema();
-        // Unbindable first: enabling the feature cannot help an element nothing can write, so
-        // advising it would only lead to a second and less helpful failure.
-        if (isUnbindableArrayElement(field)) {
-          return super.getSqlType(field);
-        }
-        if (!complexTypesEnabled() && isComplexArrayElement(element, field.name())) {
-          throw complexArrayElementDisabledError(element, field.name());
-        }
+      case ARRAY:
         SinkRecordField childField = new SinkRecordField(
-            element,
+            field.schema().valueSchema(),
             field.name(),
             field.isPrimaryKey()
         );
         return getSqlType(childField) + "[]";
-      }
-      case MAP:
-        if (isStringToStringMap(field.schema()) && complexTypesEnabled()) {
-          return hstoreTypeNameOrFail(field.name());
-        }
-        return super.getSqlType(field);
       default:
         return super.getSqlType(field);
     }
@@ -1349,246 +561,68 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
       String fieldName
   ) throws SQLException {
     switch (schema.type()) {
-      case ARRAY:
-        if (bindArray(statement, index, schema, value, fieldName)) {
+      case ARRAY: {
+        Class<?> valueClass = value.getClass();
+        Object newValue = null;
+        Collection<?> valueCollection;
+        if (Collection.class.isAssignableFrom(valueClass)) {
+          valueCollection = (Collection<?>) value;
+        } else if (valueClass.isArray()) {
+          valueCollection = Arrays.asList((Object[]) value);
+        } else {
+          throw new DataException(
+              String.format("Type '%s' is not supported for Array.", valueClass.getName())
+          );
+        }
+
+        // All typecasts below are based on pgjdbc's documentation on how to use primitive arrays
+        // - https://jdbc.postgresql.org/documentation/head/arrays.html
+        switch (schema.valueSchema().type()) {
+          case INT8: {
+            // Gotta do this the long way, as Postgres has no single-byte integer,
+            // so we want to cast to short as the next best thing, and we can't do that with
+            // toArray.
+
+            newValue = valueCollection.stream()
+                .map(o -> ((Byte) o).shortValue())
+                .toArray(Short[]::new);
+            break;
+          }
+          case INT32:
+            newValue = valueCollection.toArray(new Integer[0]);
+            break;
+          case INT16:
+            newValue = valueCollection.toArray(new Short[0]);
+            break;
+          case BOOLEAN:
+            newValue = valueCollection.toArray(new Boolean[0]);
+            break;
+          case STRING:
+            newValue = valueCollection.toArray(new String[0]);
+            break;
+          case FLOAT64:
+            newValue = valueCollection.toArray(new Double[0]);
+            break;
+          case FLOAT32:
+            newValue = valueCollection.toArray(new Float[0]);
+            break;
+          case INT64:
+            newValue = valueCollection.toArray(new Long[0]);
+            break;
+          default:
+            break;
+        }
+
+        if (newValue != null) {
+          statement.setObject(index, newValue, Types.ARRAY);
           return true;
         }
         break;
-      case MAP:
-        if (maybeBindHstore(statement, index, schema, value)) {
-          return true;
-        }
-        break;
+      }
       default:
         break;
     }
     return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
-  }
-
-  /**
-   * Bind a Connect ARRAY value to a native PostgreSQL array parameter. When complex types are
-   * enabled, element types with a dedicated PostgreSQL array type (bytea, hstore, json, numeric and
-   * the temporals) are resolved by {@link #arrayElementBinding(Schema, String)} and bound via
-   * {@code createArrayOf}; any other (primitive) element type falls back to the pre-existing
-   * {@link #maybeBindPrimitiveArray}. Returns false if the element type is not handled here.
-   */
-  private boolean bindArray(
-      PreparedStatement statement,
-      int index,
-      Schema schema,
-      Object value,
-      String fieldName
-  ) throws SQLException {
-    Collection<?> values = arrayValueCollection(value);
-    Schema elementSchema = schema.valueSchema();
-    if (!complexTypesEnabled() && isComplexArrayElement(elementSchema, fieldName)) {
-      // The primitive fallback would fail on the element's Java type rather than say why.
-      throw complexArrayElementDisabledError(elementSchema, fieldName);
-    }
-    ArrayElementBinding binding =
-        complexTypesEnabled() ? arrayElementBinding(elementSchema, fieldName) : null;
-    if (binding == null) {
-      return maybeBindPrimitiveArray(statement, index, elementSchema, values);
-    }
-    Array array = statement.getConnection()
-        .createArrayOf(binding.pgElementType, binding.toArray(values));
-    statement.setArray(index, array);
-    return true;
-  }
-
-  /**
-   * Builds the typed Java array bound as the elements of a native PostgreSQL array.
-   */
-  @FunctionalInterface
-  private interface ArrayValuesBuilder {
-    Object[] build(Collection<?> values);
-  }
-
-  /**
-   * Pairs a PostgreSQL array element type name with the builder that produces its element array.
-   */
-  private static final class ArrayElementBinding {
-    private final String pgElementType;
-    private final ArrayValuesBuilder valuesBuilder;
-
-    ArrayElementBinding(String pgElementType, ArrayValuesBuilder valuesBuilder) {
-      this.pgElementType = pgElementType;
-      this.valuesBuilder = valuesBuilder;
-    }
-
-    Object[] toArray(Collection<?> values) {
-      return valuesBuilder.build(values);
-    }
-  }
-
-  /**
-   * Resolve the native array binding for a Connect element schema, or null if the element has no
-   * dedicated PostgreSQL array type (a primitive, handled by {@link #maybeBindPrimitiveArray}).
-   * Only the hstore-shaped {@code MAP<STRING, STRING>} and the logical types below are mapped.
-   * The field name is carried only so a missing hstore extension can name the column it fails on.
-   */
-  private ArrayElementBinding arrayElementBinding(Schema elementSchema, String fieldName) {
-    if (elementSchema == null) {
-      return null;
-    }
-    if (isStringToStringMap(elementSchema)) {
-      return new ArrayElementBinding(
-          hstoreTypeNameOrFail(fieldName), PostgreSqlDatabaseDialect::hstoreArrayFor);
-    }
-    if (elementSchema.type() == Schema.Type.BYTES && elementSchema.name() == null) {
-      return new ArrayElementBinding(BYTEA_TYPE_NAME, PostgreSqlDatabaseDialect::byteArrayFor);
-    }
-    String elementName = elementSchema.name();
-    if (elementName != null) {
-      switch (elementName) {
-        case Json.LOGICAL_NAME:
-          // Raw JSON text -> jsonb[].
-          return new ArrayElementBinding(JSONB_TYPE_NAME, Collection::toArray);
-        case Decimal.LOGICAL_NAME:
-          // Already a BigDecimal from the converter; only the array type has to be exact.
-          return new ArrayElementBinding(
-              NUMERIC_TYPE_NAME, values -> values.toArray(new BigDecimal[0]));
-        case VariableScaleDecimal.LOGICAL_NAME:
-          // {scale,value} structs -> exact BigDecimal[] -> numeric[].
-          return new ArrayElementBinding(
-              NUMERIC_TYPE_NAME, PostgreSqlDatabaseDialect::bigDecimalArrayFor);
-        case Date.LOGICAL_NAME:
-          return new ArrayElementBinding(
-              DATE_TYPE_NAME, values -> temporalArrayFor(Date.LOGICAL_NAME, values));
-        case Time.LOGICAL_NAME:
-          return new ArrayElementBinding(
-              TIME_TYPE_NAME, values -> temporalArrayFor(Time.LOGICAL_NAME, values));
-        case Timestamp.LOGICAL_NAME:
-          return new ArrayElementBinding(
-              TIMESTAMP_TYPE_NAME, values -> temporalArrayFor(Timestamp.LOGICAL_NAME, values));
-        default:
-          break;
-      }
-    }
-    return null;
-  }
-
-  /**
-   * Coerce a Connect ARRAY value into a {@link Collection} of elements.
-   */
-  private static Collection<?> arrayValueCollection(Object value) {
-    Class<?> valueClass = value.getClass();
-    if (Collection.class.isAssignableFrom(valueClass)) {
-      return (Collection<?>) value;
-    } else if (valueClass.isArray()) {
-      return Arrays.asList((Object[]) value);
-    }
-    throw new DataException(
-        String.format("Type '%s' is not supported for Array.", valueClass.getName()));
-  }
-
-  /**
-   * Bind an array of a primitive element type per pgjdbc's documented array mapping. Returns false
-   * if the element type is not a supported primitive.
-   */
-  private boolean maybeBindPrimitiveArray(PreparedStatement statement, int index,
-      Schema elementSchema, Collection<?> values) throws SQLException {
-    Object newValue =
-        elementSchema == null ? null : primitiveArrayFor(elementSchema.type(), values);
-    if (newValue == null) {
-      return false;
-    }
-    statement.setObject(index, newValue, Types.ARRAY);
-    return true;
-  }
-
-  /**
-   * Decode a collection of VariableScaleDecimal structs back into a {@code BigDecimal[]}, each with
-   * its own scale, for binding into a native {@code numeric[]} column. Null elements are preserved.
-   */
-  private static BigDecimal[] bigDecimalArrayFor(Collection<?> valueCollection) {
-    return valueCollection.stream()
-        .map(o -> o == null ? null
-            : VariableScaleDecimal.toLogical(
-                (Struct) o))
-        .toArray(BigDecimal[]::new);
-  }
-
-  /**
-   * Decode a collection of Connect BYTES elements into a {@code byte[][]} for binding into a native
-   * {@code bytea[]} column. Connect permits either representation. Null elements are preserved.
-   */
-  private static Object[] byteArrayFor(Collection<?> valueCollection) {
-    return valueCollection.stream()
-        .map(o -> o == null ? null : o instanceof ByteBuffer ? bytesOf((ByteBuffer) o) : (byte[]) o)
-        .toArray(byte[][]::new);
-  }
-
-  private static byte[] bytesOf(ByteBuffer buffer) {
-    ByteBuffer slice = buffer.slice();
-    byte[] bytes = new byte[slice.remaining()];
-    slice.get(bytes);
-    return bytes;
-  }
-
-  /**
-   * Serialize each map element to hstore text for a native hstore[] column, nulls preserved.
-   */
-  private static Object[] hstoreArrayFor(Collection<?> valueCollection) {
-    return valueCollection.stream()
-        .map(o -> o == null ? null : HstoreConverter.connectMapToHstore(o))
-        .toArray();
-  }
-
-  /**
-   * Render each temporal element as a text literal for binding into a native
-   * date[]/time[]/timestamp[] column, mirroring the scalar sink path: {@code date} uses the date
-   * time zone while {@code time}/{@code timestamp} use {@code db.timezone}, with the calendar
-   * system applied. Nulls are preserved.
-   */
-  private Object[] temporalArrayFor(String elementName, Collection<?> valueCollection) {
-    return valueCollection.stream()
-        .map(o -> o == null ? null : formatTemporalElement(elementName, (java.util.Date) o))
-        .toArray(String[]::new);
-  }
-
-  /**
-   * Render one temporal element as the text literal bound into the native array. {@code
-   * createArrayOf} takes no calendar and pgjdbc has no encoder for the {@code java.sql} temporal
-   * types, so elements are rendered here, honouring the zone and calendar the scalar bind does.
-   */
-  private String formatTemporalElement(String elementName, java.util.Date value) {
-    if (Date.LOGICAL_NAME.equals(elementName)) {
-      return DateTimeUtils.formatDate(value, dateTimeZoneId(), dateCalendarSystem());
-    }
-    if (Time.LOGICAL_NAME.equals(elementName)) {
-      return DateTimeUtils.formatTime(value, zoneId());
-    }
-    return DateTimeUtils.formatTimestamp(value, zoneId(), dateCalendarSystem());
-  }
-
-  /**
-   * Convert a collection into a typed Java array for a primitive Connect element type, following
-   * pgjdbc's array mapping (https://jdbc.postgresql.org/documentation/head/arrays.html). Returns
-   * null for unhandled element types.
-   */
-  private static Object primitiveArrayFor(Schema.Type elementType, Collection<?> valueCollection) {
-    switch (elementType) {
-      case INT8:
-        // PostgreSQL has no single-byte integer; widen to short.
-        return valueCollection.stream().map(o -> ((Byte) o).shortValue()).toArray(Short[]::new);
-      case INT16:
-        return valueCollection.toArray(new Short[0]);
-      case INT32:
-        return valueCollection.toArray(new Integer[0]);
-      case INT64:
-        return valueCollection.toArray(new Long[0]);
-      case FLOAT32:
-        return valueCollection.toArray(new Float[0]);
-      case FLOAT64:
-        return valueCollection.toArray(new Double[0]);
-      case BOOLEAN:
-        return valueCollection.toArray(new Boolean[0]);
-      case STRING:
-        return valueCollection.toArray(new String[0]);
-      default:
-        return null;
-    }
   }
 
   /**
@@ -1628,8 +662,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    *
    * <p>This method returns a blank string except for those column types that require casting
    * when set with literal values. For example, a column of type {@code uuid} must be cast when
-   * being bound with a {@code varchar} literal, since a UUID value cannot be bound directly. The
-   * array of such a type needs the same cast, so a {@code uuid[]} column yields {@code ::uuid[]}.
+   * being bound with with a {@code varchar} literal, since a UUID value cannot be bound directly.
    *
    * @param tableDefn the table definition; may be null if unknown
    * @param columnId  the column within the table; may not be null
@@ -1638,26 +671,13 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
   protected String valueTypeCast(TableDefinition tableDefn, ColumnId columnId) {
     if (tableDefn != null) {
       ColumnDefinition defn = tableDefn.definitionForColumn(columnId.name());
-      if (defn != null && defn.typeName() != null) {
+      if (defn != null) {
         String typeName = defn.typeName(); // database-specific
-        if (!complexTypesEnabled()) {
-          // Both gates off: the hstore cast, the array cast, and the local-name match are all new,
-          // so this is the pre-feature form — scalar cast types matched on the raw name only.
-          String rawName = typeName.toLowerCase();
-          return CAST_TYPES.contains(rawName) ? "::" + rawName : "";
-        }
-        String localName = localTypeName(typeName).toLowerCase();
-        if (HSTORE_TYPE_NAME.equals(localName)) {
-          // Requoted, not interpolated: pgjdbc builds the qualified name without escaping.
-          return "::" + requoteTypeName(typeName);
-        }
-        if (CAST_TYPES.contains(localName)) {
-          return "::" + localName;
-        }
-        // The array of a cast type needs the same cast, e.g. text[] into a uuid[] column.
-        if (localName.startsWith(ARRAY_TYPE_PREFIX)
-            && CAST_TYPES.contains(localName.substring(ARRAY_TYPE_PREFIX.length()))) {
-          return "::" + localName.substring(ARRAY_TYPE_PREFIX.length()) + "[]";
+        if (typeName != null) {
+          typeName = typeName.toLowerCase();
+          if (CAST_TYPES.contains(typeName)) {
+            return "::" + typeName;
+          }
         }
       }
     }

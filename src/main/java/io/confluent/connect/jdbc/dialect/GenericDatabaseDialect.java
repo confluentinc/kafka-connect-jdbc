@@ -265,18 +265,6 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     return zoneId;
   }
 
-  protected ZoneId dateTimeZoneId() {
-    return dateTimeZoneId;
-  }
-
-  protected TimestampGranularity timestampGranularity() {
-    return tsGranularity;
-  }
-
-  protected DateCalendarSystem dateCalendarSystem() {
-    return dateCalendarSystem;
-  }
-
   /**
    * Build authentication properties from credentials.
    * Subclasses can override to customize authentication property handling.

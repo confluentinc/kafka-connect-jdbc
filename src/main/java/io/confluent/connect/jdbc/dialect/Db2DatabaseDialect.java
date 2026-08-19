@@ -25,6 +25,7 @@ import org.apache.kafka.connect.data.Timestamp;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Collection;
+import java.util.Properties;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
@@ -32,6 +33,7 @@ import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.ExpressionBuilder.Transform;
 import io.confluent.connect.jdbc.util.IdentifierRules;
+import io.confluent.connect.jdbc.util.JdbcCredentials;
 import io.confluent.connect.jdbc.util.TableId;
 
 /**
@@ -60,6 +62,21 @@ public class Db2DatabaseDialect extends GenericDatabaseDialect {
    */
   public Db2DatabaseDialect(AbstractConfig config) {
     super(config, new IdentifierRules(".", "\"", "\""));
+  }
+
+  @Override
+  protected Properties buildAuthenticationProperties(JdbcCredentials jdbcCredentials) {
+    Properties properties = new Properties();
+    if (jdbcCredentials.getUsername() != null) {
+      properties.setProperty("user", jdbcCredentials.getUsername());
+      if (jdbcCredentials.getPassword() != null) {
+        properties.setProperty("password", jdbcCredentials.getPassword());
+      }
+    } else if (jdbcCredentials.getPassword() != null) {
+      // When username is null, treat password field as access token (Entra ID / OIDC)
+      properties.setProperty("accessToken", jdbcCredentials.getPassword());
+    }
+    return properties;
   }
 
   @Override

@@ -69,9 +69,9 @@ public class JdbcSinkConfigTest {
   }
 
   @Test
-  public void shouldDisableSensitiveLogTrimmingByDefault() {
+  public void shouldEnableSensitiveLogTrimmingByDefault() {
     createConfig();
-    assertFalse(config.trimSensitiveLogsEnabled);
+    assertTrue(config.trimSensitiveLogsEnabled);
   }
 
   @Test

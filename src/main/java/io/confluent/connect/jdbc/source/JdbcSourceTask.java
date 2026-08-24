@@ -275,7 +275,10 @@ public class JdbcSourceTask extends SourceTask {
         for (Map<String, String> toCheckPartition : tablePartitionsToCheck) {
           offset = offsets.get(toCheckPartition);
           if (offset != null) {
-            log.info("Found offset {} for partition {}", offsets, toCheckPartition);
+            // Log only the single matched offset for this partition, never the whole `offsets`
+            // map: in incrementing/timestamp modes an offset holds customer column values, so
+            // dumping the full map would emit every table's latest column values on each poll.
+            log.info("Found offset {} for partition {}", offset, toCheckPartition);
             break;
           }
         }

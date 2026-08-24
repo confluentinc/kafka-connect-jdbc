@@ -19,8 +19,10 @@ package io.confluent.connect.jdbc.source;
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.TableId;
+import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
+import org.apache.kafka.connect.errors.DataException;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -29,9 +31,11 @@ import org.powermock.api.easymock.annotation.MockNice;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
+import java.lang.reflect.Constructor;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Arrays;
 import java.util.Collections;
@@ -44,6 +48,7 @@ import static org.easymock.EasyMock.expect;
 import static org.easymock.EasyMock.mock;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.powermock.api.easymock.PowerMock.expectLastCall;
 import static org.powermock.api.easymock.PowerMock.mockStatic;
@@ -140,6 +145,54 @@ public class TimestampIncrementingTableQuerierTest {
     querier.maybeStartQuery(db);
 
     assertFalse(querier.next());
+  }
+
+  @Test
+  public void extractRecordRedactsSqlExceptionCarryingColumnValue() throws Exception {
+    // A driver SQLException raised while mapping a column into the Connect record can embed the
+    // raw failing column value (customer data, e.g. pgjdbc "Bad value for type ..."). Prove the
+    // querier does not let that value reach the DataException it throws to the framework (which
+    // becomes the connector's task-status failure reason via RecordQueue.poll()).
+    final String canary = "SENSITIVE_CANARY_9998887";
+
+    expectNewQuery();
+    TimestampIncrementingTableQuerier querier = querier(offset(INITIAL_TS, INITIAL_INC), false);
+    expect(schemaMapping.schema()).andReturn(schema()).anyTimes();
+    expect(schemaMapping.fieldSetters())
+        .andReturn(Collections.singletonList(throwingFieldSetter(canary)))
+        .anyTimes();
+
+    replayAll();
+
+    querier.maybeStartQuery(db);
+
+    DataException thrown = assertThrows(DataException.class, querier::extractRecord);
+
+    boolean sawRedactedCause = false;
+    for (Throwable t = thrown; t != null; t = t.getCause()) {
+      assertFalse(
+          "raw column value leaked into " + t.getClass().getName() + ": " + t.getMessage(),
+          String.valueOf(t.getMessage()).contains(canary));
+      if (t instanceof SQLException && String.valueOf(t.getMessage()).contains("<redacted>")) {
+        sawRedactedCause = true;
+      }
+    }
+    assertTrue("expected a redacted SQLException in the DataException cause chain", sawRedactedCause);
+  }
+
+  private static SchemaMapping.FieldSetter throwingFieldSetter(String canaryValue) throws Exception {
+    DatabaseDialect.ColumnConverter throwingConverter = new DatabaseDialect.ColumnConverter() {
+      @Override
+      public Object convert(ResultSet resultSet) throws SQLException {
+        // Mirrors pgjdbc's "Bad value for type <type> : <value>" shape observed in production.
+        throw new SQLException("Bad value for type byte : " + canaryValue);
+      }
+    };
+    Field field = new Field(INCREMENTING_COLUMN, 0, Schema.INT64_SCHEMA);
+    Constructor<SchemaMapping.FieldSetter> ctor = SchemaMapping.FieldSetter.class
+        .getDeclaredConstructor(DatabaseDialect.ColumnConverter.class, Field.class);
+    ctor.setAccessible(true);
+    return ctor.newInstance(throwingConverter, field);
   }
 
   @Test

@@ -151,8 +151,12 @@ public class TimestampTableQuerier extends TimestampIncrementingTableQuerier {
         log.warn("Error mapping fields into Connect record", e);
         throw new ConnectException(e);
       } catch (SQLException e) {
-        log.warn("SQL error mapping fields into Connect record", e);
-        throw new DataException(e);
+        // The driver SQLException message can embed the raw failing column VALUE (customer data,
+        // e.g. pgjdbc "Bad value for type ..."). Redact to class/SQLState/errorCode before it
+        // reaches this forwarded WARN log or the DataException that becomes the task-status reason.
+        SQLException redacted = LogUtil.redactSensitiveData(e);
+        log.warn("SQL error mapping fields into Connect record", redacted);
+        throw new DataException(redacted);
       }
     }
     // Use the extracted timestamp as the record's timestamp

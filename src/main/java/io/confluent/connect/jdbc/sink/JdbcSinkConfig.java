@@ -337,9 +337,10 @@ public class JdbcSinkConfig extends AbstractConfig {
       + AUTO_EVOLVE + "``).";
 
   public static final String TRIM_SENSITIVE_LOG_ENABLED = "trim.sensitive.log";
-  // Redact by default so self-managed deployments do not log raw driver SQLExceptions (which can
-  // embed bound row VALUES) at ERROR/WARN. The fully-managed service already pins this to true.
-  private static final String TRIM_SENSITIVE_LOG_ENABLED_DEFAULT = "true";
+  // Default false so self-managed deployments keep full driver SQLException detail for debugging;
+  // the customer owns those logs. The fully-managed service pins this to true via its cloud
+  // template, so managed connectors still redact bound row VALUES from SQLExceptions.
+  private static final String TRIM_SENSITIVE_LOG_ENABLED_DEFAULT = "false";
   private static final EnumRecommender QUOTE_METHOD_RECOMMENDER =
       EnumRecommender.in(QuoteMethod.values());
 

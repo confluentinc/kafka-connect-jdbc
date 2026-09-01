@@ -70,6 +70,8 @@ public class JdbcSinkConfigTest {
 
   @Test
   public void shouldDisableSensitiveLogTrimmingByDefault() {
+    // Self-managed default: full SQLException detail is kept for debugging. The fully-managed
+    // service opts in to trimming via its cloud template.
     createConfig();
     assertFalse(config.trimSensitiveLogsEnabled);
   }

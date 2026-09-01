@@ -174,8 +174,19 @@ public class DatabaseDialects {
       LOG.debug("Validated JDBC URL.");
       return new JdbcUrlDetails(matcher.group(1), matcher.group(2), url);
     }
-    LOG.error("Not a valid JDBC URL: " + url);
-    throw new ConnectException("Not a valid JDBC URL: " + url);
+    // Mask any embedded credentials before the raw URL reaches the log or the thrown message: a
+    // malformed self-managed connection.url can carry a ?password= parameter. No dialect exists
+    // yet at URL-validation time, so mirror GenericDatabaseDialect.sanitizedUrl() here.
+    String sanitizedUrl = sanitizeUrl(url);
+    LOG.error("Not a valid JDBC URL: " + sanitizedUrl);
+    throw new ConnectException("Not a valid JDBC URL: " + sanitizedUrl);
+  }
+
+  // Same masking as GenericDatabaseDialect.sanitizedUrl(): replace the value of any URL property
+  // whose key contains "password". Duplicated (not shared) because that method is a protected
+  // instance method and no dialect instance exists when a URL is validated here.
+  private static String sanitizeUrl(String url) {
+    return url.replaceAll("(?i)([?&]([^=&]*)password([^=&]*)=)[^&]*", "$1****");
   }
 
   /**

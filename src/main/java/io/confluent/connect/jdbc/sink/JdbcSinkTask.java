@@ -18,6 +18,7 @@ package io.confluent.connect.jdbc.sink;
 import io.confluent.connect.jdbc.util.LogUtil;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.RetriableException;
 import org.apache.kafka.connect.sink.ErrantRecordReporter;
@@ -29,25 +30,42 @@ import org.slf4j.LoggerFactory;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.Map;
+import java.util.function.LongSupplier;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
+import io.confluent.connect.jdbc.dialect.PostgreSqlDatabaseDialect;
+import io.confluent.connect.jdbc.dialect.SqliteDatabaseDialect;
+import io.confluent.connect.jdbc.util.TableType;
 import io.confluent.connect.jdbc.util.Version;
 
 public class JdbcSinkTask extends SinkTask {
   private static final Logger log = LoggerFactory.getLogger(JdbcSinkTask.class);
 
+  private final LongSupplier nanoClock;
+
   ErrantRecordReporter reporter;
   DatabaseDialect dialect;
   JdbcSinkConfig config;
   JdbcDbWriter writer;
+  ReceiptWriteFence writeFence;
   int remainingRetries;
+
+  public JdbcSinkTask() {
+    this(System::nanoTime);
+  }
+
+  JdbcSinkTask(LongSupplier nanoClock) {
+    this.nanoClock = nanoClock;
+  }
 
   @Override
   public void start(final Map<String, String> props) {
     log.info("Starting JDBC Sink task");
     config = new JdbcSinkConfig(props);
+    writeFence = new ReceiptWriteFence(config, nanoClock);
     initWriter();
     remainingRetries = config.maxRetries;
     try {
@@ -67,8 +85,56 @@ public class JdbcSinkTask extends SinkTask {
     }
     final DbStructure dbStructure = new DbStructure(dialect);
     log.info("Initializing writer using SQL dialect: {}", dialect.getClass().getSimpleName());
-    writer = new JdbcDbWriter(config, dialect, dbStructure);
+    writer = new JdbcDbWriter(config, dialect, dbStructure, writeFence);
+    validateWriteFenceEligibility();
     log.info("JDBC writer initialized");
+  }
+
+  private void validateWriteFenceEligibility() {
+    if (!writeFence.enabled()) {
+      return;
+    }
+    if (!(dialect instanceof PostgreSqlDatabaseDialect)
+        && !(dialect instanceof SqliteDatabaseDialect)) {
+      throw new ConfigException(
+          JdbcSinkConfig.WRITE_FENCE_TIMEOUT_MS,
+          config.writeFenceTimeoutMs,
+          "JDBC write fence is supported only for PostgreSQL and SQLite dialects"
+      );
+    }
+    validateWriteFenceSchemaSettings();
+    if (!config.tableTypes.equals(EnumSet.of(TableType.TABLE))) {
+      throw new ConfigException(
+          JdbcSinkConfig.WRITE_FENCE_TIMEOUT_MS,
+          config.writeFenceTimeoutMs,
+          "JDBC write fence requires table.types=table"
+      );
+    }
+    if (config.insertMode != JdbcSinkConfig.InsertMode.UPSERT
+        && config.insertMode != JdbcSinkConfig.InsertMode.UPDATE) {
+      throw new ConfigException(
+          JdbcSinkConfig.WRITE_FENCE_TIMEOUT_MS,
+          config.writeFenceTimeoutMs,
+          "JDBC write fence requires insert.mode=upsert or insert.mode=update"
+      );
+    }
+    if (config.pkMode == JdbcSinkConfig.PrimaryKeyMode.NONE) {
+      throw new ConfigException(
+          JdbcSinkConfig.WRITE_FENCE_TIMEOUT_MS,
+          config.writeFenceTimeoutMs,
+          "JDBC write fence requires a usable primary key"
+      );
+    }
+  }
+
+  private void validateWriteFenceSchemaSettings() {
+    if (config.autoCreate || config.autoEvolve) {
+      throw new ConfigException(
+          JdbcSinkConfig.WRITE_FENCE_TIMEOUT_MS,
+          config.writeFenceTimeoutMs,
+          "JDBC write fence requires auto.create=false and auto.evolve=false"
+      );
+    }
   }
 
   @Override
@@ -76,17 +142,24 @@ public class JdbcSinkTask extends SinkTask {
     if (records.isEmpty()) {
       return;
     }
-    final SinkRecord first = records.iterator().next();
-    final int recordsCount = records.size();
-    log.debug(
-        "Received {} records. First record kafka coordinates:({}-{}-{}). Writing them to the "
-        + "database...",
-        recordsCount, first.topic(), first.kafkaPartition(), first.kafkaOffset()
-    );
     try {
+      writeFence.recordPutDelivery(records);
+      final SinkRecord first = records.iterator().next();
+      final int recordsCount = records.size();
+      log.debug(
+          "Received {} records. First record kafka coordinates:({}-{}-{}). Writing them to the "
+          + "database...",
+          recordsCount, first.topic(), first.kafkaPartition(), first.kafkaOffset()
+      );
+      writeFence.check(records);
       writer.write(records);
+      writeFence.complete(records);
       log.info("Successfully wrote {} records.", recordsCount);
+    } catch (JdbcWriteFenceException fence) {
+      writer.closeQuietly();
+      throw fence;
     } catch (TableAlterOrCreateException tace) {
+      checkFenceBeforeRecovery(records);
       if (reporter != null) {
         unrollAndRetry(records);
       } else {
@@ -107,14 +180,18 @@ public class JdbcSinkTask extends SinkTask {
       }
       SQLException sqlAllMessagesException = getAllMessagesException(loggedException);
       if (remainingRetries > 0) {
+        checkFenceBeforeRecovery(records);
         writer.closeQuietly();
+        checkFenceBeforeRecovery(records);
         initWriter();
+        checkFenceBeforeRecovery(records);
         remainingRetries--;
         context.timeout(config.retryBackoffMs);
         log.debug(sqlAllMessagesException.toString());
         throw new RetriableException(sqlAllMessagesException);
       } else {
         if (reporter != null) {
+          checkFenceBeforeRecovery(records);
           unrollAndRetry(records);
         } else {
           log.error(
@@ -138,19 +215,38 @@ public class JdbcSinkTask extends SinkTask {
     initWriter();
     log.warn("Retrying write operation for {} records.", records.size());
     for (SinkRecord record : records) {
+      Collection<SinkRecord> recordAsCollection = Collections.singletonList(record);
       try {
-        writer.write(Collections.singletonList(record));
+        writeFence.check(recordAsCollection);
+        writer.write(recordAsCollection);
+        writeFence.complete(recordAsCollection);
+      } catch (JdbcWriteFenceException fence) {
+        writer.closeQuietly();
+        throw fence;
       } catch (TableAlterOrCreateException tace) {
         log.debug(tace.toString());
+        checkFenceBeforeRecovery(recordAsCollection);
         reporter.report(record, tace);
+        writeFence.complete(recordAsCollection);
         writer.closeQuietly();
       } catch (SQLException sqle) {
         SQLException sqlAllMessagesException =
             getAllMessagesException(redactSensitiveDataIfEnabled(sqle));
         log.debug(sqlAllMessagesException.toString());
+        checkFenceBeforeRecovery(recordAsCollection);
         reporter.report(record, sqlAllMessagesException);
+        writeFence.complete(recordAsCollection);
         writer.closeQuietly();
       }
+    }
+  }
+
+  private void checkFenceBeforeRecovery(Collection<SinkRecord> records) {
+    try {
+      writeFence.check(records);
+    } catch (JdbcWriteFenceException fence) {
+      writer.closeQuietly();
+      throw fence;
     }
   }
 
@@ -173,6 +269,18 @@ public class JdbcSinkTask extends SinkTask {
   @Override
   public void flush(Map<TopicPartition, OffsetAndMetadata> map) {
     // Not necessary
+  }
+
+  @Override
+  public void open(Collection<TopicPartition> partitions) {
+    if (writeFence != null) {
+      writeFence.open(partitions);
+    }
+  }
+
+  @Override
+  public void close(Collection<TopicPartition> partitions) {
+    // Pending first-receipt timestamps deliberately survive close callbacks.
   }
 
   public void stop() {

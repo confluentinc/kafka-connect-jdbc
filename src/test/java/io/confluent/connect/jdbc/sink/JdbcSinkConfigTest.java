@@ -75,6 +75,36 @@ public class JdbcSinkConfigTest {
   }
 
   @Test
+  public void shouldDisableWriteFenceByDefault() {
+    createConfig();
+    assertEquals(0L, config.writeFenceTimeoutMs);
+    assertEquals(0L, config.writeFenceTimeoutNanos);
+    assertFalse(config.writeFenceReceiptResetOnAssignment);
+  }
+
+  @Test
+  public void shouldEnableWriteFenceReceiptResetOnAssignment() {
+    props.put(JdbcSinkConfig.WRITE_FENCE_TIMEOUT_MS, "25");
+    props.put(JdbcSinkConfig.WRITE_FENCE_RECEIPT_RESET_ON_ASSIGNMENT, "true");
+    createConfig();
+    assertEquals(25L, config.writeFenceTimeoutMs);
+    assertEquals(25_000_000L, config.writeFenceTimeoutNanos);
+    assertTrue(config.writeFenceReceiptResetOnAssignment);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldRejectNegativeWriteFenceTimeout() {
+    props.put(JdbcSinkConfig.WRITE_FENCE_TIMEOUT_MS, "-1");
+    createConfig();
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldRejectWriteFenceTimeoutThatOverflowsNanos() {
+    props.put(JdbcSinkConfig.WRITE_FENCE_TIMEOUT_MS, String.valueOf(Long.MAX_VALUE));
+    createConfig();
+  }
+
+  @Test
   public void shouldEnableSensitiveLogTrimming() {
     props.put(JdbcSinkConfig.TRIM_SENSITIVE_LOG_ENABLED, "true");
     createConfig();

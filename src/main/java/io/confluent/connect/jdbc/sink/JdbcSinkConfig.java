@@ -156,6 +156,22 @@ public class JdbcSinkConfig extends AbstractConfig {
       "The time in milliseconds to wait following an error before a retry attempt is made.";
   private static final String RETRY_BACKOFF_MS_DISPLAY = "Retry Backoff (millis)";
 
+  public static final String WRITE_FENCE_TIMEOUT_MS = "write.fence.timeout.ms";
+  private static final long WRITE_FENCE_TIMEOUT_MS_DEFAULT = 0L;
+  private static final String WRITE_FENCE_TIMEOUT_MS_DOC =
+      "Maximum elapsed time from first sink task receipt of a pending record to a protected "
+      + "JDBC write commit. A value of 0 disables the fence.";
+  private static final String WRITE_FENCE_TIMEOUT_MS_DISPLAY = "Write Fence Timeout (millis)";
+
+  public static final String WRITE_FENCE_RECEIPT_RESET_ON_ASSIGNMENT =
+      "write.fence.receipt.reset.on.assignment";
+  private static final String WRITE_FENCE_RECEIPT_RESET_ON_ASSIGNMENT_DEFAULT = "false";
+  private static final String WRITE_FENCE_RECEIPT_RESET_ON_ASSIGNMENT_DOC =
+      "Whether to reset retained write-fence receipt timestamps for source partitions opened "
+      + "after assignment.";
+  private static final String WRITE_FENCE_RECEIPT_RESET_ON_ASSIGNMENT_DISPLAY =
+      "Write Fence Receipt Reset on Assignment";
+
   public static final String BATCH_SIZE = "batch.size";
   private static final int BATCH_SIZE_DEFAULT = 3000;
   private static final String BATCH_SIZE_DOC =
@@ -700,6 +716,29 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Width.SHORT,
             RETRY_BACKOFF_MS_DISPLAY
         )
+        .define(
+            WRITE_FENCE_TIMEOUT_MS,
+            ConfigDef.Type.LONG,
+            WRITE_FENCE_TIMEOUT_MS_DEFAULT,
+            ConfigDef.Range.atLeast(0),
+            ConfigDef.Importance.LOW,
+            WRITE_FENCE_TIMEOUT_MS_DOC,
+            RETRIES_GROUP,
+            3,
+            ConfigDef.Width.SHORT,
+            WRITE_FENCE_TIMEOUT_MS_DISPLAY
+        )
+        .define(
+            WRITE_FENCE_RECEIPT_RESET_ON_ASSIGNMENT,
+            ConfigDef.Type.BOOLEAN,
+            WRITE_FENCE_RECEIPT_RESET_ON_ASSIGNMENT_DEFAULT,
+            ConfigDef.Importance.LOW,
+            WRITE_FENCE_RECEIPT_RESET_ON_ASSIGNMENT_DOC,
+            RETRIES_GROUP,
+            4,
+            ConfigDef.Width.SHORT,
+            WRITE_FENCE_RECEIPT_RESET_ON_ASSIGNMENT_DISPLAY
+        )
         .defineInternal(
             TRIM_SENSITIVE_LOG_ENABLED,
             ConfigDef.Type.BOOLEAN,
@@ -733,6 +772,9 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final TimestampPrecisionMode timestampPrecisionMode;
   public final EnumSet<TableType> tableTypes;
   public final boolean useHoldlockInMerge;
+  public final long writeFenceTimeoutMs;
+  public final long writeFenceTimeoutNanos;
+  public final boolean writeFenceReceiptResetOnAssignment;
 
   public final boolean trimSensitiveLogsEnabled;
   public final DateCalendarSystem dateCalendarSystem;
@@ -769,6 +811,17 @@ public class JdbcSinkConfig extends AbstractConfig {
     timestampPrecisionMode =
         TimestampPrecisionMode.valueOf(getString(TIMESTAMP_PRECISION_MODE_CONFIG).toUpperCase());
     useHoldlockInMerge = getBoolean(MSSQL_USE_MERGE_HOLDLOCK);
+    writeFenceTimeoutMs = getLong(WRITE_FENCE_TIMEOUT_MS);
+    try {
+      writeFenceTimeoutNanos = Math.multiplyExact(writeFenceTimeoutMs, 1_000_000L);
+    } catch (ArithmeticException e) {
+      throw new ConfigException(
+          WRITE_FENCE_TIMEOUT_MS,
+          writeFenceTimeoutMs,
+          "Value is too large to convert to nanoseconds"
+      );
+    }
+    writeFenceReceiptResetOnAssignment = getBoolean(WRITE_FENCE_RECEIPT_RESET_ON_ASSIGNMENT);
     trimSensitiveLogsEnabled = getBoolean(TRIM_SENSITIVE_LOG_ENABLED);
     dateCalendarSystem = DateCalendarSystem.fromConfigValue(getString(DATE_CALENDAR_SYSTEM_CONFIG));
     if (deleteEnabled && pkMode != PrimaryKeyMode.RECORD_KEY) {

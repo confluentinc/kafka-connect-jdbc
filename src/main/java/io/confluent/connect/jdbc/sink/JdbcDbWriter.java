@@ -40,12 +40,23 @@ public class JdbcDbWriter {
   private final JdbcSinkConfig config;
   private final DatabaseDialect dbDialect;
   private final DbStructure dbStructure;
+  private final ReceiptWriteFence writeFence;
   final CachedConnectionProvider cachedConnectionProvider;
 
   JdbcDbWriter(final JdbcSinkConfig config, DatabaseDialect dbDialect, DbStructure dbStructure) {
+    this(config, dbDialect, dbStructure, ReceiptWriteFence.disabled());
+  }
+
+  JdbcDbWriter(
+      final JdbcSinkConfig config,
+      DatabaseDialect dbDialect,
+      DbStructure dbStructure,
+      ReceiptWriteFence writeFence
+  ) {
     this.config = config;
     this.dbDialect = dbDialect;
     this.dbStructure = dbStructure;
+    this.writeFence = writeFence;
 
     this.cachedConnectionProvider = connectionProvider(
         config.connectionAttempts,
@@ -87,6 +98,7 @@ public class JdbcDbWriter {
         buffer.close();
       }
       log.trace("Committing transaction");
+      writeFence.check(records);
       connection.commit();
     } catch (SQLException e) {
       SQLException writeException =
@@ -95,6 +107,10 @@ public class JdbcDbWriter {
       throw writeException;
     } catch (TableAlterOrCreateException e) {
       rollback(connection, e);
+      throw e;
+    } catch (JdbcWriteFenceException e) {
+      rollback(connection, e);
+      closeQuietly();
       throw e;
     }
     log.info("Completed write operation for {} records to the database", records.size());

@@ -41,6 +41,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.LongSupplier;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.SqliteDatabaseDialect;
@@ -107,10 +108,18 @@ public class JdbcDbWriterTest {
   }
 
   private JdbcDbWriter newWriterWithMockConnection(Map<String, String> props, Connection mockConnection) {
+    return newWriterWithMockConnection(props, mockConnection, ReceiptWriteFence.disabled());
+  }
+
+  private JdbcDbWriter newWriterWithMockConnection(
+      Map<String, String> props,
+      Connection mockConnection,
+      ReceiptWriteFence writeFence
+  ) {
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
     dialect = mock(DatabaseDialect.class);
     final DbStructure dbStructure = mock(DbStructure.class);
-    return new JdbcDbWriter(config, dialect, dbStructure) {
+    return new JdbcDbWriter(config, dialect, dbStructure, writeFence) {
       protected CachedConnectionProvider connectionProvider(int maxConnAttempts, long retryBackoff) {
         CachedConnectionProvider mockConnectionProvider = mock(CachedConnectionProvider.class);
         when(mockConnectionProvider.getConnection()).thenReturn(mockConnection);
@@ -278,6 +287,76 @@ public class JdbcDbWriterTest {
     assertEquals(suppressed.length, 0);
   }
 
+  @Test
+  public void writeFenceRollsBackAndClosesConnectionWhenExpiredBeforeCommit()
+      throws SQLException {
+    MutableClock clock = new MutableClock();
+    Map<String, String> props = writeFenceProps(1);
+    JdbcSinkConfig config = new JdbcSinkConfig(props);
+    ReceiptWriteFence writeFence = new ReceiptWriteFence(config, clock);
+    Connection mockConnection = mock(Connection.class);
+    JdbcDbWriter testWriter = newWriterWithMockConnection(props, mockConnection, writeFence);
+    SinkRecord record = recordWithPrimitiveKey();
+
+    prepareSuccessfulMockWrite();
+    writeFence.recordPutDelivery(Collections.singletonList(record));
+    clock.set(1_000_000L);
+
+    assertThrows(
+        JdbcWriteFenceException.class,
+        () -> testWriter.write(Collections.singletonList(record))
+    );
+    verify(mockConnection, times(1)).rollback();
+    verify(mockConnection, times(0)).commit();
+    verify(testWriter.cachedConnectionProvider, times(1)).close();
+  }
+
+  @Test
+  public void rollbackFailureIsSuppressedOnWriteFenceException() throws SQLException {
+    MutableClock clock = new MutableClock();
+    Map<String, String> props = writeFenceProps(1);
+    JdbcSinkConfig config = new JdbcSinkConfig(props);
+    ReceiptWriteFence writeFence = new ReceiptWriteFence(config, clock);
+    Connection mockConnection = mock(Connection.class);
+    SQLException rollbackFailure = new SQLException("rollback failed");
+    doThrow(rollbackFailure).when(mockConnection).rollback();
+    JdbcDbWriter testWriter = newWriterWithMockConnection(props, mockConnection, writeFence);
+    SinkRecord record = recordWithPrimitiveKey();
+
+    prepareSuccessfulMockWrite();
+    writeFence.recordPutDelivery(Collections.singletonList(record));
+    clock.set(1_000_000L);
+
+    JdbcWriteFenceException thrown = assertThrows(
+        JdbcWriteFenceException.class,
+        () -> testWriter.write(Collections.singletonList(record))
+    );
+    assertEquals(1, thrown.getSuppressed().length);
+    assertSame(rollbackFailure, thrown.getSuppressed()[0]);
+  }
+
+  @Test
+  public void successfulCommitJustBeforeBudgetDoesNotFenceAfterCommit()
+      throws SQLException {
+    MutableClock clock = new MutableClock();
+    Map<String, String> props = writeFenceProps(1);
+    JdbcSinkConfig config = new JdbcSinkConfig(props);
+    ReceiptWriteFence writeFence = new ReceiptWriteFence(config, clock);
+    Connection mockConnection = mock(Connection.class);
+    JdbcDbWriter testWriter = newWriterWithMockConnection(props, mockConnection, writeFence);
+    SinkRecord record = recordWithPrimitiveKey();
+
+    prepareSuccessfulMockWrite();
+    writeFence.recordPutDelivery(Collections.singletonList(record));
+    clock.set(999_999L);
+    testWriter.write(Collections.singletonList(record));
+    clock.set(1_000_000L);
+
+    writeFence.complete(Collections.singletonList(record));
+    verify(mockConnection, times(1)).commit();
+    verify(mockConnection, times(0)).rollback();
+  }
+
   private SQLException verifyConnectionRollback(boolean succeedOnRollBack) throws SQLException {
     return verifyConnectionRollback(succeedOnRollBack, new SQLException());
   }
@@ -349,6 +428,50 @@ public class JdbcDbWriterTest {
 
     verify(mockConnection, times(1)).rollback();
     return e;
+  }
+
+  private void prepareSuccessfulMockWrite() throws SQLException {
+    PreparedStatement mockStatement = mock(PreparedStatement.class);
+    when(dialect.parseTableIdentifier(any())).thenReturn(mock(TableId.class));
+    when(dialect.createPreparedStatement(any(), any())).thenReturn(mockStatement);
+    when(dialect.statementBinder(any(), any(), any(), any(), any(), any(), eq(true)))
+        .thenReturn(mock(PreparedStatementBinder.class));
+    when(mockStatement.executeBatch()).thenReturn(new int[]{1});
+  }
+
+  private Map<String, String> writeFenceProps(int timeoutMs) {
+    Map<String, String> props = new HashMap<>();
+    props.put("connection.url", "jdbc:sqlite:memory");
+    props.put("insert.mode", "upsert");
+    props.put("pk.mode", "record_key");
+    props.put("pk.fields", "id");
+    props.put(JdbcSinkConfig.WRITE_FENCE_TIMEOUT_MS, String.valueOf(timeoutMs));
+    return props;
+  }
+
+  private SinkRecord recordWithPrimitiveKey() {
+    Schema keySchema = Schema.INT64_SCHEMA;
+    Schema valueSchema = SchemaBuilder.struct()
+        .field("author", Schema.STRING_SCHEMA)
+        .field("title", Schema.STRING_SCHEMA)
+        .build();
+    Struct value = new Struct(valueSchema)
+        .put("author", "Tom Robbins")
+        .put("title", "Villa Incognito");
+    return new SinkRecord("books", 0, keySchema, 1L, valueSchema, value, 0);
+  }
+
+  private static class MutableClock implements LongSupplier {
+    private long nanos;
+
+    void set(long nanos) {
+      this.nanos = nanos;
+    }
+
+    @Override
+    public long getAsLong() {
+      return nanos;
+    }
   }
 
   private void captureWriterLogs() {

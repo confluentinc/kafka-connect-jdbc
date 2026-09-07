@@ -62,6 +62,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import io.confluent.connect.jdbc.dialect.SqliteDatabaseDialect;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 
 public class JdbcSinkTaskTest extends EasyMockSupport {
@@ -291,6 +292,45 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     assertFalse(exhausted instanceof RetriableException);
     assertTaskExceptionRedacted(exhausted, RETRY_CANARY, "42000", 10);
 
+    verifyAll();
+  }
+
+  @Test
+  public void writeFenceTimesOutRetainedRecordAcrossRetries() throws Exception {
+    List<SinkRecord> records = createRecordsList(1);
+    SQLException exception = new SQLException("transient");
+
+    mockWriter.write(records);
+    expectLastCall().andThrow(exception);
+    ctx.timeout(0);
+    expectLastCall();
+    mockWriter.closeQuietly();
+    expectLastCall().times(2);
+
+    final long[] now = {0L};
+    JdbcSinkTask task = new JdbcSinkTask(() -> now[0]) {
+      @Override
+      void initWriter() {
+        this.dialect = new SqliteDatabaseDialect(config);
+        this.writer = mockWriter;
+      }
+    };
+    task.initialize(ctx);
+    expect(ctx.errantRecordReporter()).andReturn(null);
+    replayAll();
+
+    Map<String, String> props = setupBasicProps(1, 0);
+    props.put(JdbcSinkConfig.CONNECTION_URL, sqliteHelper.sqliteUri());
+    props.put(JdbcSinkConfig.INSERT_MODE, "upsert");
+    props.put(JdbcSinkConfig.PK_MODE, "kafka");
+    props.put("write.fence.timeout.ms", "1");
+    task.start(props);
+
+    assertThrows(RetriableException.class, () -> task.put(records));
+    now[0] = 1_000_000L;
+    ConnectException thrown = assertThrows(ConnectException.class, () -> task.put(records));
+
+    assertEquals("JdbcWriteFenceException", thrown.getClass().getSimpleName());
     verifyAll();
   }
 

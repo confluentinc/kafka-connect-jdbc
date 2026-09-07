@@ -156,6 +156,21 @@ public class JdbcSinkConfig extends AbstractConfig {
       "The time in milliseconds to wait following an error before a retry attempt is made.";
   private static final String RETRY_BACKOFF_MS_DISPLAY = "Retry Backoff (millis)";
 
+  public static final String WRITE_FENCE_TIMEOUT_MS = "write.fence.timeout.ms";
+  private static final long WRITE_FENCE_TIMEOUT_MS_DEFAULT = 0L;
+  private static final String WRITE_FENCE_TIMEOUT_MS_DOC =
+      "Maximum elapsed time allowed for one JDBC sink put attempt before guarded writes fail "
+      + "closed. A value of 0 disables the fence.";
+  private static final String WRITE_FENCE_TIMEOUT_MS_DISPLAY = "Write Fence Timeout (millis)";
+
+  public static final String WRITE_FENCE_RECEIPT_RESET_ON_ASSIGNMENT =
+      "write.fence.receipt.reset.on.assignment";
+  private static final String WRITE_FENCE_RECEIPT_RESET_ON_ASSIGNMENT_DEFAULT = "false";
+  private static final String WRITE_FENCE_RECEIPT_RESET_ON_ASSIGNMENT_DOC =
+      "Accepted for shared fencing policy matrices. The per-attempt fence ignores this setting.";
+  private static final String WRITE_FENCE_RECEIPT_RESET_ON_ASSIGNMENT_DISPLAY =
+      "Reset Receipt Fence on Assignment";
+
   public static final String BATCH_SIZE = "batch.size";
   private static final int BATCH_SIZE_DEFAULT = 3000;
   private static final String BATCH_SIZE_DOC =
@@ -249,6 +264,8 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String FIELDS_WHITELIST_DISPLAY = "Fields Whitelist";
 
   private static final ConfigDef.Range NON_NEGATIVE_INT_VALIDATOR = ConfigDef.Range.atLeast(0);
+  private static final WriteFenceTimeoutValidator WRITE_FENCE_TIMEOUT_VALIDATOR =
+      new WriteFenceTimeoutValidator();
 
   private static final String CONNECTION_GROUP = "Connection";
   private static final String WRITES_GROUP = "Writes";
@@ -700,6 +717,29 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Width.SHORT,
             RETRY_BACKOFF_MS_DISPLAY
         )
+        .define(
+            WRITE_FENCE_TIMEOUT_MS,
+            ConfigDef.Type.LONG,
+            WRITE_FENCE_TIMEOUT_MS_DEFAULT,
+            WRITE_FENCE_TIMEOUT_VALIDATOR,
+            ConfigDef.Importance.LOW,
+            WRITE_FENCE_TIMEOUT_MS_DOC,
+            RETRIES_GROUP,
+            3,
+            ConfigDef.Width.SHORT,
+            WRITE_FENCE_TIMEOUT_MS_DISPLAY
+        )
+        .define(
+            WRITE_FENCE_RECEIPT_RESET_ON_ASSIGNMENT,
+            ConfigDef.Type.BOOLEAN,
+            WRITE_FENCE_RECEIPT_RESET_ON_ASSIGNMENT_DEFAULT,
+            ConfigDef.Importance.LOW,
+            WRITE_FENCE_RECEIPT_RESET_ON_ASSIGNMENT_DOC,
+            RETRIES_GROUP,
+            4,
+            ConfigDef.Width.SHORT,
+            WRITE_FENCE_RECEIPT_RESET_ON_ASSIGNMENT_DISPLAY
+        )
         .defineInternal(
             TRIM_SENSITIVE_LOG_ENABLED,
             ConfigDef.Type.BOOLEAN,
@@ -719,6 +759,9 @@ public class JdbcSinkConfig extends AbstractConfig {
   public final boolean replaceNullWithDefault;
   public final int maxRetries;
   public final int retryBackoffMs;
+  public final long writeFenceTimeoutMs;
+  public final long writeFenceTimeoutNanos;
+  public final boolean writeFenceReceiptResetOnAssignment;
   public final boolean autoCreate;
   public final boolean autoEvolve;
   public final InsertMode insertMode;
@@ -751,6 +794,9 @@ public class JdbcSinkConfig extends AbstractConfig {
     replaceNullWithDefault = getBoolean(REPLACE_NULL_WITH_DEFAULT);
     maxRetries = getInt(MAX_RETRIES);
     retryBackoffMs = getInt(RETRY_BACKOFF_MS);
+    writeFenceTimeoutMs = getLong(WRITE_FENCE_TIMEOUT_MS);
+    writeFenceTimeoutNanos = millisToNanos(writeFenceTimeoutMs);
+    writeFenceReceiptResetOnAssignment = getBoolean(WRITE_FENCE_RECEIPT_RESET_ON_ASSIGNMENT);
     timestampFieldsList = new HashSet<>(getList(TIMESTAMP_FIELDS_LIST));
     autoCreate = getBoolean(AUTO_CREATE);
     autoEvolve = getBoolean(AUTO_EVOLVE);
@@ -784,6 +830,13 @@ public class JdbcSinkConfig extends AbstractConfig {
       return password.value();
     }
     return null;
+  }
+
+  private static long millisToNanos(long millis) {
+    if (millis == 0) {
+      return 0;
+    }
+    return Math.multiplyExact(millis, 1_000_000L);
   }
 
   public String connectorName() {
@@ -828,6 +881,26 @@ public class JdbcSinkConfig extends AbstractConfig {
     @Override
     public String toString() {
       return canonicalValues.toString();
+    }
+  }
+
+  private static class WriteFenceTimeoutValidator implements ConfigDef.Validator {
+    @Override
+    public void ensureValid(String name, Object value) {
+      long millis = (Long) value;
+      if (millis < 0) {
+        throw new ConfigException(name, value, "Value must be non-negative");
+      }
+      try {
+        millisToNanos(millis);
+      } catch (ArithmeticException e) {
+        throw new ConfigException(name, value, "Value is too large to convert to nanoseconds");
+      }
+    }
+
+    @Override
+    public String toString() {
+      return "[0,...," + Long.MAX_VALUE / 1_000_000L + "]";
     }
   }
 

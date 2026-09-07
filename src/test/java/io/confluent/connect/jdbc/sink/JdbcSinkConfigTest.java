@@ -82,6 +82,36 @@ public class JdbcSinkConfigTest {
   }
 
   @Test
+  public void shouldDisableWriteFenceByDefault() {
+    createConfig();
+    assertEquals(0, config.writeFenceTimeoutMs);
+    assertEquals(0, config.writeFenceTimeoutNanos);
+    assertFalse(config.writeFenceReceiptResetOnAssignment);
+  }
+
+  @Test
+  public void shouldConfigureWriteFenceTimeoutAndReceiptResetFlag() {
+    props.put(JdbcSinkConfig.WRITE_FENCE_TIMEOUT_MS, "10");
+    props.put(JdbcSinkConfig.WRITE_FENCE_RECEIPT_RESET_ON_ASSIGNMENT, "true");
+    createConfig();
+    assertEquals(10, config.writeFenceTimeoutMs);
+    assertEquals(10_000_000L, config.writeFenceTimeoutNanos);
+    assertTrue(config.writeFenceReceiptResetOnAssignment);
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldRejectNegativeWriteFenceTimeout() {
+    props.put(JdbcSinkConfig.WRITE_FENCE_TIMEOUT_MS, "-1");
+    createConfig();
+  }
+
+  @Test(expected = ConfigException.class)
+  public void shouldRejectWriteFenceTimeoutNanosOverflow() {
+    props.put(JdbcSinkConfig.WRITE_FENCE_TIMEOUT_MS, String.valueOf(Long.MAX_VALUE));
+    createConfig();
+  }
+
+  @Test
   public void shouldCreateConfigWithHoldlock() {
     createConfig();
     assertEquals(true, config.useHoldlockInMerge);

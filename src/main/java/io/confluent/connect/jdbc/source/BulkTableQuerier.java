@@ -32,6 +32,7 @@ import java.util.Map;
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.source.SchemaMapping.FieldSetter;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
+import io.confluent.connect.jdbc.util.LogUtil;
 
 /**
  * BulkTableQuerier always returns the entire table.
@@ -89,8 +90,12 @@ public class BulkTableQuerier extends TableQuerier {
         log.warn("Error mapping fields into Connect record", e);
         throw new ConnectException(e);
       } catch (SQLException e) {
-        log.warn("SQL error mapping fields into Connect record", e);
-        throw new DataException(e);
+        // The driver SQLException message can embed the raw failing column VALUE (customer data,
+        // e.g. pgjdbc "Bad value for type ..."). Redact to class/SQLState/errorCode before it
+        // reaches this forwarded WARN log or the DataException that becomes the task-status reason.
+        SQLException redacted = LogUtil.redactSensitiveData(e);
+        log.warn("SQL error mapping fields into Connect record", redacted);
+        throw new DataException(redacted);
       }
     }
     // TODO: key from primary key? partition?

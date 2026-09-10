@@ -25,6 +25,9 @@ import java.util.Map;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig;
 
 import static junit.framework.TestCase.assertSame;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 public class DatabaseDialectsTest {
@@ -107,6 +110,23 @@ public class DatabaseDialectsTest {
   @Test(expected = ConnectException.class)
   public void shouldNotFindDialectForInvalidUrlMissingJdbcPrefix() {
     DatabaseDialects.extractJdbcUrlInfo("mysql://Server:port");
+  }
+
+  @Test
+  public void shouldMaskEmbeddedPasswordWhenUrlIsInvalid() {
+    // A malformed self-managed connection.url can carry a ?password= parameter. The masking must
+    // run before the raw URL reaches the thrown message (and the ERROR log) at this validation
+    // site, which does not go through a dialect's sanitizedUrl().
+    final String canary = "SUPERSECRETcanary123";
+    // No "jdbc:" prefix, so this fails PROTOCOL_PATTERN and hits the invalid-URL branch.
+    String malformedUrl = "postgresql://host:5432/db?user=me&password=" + canary;
+    ConnectException e = assertThrows(
+        ConnectException.class,
+        () -> DatabaseDialects.extractJdbcUrlInfo(malformedUrl));
+    assertFalse(
+        "the embedded password must not appear in the thrown message: " + e.getMessage(),
+        e.getMessage().contains(canary));
+    assertTrue(e.getMessage().contains("password=****"));
   }
 
 

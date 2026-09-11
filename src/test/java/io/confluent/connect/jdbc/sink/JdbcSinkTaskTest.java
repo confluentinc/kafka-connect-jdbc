@@ -246,6 +246,12 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
   }
 
   @Test
+  public void stopBeforeStartDoesNotThrow() {
+    JdbcSinkTask neverStarted = new JdbcSinkTask();
+    neverStarted.stop();
+  }
+
+  @Test
   public void retries() throws SQLException {
     final int maxRetries = 2;
     final int retryBackoffMs = 1000;

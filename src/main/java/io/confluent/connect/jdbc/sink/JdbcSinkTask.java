@@ -178,7 +178,9 @@ public class JdbcSinkTask extends SinkTask {
   public void stop() {
     log.info("Stopping task");
     try {
-      writer.closeQuietly();
+      if (writer != null) {
+        writer.closeQuietly();
+      }
     } finally {
       try {
         if (dialect != null) {

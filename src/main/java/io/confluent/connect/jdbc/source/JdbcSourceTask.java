@@ -553,7 +553,11 @@ public class JdbcSourceTask extends SourceTask {
   @Override
   public List<SourceRecord> poll() throws InterruptedException {
     if (engine == null) {
-      // Engine is not initialized yet, so nothing to poll
+      // Engine is not initialized yet (e.g. the task is a placeholder still waiting for the table
+      // list to be fetched). Back off for poll.interval.ms before returning so the worker's poll
+      // loop does not busy-spin at ~100% CPU, since SourceTask.poll() is expected to block when it
+      // has nothing to return. Uses the injected clock so it stays deterministic under test.
+      time.sleep(config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG));
       return null;
     }
     // Get the next batch from the queue

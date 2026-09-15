@@ -200,7 +200,7 @@ public class JdbcSourceConnector extends SourceConnector {
            */
           taskProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "false");
           log.warn("The connector has not been able to read the "
-              + "list of tables from the database yet.");
+              + "list of tables from the database yet");
         } else {
           log.trace("currentTables is empty - no tables found after fetch");
           taskProps.put(JdbcSourceTaskConfig.TABLES_FETCHED, "true");

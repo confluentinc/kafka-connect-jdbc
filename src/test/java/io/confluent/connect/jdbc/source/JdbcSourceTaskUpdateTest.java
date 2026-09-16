@@ -981,19 +981,19 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   @Test
   public void testTaskCreatedWhileWaitingToFetchTables() throws InterruptedException {
     initializeTask();
-    final int pollIntervalMs = 3000;
+    final int pollLingerMs = 3000;
     Map<String, String> props = new HashMap<>();
     props.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
     props.put(JdbcSourceTaskConfig.TABLES_FETCHED, "false");
-    props.put(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG, String.valueOf(pollIntervalMs));
+    props.put(JdbcSourceTaskConfig.POLL_LINGER_MS_CONFIG, String.valueOf(pollLingerMs));
     task.start(props);
 
-    // Placeholder task waiting for tables: poll() must back off poll.interval.ms, not return
+    // Placeholder task waiting for tables: poll() must back off poll.linger.ms, not return
     // instantly. Assert the clock advanced so a regression that drops the sleep fails here.
     long before = time.milliseconds();
     List<SourceRecord> records = task.poll();
     assertNull(records);
-    assertEquals(pollIntervalMs, time.milliseconds() - before);
+    assertEquals(pollLingerMs, time.milliseconds() - before);
   }
 
   @Test

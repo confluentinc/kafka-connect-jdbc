@@ -554,7 +554,10 @@ public class JdbcSourceTask extends SourceTask {
   public List<SourceRecord> poll() throws InterruptedException {
     if (engine == null) {
       // Waiting for tables: back off so the worker's poll loop doesn't busy-spin at 100% CPU.
-      time.sleep(config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG));
+      // poll.linger.ms is the knob for how long a poll waits before returning an empty batch,
+      // and it is the same backoff the running engine applies on an empty queue, so the idle
+      // wait is consistent whether or not the engine has been built yet.
+      time.sleep(config.pollLingerMs().toMillis());
       return null;
     }
     // Get the next batch from the queue

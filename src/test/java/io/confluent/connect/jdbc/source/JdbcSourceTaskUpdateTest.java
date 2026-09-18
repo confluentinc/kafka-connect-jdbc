@@ -18,12 +18,14 @@ package io.confluent.connect.jdbc.source;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsEqual.equalTo;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.StringWriter;
 import java.sql.Timestamp;
 import java.time.ZoneOffset;
 import java.util.Arrays;
@@ -38,6 +40,10 @@ import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
+import org.apache.log4j.PatternLayout;
+import org.apache.log4j.WriterAppender;
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -682,6 +688,53 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     verifyPoll(2, "id", Arrays.asList(2, 3), false, true, false, TOPIC_PREFIX + SINGLE_TABLE_NAME);
 
     PowerMock.verifyAll();
+  }
+
+  @Test
+  public void foundOffsetLogsOnlyMatchedOffsetNotWholeMap() throws Exception {
+    // JdbcSourceTask.start() must log only the single matched partition's offset, never the whole
+    // offsets map: in incrementing/timestamp modes an offset holds customer column values, so
+    // dumping the full map would emit every table's latest column values on each poll.
+    final long canaryIncrementing = 8675309L; // synthetic value that must not be dumped
+    TimestampIncrementingOffset matchedOffset = new TimestampIncrementingOffset(null, 1L);
+    TimestampIncrementingOffset canaryOffset =
+        new TimestampIncrementingOffset(null, canaryIncrementing);
+
+    // Newest-protocol partition wins and becomes the matched offset; the canary lives only under
+    // the other partition key, so it appears in the log ONLY if the whole map is dumped.
+    Map<Map<String, String>, Map<String, Object>> offsets = new HashMap<>();
+    offsets.put(SINGLE_TABLE_PARTITION_WITH_VERSION, matchedOffset.toMap());
+    offsets.put(SINGLE_TABLE_PARTITION, canaryOffset.toMap());
+
+    expectInitialize(
+        Arrays.asList(SINGLE_TABLE_PARTITION_WITH_VERSION, SINGLE_TABLE_PARTITION),
+        offsets
+    );
+
+    PowerMock.replayAll();
+
+    db.createTable(SINGLE_TABLE_NAME, "id", "INT NOT NULL");
+    db.insert(SINGLE_TABLE_NAME, "id", 1);
+
+    Logger taskLogger = Logger.getLogger(JdbcSourceTask.class);
+    Level previousLevel = taskLogger.getLevel();
+    StringWriter logOutput = new StringWriter();
+    WriterAppender appender = new WriterAppender(new PatternLayout("%m%n"), logOutput);
+    taskLogger.setLevel(Level.INFO);
+    taskLogger.addAppender(appender);
+    try {
+      startTask(null, "id", null);
+    } finally {
+      taskLogger.removeAppender(appender);
+      appender.close();
+      taskLogger.setLevel(previousLevel);
+    }
+
+    String logs = logOutput.toString();
+    assertTrue("expected the matched-offset log line to fire", logs.contains("Found offset"));
+    assertFalse(
+        "the whole offsets map (another partition's value) was dumped to the log: " + logs,
+        logs.contains(String.valueOf(canaryIncrementing)));
   }
 
   @Test

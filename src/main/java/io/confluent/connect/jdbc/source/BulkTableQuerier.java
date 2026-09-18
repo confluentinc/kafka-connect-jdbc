@@ -33,6 +33,7 @@ import java.util.Map;
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.source.SchemaMapping.FieldSetter;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
+import io.confluent.connect.jdbc.util.LogUtil;
 
 /**
  * BulkTableQuerier always returns the entire table.

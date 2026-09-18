@@ -36,6 +36,7 @@ import java.util.Map;
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.TimestampGranularity;
 import io.confluent.connect.jdbc.source.SchemaMapping.FieldSetter;
+import io.confluent.connect.jdbc.util.LogUtil;
 
 /**
  * A specialized subclass of the {@link TimestampIncrementingTableQuerier} that only advances the

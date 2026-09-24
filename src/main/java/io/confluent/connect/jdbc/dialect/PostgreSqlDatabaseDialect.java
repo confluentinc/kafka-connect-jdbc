@@ -61,6 +61,8 @@ import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.CONNECT
  */
 public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
 
+  private final String updateIfNewerField;
+
   private static final Logger log = LoggerFactory.getLogger(PostgreSqlDatabaseDialect.class);
 
   // Visible for testing
@@ -102,6 +104,11 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
    */
   public PostgreSqlDatabaseDialect(AbstractConfig config) {
     super(config, new IdentifierRules(".", "\"", "\""));
+    // update.if.newer.field only exists in JdbcSinkConfig; this dialect is also constructed
+    // with a JdbcSourceConnectorConfig for source connectors, which doesn't define it.
+    this.updateIfNewerField = config instanceof JdbcSinkConfig
+        ? config.getString(JdbcSinkConfig.UPDATE_IF_NEWER_FIELD_CONFIG)
+        : null;
   }
 
   @Override
@@ -487,8 +494,40 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
           .delimitedBy(",")
           .transformedBy(transform)
           .of(nonKeyColumns);
+      // Add WHERE condition only if updateIfNewerField is defined and not empty
+      // This is used to avoid updating the row if the value in the updateIfNewerField is not newer
+      // than the existing value in the table.
+      // This is useful for lastdata flow.
+      if (shouldApplyUpdateIfNewerCondition(keyColumns, nonKeyColumns)) {
+        builder.append(" WHERE EXCLUDED.")
+               .appendColumnName(updateIfNewerField)
+               .append(" >= ")
+               .append(table)
+               .append(".")
+               .appendColumnName(updateIfNewerField);
+      }
     }
     return builder.toString();
+  }
+
+  private boolean shouldApplyUpdateIfNewerCondition(
+      Collection<ColumnId> keyColumns,
+      Collection<ColumnId> nonKeyColumns
+  ) {
+    if (updateIfNewerField == null || updateIfNewerField.isEmpty()) {
+      return false;
+    }
+    return containsColumnIgnoreCase(keyColumns, updateIfNewerField)
+        || containsColumnIgnoreCase(nonKeyColumns, updateIfNewerField);
+  }
+
+  private boolean containsColumnIgnoreCase(Collection<ColumnId> columns, String columnName) {
+    for (ColumnId column : columns) {
+      if (column.name().equalsIgnoreCase(columnName)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   @Override

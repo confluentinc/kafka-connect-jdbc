@@ -23,15 +23,23 @@ import io.confluent.connect.jdbc.util.TableDefinitionBuilder;
 import io.confluent.connect.jdbc.util.TableId;
 import io.confluent.connect.jdbc.util.ExpressionBuilder;
 
+import io.confluent.connect.jdbc.data.geometry.Geography;
+import io.confluent.connect.jdbc.data.geometry.Geometry;
+import io.confluent.connect.jdbc.data.geometry.Point;
+import io.confluent.connect.jdbc.time.ZonedTime;
+import io.confluent.connect.jdbc.time.ZonedTimestamp;
+
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.SchemaBuilder;
+import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.JDBCType;
@@ -65,9 +73,35 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   private static final String ORDERS_TABLE = "orders";
   private static final String VARCHAR_TYPE = "varchar";
 
+  // 'SRID=3187;POINT(174.9479 -36.7208)'::postgis.geometry
+  private static final Struct GEOMETRY_VALUE =
+          Geometry.createValue(Geometry.schema(),
+                  parseHexBinary(
+                          "0101000020730C00001C7C613255DE6540787AA52C435C42C0"),
+                  3187);
+  // 'MULTILINESTRING((169.1321 -44.7032, 167.8974 -44.6414))'::postgis.geography
+  private static final Struct GEOGRAPHY_VALUE =
+          Geography.createValue(Geography.schema(),
+                  parseHexBinary(
+                          "0105000020E610000001000000010200000002000000A779C7293A246540B462575025A46C0C66D3480B7FC6440C3D32B65195246C0"),
+                  4326);
+  private static final Struct POINT_VALUE = Point.createValue(Point.builder().build(), 1, 1);
+
+  // Avoid javax.xml.bind.DatatypeConverter (removed from the JDK in Java 11+) and
+  // java.util.HexFormat (Java 17+ only) so this test compiles and runs on any supported JDK.
+  private static byte[] parseHexBinary(String hex) {
+    int len = hex.length() - (hex.length() % 2);
+    byte[] bytes = new byte[len / 2];
+    for (int i = 0; i < len; i += 2) {
+      bytes[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) << 4)
+          + Character.digit(hex.charAt(i + 1), 16));
+    }
+    return bytes;
+  }
+
   @Override
   protected PostgreSqlDatabaseDialect createDialect() {
-    return new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something"));
+    return new PostgreSqlDatabaseDialect(sourceConfigWithUrl("jdbc:postgresql://something/"));
   }
 
   @Test
@@ -113,6 +147,12 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     verifyDataTypeMapping("DATE", Date.SCHEMA);
     verifyDataTypeMapping("TIME", Time.SCHEMA);
     verifyDataTypeMapping("TIMESTAMP", Timestamp.SCHEMA);
+    verifyDataTypeMapping("TIMETZ", ZonedTime.schema());
+    verifyDataTypeMapping("TIMESTAMPTZ", ZonedTimestamp.schema());
+    verifyDataTypeMapping("GEOMETRY", Geometry.schema());
+    // Geography is also derived from Geometry
+    verifyDataTypeMapping("GEOMETRY", Geography.schema());
+    verifyDataTypeMapping("GEOMETRY", Point.schema());
   }
 
   @Test
@@ -128,6 +168,13 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   @Test
   public void shouldMapTimestampSchemaTypeToTimestampSqlType() {
     assertTimestampMapping("TIMESTAMP");
+  }
+
+  @Test
+  public void shouldMapGeometryTypeToPostGisTypes() {
+    assertMapping("GEOMETRY", Geometry.schema());
+    assertMapping("GEOMETRY", Geography.schema());
+    assertMapping("GEOMETRY", Point.schema());
   }
 
   @Test
@@ -439,6 +486,31 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
   @Override
   public void bindFieldArrayUnsupported() throws SQLException {
       // Overridden simply to dummy out the test.
+  }
+
+  @Test
+  public void bindFieldZonedTimeValue() throws SQLException {
+    int index = ThreadLocalRandom.current().nextInt();
+    String value = "10:15:30+01:00";
+    super.verifyBindField(++index, ZonedTime.schema(), value).setObject(index, value, Types.OTHER);
+  }
+
+  @Test
+  public void bindFieldZonedTimestampValue() throws SQLException {
+    int index = ThreadLocalRandom.current().nextInt();
+    String value = "2021-05-01T18:00:00.030431+02:00";
+    super.verifyBindField(++index, ZonedTimestamp.schema(), value).setObject(index, value, Types.OTHER);
+  }
+
+  @Test
+  public void bindFieldPostGisValues() throws SQLException, IOException {
+    int index = ThreadLocalRandom.current().nextInt();
+    super.verifyBindField(++index, Geometry.schema(), GEOMETRY_VALUE)
+            .setBytes(index, GEOMETRY_VALUE.getBytes(Geometry.WKB_FIELD));
+    super.verifyBindField(++index, Geography.schema(), GEOGRAPHY_VALUE)
+            .setBytes(index, GEOGRAPHY_VALUE.getBytes(Geometry.WKB_FIELD));
+    super.verifyBindField(++index, Geometry.schema(), POINT_VALUE)
+            .setBytes(index, POINT_VALUE.getBytes(Geometry.WKB_FIELD));
   }
 
   @Test

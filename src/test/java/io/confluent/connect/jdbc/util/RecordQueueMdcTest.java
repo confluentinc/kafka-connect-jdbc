@@ -1,5 +1,5 @@
 /*
- * Copyright [2024 - 2024] Confluent Inc.
+ * Copyright 2026 Confluent Inc.
  */
 
 package io.confluent.connect.jdbc.util;

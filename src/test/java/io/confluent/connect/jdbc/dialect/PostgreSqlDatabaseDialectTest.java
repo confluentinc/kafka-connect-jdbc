@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.dialect;
 
+import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.QuoteMethod;
@@ -52,8 +53,8 @@ import java.util.concurrent.ThreadLocalRandom;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -298,6 +299,47 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
         "uuidColumn=EXCLUDED.uuidColumn," +
         "dateColumn=EXCLUDED.dateColumn",
         dialect.buildUpsertQueryStatement(tableId, pkColumns, nonPkColumns, tableDefn)
+    );
+  }
+
+  @Test
+  public void shouldAddUpdateIfNewerConditionOnlyWhenFieldExistsInCurrentColumns() {
+    PostgreSqlDatabaseDialect configuredDialect = new PostgreSqlDatabaseDialect(
+        sinkConfigWithUrl(
+            "jdbc:postgresql://something/",
+            JdbcSinkConfig.UPDATE_IF_NEWER_FIELD_CONFIG,
+            "updated_at"
+        )
+    );
+
+    TableDefinitionBuilder builder = new TableDefinitionBuilder().withTable("myTable");
+    builder.withColumn("id1").type("int", JDBCType.INTEGER, Integer.class);
+    builder.withColumn("id2").type("int", JDBCType.INTEGER, Integer.class);
+    builder.withColumn("columnA").type("varchar", JDBCType.VARCHAR, String.class);
+    builder.withColumn("updated_at").type("timestamp", JDBCType.TIMESTAMP, java.sql.Timestamp.class);
+    TableDefinition tableDefn = builder.build();
+
+    assertEquals(
+        "INSERT INTO \"myTable\" (\"id1\",\"id2\",\"columnA\",\"updated_at\") VALUES (?,?,?,?) "
+            + "ON CONFLICT (\"id1\",\"id2\") DO UPDATE SET \"columnA\"=EXCLUDED.\"columnA\","
+            + "\"updated_at\"=EXCLUDED.\"updated_at\" WHERE EXCLUDED.\"updated_at\" >= \"myTable\".\"updated_at\"",
+        configuredDialect.buildUpsertQueryStatement(
+            tableId,
+            pkColumns,
+            columns(tableId, "columnA", "updated_at"),
+            tableDefn
+        )
+    );
+
+    assertEquals(
+        "INSERT INTO \"myTable\" (\"id1\",\"id2\",\"columnA\") VALUES (?,?,?) "
+            + "ON CONFLICT (\"id1\",\"id2\") DO UPDATE SET \"columnA\"=EXCLUDED.\"columnA\"",
+        configuredDialect.buildUpsertQueryStatement(
+            tableId,
+            pkColumns,
+            columns(tableId, "columnA"),
+            tableDefn
+        )
     );
   }
 

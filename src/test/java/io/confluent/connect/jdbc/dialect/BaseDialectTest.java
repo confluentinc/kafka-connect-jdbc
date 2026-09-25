@@ -58,6 +58,11 @@ import io.confluent.connect.jdbc.util.ColumnId;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
+import io.confluent.connect.jdbc.data.geometry.Geography;
+import io.confluent.connect.jdbc.data.geometry.Geometry;
+import io.confluent.connect.jdbc.data.geometry.Point;
+import io.confluent.connect.jdbc.time.ZonedTime;
+import io.confluent.connect.jdbc.time.ZonedTimestamp;
 
 import static junit.framework.TestCase.assertNotNull;
 import static org.junit.Assert.assertArrayEquals;
@@ -476,7 +481,12 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
         Decimal.schema(0),
         Date.SCHEMA,
         Time.SCHEMA,
-        Timestamp.SCHEMA
+        Timestamp.SCHEMA,
+        ZonedTime.schema(),
+        ZonedTimestamp.schema(),
+        Geometry.schema(),
+        Geography.schema(),
+        Point.schema()
     );
     int index = 0;
     for (Schema schema : nullableTypes) {
@@ -536,6 +546,15 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
           break;
         case Timestamp.LOGICAL_NAME:
           when(colDef.type()).thenReturn(Types.TIMESTAMP);
+          break;
+        case ZonedTime.SCHEMA_NAME:
+        case ZonedTimestamp.SCHEMA_NAME:
+          when(colDef.type()).thenReturn(Types.OTHER);
+          break;
+        case Geometry.LOGICAL_NAME:
+        case Geography.LOGICAL_NAME:
+        case Point.LOGICAL_NAME:
+          when(colDef.type()).thenReturn(Types.BLOB);
           break;
         default:
           when(colDef.type()).thenThrow(

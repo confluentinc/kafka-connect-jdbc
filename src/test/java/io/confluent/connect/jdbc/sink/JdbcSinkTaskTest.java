@@ -15,10 +15,6 @@
 
 package io.confluent.connect.jdbc.sink;
 
-import static org.easymock.EasyMock.anyObject;
-import static org.easymock.EasyMock.capture;
-import static org.easymock.EasyMock.expect;
-import static org.easymock.EasyMock.expectLastCall;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -26,6 +22,13 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.io.IOException;
 import java.io.StringWriter;
@@ -56,23 +59,22 @@ import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.apache.log4j.PatternLayout;
 import org.apache.log4j.WriterAppender;
-import org.easymock.Capture;
-import org.easymock.EasyMockSupport;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.ArgumentCaptor;
 
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 
-public class JdbcSinkTaskTest extends EasyMockSupport {
+public class JdbcSinkTaskTest {
   private static final String REDACTED = "<redacted>";
   private static final String RETRY_CANARY = "retry-secret";
   private static final String SQL_SERVER_CANARY = "sqlserver-secret@example.com";
   private static final String MYSQL_CANARY = "mysql-secret@example.com";
 
   private final SqliteHelper sqliteHelper = new SqliteHelper(getClass().getSimpleName());
-  private final JdbcDbWriter mockWriter = createMock(JdbcDbWriter.class);
-  private final SinkTaskContext ctx = createMock(SinkTaskContext.class);
+  private final JdbcDbWriter mockWriter = mock(JdbcDbWriter.class);
+  private final SinkTaskContext ctx = mock(SinkTaskContext.class);
   private final Logger taskLogger = Logger.getLogger(JdbcSinkTask.class);
 
   private Level taskLogLevel;
@@ -258,17 +260,10 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
 
     List<SinkRecord> records = createRecordsList(1);
 
-    mockWriter.write(records);
     SQLException chainedException = new SQLException(RETRY_CANARY + "-1", "42000", 10);
     chainedException.setNextException(new SQLException(RETRY_CANARY + "-2", "42001", 20));
     chainedException.setNextException(new SQLException(RETRY_CANARY + "-3", "42002", 30));
-    expectLastCall().andThrow(chainedException).times(1 + maxRetries);
-
-    ctx.timeout(retryBackoffMs);
-    expectLastCall().times(maxRetries);
-
-    mockWriter.closeQuietly();
-    expectLastCall().times(maxRetries);
+    doThrow(chainedException).when(mockWriter).write(records);
 
     JdbcSinkTask task = new JdbcSinkTask() {
       @Override
@@ -277,8 +272,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
       }
     };
     task.initialize(ctx);
-    expect(ctx.errantRecordReporter()).andReturn(null);
-    replayAll();
+    when(ctx.errantRecordReporter()).thenReturn(null);
 
     Map<String, String> props = setupBasicProps(maxRetries, retryBackoffMs);
     props.put(JdbcSinkConfig.TRIM_SENSITIVE_LOG_ENABLED, "true");
@@ -297,24 +291,22 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     assertFalse(exhausted instanceof RetriableException);
     assertTaskExceptionRedacted(exhausted, RETRY_CANARY, "42000", 10);
 
-    verifyAll();
+    verify(mockWriter, times(1 + maxRetries)).write(records);
+    verify(ctx, times(maxRetries)).timeout(retryBackoffMs);
+    verify(mockWriter, times(maxRetries)).closeQuietly();
   }
 
   @Test
   public void errorReportingRedactsPlainSqlException() throws SQLException {
     List<SinkRecord> records = createRecordsList(1);
 
-    mockWriter.write(records);
     SQLException exception = new SQLException(
         "Duplicate entry '" + MYSQL_CANARY + "' for key 'email'",
         "23000",
         1062
     );
-    expectLastCall().andThrow(exception);
-    mockWriter.closeQuietly();
-    expectLastCall();
-    mockWriter.write(anyObject());
-    expectLastCall().andThrow(exception);
+    doThrow(exception).when(mockWriter).write(any());
+    doThrow(exception).when(mockWriter).write(records);
 
     JdbcSinkTask task = new JdbcSinkTask() {
       @Override
@@ -323,14 +315,9 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
       }
     };
     task.initialize(ctx);
-    ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
-    Capture<Throwable> reportedException = Capture.newInstance();
-    expect(ctx.errantRecordReporter()).andReturn(reporter);
-    expect(reporter.report(anyObject(), capture(reportedException)))
-        .andReturn(CompletableFuture.completedFuture(null));
-    mockWriter.closeQuietly();
-    expectLastCall();
-    replayAll();
+    ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+    when(ctx.errantRecordReporter()).thenReturn(reporter);
+    when(reporter.report(any(), any())).thenReturn(CompletableFuture.completedFuture(null));
 
     Map<String, String> props = setupBasicProps(0, 0);
     props.put(JdbcSinkConfig.TRIM_SENSITIVE_LOG_ENABLED, "true");
@@ -338,7 +325,9 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     captureTaskLogs();
     task.put(records);
 
-    assertTrue(reportedException.hasCaptured());
+    ArgumentCaptor<Throwable> reportedException = ArgumentCaptor.forClass(Throwable.class);
+    verify(reporter).report(any(), reportedException.capture());
+    assertFalse(reportedException.getAllValues().isEmpty());
     assertTrue(reportedException.getValue() instanceof SQLException);
     assertRedactedSqlException(
         (SQLException) reportedException.getValue(),
@@ -349,20 +338,17 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     String logs = capturedTaskLogs();
     assertTrue(logs.contains(REDACTED));
     assertFalse(logs.contains(MYSQL_CANARY));
-    verifyAll();
+    verify(mockWriter, times(2)).write(any());
+    verify(mockWriter, times(2)).closeQuietly();
   }
 
   @Test
   public void errorReportingTableAlterOrCreateException() throws SQLException {
     List<SinkRecord> records = createRecordsList(1);
 
-    mockWriter.write(records);
     TableAlterOrCreateException exception = new TableAlterOrCreateException("cause 1");
-    expectLastCall().andThrow(exception);
-    mockWriter.closeQuietly();
-    expectLastCall();
-    mockWriter.write(anyObject());
-    expectLastCall().andThrow(exception);
+    doThrow(exception).when(mockWriter).write(any());
+    doThrow(exception).when(mockWriter).write(records);
 
     JdbcSinkTask task = new JdbcSinkTask() {
       @Override
@@ -371,17 +357,17 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
       }
     };
     task.initialize(ctx);
-    ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
-    expect(ctx.errantRecordReporter()).andReturn(reporter);
-    expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null));
-    mockWriter.closeQuietly();
-    expectLastCall();
-    replayAll();
+    ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+    when(ctx.errantRecordReporter()).thenReturn(reporter);
+    when(reporter.report(any(), any())).thenReturn(CompletableFuture.completedFuture(null));
 
     Map<String, String> props = setupBasicProps(0, 0);
     task.start(props);
     task.put(records);
-    verifyAll();
+
+    verify(mockWriter, times(2)).write(any());
+    verify(mockWriter, times(2)).closeQuietly();
+    verify(reporter).report(any(), any());
   }
 
   @Test
@@ -394,8 +380,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
         1062
     );
 
-    mockWriter.write(records);
-    expectLastCall().andThrow(exception);
+    doThrow(exception).when(mockWriter).write(records);
 
     JdbcSinkTask task = new JdbcSinkTask() {
       @Override
@@ -404,8 +389,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
       }
     };
     task.initialize(ctx);
-    expect(ctx.errantRecordReporter()).andReturn(null);
-    replayAll();
+    when(ctx.errantRecordReporter()).thenReturn(null);
 
     Map<String, String> props = setupBasicProps(0, 0);
     task.start(props);
@@ -421,7 +405,6 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     String logs = capturedTaskLogs();
     assertTrue(logs.contains(MYSQL_CANARY));
     assertFalse(logs.contains(REDACTED));
-    verifyAll();
   }
 
   @Test
@@ -430,13 +413,9 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
 
     List<SinkRecord> records = createRecordsList(batchSize);
 
-    mockWriter.write(records);
     SQLException exception = new SQLException("cause 1");
-    expectLastCall().andThrow(exception);
-    mockWriter.closeQuietly();
-    expectLastCall();
-    mockWriter.write(anyObject());
-    expectLastCall().andThrow(exception).times(batchSize);
+    doThrow(exception).when(mockWriter).write(any());
+    doThrow(exception).when(mockWriter).write(records);
 
     JdbcSinkTask task = new JdbcSinkTask() {
       @Override
@@ -445,19 +424,17 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
       }
     };
     task.initialize(ctx);
-    ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
-    expect(ctx.errantRecordReporter()).andReturn(reporter);
-    expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null)).times(batchSize);
-    for (int i = 0; i < batchSize; i++) {
-      mockWriter.closeQuietly();
-      expectLastCall();
-    }
-    replayAll();
+    ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+    when(ctx.errantRecordReporter()).thenReturn(reporter);
+    when(reporter.report(any(), any())).thenReturn(CompletableFuture.completedFuture(null));
 
     Map<String, String> props = setupBasicProps(0, 0);
     task.start(props);
     task.put(records);
-    verifyAll();
+
+    verify(mockWriter, times(1 + batchSize)).write(any());
+    verify(mockWriter, times(1 + batchSize)).closeQuietly();
+    verify(reporter, times(batchSize)).report(any(), any());
   }
 
   @Test
@@ -466,14 +443,10 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
 
     List<SinkRecord> records = createRecordsList(batchSize);
 
-    mockWriter.write(records);
     SQLException exception = new SQLException("cause 1");
-    expectLastCall().andThrow(exception);
-    mockWriter.closeQuietly();
-    expectLastCall();
-    mockWriter.write(anyObject());
-    expectLastCall().times(2);
-    expectLastCall().andThrow(exception);
+    // First 2 of the batchSize per-record retries succeed, the 3rd fails.
+    doNothing().doNothing().doThrow(exception).when(mockWriter).write(any());
+    doThrow(exception).when(mockWriter).write(records);
 
     JdbcSinkTask task = new JdbcSinkTask() {
       @Override
@@ -482,17 +455,18 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
       }
     };
     task.initialize(ctx);
-    ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
-    expect(ctx.errantRecordReporter()).andReturn(reporter);
-    expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null));
-    mockWriter.closeQuietly();
-    expectLastCall();
-    replayAll();
+    ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+    when(ctx.errantRecordReporter()).thenReturn(reporter);
+    when(reporter.report(any(), any())).thenReturn(CompletableFuture.completedFuture(null));
 
     Map<String, String> props = setupBasicProps(0, 0);
     task.start(props);
     task.put(records);
-    verifyAll();
+
+    verify(mockWriter, times(1 + batchSize)).write(any());
+    // unrollAndRetry() closes once up front, then once more for the single record that fails.
+    verify(mockWriter, times(2)).closeQuietly();
+    verify(reporter).report(any(), any());
   }
 
   @Test
@@ -501,17 +475,10 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
 
     List<SinkRecord> records = createRecordsList(batchSize);
 
-    mockWriter.write(records);
     SQLException exception = new SQLException("cause 1");
-    expectLastCall().andThrow(exception);
-    mockWriter.closeQuietly();
-    expectLastCall();
-    mockWriter.write(anyObject());
-    expectLastCall();
-    mockWriter.write(anyObject());
-    expectLastCall().andThrow(exception);
-    mockWriter.write(anyObject());
-    expectLastCall();
+    // The 2nd of the batchSize per-record retries fails, the 1st and 3rd succeed.
+    doNothing().doThrow(exception).doNothing().when(mockWriter).write(any());
+    doThrow(exception).when(mockWriter).write(records);
 
     JdbcSinkTask task = new JdbcSinkTask() {
       @Override
@@ -520,17 +487,18 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
       }
     };
     task.initialize(ctx);
-    ErrantRecordReporter reporter = createMock(ErrantRecordReporter.class);
-    expect(ctx.errantRecordReporter()).andReturn(reporter);
-    expect(reporter.report(anyObject(), anyObject())).andReturn(CompletableFuture.completedFuture(null));
-    mockWriter.closeQuietly();
-    expectLastCall();
-    replayAll();
+    ErrantRecordReporter reporter = mock(ErrantRecordReporter.class);
+    when(ctx.errantRecordReporter()).thenReturn(reporter);
+    when(reporter.report(any(), any())).thenReturn(CompletableFuture.completedFuture(null));
 
     Map<String, String> props = setupBasicProps(0, 0);
     task.start(props);
     task.put(records);
-    verifyAll();
+
+    verify(mockWriter, times(1 + batchSize)).write(any());
+    // unrollAndRetry() closes once up front, then once more for the single record that fails.
+    verify(mockWriter, times(2)).closeQuietly();
+    verify(reporter).report(any(), any());
   }
 
   @Test
@@ -545,8 +513,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
         new int[]{Statement.EXECUTE_FAILED}
     );
 
-    mockWriter.write(records);
-    expectLastCall().andThrow(exception);
+    doThrow(exception).when(mockWriter).write(records);
 
     JdbcSinkTask task = new JdbcSinkTask() {
       @Override
@@ -555,8 +522,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
       }
     };
     task.initialize(ctx);
-    expect(ctx.errantRecordReporter()).andReturn(null);
-    replayAll();
+    when(ctx.errantRecordReporter()).thenReturn(null);
 
     Map<String, String> props = setupBasicProps(0, 0);
     props.put(JdbcSinkConfig.TRIM_SENSITIVE_LOG_ENABLED, "true");
@@ -580,7 +546,6 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     String logs = capturedTaskLogs();
     assertTrue(logs.contains(REDACTED));
     assertFalse(logs.contains(SQL_SERVER_CANARY));
-    verifyAll();
   }
 
   private SQLException assertTaskExceptionRedacted(

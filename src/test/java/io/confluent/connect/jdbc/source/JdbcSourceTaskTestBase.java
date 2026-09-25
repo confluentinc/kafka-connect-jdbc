@@ -19,10 +19,9 @@ import io.confluent.connect.jdbc.util.TableId;
 import org.apache.kafka.common.utils.Time;
 import org.apache.kafka.connect.source.SourceTaskContext;
 import org.apache.kafka.connect.storage.OffsetStorageReader;
-import org.easymock.EasyMock;
 import org.junit.After;
 import org.junit.Before;
-import org.powermock.api.easymock.annotation.Mock;
+import org.mockito.Mock;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -30,6 +29,8 @@ import java.util.Map;
 import java.util.TimeZone;
 
 import static io.confluent.connect.jdbc.source.JdbcSourceConnectorConfig.NumericMapping;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.when;
 
 public class JdbcSourceTaskTestBase {
 
@@ -135,8 +136,8 @@ public class JdbcSourceTaskTestBase {
   }
 
   protected <T> void expectInitialize(Collection<Map<String, T>> partitions, Map<Map<String, T>, Map<String, Object>> offsets) {
-    EasyMock.expect(taskContext.offsetStorageReader()).andReturn(reader);
-    EasyMock.expect(reader.offsets(EasyMock.eq(partitions))).andReturn(offsets);
+    when(taskContext.offsetStorageReader()).thenReturn(reader);
+    when(reader.offsets(eq(partitions))).thenReturn(offsets);
   }
 
   protected <T> void expectInitializeNoOffsets(Collection<Map<String, T>> partitions) {

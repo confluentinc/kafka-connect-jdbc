@@ -1068,10 +1068,8 @@ public class JdbcSourceConnectorValidationTest {
   }
 
   // ========== Query Appended-Criteria (WHERE/ORDER BY) Enforcing Validation Tests ==========
-  // A custom query whose outermost SELECT carries a top-level clause that collides with the
-  // WHERE/ORDER BY the connector appends in incremental modes is now REJECTED at validate time
-  // (it produces invalid SQL and fails on every poll at runtime). bulk and the sub-select pattern
-  // are not rejected. See validateQueryAppendedCriteriaCompatibility.
+  // A custom query whose outermost SELECT collides with the WHERE/ORDER BY appended in incremental
+  // modes is rejected; bulk and the sub-select pattern are not.
 
   @Test
   public void validate_withQueryIncrementingModeAndTopLevelOrderBy_rejected() {

@@ -1067,12 +1067,12 @@ public class JdbcSourceConnectorValidationTest {
     assertNoErrors();
   }
 
-  // ========== Query Appended-Criteria (WHERE/ORDER BY) Shadow-Mode Tests ==========
-  // The appended-criteria check is log-only for now, so it must never add a config error —
-  // including for queries it flags. See logQueryAppendedCriteriaCompatibility.
+  // ========== Query Appended-Criteria (WHERE/ORDER BY) Enforcing Validation Tests ==========
+  // A custom query whose outermost SELECT collides with the WHERE/ORDER BY appended in incremental
+  // modes is rejected; bulk and the sub-select pattern are not.
 
   @Test
-  public void validate_withQueryIncrementingModeAndTopLevelOrderBy_flaggedButNoErrors() {
+  public void validate_withQueryIncrementingModeAndTopLevelOrderBy_rejected() {
     props.put(MODE_CONFIG, MODE_INCREMENTING);
     props.put(QUERY_CONFIG, "SELECT * FROM sample_data ORDER BY id");
     props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");
@@ -1080,11 +1080,12 @@ public class JdbcSourceConnectorValidationTest {
     validate();
 
     assertTrue(validation.queryBlocksAppendedCriteria());
-    assertNoErrors();
+    assertErrors(QUERY_CONFIG, 1);
+    assertErrorMatches(QUERY_CONFIG, "not compatible with mode");
   }
 
   @Test
-  public void validate_withQueryMaskedTimestampModeAndTopLevelWhere_flaggedButNoErrors() {
+  public void validate_withQueryMaskedTimestampModeAndTopLevelWhere_rejected() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP);
     props.put(QUERY_MASKED_CONFIG, "SELECT * FROM sample_data WHERE active = true");
     props.put(TIMESTAMP_COLUMN_NAME_CONFIG, "ts");
@@ -1092,11 +1093,12 @@ public class JdbcSourceConnectorValidationTest {
     validate();
 
     assertTrue(validation.queryBlocksAppendedCriteria());
-    assertNoErrors();
+    assertErrors(QUERY_MASKED_CONFIG, 1);
+    assertErrorMatches(QUERY_MASKED_CONFIG, "not compatible with mode");
   }
 
   @Test
-  public void validate_withQueryTimestampIncrementingModeAndSetOperation_flaggedButNoErrors() {
+  public void validate_withQueryTimestampIncrementingModeAndSetOperation_rejected() {
     props.put(MODE_CONFIG, MODE_TIMESTAMP_INCREMENTING);
     props.put(QUERY_CONFIG, "SELECT id, ts FROM a UNION SELECT id, ts FROM b");
     props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");
@@ -1105,11 +1107,12 @@ public class JdbcSourceConnectorValidationTest {
     validate();
 
     assertTrue(validation.queryBlocksAppendedCriteria());
-    assertNoErrors();
+    assertErrors(QUERY_CONFIG, 1);
+    assertErrorMatches(QUERY_CONFIG, "not compatible with mode");
   }
 
   @Test
-  public void validate_withQueryIncrementingModeAndSubselectPattern_notFlagged() {
+  public void validate_withQueryIncrementingModeAndSubselectPattern_notRejected() {
     props.put(MODE_CONFIG, MODE_INCREMENTING);
     props.put(QUERY_CONFIG,
         "SELECT * FROM (SELECT id, ts FROM sample_data WHERE active = true ORDER BY ts) sub");
@@ -1122,7 +1125,7 @@ public class JdbcSourceConnectorValidationTest {
   }
 
   @Test
-  public void validate_withQueryBulkModeAndTopLevelOrderBy_notFlagged() {
+  public void validate_withQueryBulkModeAndTopLevelOrderBy_notRejected() {
     // bulk never appends a criteria, so top-level clauses are legitimate there.
     props.put(MODE_CONFIG, MODE_BULK);
     props.put(QUERY_CONFIG, "SELECT * FROM sample_data ORDER BY id");
@@ -1134,7 +1137,7 @@ public class JdbcSourceConnectorValidationTest {
   }
 
   @Test
-  public void validate_withoutQueryIncrementingMode_notFlagged() {
+  public void validate_withoutQueryIncrementingMode_notRejected() {
     props.put(MODE_CONFIG, MODE_INCREMENTING);
     props.put(TABLE_WHITELIST_CONFIG, "sample_data");
     props.put(INCREMENTING_COLUMN_NAME_CONFIG, "id");

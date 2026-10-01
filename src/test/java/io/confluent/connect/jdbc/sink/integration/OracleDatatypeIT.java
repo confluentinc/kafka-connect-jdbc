@@ -1,13 +1,18 @@
 package io.confluent.connect.jdbc.sink.integration;
 
+import org.apache.kafka.common.config.ConfigDef;
+import org.apache.kafka.connect.connector.ConnectRecord;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.json.JsonConverter;
+import org.apache.kafka.connect.transforms.Transformation;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -17,6 +22,7 @@ import org.testcontainers.containers.OracleContainer;
 import org.testcontainers.utility.ThrowingFunction;
 
 import java.math.BigDecimal;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -24,8 +30,10 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.ZoneId;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
@@ -34,6 +42,7 @@ import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.jdbc.integration.BaseConnectorIT;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -316,6 +325,111 @@ public class OracleDatatypeIT extends BaseConnectorIT {
             assertTrue(rs.next());
             assertEquals(struct.getString("firstname"), rs.getString("firstname"));
             assertEquals(struct.getString("lastname"), rs.getString("lastname"));
+        }
+    }
+
+    @Test
+    public void testByteBufferKindsToBlob() throws Exception {
+        try (Statement s = connection.createStatement()) {
+            s.execute("CREATE TABLE " + tableName + "("
+                + "\"kind\" VARCHAR2(20), "
+                + "\"bytes\" BLOB, "
+                + "KEY NUMBER NOT NULL, PRIMARY KEY (KEY)"
+                + ")");
+        }
+
+        props.put(JdbcSinkConfig.INSERT_MODE, "insert");
+        props.put("transforms", "toByteBuffer");
+        props.put("transforms.toByteBuffer.type", BytesAsByteBuffer.class.getName());
+        connect.configureConnector("jdbc-sink-connector", props);
+        waitForConnectorToStart("jdbc-sink-connector", 1);
+
+        final Schema schema = SchemaBuilder.struct()
+            .field("kind", Schema.STRING_SCHEMA)
+            .field("bytes", Schema.BYTES_SCHEMA)
+            .field("KEY", Schema.INT32_SCHEMA)
+            .build();
+        final byte[] payload = "blob payload".getBytes(StandardCharsets.UTF_8);
+        final List<String> kinds = Arrays.asList(
+            BytesAsByteBuffer.READ_ONLY, BytesAsByteBuffer.OFFSET, BytesAsByteBuffer.DIRECT);
+        for (int key = 1; key <= kinds.size(); key++) {
+            produceRecord(schema, new Struct(schema)
+                .put("kind", kinds.get(key - 1))
+                .put("bytes", payload)
+                .put("KEY", key));
+        }
+
+        waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName),
+            kinds.size(), 1, TimeUnit.MINUTES.toMillis(3));
+
+        try (Statement s = connection.createStatement()) {
+            ResultSet rs = s.executeQuery(
+                "SELECT \"kind\", \"bytes\" FROM " + tableName + " ORDER BY KEY");
+            for (String kind : kinds) {
+                assertTrue(rs.next());
+                assertEquals(kind, rs.getString(1));
+                assertArrayEquals("BLOB written from a " + kind + " ByteBuffer",
+                    payload, rs.getBytes(2));
+            }
+            assertFalse(rs.next());
+        }
+    }
+
+    /**
+     * Replaces the {@code bytes} field of the record value with a {@link ByteBuffer} of the kind
+     * named by its {@code kind} field, the way an upstream converter or SMT may hand it to the sink.
+     */
+    public static class BytesAsByteBuffer<R extends ConnectRecord<R>> implements Transformation<R> {
+        static final String READ_ONLY = "read-only";
+        static final String OFFSET = "offset";
+        static final String DIRECT = "direct";
+
+        @Override
+        public void configure(Map<String, ?> configs) {
+        }
+
+        @Override
+        public R apply(R record) {
+            final Struct value = (Struct) record.value();
+            final String kind = value.getString("kind");
+            final byte[] bytes = (byte[]) value.get("bytes");
+            final ByteBuffer buffer;
+            switch (kind) {
+                case READ_ONLY:
+                    buffer = ByteBuffer.wrap(bytes).asReadOnlyBuffer();
+                    break;
+                case OFFSET:
+                    // The bytes sit between a leading and a trailing pad byte of the backing array.
+                    final byte[] padded = new byte[bytes.length + 2];
+                    padded[0] = (byte) 0xFF;
+                    padded[padded.length - 1] = (byte) 0xFF;
+                    System.arraycopy(bytes, 0, padded, 1, bytes.length);
+                    buffer = ByteBuffer.wrap(padded, 1, bytes.length);
+                    break;
+                case DIRECT:
+                    buffer = ByteBuffer.allocateDirect(bytes.length);
+                    buffer.put(bytes);
+                    buffer.flip();
+                    break;
+                default:
+                    throw new DataException("Unknown ByteBuffer kind: " + kind);
+            }
+            final Struct newValue = new Struct(value.schema());
+            for (Field field : value.schema().fields()) {
+                newValue.put(field, value.get(field));
+            }
+            newValue.put("bytes", buffer);
+            return record.newRecord(record.topic(), record.kafkaPartition(), record.keySchema(),
+                record.key(), record.valueSchema(), newValue, record.timestamp());
+        }
+
+        @Override
+        public ConfigDef config() {
+            return new ConfigDef();
+        }
+
+        @Override
+        public void close() {
         }
     }
 

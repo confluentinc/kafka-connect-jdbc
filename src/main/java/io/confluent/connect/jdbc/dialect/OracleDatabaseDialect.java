@@ -157,7 +157,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
         }
 
         if (value instanceof ByteBuffer) {
-          statement.setBlob(index, new ByteArrayInputStream(((ByteBuffer) value).array()));
+          statement.setBlob(index, remainingBytesAsStream((ByteBuffer) value));
         } else if (value instanceof byte[]) {
           statement.setBlob(index, new ByteArrayInputStream((byte[]) value));
         } else {
@@ -180,6 +180,21 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     }
 
     return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
+  }
+
+  /**
+   * Streams the remaining bytes of the buffer without consuming it. {@link ByteBuffer#array()}
+   * alone is not enough, because it fails for read-only and direct buffers and ignores the
+   * buffer's position, limit and array offset.
+   */
+  private static ByteArrayInputStream remainingBytesAsStream(ByteBuffer buffer) {
+    if (buffer.hasArray()) {
+      return new ByteArrayInputStream(
+          buffer.array(), buffer.arrayOffset() + buffer.position(), buffer.remaining());
+    }
+    final byte[] bytes = new byte[buffer.remaining()];
+    buffer.duplicate().get(bytes);
+    return new ByteArrayInputStream(bytes);
   }
 
   private boolean maybeBindStringPrimitive(

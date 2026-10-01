@@ -18,6 +18,7 @@ package io.confluent.connect.jdbc.dialect;
 import io.confluent.connect.jdbc.util.ColumnDefinition;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.io.StringReader;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
@@ -34,12 +35,14 @@ import org.apache.kafka.connect.data.Schema.Type;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
+import org.mockito.ArgumentCaptor;
 
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
 import oracle.jdbc.OraclePreparedStatement;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
@@ -366,6 +369,39 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
     verify(statement, times(1)).setBlob(eq(index), any(ByteArrayInputStream.class));
     dialect.bindField(statement, index, schema, value, colDefBinary, field);
     verify(statement, times(1)).setBytes(index, value);
+  }
+
+  @Test
+  public void shouldBindRemainingBytesOfAnyByteBufferToBlob() throws SQLException {
+    byte[] expected = new byte[]{1, 2, 3};
+    byte[] padded = new byte[]{(byte) 0xFF, 1, 2, 3, (byte) 0xFF};
+    ByteBuffer direct = ByteBuffer.allocateDirect(expected.length);
+    direct.put(expected);
+    direct.flip();
+
+    assertBlobBoundFrom(ByteBuffer.wrap(expected).asReadOnlyBuffer(), expected);
+    assertBlobBoundFrom(ByteBuffer.wrap(padded, 1, expected.length), expected);
+    assertBlobBoundFrom(ByteBuffer.wrap(padded, 1, expected.length).slice(), expected);
+    assertBlobBoundFrom(direct, expected);
+  }
+
+  private void assertBlobBoundFrom(ByteBuffer value, byte[] expected) throws SQLException {
+    int index = ThreadLocalRandom.current().nextInt();
+    int position = value.position();
+    PreparedStatement statement = mock(PreparedStatement.class);
+    ColumnDefinition colDefBlob = mock(ColumnDefinition.class);
+    when(colDefBlob.type()).thenReturn(Types.BLOB);
+
+    dialect.bindField(statement, index, Schema.BYTES_SCHEMA, value, colDefBlob, "sample-test");
+
+    ArgumentCaptor<InputStream> blob = ArgumentCaptor.forClass(InputStream.class);
+    verify(statement, times(1)).setBlob(eq(index), blob.capture());
+    ByteArrayInputStream stream = (ByteArrayInputStream) blob.getValue();
+    byte[] actual = new byte[stream.available()];
+    stream.read(actual, 0, actual.length);
+    assertArrayEquals(expected, actual);
+    // Binding must not consume the buffer, since a retried flush binds the same record again.
+    assertEquals(position, value.position());
   }
 
   @Override

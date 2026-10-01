@@ -156,13 +156,19 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
           break;
         }
 
+        final byte[] bytes;
         if (value instanceof ByteBuffer) {
-          statement.setBlob(index, new ByteArrayInputStream(((ByteBuffer) value).array()));
+          // ByteBuffer.array() fails on read-only and direct buffers, and ignores the buffer's
+          // position and limit, so copy just the remaining bytes without consuming the buffer.
+          final ByteBuffer buffer = ((ByteBuffer) value).slice();
+          bytes = new byte[buffer.remaining()];
+          buffer.get(bytes);
         } else if (value instanceof byte[]) {
-          statement.setBlob(index, new ByteArrayInputStream((byte[]) value));
+          bytes = (byte[]) value;
         } else {
           return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
         }
+        statement.setBlob(index, new ByteArrayInputStream(bytes));
         return true;
       case FLOAT32:
         // Some float values can't be bounded to the JDBC driver with PreparedStatement.setFloat().

@@ -1,13 +1,18 @@
 package io.confluent.connect.jdbc.sink.integration;
 
+import org.apache.kafka.common.config.ConfigDef;
+import org.apache.kafka.common.config.ConfigException;
+import org.apache.kafka.connect.connector.ConnectRecord;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
+import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.json.JsonConverter;
+import org.apache.kafka.connect.transforms.Transformation;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -17,6 +22,7 @@ import org.testcontainers.containers.OracleContainer;
 import org.testcontainers.utility.ThrowingFunction;
 
 import java.math.BigDecimal;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -34,6 +40,7 @@ import io.confluent.common.utils.IntegrationTest;
 import io.confluent.connect.jdbc.integration.BaseConnectorIT;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -316,6 +323,111 @@ public class OracleDatatypeIT extends BaseConnectorIT {
             assertTrue(rs.next());
             assertEquals(struct.getString("firstname"), rs.getString("firstname"));
             assertEquals(struct.getString("lastname"), rs.getString("lastname"));
+        }
+    }
+
+    @Test
+    public void testReadOnlyByteBufferToBlob() throws Exception {
+        testByteBufferToBlob(BytesAsByteBuffer.READ_ONLY);
+    }
+
+    @Test
+    public void testOffsetByteBufferToBlob() throws Exception {
+        testByteBufferToBlob(BytesAsByteBuffer.OFFSET);
+    }
+
+    @Test
+    public void testDirectByteBufferToBlob() throws Exception {
+        testByteBufferToBlob(BytesAsByteBuffer.DIRECT);
+    }
+
+    private void testByteBufferToBlob(String bufferKind) throws Exception {
+        try (Statement s = connection.createStatement()) {
+            s.execute("CREATE TABLE " + tableName + "("
+                + "\"bytes\" BLOB, "
+                + "KEY NUMBER NOT NULL, PRIMARY KEY (KEY)"
+                + ")");
+        }
+
+        props.put(JdbcSinkConfig.INSERT_MODE, "insert");
+        props.put("transforms", "toByteBuffer");
+        props.put("transforms.toByteBuffer.type", BytesAsByteBuffer.class.getName());
+        props.put("transforms.toByteBuffer." + BytesAsByteBuffer.KIND_CONFIG, bufferKind);
+
+        final Schema schema = SchemaBuilder.struct()
+            .field("bytes", Schema.BYTES_SCHEMA)
+            .field("KEY", Schema.INT32_SCHEMA)
+            .build();
+        final byte[] payload = "blob payload".getBytes(StandardCharsets.UTF_8);
+        final Struct value = new Struct(schema)
+            .put("bytes", payload)
+            .put("KEY", 1);
+
+        assertProduced(schema, value, (rs) -> {
+            assertArrayEquals(payload, rs.getBytes(1));
+            return null;
+        });
+    }
+
+    /**
+     * Replaces the {@code bytes} field of the record value with a {@link ByteBuffer} of the
+     * configured kind, the way an upstream converter or SMT may hand it to the sink.
+     */
+    public static class BytesAsByteBuffer<R extends ConnectRecord<R>> implements Transformation<R> {
+        static final String KIND_CONFIG = "kind";
+        static final String READ_ONLY = "read-only";
+        static final String OFFSET = "offset";
+        static final String DIRECT = "direct";
+
+        private String kind;
+
+        @Override
+        public void configure(Map<String, ?> configs) {
+            kind = (String) configs.get(KIND_CONFIG);
+        }
+
+        @Override
+        public R apply(R record) {
+            final Struct value = (Struct) record.value();
+            final byte[] bytes = (byte[]) value.get("bytes");
+            final ByteBuffer buffer;
+            switch (kind) {
+                case READ_ONLY:
+                    buffer = ByteBuffer.wrap(bytes).asReadOnlyBuffer();
+                    break;
+                case OFFSET:
+                    // The bytes sit between a leading and a trailing pad byte of the backing array.
+                    final byte[] padded = new byte[bytes.length + 2];
+                    padded[0] = (byte) 0xFF;
+                    padded[padded.length - 1] = (byte) 0xFF;
+                    System.arraycopy(bytes, 0, padded, 1, bytes.length);
+                    buffer = ByteBuffer.wrap(padded, 1, bytes.length);
+                    break;
+                case DIRECT:
+                    buffer = ByteBuffer.allocateDirect(bytes.length);
+                    buffer.put(bytes);
+                    buffer.flip();
+                    break;
+                default:
+                    throw new ConfigException(KIND_CONFIG, kind, "Unknown ByteBuffer kind");
+            }
+            final Struct newValue = new Struct(value.schema());
+            for (Field field : value.schema().fields()) {
+                newValue.put(field, value.get(field));
+            }
+            newValue.put("bytes", buffer);
+            return record.newRecord(record.topic(), record.kafkaPartition(), record.keySchema(),
+                record.key(), record.valueSchema(), newValue, record.timestamp());
+        }
+
+        @Override
+        public ConfigDef config() {
+            return new ConfigDef()
+                .define(KIND_CONFIG, ConfigDef.Type.STRING, ConfigDef.Importance.HIGH, "ByteBuffer kind");
+        }
+
+        @Override
+        public void close() {
         }
     }
 

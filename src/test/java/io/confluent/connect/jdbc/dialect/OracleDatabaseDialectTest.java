@@ -379,6 +379,7 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
     direct.put(expected);
     direct.flip();
 
+    assertBlobBoundFrom(ByteBuffer.wrap(expected), expected);
     assertBlobBoundFrom(ByteBuffer.wrap(expected).asReadOnlyBuffer(), expected);
     assertBlobBoundFrom(ByteBuffer.wrap(padded, 1, expected.length), expected);
     assertBlobBoundFrom(ByteBuffer.wrap(padded, 1, expected.length).slice(), expected);

@@ -1,7 +1,6 @@
 package io.confluent.connect.jdbc.sink.integration;
 
 import org.apache.kafka.common.config.ConfigDef;
-import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.connector.ConnectRecord;
 import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
@@ -11,6 +10,7 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.json.JsonConverter;
 import org.apache.kafka.connect.transforms.Transformation;
 import org.junit.After;
@@ -30,8 +30,10 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.ZoneId;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
@@ -327,23 +329,10 @@ public class OracleDatatypeIT extends BaseConnectorIT {
     }
 
     @Test
-    public void testReadOnlyByteBufferToBlob() throws Exception {
-        testByteBufferToBlob(BytesAsByteBuffer.READ_ONLY);
-    }
-
-    @Test
-    public void testOffsetByteBufferToBlob() throws Exception {
-        testByteBufferToBlob(BytesAsByteBuffer.OFFSET);
-    }
-
-    @Test
-    public void testDirectByteBufferToBlob() throws Exception {
-        testByteBufferToBlob(BytesAsByteBuffer.DIRECT);
-    }
-
-    private void testByteBufferToBlob(String bufferKind) throws Exception {
+    public void testByteBufferKindsToBlob() throws Exception {
         try (Statement s = connection.createStatement()) {
             s.execute("CREATE TABLE " + tableName + "("
+                + "\"kind\" VARCHAR2(20), "
                 + "\"bytes\" BLOB, "
                 + "KEY NUMBER NOT NULL, PRIMARY KEY (KEY)"
                 + ")");
@@ -352,43 +341,57 @@ public class OracleDatatypeIT extends BaseConnectorIT {
         props.put(JdbcSinkConfig.INSERT_MODE, "insert");
         props.put("transforms", "toByteBuffer");
         props.put("transforms.toByteBuffer.type", BytesAsByteBuffer.class.getName());
-        props.put("transforms.toByteBuffer." + BytesAsByteBuffer.KIND_CONFIG, bufferKind);
+        connect.configureConnector("jdbc-sink-connector", props);
+        waitForConnectorToStart("jdbc-sink-connector", 1);
 
         final Schema schema = SchemaBuilder.struct()
+            .field("kind", Schema.STRING_SCHEMA)
             .field("bytes", Schema.BYTES_SCHEMA)
             .field("KEY", Schema.INT32_SCHEMA)
             .build();
         final byte[] payload = "blob payload".getBytes(StandardCharsets.UTF_8);
-        final Struct value = new Struct(schema)
-            .put("bytes", payload)
-            .put("KEY", 1);
+        final List<String> kinds = Arrays.asList(
+            BytesAsByteBuffer.READ_ONLY, BytesAsByteBuffer.OFFSET, BytesAsByteBuffer.DIRECT);
+        for (int key = 1; key <= kinds.size(); key++) {
+            produceRecord(schema, new Struct(schema)
+                .put("kind", kinds.get(key - 1))
+                .put("bytes", payload)
+                .put("KEY", key));
+        }
 
-        assertProduced(schema, value, (rs) -> {
-            assertArrayEquals(payload, rs.getBytes(1));
-            return null;
-        });
+        waitForCommittedRecords("jdbc-sink-connector", Collections.singleton(tableName),
+            kinds.size(), 1, TimeUnit.MINUTES.toMillis(3));
+
+        try (Statement s = connection.createStatement()) {
+            ResultSet rs = s.executeQuery(
+                "SELECT \"kind\", \"bytes\" FROM " + tableName + " ORDER BY KEY");
+            for (String kind : kinds) {
+                assertTrue(rs.next());
+                assertEquals(kind, rs.getString(1));
+                assertArrayEquals("BLOB written from a " + kind + " ByteBuffer",
+                    payload, rs.getBytes(2));
+            }
+            assertFalse(rs.next());
+        }
     }
 
     /**
-     * Replaces the {@code bytes} field of the record value with a {@link ByteBuffer} of the
-     * configured kind, the way an upstream converter or SMT may hand it to the sink.
+     * Replaces the {@code bytes} field of the record value with a {@link ByteBuffer} of the kind
+     * named by its {@code kind} field, the way an upstream converter or SMT may hand it to the sink.
      */
     public static class BytesAsByteBuffer<R extends ConnectRecord<R>> implements Transformation<R> {
-        static final String KIND_CONFIG = "kind";
         static final String READ_ONLY = "read-only";
         static final String OFFSET = "offset";
         static final String DIRECT = "direct";
 
-        private String kind;
-
         @Override
         public void configure(Map<String, ?> configs) {
-            kind = (String) configs.get(KIND_CONFIG);
         }
 
         @Override
         public R apply(R record) {
             final Struct value = (Struct) record.value();
+            final String kind = value.getString("kind");
             final byte[] bytes = (byte[]) value.get("bytes");
             final ByteBuffer buffer;
             switch (kind) {
@@ -409,7 +412,7 @@ public class OracleDatatypeIT extends BaseConnectorIT {
                     buffer.flip();
                     break;
                 default:
-                    throw new ConfigException(KIND_CONFIG, kind, "Unknown ByteBuffer kind");
+                    throw new DataException("Unknown ByteBuffer kind: " + kind);
             }
             final Struct newValue = new Struct(value.schema());
             for (Field field : value.schema().fields()) {
@@ -422,8 +425,7 @@ public class OracleDatatypeIT extends BaseConnectorIT {
 
         @Override
         public ConfigDef config() {
-            return new ConfigDef()
-                .define(KIND_CONFIG, ConfigDef.Type.STRING, ConfigDef.Importance.HIGH, "ByteBuffer kind");
+            return new ConfigDef();
         }
 
         @Override

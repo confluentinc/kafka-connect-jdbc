@@ -156,19 +156,13 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
           break;
         }
 
-        final byte[] bytes;
         if (value instanceof ByteBuffer) {
-          // ByteBuffer.array() fails on read-only and direct buffers, and ignores the buffer's
-          // position and limit, so copy just the remaining bytes without consuming the buffer.
-          final ByteBuffer buffer = ((ByteBuffer) value).slice();
-          bytes = new byte[buffer.remaining()];
-          buffer.get(bytes);
+          statement.setBlob(index, remainingBytesAsStream((ByteBuffer) value));
         } else if (value instanceof byte[]) {
-          bytes = (byte[]) value;
+          statement.setBlob(index, new ByteArrayInputStream((byte[]) value));
         } else {
           return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
         }
-        statement.setBlob(index, new ByteArrayInputStream(bytes));
         return true;
       case FLOAT32:
         // Some float values can't be bounded to the JDBC driver with PreparedStatement.setFloat().
@@ -186,6 +180,21 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     }
 
     return super.maybeBindPrimitive(statement, index, schema, value, fieldName);
+  }
+
+  /**
+   * Streams the remaining bytes of the buffer without consuming it. {@link ByteBuffer#array()}
+   * alone is not enough, because it fails for read-only and direct buffers and ignores the
+   * buffer's position, limit and array offset.
+   */
+  private static ByteArrayInputStream remainingBytesAsStream(ByteBuffer buffer) {
+    if (buffer.hasArray()) {
+      return new ByteArrayInputStream(
+          buffer.array(), buffer.arrayOffset() + buffer.position(), buffer.remaining());
+    }
+    final byte[] bytes = new byte[buffer.remaining()];
+    buffer.duplicate().get(bytes);
+    return new ByteArrayInputStream(bytes);
   }
 
   private boolean maybeBindStringPrimitive(

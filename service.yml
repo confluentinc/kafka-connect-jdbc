@@ -1,6 +1,6 @@
 name: kafka-connect-jdbc
 lang: java
-lang_version: 8
+lang_version: '8'
 git:
   enable: true
 codeowners:
@@ -9,8 +9,8 @@ semaphore:
   enable: true
   pipeline_type: cp
   trivy_scan: true
-  extra_deploy_args: "-Dcloud -Pjenkins"
-  extra_build_args: "-Dcloud -Pjenkins"
+  extra_deploy_args: -Dcloud -Pjenkins
+  extra_build_args: -Dcloud -Pjenkins
   run_pint_merge: true
   generate_connect_changelogs: true
 code_artifact:

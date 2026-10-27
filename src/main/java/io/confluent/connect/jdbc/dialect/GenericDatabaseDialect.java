@@ -540,7 +540,31 @@ public class GenericDatabaseDialect implements DatabaseDialect {
   @Override
   public ExpressionBuilder expressionBuilder() {
     return identifierRules().expressionBuilder()
-                            .setQuoteIdentifiers(quoteSqlIdentifiers);
+        .setQuoteIdentifiers(quoteSqlIdentifiers)
+        .setStringLiteralEscaping(stringLiteralEscaping())
+        .setExtraForbiddenUnquotedSequences(extraForbiddenUnquotedIdentifierSequences());
+  }
+
+  /**
+   * Return character sequences, beyond the standard SQL ones, that this dialect's grammar treats
+   * as comment introducers or statement syntax and that therefore must not appear in a bare
+   * (unquoted) identifier. The default is none.
+   *
+   * @return the extra sequences; never null
+   */
+  protected Collection<String> extraForbiddenUnquotedIdentifierSequences() {
+    return Collections.emptyList();
+  }
+
+  /**
+   * Return how this dialect's string literals treat backslash, so that values written into
+   * generated SQL (such as column DEFAULT values) are escaped correctly. The default is the SQL
+   * standard, where backslash is an ordinary character.
+   *
+   * @return the string literal escaping style; never null
+   */
+  protected ExpressionBuilder.StringLiteralEscaping stringLiteralEscaping() {
+    return ExpressionBuilder.StringLiteralEscaping.STANDARD;
   }
 
   /**
@@ -1902,6 +1926,13 @@ public class GenericDatabaseDialect implements DatabaseDialect {
     if (schemaName != null) {
       switch (schemaName) {
         case Decimal.LOGICAL_NAME:
+          // Connect validates Decimal defaults as BigDecimal; refuse anything else rather than
+          // appending it unquoted.
+          if (!(value instanceof BigDecimal)) {
+            throw new ConnectException(
+                "Unsupported value type for Decimal column value: "
+                + (value == null ? "null" : value.getClass().getName()));
+          }
           builder.append(value);
           return;
         case Date.LOGICAL_NAME:
@@ -1959,6 +1990,26 @@ public class GenericDatabaseDialect implements DatabaseDialect {
         "%s (%s) type doesn't have a mapping to the SQL database column type", f.schemaName(),
         f.schemaType()
     ));
+  }
+
+  /**
+   * Return the scale of a Decimal field parsed as an int. The scale is schema content supplied by
+   * the producer, so it must never be concatenated verbatim into a generated column type.
+   *
+   * @param field the Decimal field; may not be null
+   * @return the scale
+   * @throws ConnectException if the scale is missing or not an integer
+   */
+  protected static int decimalScaleOf(SinkRecordField field) {
+    String scale = field.schemaParameters() == null
+        ? null : field.schemaParameters().get(Decimal.SCALE_FIELD);
+    try {
+      return Integer.parseInt(scale);
+    } catch (NumberFormatException e) {
+      throw new ConnectException(
+          "Invalid Decimal scale parameter for field '" + field.name() + "'; expected an integer",
+          e);
+    }
   }
 
   /**

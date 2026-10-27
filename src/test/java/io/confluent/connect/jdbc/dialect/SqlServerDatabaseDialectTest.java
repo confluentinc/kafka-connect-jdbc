@@ -108,6 +108,16 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
   }
 
   @Test
+  public void shouldParseDecimalScaleAsInt() {
+    assertDecimalScaleParsedAsInt("decimal(38,2)");
+  }
+
+  @Test
+  public void shouldRejectNonNumericDecimalScale() {
+    assertNonNumericDecimalScaleRejected();
+  }
+
+  @Test
   public void shouldMapDecimalSchemaTypeToDecimalSqlType() {
     assertDecimalMapping(0, "decimal(38,0)");
     assertDecimalMapping(3, "decimal(38,3)");
@@ -447,5 +457,13 @@ public class SqlServerDatabaseDialectTest extends BaseDialectTest<SqlServerDatab
 
     dialect.bindField(stmtNvarchar, index, schema, value, colDefNvarchar);
     verify(stmtNvarchar, times(1)).setNString(index, value);
+  }
+
+  @Test
+  public void unquotedIdentifierMayContainHash() {
+    // '#' is an ordinary identifier character here (not a comment), so it stays allowed bare.
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertEquals("x#y", dialect.expressionBuilder().appendColumnName("x#y").toString());
   }
 }

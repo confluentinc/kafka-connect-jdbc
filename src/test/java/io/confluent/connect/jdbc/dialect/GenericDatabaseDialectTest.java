@@ -24,6 +24,7 @@ import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.apache.kafka.connect.errors.ConnectException;
+import org.apache.kafka.connect.errors.DataException;
 import org.easymock.EasyMock;
 import org.junit.After;
 import org.junit.Before;
@@ -40,6 +41,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
@@ -479,10 +481,102 @@ public class GenericDatabaseDialectTest extends BaseDialectTest<GenericDatabaseD
 
     verifyFormatColumnValue("42.42", Decimal.schema(2), new BigDecimal("42.42"));
 
+    // DATE/TIME/TIMESTAMP defaults also go through appendStringQuoted, but the text is produced by
+    // DateTimeUtils' fixed numeric patterns (digits, '-', ':', '.', ' '), never raw producer text.
     final java.util.Date instant = new java.util.Date(1474661402123L);
     verifyFormatColumnValue("'2016-09-23'", Date.SCHEMA, instant);
     verifyFormatColumnValue("'20:10:02.123'", Time.SCHEMA, instant);
     verifyFormatColumnValue("'2016-09-23 20:10:02.123'", Timestamp.SCHEMA, instant);
+  }
+
+  @Test
+  public void formatColumnValueDoublesSingleQuoteInStringDefault() {
+    verifyFormatColumnValue("'a''b'", Schema.STRING_SCHEMA, "a'b");
+    // Ordinary defaults, including slashes and apostrophes, keep working.
+    verifyFormatColumnValue("'n/a'", Schema.STRING_SCHEMA, "n/a");
+    verifyFormatColumnValue("'O''Neill'", Schema.STRING_SCHEMA, "O'Neill");
+    // The generic dialect follows the SQL standard: backslash is not an escape character, so it
+    // is left as-is (doubling it would change the stored value).
+    verifyFormatColumnValue("'a\\b'", Schema.STRING_SCHEMA, "a\\b");
+  }
+
+  @Test
+  public void createTableStringDefaultCannotCloseLiteral() {
+    GenericDatabaseDialect dialect = dummyDialect();
+    String payload = "n/a'); CREATE TABLE marker_create AS SELECT current_user::text AS db_user; --";
+    String ddl = dialect.buildCreateTableStatement(tableId, Collections.singletonList(
+        new SinkRecordField(
+            SchemaBuilder.string().optional().defaultValue(payload).build(), "ref", false)));
+    assertEquals(
+        "CREATE TABLE \"myTable\" (" + System.lineSeparator()
+        + "\"ref\" DUMMY DEFAULT 'n/a''); CREATE TABLE marker_create AS SELECT "
+        + "current_user::text AS db_user; --')",
+        ddl);
+  }
+
+  @Test
+  public void alterTableStringDefaultCannotCloseLiteral() {
+    GenericDatabaseDialect dialect = dummyDialect();
+    String payload = "n/a'; CREATE TABLE marker_poc AS SELECT current_user::text AS db_user; --";
+    List<String> ddl = dialect.buildAlterTable(tableId, Collections.singletonList(
+        new SinkRecordField(
+            SchemaBuilder.string().optional().defaultValue(payload).build(), "ref", false)));
+    assertEquals(Collections.singletonList(
+        "ALTER TABLE \"myTable\" ADD \"ref\" DUMMY DEFAULT 'n/a''; CREATE TABLE marker_poc AS "
+        + "SELECT current_user::text AS db_user; --'"),
+        ddl);
+  }
+
+  @Test
+  public void writeColumnSpecRejectsStatementBreakingNameWhenUnquoted() {
+    // With quote.sql.identifiers=NEVER the column name is emitted bare, so it must be rejected
+    // rather than producing "x INT); DROP TABLE t; -- DUMMY NOT NULL".
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    assertThrows(ConnectException.class, () -> verifyWriteColumnSpec(
+        "unused", new SinkRecordField(Schema.INT32_SCHEMA, "x INT); DROP TABLE t; --", false)));
+  }
+
+  @Test
+  public void createTableAcceptsSeparatorAndCommentInQuotedName() {
+    // Default ALWAYS mode: a field legitimately named "order;id" or "a--b" is fully contained by
+    // the quoted identifier and must keep producing the same DDL as before.
+    GenericDatabaseDialect dialect = dummyDialect();
+    String ddl = dialect.buildCreateTableStatement(tableId, Arrays.asList(
+        new SinkRecordField(Schema.INT32_SCHEMA, "order;id", true),
+        new SinkRecordField(Schema.OPTIONAL_STRING_SCHEMA, "a--b", false)));
+    assertEquals(
+        "CREATE TABLE \"myTable\" (" + System.lineSeparator()
+        + "\"order;id\" DUMMY NOT NULL," + System.lineSeparator()
+        + "\"a--b\" DUMMY NULL," + System.lineSeparator()
+        + "PRIMARY KEY(\"order;id\"))",
+        ddl);
+  }
+
+  @Test
+  public void writeColumnSpecRejectsSeparatorInNameWhenUnquoted() {
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    assertThrows(ConnectException.class, () -> verifyWriteColumnSpec(
+        "unused", new SinkRecordField(Schema.INT32_SCHEMA, "order;id", false)));
+  }
+
+  @Test
+  public void writeColumnSpecEscapesQuoteInQuotedName() {
+    verifyWriteColumnSpec("\"a\"\"b\" DUMMY NOT NULL",
+        new SinkRecordField(Schema.INT32_SCHEMA, "a\"b", false));
+  }
+
+  @Test
+  public void decimalStringDefaultIsUnreachableAndFailsClosed() {
+    // Connect validates a Decimal default as BigDecimal, so an arbitrary string cannot reach the
+    // unquoted Decimal DEFAULT path through a converter.
+    assertThrows(DataException.class, () -> Decimal.builder(2).defaultValue("1); DROP TABLE t; --"));
+    // Even if a non-BigDecimal value reached formatColumnValue directly, it is rejected rather
+    // than appended unquoted.
+    GenericDatabaseDialect dialect = dummyDialect();
+    Schema schema = Decimal.schema(2);
+    assertThrows(ConnectException.class, () -> dialect.formatColumnValue(
+        dialect.expressionBuilder(), schema.name(), schema.parameters(), schema.type(),
+        "1); DROP TABLE t; --"));
   }
 
   private void verifyFormatColumnValue(String expected, Schema schema, Object value) {

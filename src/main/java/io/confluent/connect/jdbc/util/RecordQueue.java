@@ -40,6 +40,13 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
   private static final Logger log = LoggerFactory.getLogger(RecordQueue.class);
 
   /**
+   * The shortest time that {@link #poll()} waits for a record when the queue is empty, even when
+   * the linger is zero. The Connect worker calls poll again as soon as it returns, so returning
+   * without waiting would turn an idle task into a busy loop that keeps a CPU core fully busy.
+   */
+  public static final Duration MIN_IDLE_POLL_WAIT = Duration.ofMillis(100);
+
+  /**
    * Builder for RecordQueue that can be specialized.
    *
    * @param <RecordT>  the type of record
@@ -109,9 +116,10 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
 
     /**
      * Set the maximum duration that a single call to {@link RecordQueue#poll()} should
-     * block while waiting for a batch to fill.
+     * block on an empty queue while waiting for a record to arrive.
      *
-     * <p>By default this is 0 seconds.
+     * <p>By default this is 0 seconds, which {@link RecordQueue#poll()} raises to
+     * {@link RecordQueue#MIN_IDLE_POLL_WAIT}.
      *
      * @param duration the maximum duration for a poll for records; may not be null
      * @return this builder; never null
@@ -248,7 +256,6 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
   }
 
   private final int maxBatchSize;
-  private final boolean useLinger;
   private final Duration linger;
   private final Duration maxPollInterruptTime;
   private final BlockingQueue<SourceRecord> queue;
@@ -261,7 +268,6 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
   protected RecordQueue(Builder<RecordT> builder) {
     this.maxBatchSize = builder.maxBatchSize;
     this.linger = builder.linger;
-    this.useLinger = !linger.isZero() && !linger.isNegative();
     this.maxPollInterruptTime = builder.maxPollInterruptTime;
     this.clock = builder.clock;
     this.batchFactory = builder.batchFactory;
@@ -360,7 +366,10 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
   }
 
   /**
-   * Poll for the next batch of records. This method will block up to the maximum batch
+   * Poll for the next batch of records. If the queue is empty, this method blocks until a record
+   * arrives, for no longer than the {@link Builder#maxPollLinger(Duration) linger} and for no less
+   * than {@link #MIN_IDLE_POLL_WAIT}. It returns as soon as it has at least one record, together
+   * with any others already queued, rather than waiting for a full batch.
    *
    * @return the next batch of records, which may be empty if there are no records in the queue;
    *         or null if the queue has been {@link #stop() stopped}
@@ -391,39 +400,38 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
       return records;
     }
 
-    // We have no records, so maybe linger until there are some
-    if (useLinger) {
-      int count = drained;
-      long lingerRemainderMs = linger.toMillis();
-      final long start = clock.milliseconds();
-      final long lingerEndMs = start + lingerRemainderMs;
-      SourceRecord record;
-      while (isRunning() && hasNoFailure() && count < maxBatchSize && lingerRemainderMs > 0L) {
-
-        // Since we need to be able to detect that we've stopped within a max interrupt time,
-        // we can wait no more than this interrupt time or the remainder of our linger
-        // (whichever is smaller)
-        long maxPollTime = Math.min(maxPollInterruptTime.toMillis(), lingerRemainderMs);
-        record = queue.poll(maxPollTime, TimeUnit.MILLISECONDS);
-        if (record != null) {
-          records.add(record);
-          ++count;
-        }
-        lingerRemainderMs = lingerEndMs - clock.milliseconds();
-      }
-
-      if (log.isTraceEnabled()) {
-        lingerRemainderMs = Math.max(0, lingerRemainderMs);
+    // We have no records, so linger until the first one arrives. Do not wait for the batch to
+    // fill: a low-volume table may never fill it, and every record would be held for the whole
+    // linger. Wait at least MIN_IDLE_POLL_WAIT even when the linger is zero, so that the caller's
+    // poll loop does not spin.
+    final long start = clock.milliseconds();
+    final long lingerEndMs = start + linger.toMillis();
+    // Since we need to be able to detect that we've stopped within a max interrupt time,
+    // we can wait no more than this interrupt time at once
+    long waitMs = Math.min(
+        maxPollInterruptTime.toMillis(),
+        Math.max(linger.toMillis(), MIN_IDLE_POLL_WAIT.toMillis())
+    );
+    while (true) {
+      SourceRecord record = queue.poll(waitMs, TimeUnit.MILLISECONDS);
+      if (record != null) {
+        records.add(record);
+        int count = 1 + queue.drainTo(records, maxBatchSize - 1);
         log.trace(
             "Returning {} records after lingering {} ms; {} records waiting in buffer",
             count,
-            linger.toMillis() - lingerRemainderMs,
+            clock.milliseconds() - start,
             queue.size()
         );
+        return records;
       }
-    } else {
-      log.trace("Returning 0 records; {} records waiting in buffer", queue.size());
+      long lingerRemainderMs = lingerEndMs - clock.milliseconds();
+      if (!isRunning() || !hasNoFailure() || lingerRemainderMs <= 0L) {
+        break;
+      }
+      waitMs = Math.min(maxPollInterruptTime.toMillis(), lingerRemainderMs);
     }
+    log.trace("Returning 0 records after lingering {} ms", clock.milliseconds() - start);
     return records;
   }
 

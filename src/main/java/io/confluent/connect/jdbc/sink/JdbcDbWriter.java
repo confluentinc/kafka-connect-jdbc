@@ -144,21 +144,28 @@ public class JdbcDbWriter {
     return new TableId(finalCatalogName, finalSchemaName, parsedTableId.tableName());
   }
 
-  private Optional<String> getSchemaSafe(Connection connection) {
+  private Optional<String> getSchemaSafe(Connection connection) throws SQLException {
     try {
       return Optional.ofNullable(connection.getSchema());
     } catch (AbstractMethodError | SQLException e) {
       log.warn("Failed to get schema: {}", e.getMessage());
       return Optional.empty();
+    } catch (RuntimeException e) {
+      // A driver RuntimeException here means the connection is broken; surface it as an
+      // SQLException so JdbcSinkTask.put() reconnects and retries instead of failing the task.
+      throw new SQLException("Failed to get schema from the database connection", e);
     }
   }
 
-  private Optional<String> getCatalogSafe(Connection connection) {
+  private Optional<String> getCatalogSafe(Connection connection) throws SQLException {
     try {
       return Optional.ofNullable(connection.getCatalog());
     } catch (AbstractMethodError | SQLException e) {
       log.warn("Failed to get catalog: {}", e.getMessage());
       return Optional.empty();
+    } catch (RuntimeException e) {
+      // See getSchemaSafe: a driver RuntimeException here means a broken connection.
+      throw new SQLException("Failed to get catalog from the database connection", e);
     }
   }
 }

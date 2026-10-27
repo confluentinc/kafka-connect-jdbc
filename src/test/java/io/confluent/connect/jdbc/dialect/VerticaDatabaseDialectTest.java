@@ -19,10 +19,16 @@ import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
+import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
+import java.util.Collections;
+import java.util.List;
+
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 
 import static org.junit.Assert.assertEquals;
@@ -46,6 +52,16 @@ public class VerticaDatabaseDialectTest extends BaseDialectTest<VerticaDatabaseD
     assertPrimitiveMapping(Type.BOOLEAN, "BOOLEAN");
     assertPrimitiveMapping(Type.BYTES, "VARBINARY(1024)");
     assertPrimitiveMapping(Type.STRING, "VARCHAR(1024)");
+  }
+
+  @Test
+  public void shouldParseDecimalScaleAsInt() {
+    assertDecimalScaleParsedAsInt("DECIMAL(18,2)");
+  }
+
+  @Test
+  public void shouldRejectNonNumericDecimalScale() {
+    assertNonNumericDecimalScaleRejected();
   }
 
   @Test
@@ -221,5 +237,81 @@ public class VerticaDatabaseDialectTest extends BaseDialectTest<VerticaDatabaseD
         "jdbc:vertica://something?password=****&key1=value1&key2=value2&key3=value3&"
         + "user=smith&password=****&other=value"
     );
+  }
+
+  private static final String BACKSLASH_PAYLOAD = "a\\'); DROP TABLE t; --";
+
+  @Test
+  public void stringDefaultWithBackslashUsesEscapeStringSyntax() {
+    // With StandardConformingStrings off (its legacy setting) Vertica treats backslash as an
+    // escape inside an ordinary '...' literal, so "a\'" would close the literal early. An E'...'
+    // literal always treats backslash as an escape, so doubling both backslash and quote inside
+    // E'...' yields the same value whichever way StandardConformingStrings is set.
+    ExpressionBuilder builder = dialect.expressionBuilder();
+    dialect.formatColumnValue(builder, null, null, Type.STRING, BACKSLASH_PAYLOAD);
+    String literal = builder.toString();
+    assertEquals("E'a\\\\''); DROP TABLE t; --'", literal);
+    assertEquals(literal.length(), endOfEscapeStringLiteral(literal, 1));
+  }
+
+  @Test
+  public void ordinaryStringDefaultsKeepStandardLiteralSyntax() {
+    ExpressionBuilder builder = dialect.expressionBuilder();
+    dialect.formatColumnValue(builder, null, null, Type.STRING, "n/a");
+    assertEquals("'n/a'", builder.toString());
+    builder = dialect.expressionBuilder();
+    dialect.formatColumnValue(builder, null, null, Type.STRING, "O'Neill");
+    assertEquals("'O''Neill'", builder.toString());
+  }
+
+  @Test
+  public void createTableBackslashStringDefaultCannotCloseLiteral() {
+    String ddl = dialect.buildCreateTableStatement(tableId, Collections.singletonList(
+        new SinkRecordField(
+            SchemaBuilder.string().optional().defaultValue(BACKSLASH_PAYLOAD).build(),
+            "ref", false)));
+    assertEquals("CREATE TABLE \"myTable\" (" + System.lineSeparator()
+        + "\"ref\" VARCHAR(1024) DEFAULT E'a\\\\''); DROP TABLE t; --')", ddl);
+    // The literal must run all the way to the closing quote before the final ")".
+    int open = ddl.indexOf(" DEFAULT E'") + " DEFAULT E".length();
+    assertEquals(ddl.length() - 1, endOfEscapeStringLiteral(ddl, open));
+  }
+
+  @Test
+  public void alterTableBackslashStringDefaultCannotCloseLiteral() {
+    List<String> ddl = dialect.buildAlterTable(tableId, Collections.singletonList(
+        new SinkRecordField(
+            SchemaBuilder.string().optional().defaultValue(BACKSLASH_PAYLOAD).build(),
+            "ref", false)));
+    assertEquals(Collections.singletonList(
+        "ALTER TABLE \"myTable\" ADD \"ref\" VARCHAR(1024) DEFAULT E'a\\\\''); DROP TABLE t; --'"),
+        ddl);
+    int open = ddl.get(0).indexOf(" DEFAULT E'") + " DEFAULT E".length();
+    assertEquals(ddl.get(0).length(), endOfEscapeStringLiteral(ddl.get(0), open));
+  }
+
+  /**
+   * Lex a single-quoted literal starting at {@code open} with backslash escapes honored (as in an
+   * E'...' literal, or an ordinary literal with StandardConformingStrings off) and return the
+   * index just past its closing quote.
+   */
+  private static int endOfEscapeStringLiteral(String sql, int open) {
+    assertEquals('\'', sql.charAt(open));
+    int i = open + 1;
+    while (i < sql.length()) {
+      char c = sql.charAt(i);
+      if (c == '\\') {
+        i += 2;
+      } else if (c == '\'') {
+        if (i + 1 < sql.length() && sql.charAt(i + 1) == '\'') {
+          i += 2;
+        } else {
+          return i + 1;
+        }
+      } else {
+        i++;
+      }
+    }
+    throw new AssertionError("Unterminated string literal in: " + sql);
   }
 }

@@ -124,7 +124,9 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final long POLL_LINGER_MS_DEFAULT = Duration.ofSeconds(5).toMillis();
   protected static final String POLL_LINGER_MS_DOC =
       "The maximum time to wait for a record before returning an empty batch. The default is "
-          + "5 seconds.";
+          + "5 seconds. A record is returned as soon as it arrives, so this does not delay "
+          + "records; it only bounds how long an idle poll waits. Values below 100 ms are "
+          + "treated as 100 ms so that an idle task does not keep a CPU core busy.";
 
   public static final String NUMERIC_PRECISION_MAPPING_CONFIG = "numeric.precision.mapping";
   private static final String NUMERIC_PRECISION_MAPPING_DOC =

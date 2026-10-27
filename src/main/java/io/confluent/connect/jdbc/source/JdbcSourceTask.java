@@ -548,8 +548,12 @@ public class JdbcSourceTask extends SourceTask {
       // Waiting for tables: back off so the worker's poll loop doesn't busy-spin at 100% CPU.
       // poll.linger.ms is the knob for how long a poll waits before returning an empty batch,
       // and it is the same backoff the running engine applies on an empty queue, so the idle
-      // wait is consistent whether or not the engine has been built yet.
-      time.sleep(config.pollLingerMs().toMillis());
+      // wait is consistent whether or not the engine has been built yet. Like the engine, wait
+      // at least MIN_IDLE_POLL_WAIT so that poll.linger.ms=0 does not spin.
+      time.sleep(Math.max(
+          config.pollLingerMs().toMillis(),
+          RecordQueue.MIN_IDLE_POLL_WAIT.toMillis()
+      ));
       return null;
     }
     // Get the next batch from the queue

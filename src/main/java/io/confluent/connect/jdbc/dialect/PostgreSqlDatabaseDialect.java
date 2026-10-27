@@ -491,6 +491,16 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return builder.toString();
   }
 
+  /**
+   * PostgreSQL honors backslash escapes in ordinary string literals when
+   * {@code standard_conforming_strings} is off, so values containing a backslash are written as
+   * {@code E'...'} literals, whose meaning does not depend on that setting.
+   */
+  @Override
+  protected ExpressionBuilder.StringLiteralEscaping stringLiteralEscaping() {
+    return ExpressionBuilder.StringLiteralEscaping.ESCAPE_STRING_SYNTAX;
+  }
+
   @Override
   protected void formatColumnValue(
       ExpressionBuilder builder,
@@ -540,8 +550,7 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     if (item == null) {
       builder.append("NULL");
     } else if (item instanceof String) {
-      String escapedString = ((String) item).replace("'", "''");
-      builder.appendStringQuoted(escapedString);
+      builder.appendStringQuoted(item);
     } else if (item instanceof Number) {
       builder.append(item.toString());
     } else if (item instanceof Boolean) {

@@ -400,7 +400,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String QUOTE_SQL_IDENTIFIERS_DEFAULT = QuoteMethod.ALWAYS.name().toString();
   public static final String QUOTE_SQL_IDENTIFIERS_DOC =
       "When to quote table names, column names, and other identifiers in SQL statements. "
-      + "For backward compatibility, the default is ``always``.";
+      + "For backward compatibility, the default is ``always``. "
+      + "Identifiers containing control characters are always rejected. With ``never``, "
+      + "identifiers also may not contain ``;``, SQL comment sequences (including ``#`` on "
+      + "MySQL and MariaDB), whitespace, quote characters, parentheses, or commas, since they "
+      + "cannot be used unquoted.";
   public static final String QUOTE_SQL_IDENTIFIERS_DISPLAY = "Quote Identifiers";
 
   public static final String QUERY_SUFFIX_CONFIG = "query.suffix";

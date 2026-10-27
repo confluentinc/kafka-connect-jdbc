@@ -19,16 +19,31 @@ import org.apache.kafka.connect.data.Date;
 import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.Schema.Type;
+import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Time;
 import org.apache.kafka.connect.data.Timestamp;
 import org.junit.Test;
 
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.Collections;
 import java.util.List;
 
+import org.apache.kafka.connect.errors.ConnectException;
+
+import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.QuoteMethod;
 import io.confluent.connect.jdbc.util.TableId;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDialect> {
 
@@ -48,6 +63,18 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
     assertPrimitiveMapping(Type.BOOLEAN, "TINYINT");
     assertPrimitiveMapping(Type.BYTES, "VARBINARY(1024)");
     assertPrimitiveMapping(Type.STRING, "TEXT");
+  }
+
+  @Test
+  public void shouldParseDecimalScaleAsInt() {
+    assertDecimalScaleParsedAsInt("DECIMAL(65,2)");
+  }
+
+  @Test
+  public void shouldRejectNonNumericDecimalScale() {
+    // Already safe (parsed as an int), but must fail with the same ConnectException message as
+    // the other dialects rather than a bare NumberFormatException.
+    assertNonNumericDecimalScaleRejected();
   }
 
   @Test
@@ -256,6 +283,195 @@ public class MySqlDatabaseDialectTest extends BaseDialectTest<MySqlDatabaseDiale
     );
   }
 
+  // MySQL treats backslash as an escape character inside string literals by default (unless
+  // NO_BACKSLASH_ESCAPES is set). Doubling only the single quote is therefore not enough: in
+  // "a\'" the backslash escapes the quote. Both the backslash and the quote must be doubled.
+  private static final String BACKSLASH_PAYLOAD = "a\\'); DROP TABLE t; --";
+
+  @Test
+  public void stringDefaultEscapesBackslashAndQuote() {
+    ExpressionBuilder builder = dialect.expressionBuilder();
+    dialect.formatColumnValue(builder, null, null, Type.STRING, BACKSLASH_PAYLOAD);
+    assertEquals("'a\\\\''); DROP TABLE t; --'", builder.toString());
+    assertLiteralSpansToEnd(builder.toString(), 0);
+  }
+
+  @Test
+  public void ordinaryStringDefaultsAreUnchanged() {
+    ExpressionBuilder builder = dialect.expressionBuilder();
+    dialect.formatColumnValue(builder, null, null, Type.STRING, "n/a");
+    assertEquals("'n/a'", builder.toString());
+  }
+
+  @Test
+  public void createTableBackslashStringDefaultCannotCloseLiteral() {
+    String ddl = dialect.buildCreateTableStatement(tableId, Collections.singletonList(
+        new SinkRecordField(
+            SchemaBuilder.string().optional().defaultValue(BACKSLASH_PAYLOAD).build(),
+            "ref", false)));
+    assertEquals("CREATE TABLE `myTable` (" + System.lineSeparator()
+        + "`ref` TEXT DEFAULT 'a\\\\''); DROP TABLE t; --')", ddl);
+    // The literal must run all the way to the closing quote before the final ")".
+    int open = ddl.indexOf(" DEFAULT '") + " DEFAULT ".length();
+    assertEquals(ddl.length() - 1, endOfMySqlStringLiteral(ddl, open));
+  }
+
+  @Test
+  public void alterTableBackslashStringDefaultCannotCloseLiteral() {
+    List<String> ddl = dialect.buildAlterTable(tableId, Collections.singletonList(
+        new SinkRecordField(
+            SchemaBuilder.string().optional().defaultValue(BACKSLASH_PAYLOAD).build(),
+            "ref", false)));
+    assertEquals(1, ddl.size());
+    assertEquals("ALTER TABLE `myTable` ADD `ref` TEXT DEFAULT 'a\\\\''); DROP TABLE t; --'",
+        ddl.get(0));
+    int open = ddl.get(0).indexOf(" DEFAULT '") + " DEFAULT ".length();
+    assertLiteralSpansToEnd(ddl.get(0), open);
+  }
+
+  private static void assertLiteralSpansToEnd(String sql, int open) {
+    assertEquals(sql.length(), endOfMySqlStringLiteral(sql, open));
+  }
+
+  /**
+   * Lex a single-quoted literal starting at {@code open} the way MySQL does by default (backslash
+   * escapes the next character, {@code ''} is an escaped quote) and return the index just past
+   * its closing quote.
+   */
+  private static int endOfMySqlStringLiteral(String sql, int open) {
+    assertTrue(sql.charAt(open) == '\'');
+    int i = open + 1;
+    while (i < sql.length()) {
+      char c = sql.charAt(i);
+      if (c == '\\') {
+        i += 2;
+      } else if (c == '\'') {
+        if (i + 1 < sql.length() && sql.charAt(i + 1) == '\'') {
+          i += 2;
+        } else {
+          return i + 1;
+        }
+      } else {
+        i++;
+      }
+    }
+    throw new AssertionError("Unterminated string literal in: " + sql);
+  }
+
   // validateQuery behaviour is inherited from GenericDatabaseDialect and exercised in
   // GenericDatabaseDialectTest; no MySQL-specific override exists to test here.
+
+  @Test
+  public void unquotedIdentifierWithHashCommentIsRejected() {
+    // MySQL and MariaDB read '#' as a line comment, so a bare "x#y" would truncate the statement.
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertThrows(ConnectException.class,
+        () -> dialect.expressionBuilder().appendColumnName("x#y"));
+    assertThrows(ConnectException.class, () -> dialect.buildCreateTableStatement(tableId,
+        Collections.singletonList(new SinkRecordField(Schema.INT32_SCHEMA, "x#y", false))));
+  }
+
+  @Test
+  public void quotedIdentifierWithHashIsContained() {
+    assertEquals("`x#y`", dialect.expressionBuilder().appendColumnName("x#y").toString());
+  }
+
+  @Test
+  public void stringDefaultKeepsSingleBackslashWhenBackslashEscapesAreOff() {
+    // Under NO_BACKSLASH_ESCAPES a backslash is an ordinary character, so doubling it would store
+    // two backslashes. It also cannot escape the closing quote, so quote-doubling alone is safe.
+    dialect = dialectWithBackslashEscapes(false);
+    ExpressionBuilder builder = dialect.expressionBuilder();
+    dialect.formatColumnValue(builder, null, null, Type.STRING, "C:\\temp");
+    assertEquals("'C:\\temp'", builder.toString());
+    builder = dialect.expressionBuilder();
+    dialect.formatColumnValue(builder, null, null, Type.STRING, BACKSLASH_PAYLOAD);
+    assertEquals("'a\\''); DROP TABLE t; --'", builder.toString());
+    String ddl = dialect.buildCreateTableStatement(tableId, Collections.singletonList(
+        new SinkRecordField(
+            SchemaBuilder.string().optional().defaultValue("C:\\temp").build(), "ref", false)));
+    assertEquals("CREATE TABLE `myTable` (" + System.lineSeparator()
+        + "`ref` TEXT DEFAULT 'C:\\temp')", ddl);
+  }
+
+  @Test
+  public void stringDefaultDoublesBackslashWhenBackslashEscapesAreOn() {
+    dialect = dialectWithBackslashEscapes(true);
+    ExpressionBuilder builder = dialect.expressionBuilder();
+    dialect.formatColumnValue(builder, null, null, Type.STRING, "C:\\temp");
+    assertEquals("'C:\\\\temp'", builder.toString());
+  }
+
+  @Test
+  public void backslashEscapesAreAssumedActiveUntilSqlModeIsRead() {
+    assertTrue(dialect.backslashEscapesActive());
+  }
+
+  @Test
+  public void sqlModeWithNoBackslashEscapesDisablesBackslashDoubling() throws SQLException {
+    dialect.detectBackslashEscapes(
+        connectionWithSqlMode("STRICT_TRANS_TABLES,NO_BACKSLASH_ESCAPES"));
+    assertFalse(dialect.backslashEscapesActive());
+    ExpressionBuilder builder = dialect.expressionBuilder();
+    dialect.formatColumnValue(builder, null, null, Type.STRING, "C:\\temp");
+    assertEquals("'C:\\temp'", builder.toString());
+    // Matching is case-insensitive and on whole mode names only.
+    dialect.detectBackslashEscapes(connectionWithSqlMode("ansi, no_backslash_escapes"));
+    assertFalse(dialect.backslashEscapesActive());
+    dialect.detectBackslashEscapes(connectionWithSqlMode("NO_BACKSLASH_ESCAPES_X"));
+    assertTrue(dialect.backslashEscapesActive());
+  }
+
+  @Test
+  public void sqlModeWithoutNoBackslashEscapesKeepsBackslashDoubling() throws SQLException {
+    dialect.detectBackslashEscapes(connectionWithSqlMode("STRICT_TRANS_TABLES,ANSI_QUOTES"));
+    assertTrue(dialect.backslashEscapesActive());
+    dialect.detectBackslashEscapes(connectionWithSqlMode(""));
+    assertTrue(dialect.backslashEscapesActive());
+    dialect.detectBackslashEscapes(connectionWithSqlMode(null));
+    assertTrue(dialect.backslashEscapesActive());
+  }
+
+  @Test
+  public void unreadableSqlModeFallsBackToBackslashDoubling() throws SQLException {
+    // Start from a state where escapes were seen as off, so the fallback must actively restore
+    // the secure default rather than keep a stale value.
+    dialect.detectBackslashEscapes(connectionWithSqlMode("NO_BACKSLASH_ESCAPES"));
+    assertFalse(dialect.backslashEscapesActive());
+    Connection failing = mock(Connection.class);
+    when(failing.createStatement()).thenThrow(new SQLException("not supported"));
+    dialect.detectBackslashEscapes(failing);
+    assertTrue(dialect.backslashEscapesActive());
+
+    dialect.detectBackslashEscapes(connectionWithSqlMode("NO_BACKSLASH_ESCAPES"));
+    Connection empty = mock(Connection.class);
+    Statement stmt = mock(Statement.class);
+    ResultSet rs = mock(ResultSet.class);
+    when(empty.createStatement()).thenReturn(stmt);
+    when(stmt.executeQuery(MySqlDatabaseDialect.SQL_MODE_QUERY)).thenReturn(rs);
+    when(rs.next()).thenReturn(false);
+    dialect.detectBackslashEscapes(empty);
+    assertTrue(dialect.backslashEscapesActive());
+  }
+
+  private static Connection connectionWithSqlMode(String sqlMode) throws SQLException {
+    Connection connection = mock(Connection.class);
+    Statement stmt = mock(Statement.class);
+    ResultSet rs = mock(ResultSet.class);
+    when(connection.createStatement()).thenReturn(stmt);
+    when(stmt.executeQuery(MySqlDatabaseDialect.SQL_MODE_QUERY)).thenReturn(rs);
+    when(rs.next()).thenReturn(true);
+    when(rs.getString(1)).thenReturn(sqlMode);
+    return connection;
+  }
+
+  private MySqlDatabaseDialect dialectWithBackslashEscapes(boolean active) {
+    return new MySqlDatabaseDialect(sourceConfigWithUrl("jdbc:mysql://something")) {
+      @Override
+      protected boolean backslashEscapesActive() {
+        return active;
+      }
+    };
+  }
 }

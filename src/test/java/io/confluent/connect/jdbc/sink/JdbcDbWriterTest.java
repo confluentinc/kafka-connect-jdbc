@@ -58,6 +58,7 @@ import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
@@ -756,6 +757,63 @@ public class JdbcDbWriterTest {
             }
         )
     );
+  }
+
+  @Test
+  public void writeSurfacesDriverRuntimeExceptionFromGetSchemaAsSqlException() throws SQLException {
+    // CC-46266: redshift-jdbc throws NullPointerException("fields must be non-null") from
+    // Connection.getSchema() on a desynced connection. It must become an SQLException so that
+    // JdbcSinkTask.put() closes the connection and retries instead of failing the task.
+    NullPointerException driverFailure = new NullPointerException("fields must be non-null");
+    Connection mockConnection = mock(Connection.class);
+    when(mockConnection.getSchema()).thenThrow(driverFailure);
+
+    JdbcDbWriter testWriter = newWriterWithMockConnection(metadataFailureProps(), mockConnection);
+
+    SQLException thrown = assertThrows(
+        SQLException.class,
+        () -> testWriter.write(Collections.singleton(simpleRecord()))
+    );
+
+    assertSame(driverFailure, thrown.getCause());
+    verify(mockConnection, never()).getCatalog();
+    verify(mockConnection, never()).commit();
+  }
+
+  @Test
+  public void writeSurfacesDriverRuntimeExceptionFromGetCatalogAsSqlException() throws SQLException {
+    IllegalStateException driverFailure =
+        new IllegalStateException("Received resultset tuples, but no field structure for them");
+    Connection mockConnection = mock(Connection.class);
+    when(mockConnection.getSchema()).thenReturn("public");
+    when(mockConnection.getCatalog()).thenThrow(driverFailure);
+
+    JdbcDbWriter testWriter = newWriterWithMockConnection(metadataFailureProps(), mockConnection);
+
+    SQLException thrown = assertThrows(
+        SQLException.class,
+        () -> testWriter.write(Collections.singleton(simpleRecord()))
+    );
+
+    assertSame(driverFailure, thrown.getCause());
+    verify(mockConnection, never()).commit();
+  }
+
+  private Map<String, String> metadataFailureProps() {
+    Map<String, String> props = new HashMap<>();
+    props.put("connection.url", "stub");
+    props.put("auto.create", "true");
+    props.put("insert.mode", "insert");
+    props.put("pk.mode", "none");
+    return props;
+  }
+
+  private SinkRecord simpleRecord() {
+    Schema valueSchema = SchemaBuilder.struct()
+        .field("id", Schema.INT32_SCHEMA)
+        .build();
+    Struct value = new Struct(valueSchema).put("id", 1);
+    return new SinkRecord("books", 0, null, null, valueSchema, value, 0);
   }
 
 }

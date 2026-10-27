@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import static org.easymock.EasyMock.anyInt;
 import static org.easymock.EasyMock.anyObject;
 import static org.easymock.EasyMock.capture;
 import static org.easymock.EasyMock.expect;
@@ -290,6 +291,67 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
         assertThrows(ConnectException.class, () -> task.put(records));
     assertFalse(exhausted instanceof RetriableException);
     assertTaskExceptionRedacted(exhausted, RETRY_CANARY, "42000", 10);
+
+    verifyAll();
+  }
+
+  @Test
+  public void driverRuntimeExceptionInSchemaLookupIsRetriedWithReconnect() throws SQLException {
+    // CC-46266: a RuntimeException from the driver in the pre-batch metadata call must take the
+    // SQLException path: close the writer (drops the connection), back off, RetriableException.
+    final int maxRetries = 1;
+    final int retryBackoffMs = 1000;
+    List<SinkRecord> records = createRecordsList(1);
+
+    java.sql.Connection badConnection = createMock(java.sql.Connection.class);
+    expect(badConnection.getSchema())
+        .andThrow(new NullPointerException("fields must be non-null")).anyTimes();
+    expect(badConnection.isValid(anyInt())).andReturn(true).anyTimes();
+    badConnection.close();
+    expectLastCall().anyTimes();
+
+    io.confluent.connect.jdbc.util.CachedConnectionProvider provider =
+        createMock(io.confluent.connect.jdbc.util.CachedConnectionProvider.class);
+    expect(provider.getConnection()).andReturn(badConnection).anyTimes();
+    provider.close();
+    expectLastCall().anyTimes();
+
+    ctx.timeout(retryBackoffMs);
+    expectLastCall().times(maxRetries);
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        io.confluent.connect.jdbc.dialect.DatabaseDialect dialect =
+            io.confluent.connect.jdbc.dialect.DatabaseDialects.findBestFor(
+                config.connectionUrl, config);
+        DbStructure dbStructure = new DbStructure(dialect);
+        this.writer = new JdbcDbWriter(config, dialect, dbStructure) {
+          @Override
+          protected io.confluent.connect.jdbc.util.CachedConnectionProvider connectionProvider(
+              int maxConnAttempts, long retryBackoff) {
+            return provider;
+          }
+        };
+      }
+    };
+    task.initialize(ctx);
+    expect(ctx.errantRecordReporter()).andReturn(null);
+    replayAll();
+
+    Map<String, String> props = setupBasicProps(maxRetries, retryBackoffMs);
+    props.put("connection.url", "jdbc:sqlite:stub");
+    task.start(props);
+
+    RetriableException retried =
+        assertThrows(RetriableException.class, () -> task.put(records));
+    // put() flattens the SQLException chain into the message; the driver failure must be in it.
+    assertTrue(retried.getCause() instanceof SQLException);
+    assertTrue(retried.getCause().getMessage().contains("NullPointerException: fields must be non-null"));
+
+    ConnectException exhausted =
+        assertThrows(ConnectException.class, () -> task.put(records));
+    assertFalse(exhausted instanceof RetriableException);
 
     verifyAll();
   }

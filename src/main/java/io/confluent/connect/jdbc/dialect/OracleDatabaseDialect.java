@@ -233,7 +233,7 @@ public class OracleDatabaseDialect extends GenericDatabaseDialect {
     if (field.schemaName() != null) {
       switch (field.schemaName()) {
         case Decimal.LOGICAL_NAME:
-          return "NUMBER(*," + field.schemaParameters().get(Decimal.SCALE_FIELD) + ")";
+          return "NUMBER(*," + decimalScaleOf(field) + ")";
         case Date.LOGICAL_NAME:
           return "DATE";
         case Time.LOGICAL_NAME:

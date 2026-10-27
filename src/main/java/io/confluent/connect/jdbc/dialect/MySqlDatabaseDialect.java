@@ -26,7 +26,9 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Collection;
+import java.util.Collections;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
@@ -88,14 +90,93 @@ public class MySqlDatabaseDialect extends GenericDatabaseDialect {
     stmt.setFetchDirection(ResultSet.FETCH_FORWARD);
   }
 
+  static final String SQL_MODE_QUERY = "SELECT @@SESSION.sql_mode";
+  private static final String NO_BACKSLASH_ESCAPES = "NO_BACKSLASH_ESCAPES";
+
+  // Secure default: until the session's sql_mode has been read, assume backslash is an escape.
+  private volatile boolean backslashEscapesActive = true;
+
+  /**
+   * Open a connection and record whether its session honors backslash escapes. The mode is read
+   * again for every new connection rather than once per dialect, so a server-side change to
+   * sql_mode is picked up on reconnect instead of leaving a stale "escapes off" decision in place.
+   */
+  @Override
+  public Connection getConnection() throws SQLException {
+    Connection connection = super.getConnection();
+    detectBackslashEscapes(connection);
+    return connection;
+  }
+
+  /**
+   * Read the session's sql_mode and cache whether backslash escapes are active. If the mode
+   * cannot be read, fall back to assuming they are active, which is always safe.
+   */
+  void detectBackslashEscapes(Connection connection) {
+    boolean active = true;
+    try (Statement stmt = connection.createStatement();
+         ResultSet rs = stmt.executeQuery(SQL_MODE_QUERY)) {
+      active = !(rs.next() && containsNoBackslashEscapes(rs.getString(1)));
+    } catch (SQLException e) {
+      log.warn("Unable to read sql_mode; assuming backslash escapes are active: {}",
+          e.getMessage());
+    }
+    backslashEscapesActive = active;
+    log.debug("MySQL backslash escapes active: {}", active);
+  }
+
+  private static boolean containsNoBackslashEscapes(String sqlMode) {
+    if (sqlMode == null) {
+      return false;
+    }
+    for (String mode : sqlMode.split(",")) {
+      if (NO_BACKSLASH_ESCAPES.equalsIgnoreCase(mode.trim())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Whether string literals in this dialect's sessions treat backslash as an escape character,
+   * i.e. the {@code NO_BACKSLASH_ESCAPES} SQL mode is not set. True until a connection's
+   * sql_mode has been read, and whenever it cannot be read.
+   *
+   * @return true if backslash escapes are, or may be, active
+   */
+  protected boolean backslashEscapesActive() {
+    return backslashEscapesActive;
+  }
+
+  /**
+   * MySQL treats backslash as an escape character in string literals unless the
+   * {@code NO_BACKSLASH_ESCAPES} SQL mode is set, so backslashes must be escaped too. Under
+   * {@code NO_BACKSLASH_ESCAPES} a backslash is an ordinary character that cannot escape the
+   * closing quote, so doubling the single quote alone is both safe and preserves the value.
+   */
+  @Override
+  protected ExpressionBuilder.StringLiteralEscaping stringLiteralEscaping() {
+    return backslashEscapesActive()
+        ? ExpressionBuilder.StringLiteralEscaping.BACKSLASH
+        : ExpressionBuilder.StringLiteralEscaping.STANDARD;
+  }
+
+  /**
+   * MySQL and MariaDB treat {@code #} as a line comment, so it must not appear in a bare
+   * identifier. Other dialects (e.g. Oracle, SQL Server) allow it as an identifier character.
+   */
+  @Override
+  protected Collection<String> extraForbiddenUnquotedIdentifierSequences() {
+    return Collections.singletonList("#");
+  }
+
   @Override
   protected String getSqlType(SinkRecordField field) {
     if (field.schemaName() != null) {
       switch (field.schemaName()) {
         case Decimal.LOGICAL_NAME:
           // Maximum precision supported by MySQL is 65
-          int scale = Integer.parseInt(field.schemaParameters().get(Decimal.SCALE_FIELD));
-          return "DECIMAL(65," + scale + ")";
+          return "DECIMAL(65," + decimalScaleOf(field) + ")";
         case Date.LOGICAL_NAME:
           return "DATE";
         case Time.LOGICAL_NAME:

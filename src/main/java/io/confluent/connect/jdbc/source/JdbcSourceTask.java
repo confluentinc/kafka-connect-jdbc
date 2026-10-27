@@ -550,10 +550,7 @@ public class JdbcSourceTask extends SourceTask {
       // and it is the same backoff the running engine applies on an empty queue, so the idle
       // wait is consistent whether or not the engine has been built yet. Like the engine, wait
       // at least MIN_IDLE_POLL_WAIT so that poll.linger.ms=0 does not spin.
-      time.sleep(Math.max(
-          config.pollLingerMs().toMillis(),
-          RecordQueue.MIN_IDLE_POLL_WAIT.toMillis()
-      ));
+      time.sleep(RecordQueue.idlePollWait(config.pollLingerMs()).toMillis());
       return null;
     }
     // Get the next batch from the queue

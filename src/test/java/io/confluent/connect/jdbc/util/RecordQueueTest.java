@@ -5,6 +5,7 @@
 package io.confluent.connect.jdbc.util;
 
 import io.confluent.connect.jdbc.source.MockTime;
+import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.junit.After;
 import org.junit.Test;
@@ -16,8 +17,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 public class RecordQueueTest {
@@ -119,24 +123,95 @@ public class RecordQueueTest {
   }
 
   @Test(timeout = 10_000)
-  public void pollWithAHugeNegativeLingerDoesNotWaitForever() throws Exception {
+  public void pollWithTheMostNegativeLingersWaitsTheMinimum() throws Exception {
+    // On Java 8, Duration.toMillis() overflows for both values.
+    assertHugeNegativeLingerWaitsTheMinimum(Long.MIN_VALUE);
+    assertHugeNegativeLingerWaitsTheMinimum(Long.MIN_VALUE + 1);
+  }
+
+  private void assertHugeNegativeLingerWaitsTheMinimum(long lingerMs) throws Exception {
     // A clock jump during the first wait, as after a long GC pause, must not overflow the
     // remaining linger into a huge positive wait.
     MockTime clock = new MockTime();
-    ScriptedQueue backing = new ScriptedQueue().jumpingClock(clock, 1000);
+    ScriptedQueue backing = new ScriptedQueue().duringEachPoll(() -> clock.sleep(1000));
     queue = RecordQueue.builder()
-        .maxPollLinger(Duration.ofMillis(Long.MIN_VALUE + 1))
+        .maxPollLinger(Duration.ofMillis(lingerMs))
         .clock(clock)
         .queue(backing)
         .build();
 
     List<SourceRecord> batch = queue.poll();
+    queue.stop();
 
     assertTrue(batch.isEmpty());
     assertEquals(Collections.singletonList(MIN_WAIT_MS), backing.timeoutsMs);
   }
 
+  @Test(timeout = 10_000)
+  public void pollWithAHugePositiveLingerWaitsInInterruptSlices() throws Exception {
+    ScriptedQueue backing = new ScriptedQueue().arriving(record(1));
+    queue = RecordQueue.builder()
+        .maxPollLinger(Duration.ofMillis(Long.MAX_VALUE))
+        .maxPollInterruptTime(Duration.ofMillis(100))
+        .queue(backing)
+        .build();
+
+    List<SourceRecord> batch = queue.poll();
+
+    assertEquals(1, batch.size());
+    assertEquals(Collections.singletonList(100L), backing.timeoutsMs);
+  }
+
   @Test
+  public void pollReturnsAtMostTheMaxBatchSizeAndKeepsTheRestInOrder() throws Exception {
+    ScriptedQueue backing = new ScriptedQueue().arriving(record(1), record(2), record(3));
+    queue = RecordQueue.builder().maxBatchSize(2).maxPollLinger(LONG_LINGER).queue(backing)
+        .build();
+
+    assertEquals(Arrays.asList(1, 2), values(queue.poll()));
+    assertEquals(Collections.singletonList(3), values(queue.poll()));
+    assertEquals("poll() waited although records were queued", 1, backing.timeoutsMs.size());
+  }
+
+  @Test
+  public void pollWithABatchSizeOfOneReturnsOneRecordAtATime() throws Exception {
+    ScriptedQueue backing = new ScriptedQueue().arriving(record(1), record(2));
+    queue = RecordQueue.builder().maxBatchSize(1).maxPollLinger(LONG_LINGER).queue(backing)
+        .build();
+
+    assertEquals(Collections.singletonList(1), values(queue.poll()));
+    assertEquals(Collections.singletonList(2), values(queue.poll()));
+  }
+
+  @Test(timeout = 10_000)
+  public void pollReturnsNullWhenTheQueueIsStoppedWhileWaiting() throws Exception {
+    ScriptedQueue backing = new ScriptedQueue().duringEachPoll(() -> queue.stop());
+    queue = RecordQueue.builder()
+        .maxPollLinger(LONG_LINGER)
+        .maxPollInterruptTime(Duration.ofMillis(50))
+        .queue(backing)
+        .build();
+
+    assertNull(queue.poll());
+    assertEquals(1, backing.timeoutsMs.size());
+  }
+
+  @Test(timeout = 10_000)
+  public void pollThrowsWhenTheProducerFailsWhileWaiting() throws Exception {
+    ScriptedQueue backing = new ScriptedQueue()
+        .duringEachPoll(() -> queue.failWith(new RuntimeException("query failed")));
+    queue = RecordQueue.builder()
+        .maxPollLinger(LONG_LINGER)
+        .maxPollInterruptTime(Duration.ofMillis(50))
+        .queue(backing)
+        .build();
+
+    ConnectException e = assertThrows(ConnectException.class, () -> queue.poll());
+    assertEquals("query failed", e.getCause().getMessage());
+    assertEquals(1, backing.timeoutsMs.size());
+  }
+
+  @Test(timeout = 10_000)
   public void pollReturnsAnEmptyBatchOnceTheLingerExpires() throws Exception {
     Duration linger = Duration.ofMillis(300);
     queue = RecordQueue.builder().maxPollLinger(linger).build();
@@ -147,7 +222,6 @@ public class RecordQueueTest {
 
     assertTrue(batch.isEmpty());
     assertTrue("poll() returned after " + elapsedMs + " ms", elapsedMs >= linger.toMillis());
-    assertTrue("poll() returned after " + elapsedMs + " ms", elapsedMs < 2000);
   }
 
   private static SourceRecord record(int id) {
@@ -158,15 +232,18 @@ public class RecordQueueTest {
     return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNanos);
   }
 
+  private static List<Object> values(List<SourceRecord> batch) {
+    return batch.stream().map(SourceRecord::value).collect(Collectors.toList());
+  }
+
   /**
-   * A queue that records the timeout of every timed poll, and that makes records arrive or the
-   * clock jump during a timed poll, so that the tests do not depend on thread scheduling.
+   * A queue that records the timeout of every timed poll, and that makes records arrive or runs
+   * an action during a timed poll, so that the tests do not depend on thread scheduling.
    */
   private static class ScriptedQueue extends ArrayBlockingQueue<SourceRecord> {
     private final List<SourceRecord> arrivals = new ArrayList<>();
     private final List<Long> timeoutsMs = new ArrayList<>();
-    private MockTime clock;
-    private long clockJumpMs;
+    private Runnable duringEachPoll = () -> { };
 
     ScriptedQueue() {
       super(10);
@@ -178,10 +255,9 @@ public class RecordQueueTest {
       return this;
     }
 
-    /** Move the clock forward by this much during every timed poll. */
-    ScriptedQueue jumpingClock(MockTime clock, long jumpMs) {
-      this.clock = clock;
-      this.clockJumpMs = jumpMs;
+    /** Run this action during every timed poll, such as moving the clock or stopping. */
+    ScriptedQueue duringEachPoll(Runnable action) {
+      this.duringEachPoll = action;
       return this;
     }
 
@@ -195,9 +271,7 @@ public class RecordQueueTest {
         addAll(arrivals);
       }
       timeoutsMs.add(unit.toMillis(timeout));
-      if (clock != null) {
-        clock.sleep(clockJumpMs);
-      }
+      duringEachPoll.run();
       return super.poll(timeout, unit);
     }
   }

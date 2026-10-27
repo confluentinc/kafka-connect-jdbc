@@ -44,7 +44,6 @@ import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.apache.log4j.PatternLayout;
 import org.apache.log4j.WriterAppender;
-import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.powermock.api.easymock.PowerMock;
@@ -64,12 +63,6 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
                                  JdbcSourceConnectorConstants.QUERY_NAME_VALUE);
 
   private static final ZoneId UTC_ZONE_ID = ZoneOffset.UTC;
-
-  @After
-  public void tearDown() throws Exception {
-    task.stop();
-    super.tearDown();
-  }
 
   @Test
   public void testBulkPeriodicLoad() throws Exception {
@@ -1052,14 +1045,26 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
 
   @Test
   public void testTaskWaitingToFetchTablesDoesNotSpinWithZeroLinger() throws InterruptedException {
+    // poll.linger.ms=0 must still back off, or the worker's poll loop spins at full CPU.
+    assertTaskWaitingToFetchTablesWaitsTheMinimum("0");
+  }
+
+  @Test
+  public void testTaskWaitingToFetchTablesHandlesTheMostNegativeLinger()
+      throws InterruptedException {
+    // On Java 8, Duration.toMillis() overflows for this value, so it must not be converted.
+    assertTaskWaitingToFetchTablesWaitsTheMinimum(String.valueOf(Long.MIN_VALUE));
+  }
+
+  private void assertTaskWaitingToFetchTablesWaitsTheMinimum(String lingerMs)
+      throws InterruptedException {
     initializeTask();
     Map<String, String> props = new HashMap<>();
     props.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
     props.put(JdbcSourceTaskConfig.TABLES_FETCHED, "false");
-    props.put(JdbcSourceTaskConfig.POLL_LINGER_MS_CONFIG, "0");
+    props.put(JdbcSourceTaskConfig.POLL_LINGER_MS_CONFIG, lingerMs);
     task.start(props);
 
-    // poll.linger.ms=0 must still back off, or the worker's poll loop spins at full CPU.
     long before = time.milliseconds();
     List<SourceRecord> records = task.poll();
     assertNull(records);

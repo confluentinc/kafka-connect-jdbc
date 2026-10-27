@@ -47,6 +47,19 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
   public static final Duration MIN_IDLE_POLL_WAIT = Duration.ofMillis(100);
 
   /**
+   * The longest time that an idle {@link #poll()} waits for a record with the given linger: the
+   * linger itself, but no less than {@link #MIN_IDLE_POLL_WAIT}.
+   *
+   * @param linger the configured linger, which may be zero or negative
+   * @return the idle wait, which is at least {@link #MIN_IDLE_POLL_WAIT}
+   */
+  public static Duration idlePollWait(Duration linger) {
+    // Compare before converting to milliseconds: on Java 8, Duration.toMillis() overflows for the
+    // most negative durations, such as poll.linger.ms=-9223372036854775808.
+    return linger.compareTo(MIN_IDLE_POLL_WAIT) < 0 ? MIN_IDLE_POLL_WAIT : linger;
+  }
+
+  /**
    * Builder for RecordQueue that can be specialized.
    *
    * @param <RecordT>  the type of record
@@ -380,14 +393,8 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
    */
   public List<SourceRecord> poll() throws InterruptedException {
     List<SourceRecord> records = batchFactory.apply(maxBatchSize);
-    if (!isRunning()) {
-      // Discarding all records
-      log.debug("Returning null batch after shutdown");
+    if (!canKeepPolling()) {
       return null;
-    }
-
-    if (failure.get() != null) {
-      throw new ConnectException("Error while polling for records", failure.get());
     }
 
     // Drain all available records up to the max batch size
@@ -405,7 +412,7 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
     // linger. Wait at least MIN_IDLE_POLL_WAIT even when the linger is zero, so that the caller's
     // poll loop does not spin.
     final long start = clock.milliseconds();
-    final long lingerMs = Math.max(linger.toMillis(), MIN_IDLE_POLL_WAIT.toMillis());
+    final long lingerMs = idlePollWait(linger).toMillis();
     long waitedMs = 0L;
     long lingerRemainderMs = lingerMs;
     while (true) {
@@ -425,16 +432,39 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
         return records;
       }
       // An empty timed poll has waited at least waitMs, so count that too. This ends the linger
-      // even when the clock does not advance, as with a mock clock in tests, and it keeps the
-      // arithmetic within [0, lingerMs] so that a huge or negative linger cannot overflow.
+      // even when the clock does not advance, as with a mock clock in tests. Both lingerMs and
+      // the time spent are positive, so the subtraction cannot overflow, even for a huge linger
+      // or a clock that jumps; the remainder is simply negative once the linger has passed.
       waitedMs += waitMs;
       lingerRemainderMs = lingerMs - Math.max(clock.milliseconds() - start, waitedMs);
-      if (!isRunning() || !hasNoFailure() || lingerRemainderMs <= 0L) {
+      if (!canKeepPolling()) {
+        return null;
+      }
+      if (lingerRemainderMs <= 0L) {
         break;
       }
     }
     log.trace("Returning 0 records after lingering {} ms", clock.milliseconds() - start);
     return records;
+  }
+
+  /**
+   * Check whether {@link #poll()} may go on returning records.
+   *
+   * @return true if it may, or false if this queue has been {@link #stop() stopped} and poll
+   *         should return null
+   * @throws ConnectException if the producer {@link #failWith(Throwable) failed}
+   */
+  private boolean canKeepPolling() {
+    if (!isRunning()) {
+      // Discarding all records
+      log.debug("Returning null batch after shutdown");
+      return false;
+    }
+    if (failure.get() != null) {
+      throw new ConnectException("Error while polling for records", failure.get());
+    }
+    return true;
   }
 
   /**

@@ -151,11 +151,8 @@ public class JdbcDbWriter {
       log.warn("Failed to get schema: {}", e.getMessage());
       return Optional.empty();
     } catch (RuntimeException e) {
-      // Only the JDBC driver runs inside this try. A RuntimeException from it (for example
-      // redshift-jdbc's NullPointerException "fields must be non-null" on a desynced
-      // connection) means the connection is unusable. Surface it as an SQLException so that
-      // JdbcSinkTask.put() closes the connection and retries the batch instead of killing
-      // the task. The original exception is kept as the cause.
+      // A driver RuntimeException here means the connection is broken; surface it as an
+      // SQLException so JdbcSinkTask.put() reconnects and retries instead of failing the task.
       throw new SQLException("Failed to get schema from the database connection", e);
     }
   }

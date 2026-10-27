@@ -367,9 +367,9 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
 
   /**
    * Poll for the next batch of records. If the queue is empty, this method blocks until a record
-   * arrives, for no longer than the {@link Builder#maxPollLinger(Duration) linger} and for no less
-   * than {@link #MIN_IDLE_POLL_WAIT}. It returns as soon as it has at least one record, together
-   * with any others already queued, rather than waiting for a full batch.
+   * arrives, for no longer than the {@link Builder#maxPollLinger(Duration) linger}, or than
+   * {@link #MIN_IDLE_POLL_WAIT} if the linger is shorter. It returns as soon as it has at least
+   * one record, together with any others already queued, rather than waiting for a full batch.
    *
    * @return the next batch of records, which may be empty if there are no records in the queue;
    *         or null if the queue has been {@link #stop() stopped}
@@ -405,14 +405,13 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
     // linger. Wait at least MIN_IDLE_POLL_WAIT even when the linger is zero, so that the caller's
     // poll loop does not spin.
     final long start = clock.milliseconds();
-    final long lingerEndMs = start + linger.toMillis();
-    // Since we need to be able to detect that we've stopped within a max interrupt time,
-    // we can wait no more than this interrupt time at once
-    long waitMs = Math.min(
-        maxPollInterruptTime.toMillis(),
-        Math.max(linger.toMillis(), MIN_IDLE_POLL_WAIT.toMillis())
-    );
+    final long lingerMs = Math.max(linger.toMillis(), MIN_IDLE_POLL_WAIT.toMillis());
+    long waitedMs = 0L;
+    long lingerRemainderMs = lingerMs;
     while (true) {
+      // Since we need to be able to detect that we've stopped within a max interrupt time,
+      // we can wait no more than this interrupt time at once
+      long waitMs = Math.min(maxPollInterruptTime.toMillis(), lingerRemainderMs);
       SourceRecord record = queue.poll(waitMs, TimeUnit.MILLISECONDS);
       if (record != null) {
         records.add(record);
@@ -425,11 +424,14 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
         );
         return records;
       }
-      long lingerRemainderMs = lingerEndMs - clock.milliseconds();
+      // An empty timed poll has waited at least waitMs, so count that too. This ends the linger
+      // even when the clock does not advance, as with a mock clock in tests, and it keeps the
+      // arithmetic within [0, lingerMs] so that a huge or negative linger cannot overflow.
+      waitedMs += waitMs;
+      lingerRemainderMs = lingerMs - Math.max(clock.milliseconds() - start, waitedMs);
       if (!isRunning() || !hasNoFailure() || lingerRemainderMs <= 0L) {
         break;
       }
-      waitMs = Math.min(maxPollInterruptTime.toMillis(), lingerRemainderMs);
     }
     log.trace("Returning 0 records after lingering {} ms", clock.milliseconds() - start);
     return records;

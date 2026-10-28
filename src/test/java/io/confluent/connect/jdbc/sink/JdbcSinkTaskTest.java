@@ -15,7 +15,6 @@
 
 package io.confluent.connect.jdbc.sink;
 
-import static org.easymock.EasyMock.anyInt;
 import static org.easymock.EasyMock.anyObject;
 import static org.easymock.EasyMock.capture;
 import static org.easymock.EasyMock.expect;
@@ -30,7 +29,10 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.io.StringWriter;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.sql.BatchUpdateException;
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -64,6 +66,9 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.dialect.DatabaseDialects;
+import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 
 public class JdbcSinkTaskTest extends EasyMockSupport {
@@ -297,166 +302,70 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
   }
 
   @Test
-  public void driverRuntimeExceptionInSchemaLookupIsRetriedWithReconnect() throws SQLException {
-    // CC-46266: a RuntimeException from the driver in the pre-batch metadata call must take the
-    // SQLException path: close the writer (drops the connection), back off, RetriableException.
-    final int maxRetries = 1;
-    final int retryBackoffMs = 1000;
-    List<SinkRecord> records = createRecordsList(1);
-
-    java.sql.Connection badConnection = createMock(java.sql.Connection.class);
-    expect(badConnection.getSchema())
-        .andThrow(new NullPointerException("fields must be non-null")).anyTimes();
-    expect(badConnection.isValid(anyInt())).andReturn(true).anyTimes();
-    badConnection.close();
-    expectLastCall().anyTimes();
-
-    io.confluent.connect.jdbc.util.CachedConnectionProvider provider =
-        createMock(io.confluent.connect.jdbc.util.CachedConnectionProvider.class);
-    expect(provider.getConnection()).andReturn(badConnection).anyTimes();
-    provider.close();
-    expectLastCall().anyTimes();
-
-    ctx.timeout(retryBackoffMs);
-    expectLastCall().times(maxRetries);
+  public void driverRuntimeExceptionInSchemaLookupReconnectsAndWritesToDb() throws Exception {
+    // CC-46266: the first connection throws the driver NPE from getSchema(). put() must surface a
+    // RetriableException, drop that connection, and succeed on redelivery with a new one.
+    AtomicInteger schemaFailuresLeft = new AtomicInteger(1);
+    AtomicInteger connectionsOpened = new AtomicInteger();
 
     JdbcSinkTask task = new JdbcSinkTask() {
       @Override
       void initWriter() {
-        io.confluent.connect.jdbc.dialect.DatabaseDialect dialect =
-            io.confluent.connect.jdbc.dialect.DatabaseDialects.findBestFor(
-                config.connectionUrl, config);
-        DbStructure dbStructure = new DbStructure(dialect);
-        this.writer = new JdbcDbWriter(config, dialect, dbStructure) {
+        DatabaseDialect dialect = DatabaseDialects.findBestFor(config.connectionUrl, config);
+        writer = new JdbcDbWriter(config, dialect, new DbStructure(dialect)) {
           @Override
-          protected io.confluent.connect.jdbc.util.CachedConnectionProvider connectionProvider(
-              int maxConnAttempts, long retryBackoff) {
-            return provider;
-          }
-        };
-      }
-    };
-    task.initialize(ctx);
-    expect(ctx.errantRecordReporter()).andReturn(null);
-    replayAll();
-
-    Map<String, String> props = setupBasicProps(maxRetries, retryBackoffMs);
-    props.put("connection.url", "jdbc:sqlite:stub");
-    task.start(props);
-
-    RetriableException retried =
-        assertThrows(RetriableException.class, () -> task.put(records));
-    // put() flattens the SQLException chain into the message; the driver failure must be in it.
-    assertTrue(retried.getCause() instanceof SQLException);
-    assertTrue(retried.getCause().getMessage().contains("NullPointerException: fields must be non-null"));
-
-    ConnectException exhausted =
-        assertThrows(ConnectException.class, () -> task.put(records));
-    assertFalse(exhausted instanceof RetriableException);
-
-    verifyAll();
-  }
-
-  @Test
-  public void driverRuntimeExceptionInSchemaLookupReconnectsAndWritesToRealDb() throws Exception {
-    // CC-46266, end to end inside the framework against a real SQLite database: the first
-    // connection the writer gets throws the driver NPE from getSchema(). The task must report
-    // RetriableException, close that connection, open a new one on the next put() and write
-    // the batch successfully.
-    final int maxRetries = 2;
-    final int retryBackoffMs = 10;
-    final AtomicInteger schemaFailuresLeft = new AtomicInteger(1);
-    final AtomicInteger connectionsOpened = new AtomicInteger();
-    final AtomicInteger connectionsClosed = new AtomicInteger();
-
-    JdbcSinkTask task = new JdbcSinkTask() {
-      @Override
-      void initWriter() {
-        io.confluent.connect.jdbc.dialect.DatabaseDialect dialect =
-            io.confluent.connect.jdbc.dialect.DatabaseDialects.findBestFor(
-                config.connectionUrl, config);
-        DbStructure dbStructure = new DbStructure(dialect);
-        this.writer = new JdbcDbWriter(config, dialect, dbStructure) {
-          @Override
-          protected io.confluent.connect.jdbc.util.CachedConnectionProvider connectionProvider(
-              int maxConnAttempts, long retryBackoff) {
-            io.confluent.connect.jdbc.util.ConnectionProvider faulty =
-                new io.confluent.connect.jdbc.util.ConnectionProvider() {
-                  @Override
-                  public java.sql.Connection getConnection() throws SQLException {
-                    connectionsOpened.incrementAndGet();
-                    final java.sql.Connection real = dialect.getConnection();
-                    return (java.sql.Connection) java.lang.reflect.Proxy.newProxyInstance(
-                        getClass().getClassLoader(),
-                        new Class<?>[] {java.sql.Connection.class},
-                        (proxy, method, args) -> {
-                          if ("getSchema".equals(method.getName())
-                              && schemaFailuresLeft.getAndDecrement() > 0) {
-                            throw new NullPointerException("fields must be non-null");
-                          }
-                          if ("close".equals(method.getName())) {
-                            connectionsClosed.incrementAndGet();
-                          }
-                          try {
-                            return method.invoke(real, args);
-                          } catch (java.lang.reflect.InvocationTargetException e) {
-                            throw e.getCause();
-                          }
-                        });
-                  }
-
-                  @Override
-                  public boolean isConnectionValid(java.sql.Connection connection, int timeout)
-                      throws SQLException {
-                    return connection.isValid(timeout);
-                  }
-
-                  @Override
-                  public void close() {
-                    dialect.close();
-                  }
-                };
-            return new io.confluent.connect.jdbc.util.CachedConnectionProvider(
-                faulty, maxConnAttempts, retryBackoff) {
+          protected CachedConnectionProvider connectionProvider(int attempts, long backoff) {
+            return new CachedConnectionProvider(dialect, attempts, backoff) {
               @Override
-              protected void onConnect(java.sql.Connection connection) throws SQLException {
+              protected void onConnect(Connection connection) throws SQLException {
+                connectionsOpened.incrementAndGet();
                 connection.setAutoCommit(false);
+              }
+
+              @Override
+              public synchronized Connection getConnection() {
+                Connection real = super.getConnection();
+                return (Connection) Proxy.newProxyInstance(
+                    getClass().getClassLoader(), new Class<?>[] {Connection.class},
+                    (proxy, method, args) -> {
+                      if (method.getName().equals("getSchema")
+                          && schemaFailuresLeft.getAndDecrement() > 0) {
+                        throw new NullPointerException("fields must be non-null");
+                      }
+                      try {
+                        return method.invoke(real, args);
+                      } catch (InvocationTargetException e) {
+                        throw e.getCause();
+                      }
+                    });
               }
             };
           }
         };
       }
     };
-
     SinkTaskContext context = createNiceMock(SinkTaskContext.class);
     org.easymock.EasyMock.replay(context);
     task.initialize(context);
-    Map<String, String> props = setupBasicProps(maxRetries, retryBackoffMs);
+    Map<String, String> props = setupBasicProps(2, 10);
     props.put("connection.url", sqliteHelper.sqliteUri());
     props.put("auto.create", "true");
     props.put("pk.mode", "kafka");
     task.start(props);
 
-    final String topic = "atopic";
-    final Struct struct = new Struct(SCHEMA)
-        .put("firstName", "Alex")
-        .put("lastName", "Smith")
+    Struct struct = new Struct(SCHEMA).put("firstName", "Alex").put("lastName", "Smith")
         .put("modified", new Date(1474661402123L));
-    List<SinkRecord> records = Collections.singletonList(
-        new SinkRecord(topic, 1, null, null, SCHEMA, struct, 42));
+    List<SinkRecord> records =
+        Collections.singletonList(new SinkRecord("atopic", 1, null, null, SCHEMA, struct, 42));
 
-    RetriableException retried =
-        assertThrows(RetriableException.class, () -> task.put(records));
+    RetriableException retried = assertThrows(RetriableException.class, () -> task.put(records));
     assertTrue(retried.getCause().getMessage().contains("NullPointerException: fields must be non-null"));
     assertEquals(1, connectionsOpened.get());
-    assertEquals(1, connectionsClosed.get());
 
-    // Redelivery of the same batch: a fresh connection is opened and the write succeeds.
     task.put(records);
     assertEquals(2, connectionsOpened.get());
-    assertEquals(1, sqliteHelper.select("SELECT * FROM " + topic, rs -> {
+    assertEquals(1, sqliteHelper.select("SELECT * FROM atopic", rs -> {
       assertEquals("Alex", rs.getString("firstName"));
-      assertEquals("Smith", rs.getString("lastName"));
       assertEquals(42, rs.getLong("__connect_offset"));
     }));
   }

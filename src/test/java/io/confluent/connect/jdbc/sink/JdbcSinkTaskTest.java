@@ -15,6 +15,7 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import static org.easymock.EasyMock.anyInt;
 import static org.easymock.EasyMock.anyObject;
 import static org.easymock.EasyMock.capture;
 import static org.easymock.EasyMock.expect;
@@ -42,6 +43,7 @@ import java.util.List;
 import java.util.Map;
 import java.time.ZoneId;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -292,6 +294,171 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     assertTaskExceptionRedacted(exhausted, RETRY_CANARY, "42000", 10);
 
     verifyAll();
+  }
+
+  @Test
+  public void driverRuntimeExceptionInSchemaLookupIsRetriedWithReconnect() throws SQLException {
+    // CC-46266: a RuntimeException from the driver in the pre-batch metadata call must take the
+    // SQLException path: close the writer (drops the connection), back off, RetriableException.
+    final int maxRetries = 1;
+    final int retryBackoffMs = 1000;
+    List<SinkRecord> records = createRecordsList(1);
+
+    java.sql.Connection badConnection = createMock(java.sql.Connection.class);
+    expect(badConnection.getSchema())
+        .andThrow(new NullPointerException("fields must be non-null")).anyTimes();
+    expect(badConnection.isValid(anyInt())).andReturn(true).anyTimes();
+    badConnection.close();
+    expectLastCall().anyTimes();
+
+    io.confluent.connect.jdbc.util.CachedConnectionProvider provider =
+        createMock(io.confluent.connect.jdbc.util.CachedConnectionProvider.class);
+    expect(provider.getConnection()).andReturn(badConnection).anyTimes();
+    provider.close();
+    expectLastCall().anyTimes();
+
+    ctx.timeout(retryBackoffMs);
+    expectLastCall().times(maxRetries);
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        io.confluent.connect.jdbc.dialect.DatabaseDialect dialect =
+            io.confluent.connect.jdbc.dialect.DatabaseDialects.findBestFor(
+                config.connectionUrl, config);
+        DbStructure dbStructure = new DbStructure(dialect);
+        this.writer = new JdbcDbWriter(config, dialect, dbStructure) {
+          @Override
+          protected io.confluent.connect.jdbc.util.CachedConnectionProvider connectionProvider(
+              int maxConnAttempts, long retryBackoff) {
+            return provider;
+          }
+        };
+      }
+    };
+    task.initialize(ctx);
+    expect(ctx.errantRecordReporter()).andReturn(null);
+    replayAll();
+
+    Map<String, String> props = setupBasicProps(maxRetries, retryBackoffMs);
+    props.put("connection.url", "jdbc:sqlite:stub");
+    task.start(props);
+
+    RetriableException retried =
+        assertThrows(RetriableException.class, () -> task.put(records));
+    // put() flattens the SQLException chain into the message; the driver failure must be in it.
+    assertTrue(retried.getCause() instanceof SQLException);
+    assertTrue(retried.getCause().getMessage().contains("NullPointerException: fields must be non-null"));
+
+    ConnectException exhausted =
+        assertThrows(ConnectException.class, () -> task.put(records));
+    assertFalse(exhausted instanceof RetriableException);
+
+    verifyAll();
+  }
+
+  @Test
+  public void driverRuntimeExceptionInSchemaLookupReconnectsAndWritesToRealDb() throws Exception {
+    // CC-46266, end to end inside the framework against a real SQLite database: the first
+    // connection the writer gets throws the driver NPE from getSchema(). The task must report
+    // RetriableException, close that connection, open a new one on the next put() and write
+    // the batch successfully.
+    final int maxRetries = 2;
+    final int retryBackoffMs = 10;
+    final AtomicInteger schemaFailuresLeft = new AtomicInteger(1);
+    final AtomicInteger connectionsOpened = new AtomicInteger();
+    final AtomicInteger connectionsClosed = new AtomicInteger();
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        io.confluent.connect.jdbc.dialect.DatabaseDialect dialect =
+            io.confluent.connect.jdbc.dialect.DatabaseDialects.findBestFor(
+                config.connectionUrl, config);
+        DbStructure dbStructure = new DbStructure(dialect);
+        this.writer = new JdbcDbWriter(config, dialect, dbStructure) {
+          @Override
+          protected io.confluent.connect.jdbc.util.CachedConnectionProvider connectionProvider(
+              int maxConnAttempts, long retryBackoff) {
+            io.confluent.connect.jdbc.util.ConnectionProvider faulty =
+                new io.confluent.connect.jdbc.util.ConnectionProvider() {
+                  @Override
+                  public java.sql.Connection getConnection() throws SQLException {
+                    connectionsOpened.incrementAndGet();
+                    final java.sql.Connection real = dialect.getConnection();
+                    return (java.sql.Connection) java.lang.reflect.Proxy.newProxyInstance(
+                        getClass().getClassLoader(),
+                        new Class<?>[] {java.sql.Connection.class},
+                        (proxy, method, args) -> {
+                          if ("getSchema".equals(method.getName())
+                              && schemaFailuresLeft.getAndDecrement() > 0) {
+                            throw new NullPointerException("fields must be non-null");
+                          }
+                          if ("close".equals(method.getName())) {
+                            connectionsClosed.incrementAndGet();
+                          }
+                          try {
+                            return method.invoke(real, args);
+                          } catch (java.lang.reflect.InvocationTargetException e) {
+                            throw e.getCause();
+                          }
+                        });
+                  }
+
+                  @Override
+                  public boolean isConnectionValid(java.sql.Connection connection, int timeout)
+                      throws SQLException {
+                    return connection.isValid(timeout);
+                  }
+
+                  @Override
+                  public void close() {
+                    dialect.close();
+                  }
+                };
+            return new io.confluent.connect.jdbc.util.CachedConnectionProvider(
+                faulty, maxConnAttempts, retryBackoff) {
+              @Override
+              protected void onConnect(java.sql.Connection connection) throws SQLException {
+                connection.setAutoCommit(false);
+              }
+            };
+          }
+        };
+      }
+    };
+
+    SinkTaskContext context = createNiceMock(SinkTaskContext.class);
+    org.easymock.EasyMock.replay(context);
+    task.initialize(context);
+    Map<String, String> props = setupBasicProps(maxRetries, retryBackoffMs);
+    props.put("connection.url", sqliteHelper.sqliteUri());
+    props.put("auto.create", "true");
+    props.put("pk.mode", "kafka");
+    task.start(props);
+
+    final String topic = "atopic";
+    final Struct struct = new Struct(SCHEMA)
+        .put("firstName", "Alex")
+        .put("lastName", "Smith")
+        .put("modified", new Date(1474661402123L));
+    List<SinkRecord> records = Collections.singletonList(
+        new SinkRecord(topic, 1, null, null, SCHEMA, struct, 42));
+
+    RetriableException retried =
+        assertThrows(RetriableException.class, () -> task.put(records));
+    assertTrue(retried.getCause().getMessage().contains("NullPointerException: fields must be non-null"));
+    assertEquals(1, connectionsOpened.get());
+    assertEquals(1, connectionsClosed.get());
+
+    // Redelivery of the same batch: a fresh connection is opened and the write succeeds.
+    task.put(records);
+    assertEquals(2, connectionsOpened.get());
+    assertEquals(1, sqliteHelper.select("SELECT * FROM " + topic, rs -> {
+      assertEquals("Alex", rs.getString("firstName"));
+      assertEquals("Smith", rs.getString("lastName"));
+      assertEquals(42, rs.getLong("__connect_offset"));
+    }));
   }
 
   @Test

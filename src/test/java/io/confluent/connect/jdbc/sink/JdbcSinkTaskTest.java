@@ -29,7 +29,10 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.io.StringWriter;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Proxy;
 import java.sql.BatchUpdateException;
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -42,6 +45,7 @@ import java.util.List;
 import java.util.Map;
 import java.time.ZoneId;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -62,6 +66,9 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.dialect.DatabaseDialects;
+import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.DateTimeUtils;
 
 public class JdbcSinkTaskTest extends EasyMockSupport {
@@ -292,6 +299,75 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     assertTaskExceptionRedacted(exhausted, RETRY_CANARY, "42000", 10);
 
     verifyAll();
+  }
+
+  @Test
+  public void driverRuntimeExceptionInSchemaLookupReconnectsAndWritesToDb() throws Exception {
+    // CC-46266: the first connection throws the driver NPE from getSchema(). put() must surface a
+    // RetriableException, drop that connection, and succeed on redelivery with a new one.
+    AtomicInteger schemaFailuresLeft = new AtomicInteger(1);
+    AtomicInteger connectionsOpened = new AtomicInteger();
+
+    JdbcSinkTask task = new JdbcSinkTask() {
+      @Override
+      void initWriter() {
+        DatabaseDialect dialect = DatabaseDialects.findBestFor(config.connectionUrl, config);
+        writer = new JdbcDbWriter(config, dialect, new DbStructure(dialect)) {
+          @Override
+          protected CachedConnectionProvider connectionProvider(int attempts, long backoff) {
+            return new CachedConnectionProvider(dialect, attempts, backoff) {
+              @Override
+              protected void onConnect(Connection connection) throws SQLException {
+                connectionsOpened.incrementAndGet();
+                connection.setAutoCommit(false);
+              }
+
+              @Override
+              public synchronized Connection getConnection() {
+                Connection real = super.getConnection();
+                return (Connection) Proxy.newProxyInstance(
+                    getClass().getClassLoader(), new Class<?>[] {Connection.class},
+                    (proxy, method, args) -> {
+                      if (method.getName().equals("getSchema")
+                          && schemaFailuresLeft.getAndDecrement() > 0) {
+                        throw new NullPointerException("fields must be non-null");
+                      }
+                      try {
+                        return method.invoke(real, args);
+                      } catch (InvocationTargetException e) {
+                        throw e.getCause();
+                      }
+                    });
+              }
+            };
+          }
+        };
+      }
+    };
+    SinkTaskContext context = createNiceMock(SinkTaskContext.class);
+    org.easymock.EasyMock.replay(context);
+    task.initialize(context);
+    Map<String, String> props = setupBasicProps(2, 10);
+    props.put("connection.url", sqliteHelper.sqliteUri());
+    props.put("auto.create", "true");
+    props.put("pk.mode", "kafka");
+    task.start(props);
+
+    Struct struct = new Struct(SCHEMA).put("firstName", "Alex").put("lastName", "Smith")
+        .put("modified", new Date(1474661402123L));
+    List<SinkRecord> records =
+        Collections.singletonList(new SinkRecord("atopic", 1, null, null, SCHEMA, struct, 42));
+
+    RetriableException retried = assertThrows(RetriableException.class, () -> task.put(records));
+    assertTrue(retried.getCause().getMessage().contains("NullPointerException: fields must be non-null"));
+    assertEquals(1, connectionsOpened.get());
+
+    task.put(records);
+    assertEquals(2, connectionsOpened.get());
+    assertEquals(1, sqliteHelper.select("SELECT * FROM atopic", rs -> {
+      assertEquals("Alex", rs.getString("firstName"));
+      assertEquals(42, rs.getLong("__connect_offset"));
+    }));
   }
 
   @Test

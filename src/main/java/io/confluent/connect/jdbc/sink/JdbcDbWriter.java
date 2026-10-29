@@ -164,7 +164,8 @@ public class JdbcDbWriter {
       log.warn("Failed to get catalog: {}", e.getMessage());
       return Optional.empty();
     } catch (NullPointerException | IllegalStateException e) {
-      // See getSchemaSafe: these mean a broken connection.
+      // redshift-jdbc throws these from a desynced connection; surface them as an SQLException
+      // so JdbcSinkTask.put() reconnects and retries instead of failing the task.
       throw new SQLException("Failed to get catalog from the database connection", e);
     }
   }

@@ -799,6 +799,22 @@ public class JdbcDbWriterTest {
     verify(mockConnection, never()).commit();
   }
 
+  @Test
+  public void writeDoesNotWrapUnrelatedRuntimeExceptionFromGetSchema() throws SQLException {
+    UnsupportedOperationException driverFailure = new UnsupportedOperationException("not supported");
+    Connection mockConnection = mock(Connection.class);
+    when(mockConnection.getSchema()).thenThrow(driverFailure);
+
+    JdbcDbWriter testWriter = newWriterWithMockConnection(metadataFailureProps(), mockConnection);
+
+    UnsupportedOperationException thrown = assertThrows(
+        UnsupportedOperationException.class,
+        () -> testWriter.write(Collections.singleton(simpleRecord()))
+    );
+
+    assertSame(driverFailure, thrown);
+  }
+
   private Map<String, String> metadataFailureProps() {
     Map<String, String> props = new HashMap<>();
     props.put("connection.url", "stub");

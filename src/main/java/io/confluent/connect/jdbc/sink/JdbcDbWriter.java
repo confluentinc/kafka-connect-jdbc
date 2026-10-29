@@ -150,9 +150,9 @@ public class JdbcDbWriter {
     } catch (AbstractMethodError | SQLException e) {
       log.warn("Failed to get schema: {}", e.getMessage());
       return Optional.empty();
-    } catch (RuntimeException e) {
-      // A driver RuntimeException here means the connection is broken; surface it as an
-      // SQLException so JdbcSinkTask.put() reconnects and retries instead of failing the task.
+    } catch (NullPointerException | IllegalStateException e) {
+      // redshift-jdbc throws these from a desynced connection; surface them as an SQLException
+      // so JdbcSinkTask.put() reconnects and retries instead of failing the task.
       throw new SQLException("Failed to get schema from the database connection", e);
     }
   }
@@ -163,8 +163,8 @@ public class JdbcDbWriter {
     } catch (AbstractMethodError | SQLException e) {
       log.warn("Failed to get catalog: {}", e.getMessage());
       return Optional.empty();
-    } catch (RuntimeException e) {
-      // See getSchemaSafe: a driver RuntimeException here means a broken connection.
+    } catch (NullPointerException | IllegalStateException e) {
+      // See getSchemaSafe: these mean a broken connection.
       throw new SQLException("Failed to get catalog from the database connection", e);
     }
   }

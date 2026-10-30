@@ -153,6 +153,8 @@ public class JdbcDbWriter {
     } catch (NullPointerException | IllegalStateException e) {
       // redshift-jdbc throws these from a desynced connection; surface them as an SQLException
       // so JdbcSinkTask.put() reconnects and retries instead of failing the task.
+      log.warn("Failed to get schema, connection is broken: {}: {}",
+          e.getClass().getSimpleName(), e.getMessage());
       throw new SQLException("Failed to get schema from the database connection", e);
     }
   }
@@ -166,6 +168,8 @@ public class JdbcDbWriter {
     } catch (NullPointerException | IllegalStateException e) {
       // redshift-jdbc throws these from a desynced connection; surface them as an SQLException
       // so JdbcSinkTask.put() reconnects and retries instead of failing the task.
+      log.warn("Failed to get catalog, connection is broken: {}: {}",
+          e.getClass().getSimpleName(), e.getMessage());
       throw new SQLException("Failed to get catalog from the database connection", e);
     }
   }

@@ -202,6 +202,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final String MODE_TIMESTAMP = "timestamp";
   public static final String MODE_INCREMENTING = "incrementing";
   public static final String MODE_TIMESTAMP_INCREMENTING = "timestamp+incrementing";
+  public static final String MODE_CHANGE_TRACKING = "change_tracking";
 
   public static final String INCREMENTING_COLUMN_NAME_CONFIG = "incrementing.column.name";
   private static final String INCREMENTING_COLUMN_NAME_DOC =
@@ -875,7 +876,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
             MODE_BULK,
             MODE_TIMESTAMP,
             MODE_INCREMENTING,
-            MODE_TIMESTAMP_INCREMENTING
+            MODE_TIMESTAMP_INCREMENTING,
+            MODE_CHANGE_TRACKING
         ),
         Importance.HIGH,
         MODE_DOC,
@@ -1267,6 +1269,8 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
     private boolean isVisibleForMode(String name, String mode) {
       switch (mode) {
+        case MODE_CHANGE_TRACKING:
+          return isChangeTrackingConfig(name);
         case MODE_BULK:
           return false;
         case MODE_TIMESTAMP:
@@ -1296,6 +1300,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
     private boolean isTimestampIncrementingModeField(String name) {
       return isTimestampModeDependentField(name) || isIncrementingModeDependentField(name);
+    }
+    
+    private boolean isChangeTrackingConfig(String name) {
+      return !name.equals(INCREMENTING_COLUMN_NAME_CONFIG)
+          && !name.equals(TIMESTAMP_COLUMN_NAME_CONFIG)
+          && !name.equals(VALIDATE_NON_NULL_CONFIG);
     }
   }
 

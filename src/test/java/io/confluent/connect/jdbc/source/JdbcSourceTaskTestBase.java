@@ -82,6 +82,9 @@ public class JdbcSourceTaskTestBase {
 
   @After
   public void tearDown() throws Exception {
+    // Stop the task first: its querier thread keeps querying the database until then, and
+    // deleting the database files under it makes dropDatabase() fail intermittently.
+    task.stop();
     db.close();
     db.dropDatabase();
   }

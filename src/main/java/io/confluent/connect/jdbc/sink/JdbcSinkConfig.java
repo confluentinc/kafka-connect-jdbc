@@ -97,6 +97,11 @@ public class JdbcSinkConfig extends AbstractConfig {
   private static final String CONNECTION_USER_DOC = "JDBC connection user.";
   private static final String CONNECTION_USER_DISPLAY = "JDBC User";
 
+  /**
+   * Config key for the column to compare for only-if-newer updates (PostgreSQL upsert optimization).
+   */
+  public static final String UPDATE_IF_NEWER_FIELD_CONFIG = "update.if.newer.field";
+
   public static final String CONNECTION_PASSWORD =
       JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG;
   private static final String CONNECTION_PASSWORD_DOC = "JDBC connection password.";
@@ -457,6 +462,13 @@ public class JdbcSinkConfig extends AbstractConfig {
             ConfigDef.Width.SHORT,
             CONNECTION_BACKOFF_DISPLAY
         )
+            .define(
+                UPDATE_IF_NEWER_FIELD_CONFIG,
+                ConfigDef.Type.STRING,
+                null,
+                ConfigDef.Importance.LOW,
+                "Column to compare for only-if-newer updates. If set, UPSERTs will only update rows where the incoming value is newer than the existing value in this column. Only applies to PostgreSQL dialect."
+            )
         // Writes
         .define(
             INSERT_MODE,

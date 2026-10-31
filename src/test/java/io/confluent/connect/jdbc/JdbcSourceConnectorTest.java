@@ -19,16 +19,12 @@ import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigValue;
 import org.apache.kafka.connect.connector.ConnectorContext;
 import org.apache.kafka.connect.errors.ConnectException;
-import org.easymock.EasyMock;
-import org.easymock.Mock;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.powermock.api.easymock.PowerMock;
-import org.powermock.core.classloader.annotations.PowerMockIgnore;
-import org.powermock.core.classloader.annotations.PrepareForTest;
-import org.powermock.modules.junit4.PowerMockRunner;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnitRunner;
 
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -53,10 +49,14 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
-@RunWith(PowerMockRunner.class)
-@PrepareForTest({JdbcSourceConnector.class, DatabaseDialect.class})
-@PowerMockIgnore("javax.management.*")
+@RunWith(MockitoJUnitRunner.class)
 public class JdbcSourceConnectorTest {
 
   private JdbcSourceConnector connector;
@@ -126,28 +126,24 @@ public class JdbcSourceConnectorTest {
 
   @Test
   public void testStartStop() throws Exception {
-    CachedConnectionProvider mockCachedConnectionProvider = PowerMock.createMock(CachedConnectionProvider.class);
+    CachedConnectionProvider mockCachedConnectionProvider = mock(CachedConnectionProvider.class);
     connector  = new MockJdbcSourceConnector(mockCachedConnectionProvider);
     // Should request a connection, then should close it on stop(). The background thread may also
     // request connections any time it performs updates.
-    Connection conn = PowerMock.createMock(Connection.class);
-    EasyMock.expect(mockCachedConnectionProvider.getConnection()).andReturn(conn).anyTimes();
+    Connection conn = mock(Connection.class);
+    when(mockCachedConnectionProvider.getConnection()).thenReturn(conn);
 
     // Since we're just testing start/stop, we don't worry about the value here but need to stub
     // something since the background thread will be started and try to lookup metadata.
-    EasyMock.expect(conn.getMetaData()).andStubThrow(new SQLException());
-    // Close with stopping will be invoked when the connector is stopped
-    mockCachedConnectionProvider.close(true);
-    PowerMock.expectLastCall().atLeastOnce();
-    mockCachedConnectionProvider.close();
-    PowerMock.expectLastCall().anyTimes();
-
-    PowerMock.replayAll();
+    // lenient(): whether it actually gets called before stop() interrupts it is a timing race,
+    // same as the original EasyMock version's andStubThrow (tolerates zero calls).
+    lenient().when(conn.getMetaData()).thenThrow(new SQLException());
 
     connector.start(props);
     connector.stop();
 
-    PowerMock.verifyAll();
+    // Close with stopping should have been invoked when the connector is stopped
+    verify(mockCachedConnectionProvider, atLeastOnce()).close(true);
   }
 
   @Test
@@ -167,12 +163,10 @@ public class JdbcSourceConnectorTest {
     db.createTable("test", "id", "INT NOT NULL");
 
     CountDownLatch taskReconfigurationLatch = new CountDownLatch(1);
-    connectorContext.requestTaskReconfiguration();
-    EasyMock.expectLastCall().andAnswer(() -> {
+    doAnswer(invocation -> {
       taskReconfigurationLatch.countDown();
       return null;
-    });
-    EasyMock.replay(connectorContext);
+    }).when(connectorContext).requestTaskReconfiguration();
     connector.initialize(connectorContext);
 
     connector.start(props);
@@ -198,12 +192,10 @@ public class JdbcSourceConnectorTest {
     db.createTable("test4", "id", "INT NOT NULL");
 
     CountDownLatch taskReconfigurationLatch = new CountDownLatch(1);
-    connectorContext.requestTaskReconfiguration();
-    EasyMock.expectLastCall().andAnswer(() -> {
+    doAnswer(invocation -> {
       taskReconfigurationLatch.countDown();
       return null;
-    });
-    EasyMock.replay(connectorContext);
+    }).when(connectorContext).requestTaskReconfiguration();
     connector.initialize(connectorContext);
 
     connector.start(props);

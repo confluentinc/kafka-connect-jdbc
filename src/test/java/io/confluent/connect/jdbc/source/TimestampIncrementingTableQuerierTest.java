@@ -23,13 +23,14 @@ import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.errors.DataException;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.powermock.api.easymock.annotation.Mock;
-import org.powermock.api.easymock.annotation.MockNice;
-import org.powermock.core.classloader.annotations.PrepareForTest;
-import org.powermock.modules.junit4.PowerMockRunner;
+import org.mockito.Mock;
+import org.mockito.MockedStatic;
+import org.mockito.junit.MockitoJUnitRunner;
+import org.mockito.stubbing.OngoingStubbing;
 
 import java.lang.reflect.Constructor;
 import java.sql.Connection;
@@ -42,21 +43,17 @@ import java.util.Collections;
 import java.util.List;
 import java.time.ZoneId;
 
-import static org.easymock.EasyMock.anyObject;
-import static org.easymock.EasyMock.eq;
-import static org.easymock.EasyMock.expect;
-import static org.easymock.EasyMock.mock;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
-import static org.powermock.api.easymock.PowerMock.expectLastCall;
-import static org.powermock.api.easymock.PowerMock.mockStatic;
-import static org.powermock.api.easymock.PowerMock.replay;
-import static org.powermock.api.easymock.PowerMock.replayAll;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.when;
 
-@RunWith(PowerMockRunner.class)
-@PrepareForTest(SchemaMapping.class)
+@RunWith(MockitoJUnitRunner.class)
 public class TimestampIncrementingTableQuerierTest {
 
   private static final Timestamp INITIAL_TS = new Timestamp(71);
@@ -70,7 +67,7 @@ public class TimestampIncrementingTableQuerierTest {
   private ResultSet resultSet;
   @Mock
   private Connection db;
-  @MockNice
+  @Mock
   private ExpressionBuilder expressionBuilder;
   @Mock
   private TimestampIncrementingCriteria criteria;
@@ -78,10 +75,19 @@ public class TimestampIncrementingTableQuerierTest {
   private SchemaMapping schemaMapping;
   private DatabaseDialect dialect;
 
+  private MockedStatic<SchemaMapping> schemaMappingStatic;
+  private OngoingStubbing<Boolean> resultSetNextStubbing;
+  private OngoingStubbing<TimestampIncrementingOffset> extractValuesStubbing;
+
   @Before
   public void setUp() {
     dialect = mock(DatabaseDialect.class);
-    mockStatic(SchemaMapping.class);
+    schemaMappingStatic = mockStatic(SchemaMapping.class);
+  }
+
+  @After
+  public void tearDown() {
+    schemaMappingStatic.close();
   }
 
   private TimestampIncrementingTableQuerier querier(
@@ -89,10 +95,7 @@ public class TimestampIncrementingTableQuerierTest {
       boolean timestampMode
   ) {
     final String tableName = "table";
-    expect(dialect.parseTableIdentifier(tableName)).andReturn(new TableId("", "", tableName));
-
-    // Have to replay the dialect here since it's used to the table ID in the querier's constructor
-    replay(dialect);
+    when(dialect.parseTableIdentifier(tableName)).thenReturn(new TableId("", "", tableName));
 
     return new TimestampIncrementingTableQuerier(
         dialect,
@@ -120,27 +123,37 @@ public class TimestampIncrementingTableQuerierTest {
   }
 
   private void expectNewQuery() throws Exception {
-    expect(dialect.createPreparedStatement(eq(db), anyObject())).andReturn(stmt);
-    expect(dialect.expressionBuilder()).andReturn(expressionBuilder);
-    expect(dialect.criteriaFor(anyObject(), anyObject())).andReturn(criteria);
-    dialect.validateSpecificColumnTypes(anyObject(), anyObject());
-    expectLastCall();
-    criteria.whereClause(expressionBuilder);
-    expectLastCall();
-    criteria.setQueryParameters(eq(stmt), anyObject());
-    expectLastCall();
-    expect(stmt.executeQuery()).andReturn(resultSet);
-    expect(resultSet.getMetaData()).andReturn(null);
-    expect(SchemaMapping.create(anyObject(), anyObject(), anyObject())).andReturn(schemaMapping);
+    when(dialect.createPreparedStatement(eq(db), any())).thenReturn(stmt);
+    when(dialect.expressionBuilder()).thenReturn(expressionBuilder);
+    when(dialect.criteriaFor(any(), any())).thenReturn(criteria);
+    when(stmt.executeQuery()).thenReturn(resultSet);
+    when(resultSet.getMetaData()).thenReturn(null);
+    when(schemaMapping.schema()).thenReturn(schema());
+    when(schemaMapping.fieldSetters()).thenReturn(Collections.emptyList());
+    schemaMappingStatic.when(() -> SchemaMapping.create(any(), any(), any())).thenReturn(schemaMapping);
+  }
+
+  private void stubResultSetNext(boolean hasNext) throws SQLException {
+    if (resultSetNextStubbing == null) {
+      resultSetNextStubbing = when(resultSet.next()).thenReturn(hasNext);
+    } else {
+      resultSetNextStubbing = resultSetNextStubbing.thenReturn(hasNext);
+    }
+  }
+
+  private void stubExtractValues(TimestampIncrementingOffset offset) throws Exception {
+    if (extractValuesStubbing == null) {
+      extractValuesStubbing = when(criteria.extractValues(any(), any(), any(), any())).thenReturn(offset);
+    } else {
+      extractValuesStubbing = extractValuesStubbing.thenReturn(offset);
+    }
   }
 
   @Test
   public void testEmptyResultSet() throws Exception {
     expectNewQuery();
     TimestampIncrementingTableQuerier querier = querier(offset(INITIAL_TS, INITIAL_INC), false);
-    expect(resultSet.next()).andReturn(false);
-
-    replayAll();
+    stubResultSetNext(false);
 
     querier.maybeStartQuery(db);
 
@@ -157,12 +170,9 @@ public class TimestampIncrementingTableQuerierTest {
 
     expectNewQuery();
     TimestampIncrementingTableQuerier querier = querier(offset(INITIAL_TS, INITIAL_INC), false);
-    expect(schemaMapping.schema()).andReturn(schema()).anyTimes();
-    expect(schemaMapping.fieldSetters())
-        .andReturn(Collections.singletonList(throwingFieldSetter(canary)))
-        .anyTimes();
-
-    replayAll();
+    when(schemaMapping.schema()).thenReturn(schema());
+    when(schemaMapping.fieldSetters())
+        .thenReturn(Collections.singletonList(throwingFieldSetter(canary)));
 
     querier.maybeStartQuery(db);
 
@@ -206,9 +216,7 @@ public class TimestampIncrementingTableQuerierTest {
     expectRecord(firstNewOffset);
     expectRecord(secondNewOffset);
     expectRecord(secondNewOffset);
-    expect(resultSet.next()).andReturn(false);
-
-    replayAll();
+    stubResultSetNext(false);
 
     querier.maybeStartQuery(db);
 
@@ -233,9 +241,7 @@ public class TimestampIncrementingTableQuerierTest {
     expectRecord(firstNewOffset);
     expectRecord(secondNewOffset);
     expectRecord(secondNewOffset);
-    expect(resultSet.next()).andReturn(false);
-
-    replayAll();
+    stubResultSetNext(false);
 
     querier.maybeStartQuery(db);
 
@@ -255,12 +261,9 @@ public class TimestampIncrementingTableQuerierTest {
     expectNewQuery();
     TimestampIncrementingTableQuerier querier = querier(initialOffset, true);
     expectRecord(initialOffset);
-    expect(resultSet.next()).andReturn(false);
-    expectReset();
+    stubResultSetNext(false);
     expectRecord(initialOffset);
-    expect(resultSet.next()).andReturn(false);
-
-    replayAll();
+    stubResultSetNext(false);
 
     querier.maybeStartQuery(db);
 
@@ -284,19 +287,8 @@ public class TimestampIncrementingTableQuerierTest {
   }
 
   private void expectRecord(TimestampIncrementingOffset offset) throws Exception {
-    expect(schemaMapping.schema()).andReturn(schema()).times(2);
-    expect(resultSet.next()).andReturn(true);
-    expect(schemaMapping.fieldSetters()).andReturn(Collections.emptyList());
-    expect(criteria.extractValues(anyObject(), anyObject(), anyObject(), anyObject())).andReturn(offset);
-  }
-
-  private void expectReset() throws Exception {
-    resultSet.close();
-    expectLastCall();
-    stmt.close();
-    expectLastCall();
-    db.commit();
-    expectLastCall();
+    stubResultSetNext(true);
+    stubExtractValues(offset);
   }
 
   private static TimestampIncrementingOffset offset(Long inc) {

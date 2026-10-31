@@ -522,7 +522,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
         String catalogName = rs.getString(1);
         String schemaName = rs.getString(2);
         String tableName = rs.getString(3);
-        TableId tableId = new TableId(catalogName, schemaName, tableName);
+        TableId tableId = createTableId(catalogName, schemaName, tableName);
         if (includeTable(tableId)) {
           tableIds.add(tableId);
         }
@@ -545,7 +545,7 @@ public class SqlServerDatabaseDialect extends GenericDatabaseDialect {
           String schemaName = synonymRs.getString(2);
           String synonymName = synonymRs.getString(3);
 
-          TableId tableId = new TableId(catalogName, schemaName, synonymName);
+          TableId tableId = createTableId(catalogName, schemaName, synonymName);
           if (includeTable(tableId)) {
             tableIds.add(tableId);
           }

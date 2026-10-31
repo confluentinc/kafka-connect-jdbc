@@ -32,7 +32,7 @@ import java.util.Map;
 
 import org.junit.Before;
 import org.junit.Test;
-import org.mockito.Matchers;
+import org.mockito.ArgumentMatchers;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
@@ -54,11 +54,11 @@ public class TableQuerierTest {
   @Before
   public void init() {
     databaseDialectMock = mock(DatabaseDialect.class);
-    when(databaseDialectMock.parseTableIdentifier(Matchers.anyString()))
+    when(databaseDialectMock.parseTableIdentifier(ArgumentMatchers.anyString()))
         .thenReturn(new TableId(null, null, TABLE_NAME));
     when(databaseDialectMock.expressionBuilder())
         .thenReturn(ExpressionBuilder.create());
-    when(databaseDialectMock.criteriaFor(Matchers.any(ColumnId.class), Matchers.anyListOf(ColumnId.class)))
+    when(databaseDialectMock.criteriaFor(ArgumentMatchers.any(ColumnId.class), ArgumentMatchers.anyList()))
         .thenReturn(new TimestampIncrementingCriteria(
             new ColumnId(new TableId(null, null, TABLE_NAME), INCREMENTING_COLUMN_NAME),
             null,
@@ -95,8 +95,8 @@ public class TableQuerierTest {
     querier.createPreparedStatement(connectionMock);
 
     verify(databaseDialectMock, times(1)).createPreparedStatement(
-        Matchers.any(),
-        Matchers.eq("SELECT * FROM \"name\" WHERE \"name\".\"column\" > ? ORDER BY \"name\".\"column\" ASC /* SUFFIX */"));
+        ArgumentMatchers.any(),
+        ArgumentMatchers.eq("SELECT * FROM \"name\" WHERE \"name\".\"column\" > ? ORDER BY \"name\".\"column\" ASC /* SUFFIX */"));
   }
 
   @Test
@@ -118,8 +118,8 @@ public class TableQuerierTest {
     querier.createPreparedStatement(connectionMock);
 
     verify(databaseDialectMock, times(1)).createPreparedStatement(
-        Matchers.any(),
-        Matchers.eq("SELECT * FROM name WHERE \"name\".\"column\" > ? ORDER BY \"name\".\"column\" ASC /* SUFFIX */"));
+        ArgumentMatchers.any(),
+        ArgumentMatchers.eq("SELECT * FROM name WHERE \"name\".\"column\" > ? ORDER BY \"name\".\"column\" ASC /* SUFFIX */"));
   }
 
   @Test
@@ -135,8 +135,8 @@ public class TableQuerierTest {
     querier.createPreparedStatement(connectionMock);
 
     verify(databaseDialectMock, times(1)).createPreparedStatement(
-        Matchers.any(),
-        Matchers.eq("SELECT * FROM \"name\" /* SUFFIX */"));
+        ArgumentMatchers.any(),
+        ArgumentMatchers.eq("SELECT * FROM \"name\" /* SUFFIX */"));
   }
 
   @Test
@@ -152,8 +152,8 @@ public class TableQuerierTest {
     querier.createPreparedStatement(connectionMock);
 
     verify(databaseDialectMock, times(1)).createPreparedStatement(
-        Matchers.any(),
-        Matchers.eq("SELECT * FROM name /* SUFFIX */"));
+        ArgumentMatchers.any(),
+        ArgumentMatchers.eq("SELECT * FROM name /* SUFFIX */"));
   }
 
   @Test
@@ -169,8 +169,8 @@ public class TableQuerierTest {
     querier.createPreparedStatement(connectionMock);
 
     verify(databaseDialectMock, times(1)).createPreparedStatement(
-        Matchers.any(),
-        Matchers.eq("SELECT * FROM name"));
+        ArgumentMatchers.any(),
+        ArgumentMatchers.eq("SELECT * FROM name"));
   }
 
   @Test
@@ -178,7 +178,7 @@ public class TableQuerierTest {
       throws SQLException {
     DatabaseDialect dialect = postgresDialect("always");
     PreparedStatement preparedStatementMock = mock(PreparedStatement.class);
-    when(connectionMock.prepareStatement(Matchers.anyString())).thenReturn(preparedStatementMock);
+    when(connectionMock.prepareStatement(ArgumentMatchers.anyString())).thenReturn(preparedStatementMock);
     BulkTableQuerier querier = new BulkTableQuerier(
         dialect,
         QueryMode.TABLE,
@@ -197,7 +197,7 @@ public class TableQuerierTest {
       throws SQLException {
     DatabaseDialect dialect = postgresDialect("never");
     PreparedStatement preparedStatementMock = mock(PreparedStatement.class);
-    when(connectionMock.prepareStatement(Matchers.anyString())).thenReturn(preparedStatementMock);
+    when(connectionMock.prepareStatement(ArgumentMatchers.anyString())).thenReturn(preparedStatementMock);
     BulkTableQuerier querier = new BulkTableQuerier(
         dialect,
         QueryMode.TABLE,

@@ -144,21 +144,33 @@ public class JdbcDbWriter {
     return new TableId(finalCatalogName, finalSchemaName, parsedTableId.tableName());
   }
 
-  private Optional<String> getSchemaSafe(Connection connection) {
+  private Optional<String> getSchemaSafe(Connection connection) throws SQLException {
     try {
       return Optional.ofNullable(connection.getSchema());
     } catch (AbstractMethodError | SQLException e) {
       log.warn("Failed to get schema: {}", e.getMessage());
       return Optional.empty();
+    } catch (NullPointerException | IllegalStateException e) {
+      // redshift-jdbc throws these from a desynced connection; surface them as an SQLException
+      // so JdbcSinkTask.put() reconnects and retries instead of failing the task.
+      log.warn("Failed to get schema, connection is broken: {}: {}",
+          e.getClass().getSimpleName(), e.getMessage());
+      throw new SQLException("Failed to get schema from the database connection", e);
     }
   }
 
-  private Optional<String> getCatalogSafe(Connection connection) {
+  private Optional<String> getCatalogSafe(Connection connection) throws SQLException {
     try {
       return Optional.ofNullable(connection.getCatalog());
     } catch (AbstractMethodError | SQLException e) {
       log.warn("Failed to get catalog: {}", e.getMessage());
       return Optional.empty();
+    } catch (NullPointerException | IllegalStateException e) {
+      // redshift-jdbc throws these from a desynced connection; surface them as an SQLException
+      // so JdbcSinkTask.put() reconnects and retries instead of failing the task.
+      log.warn("Failed to get catalog, connection is broken: {}: {}",
+          e.getClass().getSimpleName(), e.getMessage());
+      throw new SQLException("Failed to get catalog from the database connection", e);
     }
   }
 }

@@ -1175,7 +1175,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   public static final ConfigDef CONFIG_DEF = baseConfigDef();
 
   public JdbcSourceConnectorConfig(Map<String, ?> props) {
-    super(CONFIG_DEF, props, shouldLog(props));
+    super(CONFIG_DEF, props);
   }
 
   public String topicPrefix() {
@@ -1434,7 +1434,7 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
 
   protected JdbcSourceConnectorConfig(ConfigDef subclassConfigDef, Map<String, String> props) {
-    super(subclassConfigDef, props, shouldLog(props));
+    super(subclassConfigDef, props);
   }
 
   public NumericMapping numericMapping() {

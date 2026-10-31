@@ -87,13 +87,11 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
         config = new JdbcSourceConnectorConfig(connectorConfigs);
       }
 
-      // Log-only, kept outside the && chain so it can neither fail nor be short-circuited away.
-      logQueryAppendedCriteriaCompatibility();
-
       boolean validationResult = validateMultiConfigs()
           && validateLegacyNewConfigCompatibility()
           && validateQueryConfigs()
           && validateQueryModeIncrementingColumnRequired()
+          && validateQueryAppendedCriteriaCompatibility()
           && validateConnection(CONNECTION_URL_CONFIG)
           && validateQuerySemantics();
 
@@ -403,30 +401,36 @@ public class JdbcSourceConnectorValidation extends AbstractJdbcConnectorValidati
   }
 
   /**
-   * Shadow mode: log, but do not reject, a custom query whose outermost SELECT already has a
-   * clause that collides with the {@code WHERE}/{@code ORDER BY} the connector appends in the
-   * incremental modes. Such a query already fails at runtime; logging first lets the fleet-wide
-   * blast radius be measured before this is made an enforcing validation. {@code bulk} is exempt
-   * (it never appends a criteria). The query is never logged — it may contain customer data.
-   * Never throws, so it cannot alter {@link #validate()}.
+   * Reject a custom {@code query} whose outermost SELECT has a top-level clause (WHERE, ORDER BY,
+   * etc.) that collides with the WHERE/ORDER BY the connector appends in incremental modes,
+   * producing invalid SQL that fails on every poll. {@code bulk} is exempt. Fails open: a check
+   * error, or unparseable/non-SELECT SQL, never rejects a config.
    */
-  private void logQueryAppendedCriteriaCompatibility() {
+  private boolean validateQueryAppendedCriteriaCompatibility() {
+    boolean blocks;
     try {
-      if (!queryBlocksAppendedCriteria()) {
-        return;
-      }
-      log.info("[query-appended-criteria-shadow] VALIDATION FAILED for '{}' in mode '{}': the "
-          + "query's outermost SELECT has a top-level WHERE, ORDER BY, GROUP BY, HAVING, "
-          + "LIMIT/OFFSET/FETCH, or is a set operation (UNION/INTERSECT/EXCEPT), which collides "
-          + "with the WHERE and ORDER BY the connector appends to it. This check is log-only for "
-          + "now, so the connector has NOT been rejected.",
-          config.isQueryMasked()
-              ? JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG
-              : JdbcSourceConnectorConfig.QUERY_CONFIG,
-          config.getString(JdbcSourceConnectorConfig.MODE_CONFIG));
+      blocks = queryBlocksAppendedCriteria();
     } catch (Exception e) {
-      log.debug("[query-appended-criteria-shadow] check failed to run", e);
+      log.debug("[query-appended-criteria] check failed to run; not rejecting", e);
+      return true; // fail open
     }
+    if (!blocks) {
+      return true;
+    }
+    String configKey = config.isQueryMasked()
+        ? JdbcSourceConnectorConfig.QUERY_MASKED_CONFIG
+        : JdbcSourceConnectorConfig.QUERY_CONFIG;
+    String msg = String.format(
+        "'%s' is not compatible with mode '%s': its outermost SELECT has a top-level clause "
+        + "(WHERE/ORDER BY/GROUP BY/HAVING/LIMIT/set operation) that collides with the WHERE and "
+        + "ORDER BY the connector appends in incremental modes, producing invalid SQL. Wrap it in "
+        + "a sub-select, e.g. 'SELECT * FROM (<your query>) sub', or use mode '%s'.",
+        configKey,
+        config.getString(JdbcSourceConnectorConfig.MODE_CONFIG),
+        JdbcSourceConnectorConfig.MODE_BULK);
+    addConfigError(configKey, msg);
+    log.error(msg);
+    return false;
   }
 
   /**

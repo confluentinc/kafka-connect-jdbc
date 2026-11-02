@@ -119,14 +119,18 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
           + "The default of 0 means a buffer size will be based on the maximum batch size.";
   static final int MAX_BUFFER_SIZE_DEFAULT = 0;
 
+  /**
+   * How long an empty poll waits for records before returning. This is internal: it only stops
+   * the worker's poll loop from spinning, and it is not part of the customer contract, which is
+   * {@link #POLL_INTERVAL_MS_CONFIG}. The value is clamped to
+   * [{@link #POLL_LINGER_MS_MIN}, {@link #POLL_LINGER_MS_MAX}]: below the minimum an idle task
+   * keeps a CPU core busy, and above the maximum every record waits longer before it reaches
+   * Kafka, and stop, pause and rebalance wait for the poll to return.
+   */
   public static final String POLL_LINGER_MS_CONFIG = "poll.linger.ms";
-  public static final String POLL_LINGER_MS_DISPLAY = "Poll Linger Milliseconds";
-  public static final long POLL_LINGER_MS_DEFAULT = Duration.ofSeconds(5).toMillis();
-  protected static final String POLL_LINGER_MS_DOC =
-      "The maximum time to wait for a record before returning an empty batch. The default is "
-          + "5 seconds. A record is returned as soon as it arrives, so this does not delay "
-          + "records; it only bounds how long an idle poll waits. Values below 100 ms are "
-          + "treated as 100 ms so that an idle task does not keep a CPU core busy.";
+  public static final long POLL_LINGER_MS_DEFAULT = 100;
+  public static final long POLL_LINGER_MS_MIN = 100;
+  public static final long POLL_LINGER_MS_MAX = 1000;
 
   public static final String NUMERIC_PRECISION_MAPPING_CONFIG = "numeric.precision.mapping";
   private static final String NUMERIC_PRECISION_MAPPING_DOC =
@@ -1016,16 +1020,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
         ++orderInGroup,
         Width.SHORT,
         MAX_BUFFER_SIZE_DISPLAY
-    ).define(
+    ).defineInternal(
         POLL_LINGER_MS_CONFIG,
         Type.LONG,
         POLL_LINGER_MS_DEFAULT,
-        Importance.LOW,
-        POLL_LINGER_MS_DOC,
-        CONNECTOR_GROUP,
-        ++orderInGroup,
-        Width.SHORT,
-        POLL_LINGER_MS_DISPLAY
+        Importance.LOW
     ).defineInternal(
         TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_CONFIG,
         Type.LONG,
@@ -1109,8 +1108,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   public static final ConfigDef CONFIG_DEF = baseConfigDef();
 
+  private final Duration pollLinger;
+
   public JdbcSourceConnectorConfig(Map<String, ?> props) {
     super(CONFIG_DEF, props);
+    this.pollLinger = clampedPollLinger();
   }
 
   public String topicPrefix() {
@@ -1370,6 +1372,23 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   protected JdbcSourceConnectorConfig(ConfigDef subclassConfigDef, Map<String, String> props) {
     super(subclassConfigDef, props);
+    this.pollLinger = clampedPollLinger();
+  }
+
+  /**
+   * Read {@link #POLL_LINGER_MS_CONFIG} and clamp it to
+   * [{@link #POLL_LINGER_MS_MIN}, {@link #POLL_LINGER_MS_MAX}], logging a warning when it is out of
+   * range. Clamping rather than rejecting keeps connectors that already set, for example,
+   * {@code poll.linger.ms=0} running after an upgrade.
+   */
+  private Duration clampedPollLinger() {
+    long configured = getLong(POLL_LINGER_MS_CONFIG);
+    long clamped = Math.max(POLL_LINGER_MS_MIN, Math.min(configured, POLL_LINGER_MS_MAX));
+    if (clamped != configured) {
+      LOG.warn("{}={} ms is outside [{}, {}] ms; using {} ms", POLL_LINGER_MS_CONFIG,
+          configured, POLL_LINGER_MS_MIN, POLL_LINGER_MS_MAX, clamped);
+    }
+    return Duration.ofMillis(clamped);
   }
 
   public NumericMapping numericMapping() {
@@ -1401,8 +1420,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
     return bufferSize;
   }
 
+  /**
+   * @return {@link #POLL_LINGER_MS_CONFIG}, clamped to
+   *     [{@link #POLL_LINGER_MS_MIN}, {@link #POLL_LINGER_MS_MAX}]
+   */
   public Duration pollLingerMs() {
-    return Duration.ofMillis(getLong(POLL_LINGER_MS_CONFIG));
+    return pollLinger;
   }
 
 

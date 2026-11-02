@@ -51,7 +51,6 @@ import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.modules.junit4.PowerMockRunner;
 
 import io.confluent.connect.jdbc.util.DateTimeUtils;
-import io.confluent.connect.jdbc.util.RecordQueue;
 
 // Tests of polling that return data updates, i.e. verifies the different behaviors for getting
 // incremental data updates from the database
@@ -1028,7 +1027,8 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   @Test
   public void testTaskCreatedWhileWaitingToFetchTables() throws InterruptedException {
     initializeTask();
-    final int pollLingerMs = 3000;
+    // In range, so used as is (values outside [100, 1000] are clamped, see the tests below)
+    final int pollLingerMs = 500;
     Map<String, String> props = new HashMap<>();
     props.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
     props.put(JdbcSourceTaskConfig.TABLES_FETCHED, "false");
@@ -1045,18 +1045,24 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
 
   @Test
   public void testTaskWaitingToFetchTablesDoesNotSpinWithZeroLinger() throws InterruptedException {
-    // poll.linger.ms=0 must still back off, or the worker's poll loop spins at full CPU.
-    assertTaskWaitingToFetchTablesWaitsTheMinimum("0");
+    // poll.linger.ms=0 is clamped up, or the worker's poll loop would spin at full CPU.
+    assertTaskWaitingToFetchTablesWaits("0", JdbcSourceConnectorConfig.POLL_LINGER_MS_MIN);
   }
 
   @Test
-  public void testTaskWaitingToFetchTablesHandlesTheMostNegativeLinger()
+  public void testTaskWaitingToFetchTablesClampsTheMostNegativeLinger()
       throws InterruptedException {
-    // On Java 8, Duration.toMillis() overflows for this value, so it must not be converted.
-    assertTaskWaitingToFetchTablesWaitsTheMinimum(String.valueOf(Long.MIN_VALUE));
+    assertTaskWaitingToFetchTablesWaits(
+        String.valueOf(Long.MIN_VALUE), JdbcSourceConnectorConfig.POLL_LINGER_MS_MIN);
   }
 
-  private void assertTaskWaitingToFetchTablesWaitsTheMinimum(String lingerMs)
+  @Test
+  public void testTaskWaitingToFetchTablesClampsAHugeLinger() throws InterruptedException {
+    assertTaskWaitingToFetchTablesWaits(
+        String.valueOf(Long.MAX_VALUE), JdbcSourceConnectorConfig.POLL_LINGER_MS_MAX);
+  }
+
+  private void assertTaskWaitingToFetchTablesWaits(String lingerMs, long expectedWaitMs)
       throws InterruptedException {
     initializeTask();
     Map<String, String> props = new HashMap<>();
@@ -1068,7 +1074,7 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     long before = time.milliseconds();
     List<SourceRecord> records = task.poll();
     assertNull(records);
-    assertEquals(RecordQueue.MIN_IDLE_POLL_WAIT.toMillis(), time.milliseconds() - before);
+    assertEquals(expectedWaitMs, time.milliseconds() - before);
   }
 
   @Test

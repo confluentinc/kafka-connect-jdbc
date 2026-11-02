@@ -4,6 +4,7 @@
 
 package io.confluent.connect.jdbc.util;
 
+import io.confluent.connect.jdbc.source.MockTime;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.junit.After;
 import org.junit.Test;
@@ -13,11 +14,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class RecordQueueTest {
@@ -79,6 +82,68 @@ public class RecordQueueTest {
 
     assertEquals(Arrays.asList(1, 2), values(queue.poll()));
     assertEquals(Collections.singletonList(3), values(queue.poll()));
+  }
+
+  @Test
+  public void hasActiveConsumerUntilPollIsIdleTooLong() throws Exception {
+    MockTime time = new MockTime();
+    queue = RecordQueue.builder()
+        .pollIdleClock(time)
+        .maxPollIdle(Duration.ofSeconds(10))
+        .maxPollLinger(LINGER)
+        .build();
+
+    // Construction counts as a poll, so the first query can run before the first poll()
+    assertTrue(queue.hasActiveConsumer());
+    time.sleep(10_000);
+    assertTrue(queue.hasActiveConsumer());
+    time.sleep(1);
+    assertFalse("no poll() for longer than the idle limit", queue.hasActiveConsumer());
+
+    queue.poll();
+    assertTrue("poll() resumed", queue.hasActiveConsumer());
+  }
+
+  @Test
+  public void hasActiveConsumerIsForwardedByDerivedDestinations() {
+    MockTime time = new MockTime();
+    queue = RecordQueue.builder().pollIdleClock(time).maxPollIdle(Duration.ofSeconds(10)).build();
+    RecordDestination<SourceRecord> derived = queue.withAdditionalRunningCondition(() -> true);
+
+    assertTrue(derived.hasActiveConsumer());
+    time.sleep(10_001);
+    assertFalse(derived.hasActiveConsumer());
+  }
+
+  @Test(timeout = 10_000)
+  public void lingeringPollLongerThanIdleLimitKeepsConsumerActive() throws Exception {
+    queue = RecordQueue.builder()
+        .maxPollIdle(Duration.ofMillis(300))
+        .maxPollLinger(Duration.ofMillis(2000))
+        .maxPollInterruptTime(Duration.ofMillis(50))
+        .build();
+
+    // An empty queue makes poll() linger for its full 2 s, well past the 300 ms idle limit
+    CompletableFuture<List<SourceRecord>> poll = CompletableFuture.supplyAsync(() -> {
+      try {
+        return queue.poll();
+      } catch (InterruptedException e) {
+        throw new RuntimeException(e);
+      }
+    });
+    Thread.sleep(1000);
+    assertFalse("poll() should still be lingering", poll.isDone());
+    assertTrue("a lingering poll() is an active consumer", queue.hasActiveConsumer());
+
+    assertTrue(poll.get(5, TimeUnit.SECONDS).isEmpty());
+    assertTrue("just returned from poll()", queue.hasActiveConsumer());
+    Thread.sleep(600);
+    assertFalse("no poll() for longer than the idle limit", queue.hasActiveConsumer());
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void maxPollIdleMustBePositive() {
+    RecordQueue.builder().maxPollIdle(Duration.ZERO);
   }
 
   private static SourceRecord record(int id) {

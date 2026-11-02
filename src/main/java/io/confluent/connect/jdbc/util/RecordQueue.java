@@ -397,6 +397,8 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
       long lingerRemainderMs = linger.toMillis();
       final long start = clock.milliseconds();
       final long lingerEndMs = start + lingerRemainderMs;
+      // Time spent in timed polls that returned nothing, each of which waited its full timeout
+      long emptyWaitMs = 0L;
       SourceRecord record;
       while (isRunning() && hasNoFailure() && count < maxBatchSize && lingerRemainderMs > 0L) {
 
@@ -408,8 +410,15 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
         if (record != null) {
           records.add(record);
           ++count;
+        } else {
+          emptyWaitMs += maxPollTime;
         }
-        lingerRemainderMs = lingerEndMs - clock.milliseconds();
+        // Counting the empty waits ends the linger even if the clock does not advance, as with
+        // the task's mock clock in tests, which only moves when something sleeps on it
+        lingerRemainderMs = Math.min(
+            lingerEndMs - clock.milliseconds(),
+            linger.toMillis() - emptyWaitMs
+        );
       }
 
       if (log.isTraceEnabled()) {

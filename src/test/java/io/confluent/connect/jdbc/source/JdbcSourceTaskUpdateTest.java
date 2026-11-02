@@ -44,7 +44,6 @@ import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.apache.log4j.PatternLayout;
 import org.apache.log4j.WriterAppender;
-import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.powermock.api.easymock.PowerMock;
@@ -63,12 +62,6 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
                                  JdbcSourceConnectorConstants.QUERY_NAME_VALUE);
 
   private static final ZoneId UTC_ZONE_ID = ZoneOffset.UTC;
-
-  @After
-  public void tearDown() throws Exception {
-    task.stop();
-    super.tearDown();
-  }
 
   @Test
   public void testBulkPeriodicLoad() throws Exception {
@@ -1034,7 +1027,8 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
   @Test
   public void testTaskCreatedWhileWaitingToFetchTables() throws InterruptedException {
     initializeTask();
-    final int pollLingerMs = 3000;
+    // In range, so used as is (values outside [100, 1000] are clamped, see the tests below)
+    final int pollLingerMs = 500;
     Map<String, String> props = new HashMap<>();
     props.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
     props.put(JdbcSourceTaskConfig.TABLES_FETCHED, "false");
@@ -1047,6 +1041,40 @@ public class JdbcSourceTaskUpdateTest extends JdbcSourceTaskTestBase {
     List<SourceRecord> records = task.poll();
     assertNull(records);
     assertEquals(pollLingerMs, time.milliseconds() - before);
+  }
+
+  @Test
+  public void testTaskWaitingToFetchTablesDoesNotSpinWithZeroLinger() throws InterruptedException {
+    // poll.linger.ms=0 is clamped up, or the worker's poll loop would spin at full CPU.
+    assertTaskWaitingToFetchTablesWaits("0", JdbcSourceConnectorConfig.POLL_LINGER_MS_MIN);
+  }
+
+  @Test
+  public void testTaskWaitingToFetchTablesClampsTheMostNegativeLinger()
+      throws InterruptedException {
+    assertTaskWaitingToFetchTablesWaits(
+        String.valueOf(Long.MIN_VALUE), JdbcSourceConnectorConfig.POLL_LINGER_MS_MIN);
+  }
+
+  @Test
+  public void testTaskWaitingToFetchTablesClampsAHugeLinger() throws InterruptedException {
+    assertTaskWaitingToFetchTablesWaits(
+        String.valueOf(Long.MAX_VALUE), JdbcSourceConnectorConfig.POLL_LINGER_MS_MAX);
+  }
+
+  private void assertTaskWaitingToFetchTablesWaits(String lingerMs, long expectedWaitMs)
+      throws InterruptedException {
+    initializeTask();
+    Map<String, String> props = new HashMap<>();
+    props.put(JdbcSourceTaskConfig.TABLES_CONFIG, "");
+    props.put(JdbcSourceTaskConfig.TABLES_FETCHED, "false");
+    props.put(JdbcSourceTaskConfig.POLL_LINGER_MS_CONFIG, lingerMs);
+    task.start(props);
+
+    long before = time.milliseconds();
+    List<SourceRecord> records = task.poll();
+    assertNull(records);
+    assertEquals(expectedWaitMs, time.milliseconds() - before);
   }
 
   @Test

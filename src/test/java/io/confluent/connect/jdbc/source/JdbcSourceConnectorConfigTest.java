@@ -424,4 +424,47 @@ public class JdbcSourceConnectorConfigTest {
     assertTrue(includeList.contains("schema1\\.users"));
     assertTrue(includeList.contains("schema2\\.orders"));
   }
+
+  @Test
+  public void testPollLingerIsInternal() {
+    assertTrue(JdbcSourceConnectorConfig.CONFIG_DEF.configKeys()
+        .get(JdbcSourceConnectorConfig.POLL_LINGER_MS_CONFIG).internalConfig);
+  }
+
+  @Test
+  public void testPollLingerDefault() {
+    assertEquals(100L, pollLingerMsFor(null));
+  }
+
+  @Test
+  public void testPollLingerInRangeIsKept() {
+    assertEquals(100L, pollLingerMsFor("100"));
+    assertEquals(500L, pollLingerMsFor("500"));
+    assertEquals(1000L, pollLingerMsFor("1000"));
+  }
+
+  @Test
+  public void testPollLingerBelowMinimumIsClamped() {
+    // Connectors that set poll.linger.ms=0, as a workaround for latency, keep running
+    assertEquals(100L, pollLingerMsFor("0"));
+    assertEquals(100L, pollLingerMsFor("99"));
+    assertEquals(100L, pollLingerMsFor("-1"));
+    assertEquals(100L, pollLingerMsFor(String.valueOf(Long.MIN_VALUE)));
+  }
+
+  @Test
+  public void testPollLingerAboveMaximumIsClamped() {
+    // Including the old 5 s default, set explicitly
+    assertEquals(1000L, pollLingerMsFor("1001"));
+    assertEquals(1000L, pollLingerMsFor("5000"));
+    assertEquals(1000L, pollLingerMsFor(String.valueOf(Long.MAX_VALUE)));
+  }
+
+  private long pollLingerMsFor(String lingerMs) {
+    Map<String, String> props = createMinimalConfig();
+    if (lingerMs != null) {
+      props.put(JdbcSourceConnectorConfig.POLL_LINGER_MS_CONFIG, lingerMs);
+    }
+    return new JdbcSourceConnectorConfig(props).pollLingerMs().toMillis();
+  }
 }

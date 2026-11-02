@@ -141,7 +141,6 @@ public class PostgreSqlSourceDialectIT extends BaseConnectorIT {
     props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, postgres.getJdbcUrl());
     props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, postgres.getUsername());
     props.put(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, postgres.getPassword());
-    props.put(JdbcSourceConnectorConfig.POLL_LINGER_MS_CONFIG, "0");
     props.put(JdbcSourceConnectorConfig.MODE_CONFIG, "bulk");
     props.put(JdbcSourceConnectorConfig.TOPIC_PREFIX_CONFIG, TOPIC_PREFIX);
     props.put(JdbcSourceConnectorConfig.TABLE_WHITELIST_CONFIG, TABLE_NAME);

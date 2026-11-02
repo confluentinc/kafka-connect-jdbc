@@ -74,9 +74,6 @@ public abstract class AbstractJdbcSourceConnectorIT extends BaseConnectorIT {
     props.put(JdbcSourceConnectorConfig.CONNECTION_USER_CONFIG, getDatabaseConfig().getUsername());
     props.put(JdbcSourceConnectorConfig.CONNECTION_PASSWORD_CONFIG, getDatabaseConfig().getPassword());
     props.put(JdbcSourceConnectorConfig.POLL_INTERVAL_MS_CONFIG, String.valueOf(POLLING_INTERVAL_MS));
-    // task thread is stuck while lingering, hence graceful stop fails in some of the tests. It's
-    // better to not linger.
-    props.put(JdbcSourceConnectorConfig.POLL_LINGER_MS_CONFIG, String.valueOf(0));
     props.put(JdbcSourceTaskConfig.TOPIC_PREFIX_CONFIG, getTopicPrefix());
     props.put(JdbcSourceConnectorConfig.BATCH_MAX_ROWS_CONFIG, "100");
     props.put(JdbcSourceConnectorConfig.TABLE_INCLUDE_LIST_CONFIG, ".*" + (needsUpperCaseIdentifiers() ? TEST_TABLE_NAME.toUpperCase() : TEST_TABLE_NAME));

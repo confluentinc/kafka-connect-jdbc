@@ -63,6 +63,14 @@ blocks:
         - name: Release
           commands:
             - mvn -Dcloud -Pjenkins -U -Dmaven.wagon.http.retryHandler.count=10 --batch-mode -DaltDeploymentRepository=confluent-codeartifact-internal::default::https://confluent-519856050701.d.codeartifact.us-west-2.amazonaws.com/maven/maven-snapshots/ -DrepositoryId=confluent-codeartifact-internal deploy -DskipTests
+            - |
+              timeout 60 sem-trigger -p appsec-semaphore-workflows -t mend-source-scan \
+                -i "REPO:confluentinc/kafka-connect-jdbc" \
+                -i "REF:$SEMAPHORE_GIT_BRANCH" \
+                -i "VERSION:$(v=$(timeout 30 mvn -N help:evaluate -Dexpression=project.version -q -DforceStdout 2>/dev/null) && echo "$v" || echo "$SEMAPHORE_GIT_BRANCH")" \
+                -i "JAVA_VERSION_OVERRIDE:$(java -version 2>&1 | awk -F'"' '/version/{split($2,a,"."); print (a[1]=="1"?a[2]:a[1])}')" \
+                -i "PRODUCT_FAMILY:COSS" \
+                || echo "WARNING: failed to trigger Mend SCA+SAST scan (or timed out after 60s); continuing without failing the release" >&2
   - name: Release Notes
     dependencies: []
     run:
@@ -73,17 +81,6 @@ blocks:
           commands:
             - git clone --branch master --single-branch git@github.com:confluentinc/connect-releases.git
             - ./connect-releases/tasks/release-connect-plugins/generate-connect-changelogs.sh
-  # Claude Code based code review in PRs.
-  - name: R2 Code Review
-    dependencies: []
-    run:
-      when: "pull_request =~ '.+' and change_in('/', {exclude: ['/.deployed-versions/']})"
-    task:
-      jobs:
-        - name: R2 Code Review
-          commands:
-            # || true: code review failures are unrelated to the codebase and should not block CI. Please report issues to Slack channel #r2.
-            - r2 code-review --verbose --timeout=900s || true
 
 after_pipeline:
   task:

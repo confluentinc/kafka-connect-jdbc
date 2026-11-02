@@ -33,6 +33,20 @@ public interface RecordDestination<RecordT> {
   boolean isRunning();
 
   /**
+   * Determine whether something is currently consuming the records sent to this destination.
+   * Generators should not start new work, such as a new query, while this returns false, because
+   * nothing would read its records. For example, a paused Kafka Connect source task is never
+   * polled, but is also never stopped.
+   *
+   * <p>By default this returns true.
+   *
+   * @return true if records sent now are expected to be consumed, or false otherwise
+   */
+  default boolean hasActiveConsumer() {
+    return true;
+  }
+
+  /**
    * Send a record to this destination if there is room for the record, or throwing
    * {@link IllegalStateException} if there is no room or {@link DestinationClosedException}
    * if the destination has been closed and will not accept any additional records.
@@ -106,6 +120,11 @@ public interface RecordDestination<RecordT> {
       @Override
       public boolean isRunning() {
         return original.isRunning() && isRunning.getAsBoolean();
+      }
+
+      @Override
+      public boolean hasActiveConsumer() {
+        return original.hasActiveConsumer();
       }
 
       @Override

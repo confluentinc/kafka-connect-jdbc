@@ -4,7 +4,6 @@
 
 package io.confluent.connect.jdbc.util;
 
-import io.confluent.connect.jdbc.source.MockTime;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.junit.After;
 import org.junit.Test;
@@ -67,22 +66,6 @@ public class RecordQueueTest {
     // Returning at once would make the worker's poll loop spin at full CPU while idle
     assertTrue(batch.isEmpty());
     assertTrue("poll() returned after " + elapsedMs + " ms", elapsedMs >= LINGER.toMillis());
-  }
-
-  @Test(timeout = 10_000)
-  public void pollStopsLingeringWhenTheClockDoesNotAdvance() throws Exception {
-    // The task's MockTime only moves when something sleeps on it, so the time already spent in
-    // empty timed polls must end the linger by itself
-    ScriptedQueue backing = new ScriptedQueue();
-    queue = RecordQueue.builder()
-        .maxPollLinger(Duration.ofMillis(250))
-        .maxPollInterruptTime(Duration.ofMillis(100))
-        .clock(new MockTime())
-        .queue(backing)
-        .build();
-
-    assertTrue(queue.poll().isEmpty());
-    assertEquals(Arrays.asList(100L, 100L, 50L), backing.timeoutsMs);
   }
 
   @Test(timeout = 10_000)

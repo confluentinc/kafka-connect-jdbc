@@ -22,6 +22,10 @@ import org.apache.kafka.common.config.ConfigValue;
 import org.easymock.EasyMock;
 import org.junit.After;
 import org.junit.Before;
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
+import org.apache.log4j.PatternLayout;
+import org.apache.log4j.WriterAppender;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.powermock.api.easymock.PowerMock;
@@ -30,6 +34,7 @@ import org.powermock.core.classloader.annotations.PowerMockIgnore;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
+import java.io.StringWriter;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -458,6 +463,40 @@ public class JdbcSourceConnectorConfigTest {
     assertEquals(1000L, pollLingerMsFor("1001"));
     assertEquals(1000L, pollLingerMsFor("5000"));
     assertEquals(1000L, pollLingerMsFor(String.valueOf(Long.MAX_VALUE)));
+  }
+
+  @Test
+  public void testPollLingerOutOfRangeLogsAWarning() {
+    // The WARN is the only signal a customer gets that their poll.linger.ms was changed
+    String logs = logsWhileBuildingConfigWithPollLinger("0");
+    assertTrue(logs, logs.contains("poll.linger.ms=0 ms is outside [100, 1000] ms; using 100 ms"));
+
+    logs = logsWhileBuildingConfigWithPollLinger("5000");
+    assertTrue(logs,
+        logs.contains("poll.linger.ms=5000 ms is outside [100, 1000] ms; using 1000 ms"));
+  }
+
+  @Test
+  public void testPollLingerInRangeLogsNoWarning() {
+    String logs = logsWhileBuildingConfigWithPollLinger("500");
+    assertFalse(logs, logs.contains(JdbcSourceConnectorConfig.POLL_LINGER_MS_CONFIG));
+  }
+
+  private String logsWhileBuildingConfigWithPollLinger(String lingerMs) {
+    Logger configLogger = Logger.getLogger(JdbcSourceConnectorConfig.class);
+    Level previousLevel = configLogger.getLevel();
+    StringWriter logOutput = new StringWriter();
+    WriterAppender appender = new WriterAppender(new PatternLayout("%m%n"), logOutput);
+    configLogger.setLevel(Level.WARN);
+    configLogger.addAppender(appender);
+    try {
+      pollLingerMsFor(lingerMs);
+    } finally {
+      configLogger.removeAppender(appender);
+      appender.close();
+      configLogger.setLevel(previousLevel);
+    }
+    return logOutput.toString();
   }
 
   private long pollLingerMsFor(String lingerMs) {

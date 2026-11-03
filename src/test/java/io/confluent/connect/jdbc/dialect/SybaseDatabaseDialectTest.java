@@ -68,6 +68,16 @@ public class SybaseDatabaseDialectTest extends BaseDialectTest<SybaseDatabaseDia
   }
 
   @Test
+  public void shouldParseDecimalScaleAsInt() {
+    assertDecimalScaleParsedAsInt("decimal(38,2)");
+  }
+
+  @Test
+  public void shouldRejectNonNumericDecimalScale() {
+    assertNonNumericDecimalScaleRejected();
+  }
+
+  @Test
   public void shouldMapDecimalSchemaTypeToDecimalSqlType() {
     assertDecimalMapping(0, "decimal(38,0)");
     assertDecimalMapping(3, "decimal(38,3)");

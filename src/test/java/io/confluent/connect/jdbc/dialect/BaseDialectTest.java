@@ -62,6 +62,7 @@ import io.confluent.connect.jdbc.util.TableId;
 import static junit.framework.TestCase.assertNotNull;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -407,6 +408,37 @@ public abstract class BaseDialectTest<T extends GenericDatabaseDialect> {
     assertArrayEquals(expected, dialect.buildAlterTable(tableId, Arrays.asList(
         new SinkRecordField(Schema.OPTIONAL_INT32_SCHEMA, "newcol1", false)
     )).toArray());
+  }
+
+  /**
+   * A Decimal scale parameter is producer-controlled schema content. It must be parsed as an int,
+   * not concatenated verbatim, so "02" is emitted as "2".
+   */
+  protected void assertDecimalScaleParsedAsInt(String expectedSqlType) {
+    assertEquals(expectedSqlType, dialect.getSqlType(decimalFieldWithScale("02")));
+  }
+
+  /**
+   * A non-numeric Decimal scale (here one that would close the type's parenthesis and start a
+   * second statement) must be rejected rather than concatenated into the column type.
+   */
+  protected void assertNonNumericDecimalScaleRejected() {
+    SinkRecordField field = decimalFieldWithScale("2)); SELECT 1 AS c INTO marker_scale; --");
+    try {
+      String sqlType = dialect.getSqlType(field);
+      fail("Expected non-numeric decimal scale to be rejected, but got: " + sqlType);
+    } catch (ConnectException expected) {
+      // expected
+    }
+  }
+
+  private static SinkRecordField decimalFieldWithScale(String scale) {
+    Schema schema = SchemaBuilder.bytes()
+        .name(Decimal.LOGICAL_NAME)
+        .parameter(Decimal.SCALE_FIELD, scale)
+        .optional()
+        .build();
+    return new SinkRecordField(schema, "amount", false);
   }
 
   protected void verifyAlterAddTwoCols(String... expected) {

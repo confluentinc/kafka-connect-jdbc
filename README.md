@@ -33,3 +33,4 @@ For more information, check the documentation for the JDBC connector on the [con
 
 This project is licensed under the [Confluent Community License](LICENSE).
 
+This is just a test for cla

@@ -35,7 +35,11 @@ public class OffsetProtocols {
    * @return the partition map for V1 protocol
    */
   public static Map<String, String> sourcePartitionForProtocolV1(TableId tableId) {
-    String fqn = ExpressionBuilder.create().append(tableId, QuoteMethod.NEVER).toString();
+    // An offset storage key, never executed as SQL, so identifier validation does not apply.
+    String fqn = ExpressionBuilder.create()
+        .setValidateIdentifiers(false)
+        .append(tableId, QuoteMethod.NEVER)
+        .toString();
     Map<String, String> partitionForV1 = new HashMap<>();
     partitionForV1.put(JdbcSourceConnectorConstants.TABLE_NAME_KEY, fqn);
     partitionForV1.put(

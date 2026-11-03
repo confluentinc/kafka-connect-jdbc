@@ -52,6 +52,16 @@ public class DerbyDatabaseDialectTest extends BaseDialectTest<DerbyDatabaseDiale
   }
 
   @Test
+  public void shouldParseDecimalScaleAsInt() {
+    assertDecimalScaleParsedAsInt("DECIMAL(31,2)");
+  }
+
+  @Test
+  public void shouldRejectNonNumericDecimalScale() {
+    assertNonNumericDecimalScaleRejected();
+  }
+
+  @Test
   public void shouldMapDecimalSchemaTypeToDecimalSqlType() {
     assertDecimalMapping(0, "DECIMAL(31,0)");
     assertDecimalMapping(5, "DECIMAL(31,5)");

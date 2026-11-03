@@ -15,6 +15,14 @@
 
 package io.confluent.connect.jdbc.util;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+
+import org.apache.kafka.connect.errors.ConnectException;
+
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DropOptions;
 
@@ -237,9 +245,105 @@ public class ExpressionBuilder {
 
   protected static final QuoteMethod DEFAULT_QUOTE_METHOD = QuoteMethod.ALWAYS;
 
+  /**
+   * How a dialect interprets backslash inside a single-quoted string literal, which determines how
+   * {@link #appendStringQuoted(Object)} must escape a value so it cannot close the literal early.
+   */
+  public enum StringLiteralEscaping {
+    /**
+     * SQL standard: backslash is an ordinary character; only the single quote is doubled.
+     */
+    STANDARD,
+    /**
+     * Backslash is an escape character (for example MySQL without {@code NO_BACKSLASH_ESCAPES}),
+     * so both the backslash and the single quote are doubled.
+     */
+    BACKSLASH,
+    /**
+     * Backslash may or may not be an escape character depending on server settings (PostgreSQL
+     * {@code standard_conforming_strings}). Values containing a backslash are emitted as an
+     * {@code E'...'} literal, in which backslash is always an escape, with both the backslash and
+     * the single quote doubled; other values use a standard literal.
+     */
+    ESCAPE_STRING_SYNTAX
+  }
+
+  /**
+   * Character sequences that can end, extend, or hide the remainder of a SQL statement. They are
+   * rejected in bare (unquoted) identifiers; inside a quoted identifier they are ordinary
+   * characters and the closing-quote doubling already keeps them contained.
+   */
+  private static final String[] FORBIDDEN_IDENTIFIER_SEQUENCES = {";", "--", "/*", "*/"};
+
+  /**
+   * Characters that terminate a bare (unquoted) identifier and let the following text be parsed as
+   * SQL: identifier and string quotes of any dialect, and list/parenthesis punctuation. Whitespace
+   * is handled separately. None of these can appear in a working unquoted identifier.
+   */
+  private static final String FORBIDDEN_UNQUOTED_IDENTIFIER_CHARS = "\"`'[](),";
+
+  /**
+   * Set how string literals appended via {@link #appendStringQuoted(Object)} are escaped.
+   *
+   * @param escaping the escaping style; may be null if {@link StringLiteralEscaping#STANDARD}
+   *                 should be used
+   * @return this expression builder; never null
+   */
+  public ExpressionBuilder setStringLiteralEscaping(StringLiteralEscaping escaping) {
+    this.stringLiteralEscaping = escaping != null ? escaping : StringLiteralEscaping.STANDARD;
+    return this;
+  }
+
+  /**
+   * Set additional character sequences that must not appear in a bare (unquoted) identifier
+   * because the dialect's SQL grammar gives them special meaning, for example MySQL's {@code #}
+   * line comment. Quoted identifiers are unaffected, since quote-doubling already contains them.
+   *
+   * @param sequences the sequences to reject; may be null or empty for none
+   * @return this expression builder; never null
+   */
+  public ExpressionBuilder setExtraForbiddenUnquotedSequences(Collection<String> sequences) {
+    List<String> nonEmpty = new ArrayList<>();
+    if (sequences != null) {
+      for (String sequence : sequences) {
+        if (sequence != null && !sequence.isEmpty()) {
+          nonEmpty.add(sequence);
+        }
+      }
+    }
+    this.extraForbiddenUnquotedSequences = Collections.unmodifiableList(nonEmpty);
+    return this;
+  }
+
+  /**
+   * Set whether identifier names are validated before they are appended. Validation is on by
+   * default and must stay on for any expression that is executed as SQL. Disable it only for
+   * identity strings that are never executed, such as offset partition keys, table-matching keys
+   * and log output, so that legitimate names discovered from the database do not fail. Quoting
+   * and quote-doubling are unaffected.
+   *
+   * @param validate true to validate identifiers, false to append them without validation
+   * @return this expression builder; never null
+   */
+  public ExpressionBuilder setValidateIdentifiers(boolean validate) {
+    this.validateIdentifiers = validate;
+    return this;
+  }
+
+  /**
+   * Create a builder for human-readable forms of identifiers (logging, regex matching), which are
+   * never executed as SQL and so must not fail on unusual names discovered from the database.
+   */
+  static ExpressionBuilder createForDisplay() {
+    return new ExpressionBuilder().setValidateIdentifiers(false);
+  }
+
   private final IdentifierRules rules;
   private final StringBuilder sb = new StringBuilder();
   private QuoteMethod quoteSqlIdentifiers = DEFAULT_QUOTE_METHOD;
+  private StringLiteralEscaping stringLiteralEscaping = StringLiteralEscaping.STANDARD;
+  private boolean validateIdentifiers = true;
+  private List<String> extraForbiddenUnquotedSequences = Collections.emptyList();
 
   /**
    * Create a new expression builder with the default {@link IdentifierRules}.
@@ -351,6 +455,8 @@ public class ExpressionBuilder {
 
   /**
    * Append to this builder's expression a string surrounded by single quote characters ({@code '}).
+   * Embedded single quotes (and, where the dialect treats it as an escape, backslashes) are
+   * escaped so the value cannot terminate the literal; see {@link StringLiteralEscaping}.
    * Use {@link #appendIdentifier(String, QuoteMethod)} for identifiers,
    * {@link #appendColumnName(String, QuoteMethod)} for column names, or
    * {@link #appendTableName(String, QuoteMethod)} for table names.
@@ -359,8 +465,18 @@ public class ExpressionBuilder {
    * @return this builder to enable methods to be chained; never null
    */
   public ExpressionBuilder appendStringQuoted(Object name) {
+    String value = String.valueOf(name);
+    boolean escapeBackslash = stringLiteralEscaping == StringLiteralEscaping.BACKSLASH
+        || (stringLiteralEscaping == StringLiteralEscaping.ESCAPE_STRING_SYNTAX
+            && value.indexOf('\\') >= 0);
+    if (escapeBackslash) {
+      value = value.replace("\\", "\\\\");
+      if (stringLiteralEscaping == StringLiteralEscaping.ESCAPE_STRING_SYNTAX) {
+        sb.append('E');
+      }
+    }
     appendStringQuote();
-    sb.append(name);
+    sb.append(value.replace("'", "''"));
     appendStringQuote();
     return this;
   }
@@ -392,10 +508,7 @@ public class ExpressionBuilder {
       String name,
       QuoteMethod quoted
   ) {
-    appendLeadingQuote(quoted);
-    sb.append(name);
-    appendTrailingQuote(quoted);
-    return this;
+    return appendIdentifierText(name, quoted);
   }
 
   /**
@@ -418,10 +531,7 @@ public class ExpressionBuilder {
    * @return this builder to enable methods to be chained; never null
    */
   public ExpressionBuilder appendTableName(String name, QuoteMethod quote) {
-    appendLeadingQuote(quote);
-    sb.append(name);
-    appendTrailingQuote(quote);
-    return this;
+    return appendIdentifierText(name, quote);
   }
 
   /**
@@ -444,10 +554,7 @@ public class ExpressionBuilder {
    * @return this builder to enable methods to be chained; never null
    */
   public ExpressionBuilder appendColumnName(String name, QuoteMethod quote) {
-    appendLeadingQuote(quote);
-    sb.append(name);
-    appendTrailingQuote(quote);
-    return this;
+    return appendIdentifierText(name, quote);
   }
 
   /**
@@ -458,10 +565,92 @@ public class ExpressionBuilder {
    * @return this builder to enable methods to be chained; never null
    */
   public ExpressionBuilder appendIdentifierQuoted(String name) {
-    appendLeadingQuote();
-    sb.append(name);
-    appendTrailingQuote();
+    return appendIdentifierText(name, QuoteMethod.ALWAYS);
+  }
+
+  /**
+   * Append an identifier so that its text is always read as one identifier and nothing more.
+   *
+   * <p>When the identifier is quoted, an embedded trailing-quote string is escaped by doubling it
+   * (for example {@code "} becomes {@code ""}, and for bracket quoting {@code ]} becomes
+   * {@code ]]}). Quote doubling cannot protect a bare identifier, so the name is also validated:
+   * see {@link #validateIdentifier(String, boolean)}.
+   */
+  private ExpressionBuilder appendIdentifierText(String name, QuoteMethod quote) {
+    boolean quoted = quote == QuoteMethod.ALWAYS && supportsQuotedIdentifiers();
+    if (name != null && validateIdentifiers) {
+      validateIdentifier(name, quoted);
+    }
+    appendLeadingQuote(quote);
+    if (quoted && name != null) {
+      String trailing = rules.trailingQuoteString();
+      sb.append(name.replace(trailing, trailing + trailing));
+    } else {
+      sb.append(name);
+    }
+    appendTrailingQuote(quote);
     return this;
+  }
+
+  private boolean supportsQuotedIdentifiers() {
+    String trailing = rules.trailingQuoteString();
+    return !trailing.isEmpty() && !trailing.equals(IdentifierRules.UNSUPPORTED_QUOTE);
+  }
+
+  /**
+   * Reject identifiers that could end, extend, or hide the rest of the generated statement.
+   * Control characters are rejected in every mode as defense in depth. A quoted identifier is
+   * otherwise contained by doubling its closing quote. A bare (unquoted) identifier additionally
+   * may not contain the statement separator, SQL comment introducers (including any the dialect
+   * adds, see {@link #setExtraForbiddenUnquotedSequences(Collection)}), whitespace, quote
+   * characters, parentheses, or commas, since any of those would let the remaining text be parsed
+   * as SQL. Ordinary names such as {@code [A-Za-z_][A-Za-z0-9_]*} are never affected.
+   */
+  private void validateIdentifier(String name, boolean quoted) {
+    if (!quoted) {
+      rejectContainedSequences(name, Arrays.asList(FORBIDDEN_IDENTIFIER_SEQUENCES));
+      rejectContainedSequences(name, extraForbiddenUnquotedSequences);
+    }
+    for (int i = 0; i < name.length(); i++) {
+      char c = name.charAt(i);
+      if (Character.isISOControl(c)) {
+        throw invalidIdentifier(name, String.format("control character U+%04X", (int) c));
+      }
+      if (!quoted) {
+        validateUnquotedIdentifierChar(name, c);
+      }
+    }
+  }
+
+  private static void rejectContainedSequences(String name, List<String> sequences) {
+    for (String sequence : sequences) {
+      if (name.contains(sequence)) {
+        throw invalidIdentifier(name, "'" + sequence + "'");
+      }
+    }
+  }
+
+  private void validateUnquotedIdentifierChar(String name, char c) {
+    if (Character.isWhitespace(c) || Character.isSpaceChar(c)) {
+      throw invalidIdentifier(name, "whitespace");
+    }
+    if (FORBIDDEN_UNQUOTED_IDENTIFIER_CHARS.indexOf(c) >= 0
+        || rules.leadingQuoteString().indexOf(c) >= 0
+        || rules.trailingQuoteString().indexOf(c) >= 0) {
+      throw invalidIdentifier(name, "'" + c + "'");
+    }
+  }
+
+  private static ConnectException invalidIdentifier(String name, String reason) {
+    StringBuilder printable = new StringBuilder(name.length());
+    for (int i = 0; i < name.length(); i++) {
+      char c = name.charAt(i);
+      printable.append(Character.isISOControl(c) ? '?' : c);
+    }
+    return new ConnectException(String.format(
+        "Identifier '%s' contains %s, which is not allowed in a generated SQL identifier because "
+        + "it could alter the statement. Rename the field or table.",
+        printable, reason));
   }
 
   /**

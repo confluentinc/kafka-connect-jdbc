@@ -425,6 +425,16 @@ public class PostgreSqlDatabaseDialect extends GenericDatabaseDialect {
     return builder.toString();
   }
 
+  /**
+   * PostgreSQL honors backslash escapes in ordinary string literals when
+   * {@code standard_conforming_strings} is off, so values containing a backslash are written as
+   * {@code E'...'} literals, whose meaning does not depend on that setting.
+   */
+  @Override
+  protected ExpressionBuilder.StringLiteralEscaping stringLiteralEscaping() {
+    return ExpressionBuilder.StringLiteralEscaping.ESCAPE_STRING_SYNTAX;
+  }
+
   @Override
   protected void formatColumnValue(
       ExpressionBuilder builder,

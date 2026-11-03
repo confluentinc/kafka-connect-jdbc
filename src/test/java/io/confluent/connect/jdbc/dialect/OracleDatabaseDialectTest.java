@@ -85,6 +85,16 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
   }
 
   @Test
+  public void shouldParseDecimalScaleAsInt() {
+    assertDecimalScaleParsedAsInt("NUMBER(*,2)");
+  }
+
+  @Test
+  public void shouldRejectNonNumericDecimalScale() {
+    assertNonNumericDecimalScaleRejected();
+  }
+
+  @Test
   public void shouldMapDecimalSchemaTypeToDecimalSqlType() {
     assertDecimalMapping(0, "NUMBER(*,0)");
     assertDecimalMapping(3, "NUMBER(*,3)");
@@ -476,4 +486,12 @@ public class OracleDatabaseDialectTest extends BaseDialectTest<OracleDatabaseDia
 }
   // validateQuery behaviour is inherited from GenericDatabaseDialect and exercised in
   // GenericDatabaseDialectTest; no Oracle-specific override exists to test here.
+
+  @Test
+  public void unquotedIdentifierMayContainHash() {
+    // '#' is an ordinary identifier character here (not a comment), so it stays allowed bare.
+    quoteIdentfiiers = QuoteMethod.NEVER;
+    dialect = createDialect();
+    assertEquals("x#y", dialect.expressionBuilder().appendColumnName("x#y").toString());
+  }
 }

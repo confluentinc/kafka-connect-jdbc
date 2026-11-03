@@ -28,6 +28,7 @@ import java.util.List;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialectProvider.SubprotocolBasedProvider;
 import io.confluent.connect.jdbc.sink.metadata.SinkRecordField;
+import io.confluent.connect.jdbc.util.ExpressionBuilder;
 import io.confluent.connect.jdbc.util.IdentifierRules;
 import io.confluent.connect.jdbc.util.TableId;
 
@@ -58,12 +59,23 @@ public class VerticaDatabaseDialect extends GenericDatabaseDialect {
     super(config, new IdentifierRules(".", "\"", "\""));
   }
 
+  /**
+   * Vertica treats backslash as an escape character inside ordinary {@code '...'} literals when
+   * StandardConformingStrings is off (its legacy setting), so string literals containing a
+   * backslash are emitted as {@code E'...'} literals, whose meaning does not depend on that
+   * setting.
+   */
+  @Override
+  protected ExpressionBuilder.StringLiteralEscaping stringLiteralEscaping() {
+    return ExpressionBuilder.StringLiteralEscaping.ESCAPE_STRING_SYNTAX;
+  }
+
   @Override
   protected String getSqlType(SinkRecordField field) {
     if (field.schemaName() != null) {
       switch (field.schemaName()) {
         case Decimal.LOGICAL_NAME:
-          return "DECIMAL(18," + field.schemaParameters().get(Decimal.SCALE_FIELD) + ")";
+          return "DECIMAL(18," + decimalScaleOf(field) + ")";
         case Date.LOGICAL_NAME:
           return "DATE";
         case Time.LOGICAL_NAME:

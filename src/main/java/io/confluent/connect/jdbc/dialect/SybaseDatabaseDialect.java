@@ -99,7 +99,7 @@ public class SybaseDatabaseDialect extends GenericDatabaseDialect {
     if (field.schemaName() != null) {
       switch (field.schemaName()) {
         case Decimal.LOGICAL_NAME:
-          return "decimal(38," + field.schemaParameters().get(Decimal.SCALE_FIELD) + ")";
+          return "decimal(38," + decimalScaleOf(field) + ")";
         case Date.LOGICAL_NAME:
           return "date";
         case Time.LOGICAL_NAME:

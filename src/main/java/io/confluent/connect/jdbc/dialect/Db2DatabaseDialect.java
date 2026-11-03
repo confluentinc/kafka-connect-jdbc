@@ -77,7 +77,7 @@ public class Db2DatabaseDialect extends GenericDatabaseDialect {
     if (field.schemaName() != null) {
       switch (field.schemaName()) {
         case Decimal.LOGICAL_NAME:
-          return "DECIMAL(31," + field.schemaParameters().get(Decimal.SCALE_FIELD) + ")";
+          return "DECIMAL(31," + decimalScaleOf(field) + ")";
         case Date.LOGICAL_NAME:
           return "DATE";
         case Time.LOGICAL_NAME:

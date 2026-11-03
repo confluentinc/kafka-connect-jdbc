@@ -594,6 +594,27 @@ public class PostgreSqlDatabaseDialectTest extends BaseDialectTest<PostgreSqlDat
     assertEquals(5, dialect.decimalScale(definition));
   }
   @Test
+  public void stringDefaultWithBackslashUsesEscapeStringSyntax() {
+    // With standard_conforming_strings=off PostgreSQL treats backslash as an escape inside an
+    // ordinary '...' literal, so "a\'" would close the literal early. An E'...' literal always
+    // treats backslash as an escape, so doubling both backslash and quote inside E'...' yields
+    // the same value whether standard_conforming_strings is on or off.
+    ExpressionBuilder builder = dialect.expressionBuilder();
+    dialect.formatColumnValue(builder, null, null, Type.STRING, "a\\'); DROP TABLE t; --");
+    assertEquals("E'a\\\\''); DROP TABLE t; --'", builder.toString());
+  }
+
+  @Test
+  public void ordinaryStringDefaultsKeepStandardLiteralSyntax() {
+    ExpressionBuilder builder = dialect.expressionBuilder();
+    dialect.formatColumnValue(builder, null, null, Type.STRING, "n/a");
+    assertEquals("'n/a'", builder.toString());
+    builder = dialect.expressionBuilder();
+    dialect.formatColumnValue(builder, null, null, Type.STRING, "O'Neill");
+    assertEquals("'O''Neill'", builder.toString());
+  }
+
+  @Test
   public void testArrayDefaultsFormatting() {
     PostgreSqlDatabaseDialect dialect = createDialect();
 

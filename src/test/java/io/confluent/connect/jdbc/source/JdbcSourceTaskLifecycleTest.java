@@ -19,17 +19,15 @@ import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.source.SourceRecord;
-import org.easymock.EasyMock;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.powermock.api.easymock.PowerMock;
-import org.powermock.api.easymock.annotation.Mock;
-import org.powermock.core.classloader.annotations.PowerMockIgnore;
-import org.powermock.modules.junit4.PowerMockRunner;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnitRunner;
 
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.SQLNonTransientException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
@@ -39,12 +37,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 
-import static org.easymock.EasyMock.anyBoolean;
-import static org.easymock.EasyMock.anyLong;
-import static org.easymock.EasyMock.anyObject;
-import static org.easymock.EasyMock.expect;
-import static org.easymock.EasyMock.expectLastCall;
-import static org.easymock.EasyMock.replay;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsInstanceOf.instanceOf;
 import static org.hamcrest.core.StringContains.containsString;
@@ -52,10 +44,17 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 
-@RunWith(PowerMockRunner.class)
-@PowerMockIgnore("javax.management.*")
+@RunWith(MockitoJUnitRunner.class)
 public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
 
   @Mock
@@ -94,12 +93,7 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
     };
 
     // Should request a connection, then should close it on stop()
-    EasyMock.expect(mockCachedConnectionProvider.getConnection()).andReturn(db.getConnection()).anyTimes();
-    mockCachedConnectionProvider.close(true);
-
-    PowerMock.expectLastCall();
-
-    PowerMock.replayAll();
+    when(mockCachedConnectionProvider.getConnection()).thenReturn(db.getConnection());
 
     ExecutorService executor = Executors.newSingleThreadExecutor();
     Object lock = new Object();
@@ -131,7 +125,7 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
       executor.shutdown();
     }
 
-    PowerMock.verifyAll();
+    verify(mockCachedConnectionProvider).close(true);
   }
 
   @Test
@@ -148,19 +142,15 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
     };
 
     // Should request a connection, then should close it on stop()
-    EasyMock.expect(mockCachedConnectionProvider.getConnection()).andReturn(db.getConnection());
-    EasyMock.expect(mockCachedConnectionProvider.getConnection()).andReturn(db.getConnection());
-    EasyMock.expect(mockCachedConnectionProvider.getConnection()).andReturn(db.getConnection());
-    mockCachedConnectionProvider.close(true);
-
-    PowerMock.expectLastCall();
-
-    PowerMock.replayAll();
+    when(mockCachedConnectionProvider.getConnection())
+        .thenReturn(db.getConnection())
+        .thenReturn(db.getConnection())
+        .thenReturn(db.getConnection());
 
     task.start(singleTableConfig());
     task.stop();
 
-    PowerMock.verifyAll();
+    verify(mockCachedConnectionProvider).close(true);
   }
 
   // Note: testPollInterval test was removed because the new RecordQueue-based architecture
@@ -296,22 +286,25 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
   public void testTransientSQLExceptionRetries() throws Exception {
 
     int retryMax = 2; //max times to retry
-    TableQuerier bulkTableQuerier = EasyMock.createMock(BulkTableQuerier.class);
+    TableQuerier bulkTableQuerier = mock(BulkTableQuerier.class);
 
-    for (int i = 0; i < retryMax+1; i++) {
-      expect(bulkTableQuerier.querying()).andReturn(true);
-      bulkTableQuerier.maybeStartQuery(anyObject());
-      expectLastCall().andThrow(new SQLException("This is a transient exception"));
+    // lenient(): mockedTask never goes through initialize(), so poll() can fail before ever
+    // touching bulkTableQuerier - the original EasyMock version tolerated this silently too,
+    // since it never called EasyMock.verify() on this mock.
+    lenient().when(bulkTableQuerier.querying()).thenReturn(true);
+    lenient().doThrow(new SQLException("This is a transient exception"))
+        .when(bulkTableQuerier).maybeStartQuery(any());
 
-      expect(bulkTableQuerier.getAttemptedRetryCount()).andReturn(i);
-      // Called another time in error logging
-      expect(bulkTableQuerier.getAttemptedRetryCount()).andReturn(i);
-      bulkTableQuerier.incrementRetryCount();
-      expectLastCall().once();
-      bulkTableQuerier.reset(anyLong(), anyBoolean());
+    // getAttemptedRetryCount() is called twice per retry (retry logic + error logging),
+    // returning the same value both times before moving on to the next retry count.
+    Integer[] retryCounts = new Integer[2 * (retryMax + 1)];
+    for (int i = 0; i < retryMax + 1; i++) {
+      retryCounts[2 * i] = i;
+      retryCounts[2 * i + 1] = i;
     }
+    lenient().when(bulkTableQuerier.getAttemptedRetryCount())
+        .thenReturn(retryCounts[0], Arrays.copyOfRange(retryCounts, 1, retryCounts.length));
 
-    replay(bulkTableQuerier);
     JdbcSourceTask mockedTask = setUpMockedTask(bulkTableQuerier, retryMax);
 
     for (int i = 0; i < retryMax+1; i++) {
@@ -321,11 +314,8 @@ public class JdbcSourceTaskLifecycleTest extends JdbcSourceTaskTestBase {
 
 
   private JdbcSourceTask setUpMockedTask(TableQuerier bulkTableQuerier, int retryMax) throws Exception {
-    CachedConnectionProvider mockCachedConnectionProvider = EasyMock.createMock(CachedConnectionProvider.class);
-    for (int i = 0; i < retryMax+1; i++) {
-      expect(mockCachedConnectionProvider.getConnection()).andReturn(null);
-    }
-    replay(mockCachedConnectionProvider);
+    CachedConnectionProvider mockCachedConnectionProvider = mock(CachedConnectionProvider.class);
+    lenient().when(mockCachedConnectionProvider.getConnection()).thenReturn(null);
 
     PriorityQueue<TableQuerier> priorityQueue = new PriorityQueue<>();
     priorityQueue.add(bulkTableQuerier);

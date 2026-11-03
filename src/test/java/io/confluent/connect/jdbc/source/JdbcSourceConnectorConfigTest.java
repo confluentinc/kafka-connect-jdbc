@@ -19,16 +19,12 @@ import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigDef.Recommender;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.config.ConfigValue;
-import org.easymock.EasyMock;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.powermock.api.easymock.PowerMock;
-import org.powermock.api.easymock.annotation.Mock;
-import org.powermock.core.classloader.annotations.PowerMockIgnore;
-import org.powermock.core.classloader.annotations.PrepareForTest;
-import org.powermock.modules.junit4.PowerMockRunner;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnitRunner;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -45,10 +41,13 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
-@RunWith(PowerMockRunner.class)
-@PrepareForTest({Recommender.class})
-@PowerMockIgnore("javax.management.*")
+@RunWith(MockitoJUnitRunner.class)
 public class JdbcSourceConnectorConfigTest {
 
   private EmbeddedDerby db;
@@ -133,10 +132,7 @@ public class JdbcSourceConnectorConfigTest {
     final List<Object> results1 = Collections.singletonList((Object) "xyz");
     final List<Object> results2 = Collections.singletonList((Object) "123");
     // Set up the mock recommender to be called twice, returning different results each time
-    EasyMock.expect(mockRecommender.validValues(EasyMock.anyObject(String.class), EasyMock.anyObject(Map.class))).andReturn(results1);
-    EasyMock.expect(mockRecommender.validValues(EasyMock.anyObject(String.class), EasyMock.anyObject(Map.class))).andReturn(results2);
-
-    PowerMock.replayAll();
+    when(mockRecommender.validValues(anyString(), anyMap())).thenReturn(results1, results2);
 
     CachingRecommender recommender = new CachingRecommender(mockRecommender, time, 1000L);
 
@@ -150,7 +146,7 @@ public class JdbcSourceConnectorConfigTest {
     time.sleep(2000L);
     assertSame(results2, recommender.validValues("x", config1));
 
-    PowerMock.verifyAll();
+    verify(mockRecommender, times(2)).validValues(anyString(), anyMap());
   }
 
   @Test

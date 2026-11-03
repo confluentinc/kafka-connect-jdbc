@@ -129,7 +129,7 @@ public class TableId implements Comparable<TableId>, Expressable {
 
   @Override
   public String toString() {
-    return ExpressionBuilder.create().append(this).toString();
+    return ExpressionBuilder.createForDisplay().append(this).toString();
   }
 
   /**
@@ -139,6 +139,6 @@ public class TableId implements Comparable<TableId>, Expressable {
    * @return the unquoted table identifier
    */
   public String toUnquotedString() {
-    return ExpressionBuilder.create().append(this, QuoteMethod.NEVER).toString();
+    return ExpressionBuilder.createForDisplay().append(this, QuoteMethod.NEVER).toString();
   }
 }

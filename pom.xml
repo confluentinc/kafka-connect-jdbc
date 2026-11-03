@@ -79,6 +79,9 @@
         <dependency.check.skip>true</dependency.check.skip>
         <maven-surefire-plugin.version>3.0.0-M7</maven-surefire-plugin.version>
         <maven-failsafe-plugin.version>3.0.0-M7</maven-failsafe-plugin.version>
+        <!-- Override parent's ancient mockito.version (2.23.0, cglib-based, incompatible with JDK 17+).
+             mockito-core 5.x uses ByteBuddy's inline mock maker and requires JDK 11+ at runtime. -->
+        <mockito.version>5.23.0</mockito.version>
     </properties>
     <repositories>
         <repository>
@@ -218,18 +221,8 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>org.easymock</groupId>
-            <artifactId>easymock</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.powermock</groupId>
-            <artifactId>powermock-module-junit4</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.powermock</groupId>
-            <artifactId>powermock-api-easymock</artifactId>
+            <groupId>org.hamcrest</groupId>
+            <artifactId>hamcrest-all</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -246,7 +239,7 @@
         </dependency>
         <dependency>
             <groupId>org.mockito</groupId>
-            <artifactId>mockito-all</artifactId>
+            <artifactId>mockito-core</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -535,6 +528,7 @@
                 <version>${maven-surefire-plugin.version}</version>
                 <configuration>
                     <trimStackTrace>false</trimStackTrace>
+                    <argLine>-XX:+EnableDynamicAgentLoading -Xmx4096m</argLine>
                 </configuration>
             </plugin>
             <plugin>

@@ -19,7 +19,6 @@ import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.sink.JdbcSinkConfig;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigValue;
-import org.easymock.EasyMock;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -34,6 +33,10 @@ import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.DELETE_ENABLED;
 import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.PK_MODE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 public class JdbcSinkConnectorValidationTest {
   private JdbcSinkConnectorValidation validation;
@@ -270,30 +273,28 @@ public class JdbcSinkConnectorValidationTest {
 
   @Test
   public void validate_withValidConnection_noErrors() throws Exception {
-    DatabaseDialect mockDialect = EasyMock.createNiceMock(DatabaseDialect.class);
-    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
-    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
-    EasyMock.replay(mockDialect, mockConnection);
+    DatabaseDialect mockDialect = mock(DatabaseDialect.class);
+    Connection mockConnection = mock(Connection.class);
+    when(mockDialect.getConnection()).thenReturn(mockConnection);
 
     validateWithMockDialect(mockDialect);
 
     assertNoErrors();
-    EasyMock.verify(mockDialect, mockConnection);
+    verify(mockDialect).getConnection();
   }
 
   @Test
   public void validate_withConnectionFailure_setsErrorOnConnectionUrl() throws Exception {
-    DatabaseDialect mockDialect = EasyMock.createNiceMock(DatabaseDialect.class);
-    EasyMock.expect(mockDialect.getConnection()).andThrow(
+    DatabaseDialect mockDialect = mock(DatabaseDialect.class);
+    when(mockDialect.getConnection()).thenThrow(
         new SQLException("Connection refused", "08001"));
-    EasyMock.replay(mockDialect);
 
     validateWithMockDialect(mockDialect);
 
     assertErrors(1);
     assertErrors(CONNECTION_URL, 1);
     assertErrorMatches(CONNECTION_URL, ".*Could not connect to database.*Connection refused.*");
-    EasyMock.verify(mockDialect);
+    verify(mockDialect).getConnection();
   }
 
   /**
@@ -303,10 +304,9 @@ public class JdbcSinkConnectorValidationTest {
    */
   @Test
   public void validate_withConnectionFailure_errorAttachedToConnectionUrlNotHostName() throws Exception {
-    DatabaseDialect mockDialect = EasyMock.createNiceMock(DatabaseDialect.class);
-    EasyMock.expect(mockDialect.getConnection()).andThrow(
+    DatabaseDialect mockDialect = mock(DatabaseDialect.class);
+    when(mockDialect.getConnection()).thenThrow(
         new SQLException("Could not connect to jdbc:postgresql://localhost:5432/testdb"));
-    EasyMock.replay(mockDialect);
 
     validateWithMockDialect(mockDialect);
 
@@ -316,67 +316,63 @@ public class JdbcSinkConnectorValidationTest {
     assertEquals(1, connectionUrlValue.errorMessages().size());
     assertTrue(connectionUrlValue.errorMessages().get(0).contains("Could not connect to database"));
 
-    EasyMock.verify(mockDialect);
+    verify(mockDialect).getConnection();
   }
 
   @Test
   public void validate_withAuthenticationFailure_setsErrorOnConnectionUrl() throws Exception {
-    DatabaseDialect mockDialect = EasyMock.createNiceMock(DatabaseDialect.class);
-    EasyMock.expect(mockDialect.getConnection()).andThrow(
+    DatabaseDialect mockDialect = mock(DatabaseDialect.class);
+    when(mockDialect.getConnection()).thenThrow(
         new SQLException("password authentication failed for user \"testUser\"", "28P01"));
-    EasyMock.replay(mockDialect);
 
     validateWithMockDialect(mockDialect);
 
     assertErrors(1);
     assertErrors(CONNECTION_URL, 1);
     assertErrorMatches(CONNECTION_URL, ".*Could not connect to database.*password authentication failed.*");
-    EasyMock.verify(mockDialect);
+    verify(mockDialect).getConnection();
   }
 
   @Test
   public void validate_withNetworkError_setsErrorOnConnectionUrl() throws Exception {
-    DatabaseDialect mockDialect = EasyMock.createNiceMock(DatabaseDialect.class);
-    EasyMock.expect(mockDialect.getConnection()).andThrow(
+    DatabaseDialect mockDialect = mock(DatabaseDialect.class);
+    when(mockDialect.getConnection()).thenThrow(
         new SQLException("Network error: Connection timeout"));
-    EasyMock.replay(mockDialect);
 
     validateWithMockDialect(mockDialect);
 
     assertErrors(1);
     assertErrors(CONNECTION_URL, 1);
     assertErrorMatches(CONNECTION_URL, ".*Could not connect to database.*Network error.*");
-    EasyMock.verify(mockDialect);
+    verify(mockDialect).getConnection();
   }
 
   @Test
   public void validate_withDatabaseNotFound_setsErrorOnConnectionUrl() throws Exception {
-    DatabaseDialect mockDialect = EasyMock.createNiceMock(DatabaseDialect.class);
-    EasyMock.expect(mockDialect.getConnection()).andThrow(
+    DatabaseDialect mockDialect = mock(DatabaseDialect.class);
+    when(mockDialect.getConnection()).thenThrow(
         new SQLException("FATAL: database \"testdb\" does not exist", "3D000"));
-    EasyMock.replay(mockDialect);
 
     validateWithMockDialect(mockDialect);
 
     assertErrors(1);
     assertErrors(CONNECTION_URL, 1);
     assertErrorMatches(CONNECTION_URL, ".*Could not connect to database.*database.*does not exist.*");
-    EasyMock.verify(mockDialect);
+    verify(mockDialect).getConnection();
   }
 
   @Test
   public void validate_withGenericException_setsErrorOnConnectionUrl() throws Exception {
-    DatabaseDialect mockDialect = EasyMock.createNiceMock(DatabaseDialect.class);
-    EasyMock.expect(mockDialect.getConnection()).andThrow(
+    DatabaseDialect mockDialect = mock(DatabaseDialect.class);
+    when(mockDialect.getConnection()).thenThrow(
         new RuntimeException("Unexpected error during connection"));
-    EasyMock.replay(mockDialect);
 
     validateWithMockDialect(mockDialect);
 
     assertErrors(1);
     assertErrors(CONNECTION_URL, 1);
     assertErrorMatches(CONNECTION_URL, ".*Could not connect to database.*Unexpected error.*");
-    EasyMock.verify(mockDialect);
+    verify(mockDialect).getConnection();
   }
 
   // ========== Combined Validation Tests ==========
@@ -387,9 +383,8 @@ public class JdbcSinkConnectorValidationTest {
     props.put(PK_MODE, "kafka");
 
     // Mock dialect should never be called because validation has errors
-    DatabaseDialect mockDialect = EasyMock.createNiceMock(DatabaseDialect.class);
+    DatabaseDialect mockDialect = mock(DatabaseDialect.class);
     // Don't expect any calls since connection validation is skipped
-    EasyMock.replay(mockDialect);
 
     validateWithMockDialect(mockDialect);
 
@@ -398,7 +393,7 @@ public class JdbcSinkConnectorValidationTest {
     assertErrors(2);
     assertErrors(DELETE_ENABLED, 1);
     assertErrors(PK_MODE, 1);
-    EasyMock.verify(mockDialect);
+    verifyNoInteractions(mockDialect);
   }
 
   @Test
@@ -407,9 +402,8 @@ public class JdbcSinkConnectorValidationTest {
     props.put(PK_MODE, "none");
 
     // Mock dialect should never be called because validation has errors
-    DatabaseDialect mockDialect = EasyMock.createNiceMock(DatabaseDialect.class);
+    DatabaseDialect mockDialect = mock(DatabaseDialect.class);
     // Don't expect any calls
-    EasyMock.replay(mockDialect);
 
     validateWithMockDialect(mockDialect);
 
@@ -417,7 +411,7 @@ public class JdbcSinkConnectorValidationTest {
     assertErrors(DELETE_ENABLED, 1);
     assertErrors(PK_MODE, 1);
     // Connection error should not exist because validation was skipped
-    EasyMock.verify(mockDialect);
+    verifyNoInteractions(mockDialect);
   }
 
   @Test
@@ -426,15 +420,14 @@ public class JdbcSinkConnectorValidationTest {
     props.put(PK_MODE, "record_key");
     props.put("auto.create", "true");
 
-    DatabaseDialect mockDialect = EasyMock.createNiceMock(DatabaseDialect.class);
-    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
-    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
-    EasyMock.replay(mockDialect, mockConnection);
+    DatabaseDialect mockDialect = mock(DatabaseDialect.class);
+    Connection mockConnection = mock(Connection.class);
+    when(mockDialect.getConnection()).thenReturn(mockConnection);
 
     validateWithMockDialect(mockDialect);
 
     assertNoErrors();
-    EasyMock.verify(mockDialect, mockConnection);
+    verify(mockDialect).getConnection();
   }
 
   // ========== Edge Cases ==========

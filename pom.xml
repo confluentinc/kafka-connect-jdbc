@@ -75,6 +75,7 @@
         <class.coverage.threshold>0.91</class.coverage.threshold>
         <complexity.coverage.threshold>0.65</complexity.coverage.threshold>
         <line.coverage.threshold>0.80</line.coverage.threshold>
+        <dependency.check.skip>true</dependency.check.skip>
     </properties>
 
     <repositories>

@@ -142,6 +142,7 @@ public class JdbcSourceConnectorTest {
     mockCachedConnectionProvider.close();
     PowerMock.expectLastCall().anyTimes();
 
+
     PowerMock.replayAll();
 
     connector.start(props);

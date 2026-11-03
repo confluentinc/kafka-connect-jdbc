@@ -169,6 +169,18 @@ public class TableMonitorThread extends Thread {
     shutdownLatch.countDown();
   }
 
+  /**
+   * Build the key a discovered table is compared against in the configured whitelist or
+   * blacklist. The key is never executed as SQL, so identifier validation is disabled; the
+   * dialect's quoting rules still apply so keys match the configured forms.
+   */
+  private String matchingKey(TableId table, QuoteMethod quoteMethod) {
+    return dialect.expressionBuilder()
+        .setValidateIdentifiers(false)
+        .append(table, quoteMethod)
+        .toString();
+  }
+
   private boolean updateTables() {
     final List<TableId> allTables;
     try {
@@ -187,8 +199,8 @@ public class TableMonitorThread extends Thread {
     final List<TableId> filteredTables = new ArrayList<>(allTables.size());
     if (whitelist != null) {
       for (TableId table : allTables) {
-        String fqn1 = dialect.expressionBuilder().append(table, QuoteMethod.NEVER).toString();
-        String fqn2 = dialect.expressionBuilder().append(table, QuoteMethod.ALWAYS).toString();
+        String fqn1 = matchingKey(table, QuoteMethod.NEVER);
+        String fqn2 = matchingKey(table, QuoteMethod.ALWAYS);
         if (whitelist.contains(fqn1) || whitelist.contains(fqn2)
             || whitelist.contains(table.tableName())) {
           filteredTables.add(table);
@@ -196,8 +208,8 @@ public class TableMonitorThread extends Thread {
       }
     } else if (blacklist != null) {
       for (TableId table : allTables) {
-        String fqn1 = dialect.expressionBuilder().append(table, QuoteMethod.NEVER).toString();
-        String fqn2 = dialect.expressionBuilder().append(table, QuoteMethod.ALWAYS).toString();
+        String fqn1 = matchingKey(table, QuoteMethod.NEVER);
+        String fqn2 = matchingKey(table, QuoteMethod.ALWAYS);
         if (!(blacklist.contains(fqn1) || blacklist.contains(fqn2)
               || blacklist.contains(table.tableName()))) {
           filteredTables.add(table);

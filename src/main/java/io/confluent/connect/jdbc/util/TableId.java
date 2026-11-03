@@ -129,6 +129,6 @@ public class TableId implements Comparable<TableId>, Expressable {
 
   @Override
   public String toString() {
-    return ExpressionBuilder.create().append(this).toString();
+    return ExpressionBuilder.createForDisplay().append(this).toString();
   }
 }

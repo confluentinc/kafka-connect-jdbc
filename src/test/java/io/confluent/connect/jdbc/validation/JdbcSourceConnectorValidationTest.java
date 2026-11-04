@@ -1311,6 +1311,30 @@ public class JdbcSourceConnectorValidationTest {
   }
 
   @Test
+  public void validate_withQueryAndQuerySuffixCompletingParenthesis_noErrors()
+    throws Exception {
+    String query = "SELECT * FROM (SELECT id FROM sample_data";
+    String suffix = ") sub";
+    String expectedValidatedQuery = query + " " + suffix;
+
+    props.put(MODE_CONFIG, MODE_BULK);
+    props.put(QUERY_CONFIG, query);
+    props.put(QUERY_SUFFIX_CONFIG, suffix);
+
+    DatabaseDialect mockDialect = EasyMock.createNiceMock(DatabaseDialect.class);
+    Connection mockConnection = EasyMock.createNiceMock(Connection.class);
+    EasyMock.expect(mockDialect.getConnection()).andReturn(mockConnection);
+    mockDialect.validateQuery(mockConnection, expectedValidatedQuery);
+    EasyMock.expectLastCall();
+    EasyMock.replay(mockDialect, mockConnection);
+
+    validateWithMockDialect(mockDialect);
+
+    assertNoErrors();
+    EasyMock.verify(mockDialect, mockConnection);
+  }
+
+  @Test
   public void validate_withNoQuery_skipsSemanticValidation() throws Exception {
     props.put(MODE_CONFIG, MODE_BULK);
     props.put(TABLE_WHITELIST_CONFIG, "table1,table2");

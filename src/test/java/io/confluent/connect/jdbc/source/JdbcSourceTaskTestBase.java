@@ -82,6 +82,9 @@ public class JdbcSourceTaskTestBase {
 
   @After
   public void tearDown() throws Exception {
+    // Stop the task first: its querier thread keeps querying the database until then, and
+    // deleting the database files under it makes dropDatabase() fail intermittently.
+    task.stop();
     db.close();
     db.dropDatabase();
   }
@@ -120,7 +123,6 @@ public class JdbcSourceTaskTestBase {
     Map<String, String> props = singleTableConfig(completeMapping);
     props.put(JdbcSourceTaskConfig.DB_TIMEZONE_CONFIG, tz.getID());
     props.put(JdbcSourceTaskConfig.BATCH_MAX_ROWS_CONFIG, batch.toString());
-    props.put(JdbcSourceConnectorConfig.POLL_LINGER_MS_CONFIG, "0");
     return props;
   }
 

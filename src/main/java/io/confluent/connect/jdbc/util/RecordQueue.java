@@ -40,6 +40,15 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
   private static final Logger log = LoggerFactory.getLogger(RecordQueue.class);
 
   /**
+   * Default for {@link Builder#maxPollIdle(Duration)}. While a task is running, the Connect worker
+   * calls {@link #poll()} again as soon as it has handed the previous batch to the producer, and
+   * {@link #poll()} refreshes its timestamp at least every {@code maxPollInterruptTime} while it
+   * lingers. The gap can still exceed this while the worker is blocked handing a batch to the
+   * producer (for example during Kafka backpressure); a paused task is not polled at all.
+   */
+  public static final Duration DEFAULT_MAX_POLL_IDLE = Duration.ofSeconds(10);
+
+  /**
    * Builder for RecordQueue that can be specialized.
    *
    * @param <RecordT>  the type of record
@@ -51,6 +60,8 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
     private Duration linger = Duration.ZERO;
     private Duration maxPollInterruptTime = Duration.ofSeconds(1);
     private Time clock = Time.SYSTEM;
+    private Duration maxPollIdle = DEFAULT_MAX_POLL_IDLE;
+    private Time pollIdleClock = Time.SYSTEM;
     private BlockingQueue<SourceRecord> queue;
     private IntFunction<List<SourceRecord>> batchFactory = ArrayList::new;
     private IntFunction<BlockingQueue<SourceRecord>> queueFactory = ArrayBlockingQueue::new;
@@ -135,6 +146,44 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
      */
     public Builder<RecordT> maxPollInterruptTime(Duration duration) {
       this.maxPollInterruptTime = Objects.requireNonNull(duration);
+      return this;
+    }
+
+    /**
+     * Set how long {@link RecordQueue#poll()} may go uncalled before
+     * {@link RecordQueue#hasActiveConsumer()} reports that nobody is consuming records.
+     *
+     * <p>By default this is {@link #DEFAULT_MAX_POLL_IDLE}.
+     *
+     * @param duration the maximum time between polls; may not be null and must be positive
+     * @return this builder; never null
+     * @throws NullPointerException if the duration is null
+     * @throws IllegalArgumentException if the duration is not positive
+     */
+    public Builder<RecordT> maxPollIdle(Duration duration) {
+      Objects.requireNonNull(duration);
+      if (duration.isZero() || duration.isNegative()) {
+        throw new IllegalArgumentException("Maximum poll idle time must be positive");
+      }
+      this.maxPollIdle = duration;
+      return this;
+    }
+
+    /**
+     * Set the clock used to measure the time between calls to {@link RecordQueue#poll()} for
+     * {@link RecordQueue#hasActiveConsumer()}.
+     *
+     * <p>This is separate from {@link #clock(Time)} on purpose: it measures how often the Connect
+     * worker polls, which happens in real time, not on the schedule of the record generators.
+     * Elapsed time is read from {@link Time#hiResClockMs()}, which is monotonic, so wall-clock
+     * adjustments cannot make a paused task look active. By default this is the system clock.
+     *
+     * @param clock the clock; may not be null
+     * @return this builder; never null
+     * @throws NullPointerException if the clock is null
+     */
+    public Builder<RecordT> pollIdleClock(Time clock) {
+      this.pollIdleClock = Objects.requireNonNull(clock);
       return this;
     }
 
@@ -251,6 +300,9 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
   private final boolean useLinger;
   private final Duration linger;
   private final Duration maxPollInterruptTime;
+  private final long maxPollIdleMs;
+  private final Time pollIdleClock;
+  private volatile long lastPollMs;
   private final BlockingQueue<SourceRecord> queue;
   private final Time clock;
   private final AtomicBoolean running = new AtomicBoolean(true);
@@ -264,6 +316,12 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
     this.useLinger = !linger.isZero() && !linger.isNegative();
     this.maxPollInterruptTime = builder.maxPollInterruptTime;
     this.clock = builder.clock;
+    this.maxPollIdleMs = builder.maxPollIdle.toMillis();
+    this.pollIdleClock = builder.pollIdleClock;
+    // Count construction as a poll, so the first query runs before the worker's first poll().
+    // Connect never starts a task that is already paused: WorkerTask.doRun() waits for resume
+    // before it calls start().
+    this.lastPollMs = pollIdleClock.hiResClockMs();
     this.batchFactory = builder.batchFactory;
     this.queue = builder.queue != null
         ? builder.queue
@@ -333,6 +391,27 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
     return running.get();
   }
 
+  /**
+   * Determine whether something is still consuming from this queue, that is, whether
+   * {@link #poll()} has been called within the {@link Builder#maxPollIdle(Duration) maximum poll
+   * idle time}.
+   *
+   * <p>Kafka Connect pauses a source task by no longer calling {@code SourceTask.poll()}; it does
+   * not call {@code SourceTask.stop()} and gives the task no other signal. Record generators
+   * should therefore check this before starting new work that nobody will read, such as a new
+   * query against the source database.
+   *
+   * @return true if {@link #poll()} was called recently, or false otherwise
+   */
+  @Override
+  public boolean hasActiveConsumer() {
+    return pollIdleClock.hiResClockMs() - lastPollMs <= maxPollIdleMs;
+  }
+
+  private void markPolled() {
+    lastPollMs = pollIdleClock.hiResClockMs();
+  }
+
   @Override
   public void send(RecordT record) {
     verifyRunning();
@@ -370,6 +449,7 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
    *         exception that should be propagated to the Connect framework
    */
   public List<SourceRecord> poll() throws InterruptedException {
+    markPolled();
     List<SourceRecord> records = batchFactory.apply(maxBatchSize);
     if (!isRunning()) {
       // Discarding all records
@@ -405,6 +485,8 @@ public class RecordQueue<RecordT extends SourceRecord> implements RecordDestinat
         // (whichever is smaller)
         long maxPollTime = Math.min(maxPollInterruptTime.toMillis(), lingerRemainderMs);
         record = queue.poll(maxPollTime, TimeUnit.MILLISECONDS);
+        // Still inside poll(), so the consumer is active even while it lingers
+        markPolled();
         if (record != null) {
           records.add(record);
           ++count;

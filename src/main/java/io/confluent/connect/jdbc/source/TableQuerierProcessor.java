@@ -28,6 +28,8 @@ public class TableQuerierProcessor {
   private CachedConnectionProvider cachedConnectionProvider;
   private final int maxRetriesPerQuerier;
   private final Duration timeout = Duration.ofSeconds(90);
+  private static final long IDLE_CONSUMER_SLEEP_MS = 100;
+  private boolean skippingForIdleConsumer = false;
 
   public TableQuerierProcessor(
       JdbcSourceTaskConfig config,
@@ -51,18 +53,8 @@ public class TableQuerierProcessor {
     while (destination.isRunning() && !tableQueue.isEmpty()) {
       final TableQuerier querier = tableQueue.peek();
 
-      if (!querier.querying()) {
-        // If not in the middle of an update, wait for next update time
-        final long nextUpdate = querier.getLastUpdate()
-            + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
-        final long now = time.milliseconds();
-        final long sleepMs = Math.min(nextUpdate - now, 100);
-
-        if (sleepMs > 0) {
-          log.trace("Waiting {} ms to poll {} next", sleepMs, querier.toString());
-          time.sleep(sleepMs);
-          continue; // Re-check stop flag before continuing
-        }
+      if (!querier.querying() && waitedBeforeNextQuery(destination, querier)) {
+        continue; // Re-check stop flag before continuing
       }
 
       if (!destination.isRunning()) {
@@ -89,6 +81,53 @@ public class TableQuerierProcessor {
     }
     log.info("Task has been stopped, exiting the processor");
     return 0;
+  }
+
+  /**
+   * Wait a little if the querier, which is not in the middle of an update, should not query yet:
+   * either its next update time has not come, or nothing is polling.
+   *
+   * @return true if this method slept, or false if the query may run now
+   */
+  private boolean waitedBeforeNextQuery(
+      RecordDestination<SourceRecord> destination, TableQuerier querier) {
+    final long nextUpdate = querier.getLastUpdate()
+        + config.getInt(JdbcSourceTaskConfig.POLL_INTERVAL_MS_CONFIG);
+    final long now = time.milliseconds();
+    final long sleepMs = Math.min(nextUpdate - now, 100);
+
+    if (sleepMs > 0) {
+      log.trace("Waiting {} ms to poll {} next", sleepMs, querier.toString());
+      time.sleep(sleepMs);
+      return true;
+    }
+    return waitedForIdleConsumer(destination);
+  }
+
+  /**
+   * A query is due. Do not start it if nothing is polling, which is what a paused connector looks
+   * like from inside the task: the worker stops calling poll() but never calls stop(), so without
+   * this check the task keeps querying the database for as long as the connector stays PAUSED.
+   * The same gap appears while the worker is blocked sending records to Kafka, and skipping
+   * queries then is also correct, because nothing would drain their records.
+   *
+   * @return true if nothing is polling and this method slept, or false if the query may run
+   */
+  private boolean waitedForIdleConsumer(RecordDestination<SourceRecord> destination) {
+    if (!destination.hasActiveConsumer()) {
+      if (!skippingForIdleConsumer) {
+        log.info("The task has not been polled for a while, because the connector is paused"
+            + " or the worker is blocked sending records. Not querying until polling resumes.");
+        skippingForIdleConsumer = true;
+      }
+      time.sleep(IDLE_CONSUMER_SLEEP_MS);
+      return true;
+    }
+    if (skippingForIdleConsumer) {
+      log.info("The task is being polled again, resuming queries.");
+      skippingForIdleConsumer = false;
+    }
+    return false;
   }
 
   private boolean isReadyToProcess() {

@@ -65,6 +65,11 @@ public class JdbcDbWriter {
 
   void write(final Collection<SinkRecord> records)
       throws SQLException, TableAlterOrCreateException {
+    write(records, WriteFence.disabled());
+  }
+
+  void write(final Collection<SinkRecord> records, WriteFence fence)
+      throws SQLException, TableAlterOrCreateException {
     final Connection connection = cachedConnectionProvider.getConnection();
     String schemaName = getSchemaSafe(connection).orElse(null);
     String catalogName = getCatalogSafe(connection).orElse(null);
@@ -87,7 +92,12 @@ public class JdbcDbWriter {
         buffer.close();
       }
       log.trace("Committing transaction");
+      fence.check("before JDBC commit");
       connection.commit();
+    } catch (WriteFenceTimeoutException e) {
+      rollback(connection, e);
+      cachedConnectionProvider.close();
+      throw e;
     } catch (SQLException e) {
       SQLException writeException =
           redactSensitiveDataIfEnabled("Raw sink write failure (redacted at ERROR)", e);

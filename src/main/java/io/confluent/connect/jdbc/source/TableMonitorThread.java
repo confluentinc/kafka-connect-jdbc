@@ -279,7 +279,7 @@ public class TableMonitorThread extends Thread {
       log.debug("Include regex patterns: {}", includeListRegex);
       log.debug("Exclude regex patterns: {}", excludeListRegex);
       filteredTables = TableCollectionUtils.filterTables(
-          allTables, 
+          allTables,
           includeListRegex != null ? includeListRegex : java.util.Collections.emptySet(),
           excludeListRegex != null ? excludeListRegex : java.util.Collections.emptySet()
       );

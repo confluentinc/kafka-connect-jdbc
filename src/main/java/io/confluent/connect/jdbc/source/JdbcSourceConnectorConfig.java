@@ -267,7 +267,12 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   /* The amount of time to wait for the table monitoring thread to complete initial table read */
   public static final String TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_CONFIG =
       "table.monitoring.startup.polling.limit.ms";
-  public static final long TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_DEFAULT = 10 * 1000;
+  /*
+   * taskConfigs() blocks for up to this long. Keep it below the worker's
+   * worker.connector.task.configs.timeout.ms (10s by default in Confluent Cloud), otherwise the
+   * worker times out first and the connector never gets past startup on a slow table read.
+   */
+  public static final long TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_DEFAULT = 7 * 1000;
 
   public static final String TABLE_POLL_INTERVAL_MS_CONFIG = "table.poll.interval.ms";
   private static final String TABLE_POLL_INTERVAL_MS_DOC =

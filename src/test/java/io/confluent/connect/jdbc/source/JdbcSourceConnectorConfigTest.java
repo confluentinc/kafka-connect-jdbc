@@ -96,6 +96,22 @@ public class JdbcSourceConnectorConfigTest {
   }
 
   @Test
+  public void testStartupPollingLimitDefaultIsBelowWorkerTaskConfigsTimeout() {
+    // See the comment on TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_DEFAULT. The worker's
+    // worker.connector.task.configs.timeout.ms is 10s in Confluent Cloud, and taskConfigs() has to
+    // return the placeholder task before that timeout fires.
+    long workerTaskConfigsTimeoutMs = 10_000L;
+    Object defaultValue = JdbcSourceConnectorConfig.baseConfigDef().configKeys()
+        .get(JdbcSourceConnectorConfig.TABLE_MONITORING_STARTUP_POLLING_LIMIT_MS_CONFIG)
+        .defaultValue;
+    assertTrue(
+        "table.monitoring.startup.polling.limit.ms default must stay below "
+            + workerTaskConfigsTimeoutMs + "ms, was " + defaultValue,
+        (Long) defaultValue < workerTaskConfigsTimeoutMs
+    );
+  }
+
+  @Test
   public void testConfigTableNameRecommenderWithoutSchemaOrTableTypes() throws Exception {
     props.put(JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG, db.getUrl());
     configDef = JdbcSourceConnectorConfig.baseConfigDef();
